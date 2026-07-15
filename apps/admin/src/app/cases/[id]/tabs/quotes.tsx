@@ -6,7 +6,19 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabaseBrowser } from "@/lib/supabase";
-import { Badge, Button, Card, CardTitle, Input, Label, Select, Skeleton, Table, Td, Th } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+  Skeleton,
+  Table,
+  Td,
+  Th,
+} from "@/components/ui";
 import { formatCad, titleCase } from "@/lib/utils";
 import type { CaseDetail } from "../page";
 
@@ -64,7 +76,10 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
   const { data: insurers } = useQuery({
     queryKey: ["insurers-all"],
     queryFn: async () => {
-      const { data, error } = await supabaseBrowser().from("insurers").select("id, name").order("name");
+      const { data, error } = await supabaseBrowser()
+        .from("insurers")
+        .select("id, name")
+        .order("name");
       if (error) throw error;
       return data as { id: string; name: string }[];
     },
@@ -99,7 +114,11 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
         .single();
       if (error) throw error;
 
-      const components: { product_line: string; annual_premium_cents: number; coverage: Record<string, unknown> }[] = [];
+      const components: {
+        product_line: string;
+        annual_premium_cents: number;
+        coverage: Record<string, unknown>;
+      }[] = [];
       if (values.autoPremiumDollars && values.autoPremiumDollars > 0) {
         components.push({
           product_line: "auto",
@@ -136,7 +155,8 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           },
         });
       }
-      if (components.length === 0) throw new Error("Enter at least one premium (auto or property).");
+      if (components.length === 0)
+        throw new Error("Enter at least one premium (auto or property).");
 
       for (const component of components) {
         const { data: comp, error: compError } = await supabase

@@ -3,7 +3,17 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabaseBrowser } from "@/lib/supabase";
-import { Badge, Button, Card, CardTitle, EmptyState, Skeleton, Table, Td, Th } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  EmptyState,
+  Skeleton,
+  Table,
+  Td,
+  Th,
+} from "@/components/ui";
 import { formatCad, formatEdmonton, titleCase } from "@/lib/utils";
 import type { CaseDetail } from "../page";
 
@@ -203,8 +213,9 @@ export function RecommendationTab({ caseRow }: { caseRow: CaseDetail }) {
             <ul className="mt-3 space-y-1 text-sm">
               {rec.recommendation_approvals.map((a, i) => (
                 <li key={i} className="text-ink-muted">
-                  {a.approved ? "Approved" : "Rejected"} by {a.profiles?.full_name ?? a.approver_role} (
-                  {a.approver_role}) — {formatEdmonton(a.created_at)}
+                  {a.approved ? "Approved" : "Rejected"} by{" "}
+                  {a.profiles?.full_name ?? a.approver_role} ({a.approver_role}) —{" "}
+                  {formatEdmonton(a.created_at)}
                 </li>
               ))}
             </ul>
@@ -213,7 +224,10 @@ export function RecommendationTab({ caseRow }: { caseRow: CaseDetail }) {
           (role === "reviewer" || role === "admin") &&
           caseRow.state === "licensed_review" ? (
             <div className="mt-4 flex gap-2">
-              <Button onClick={() => review.mutate({ rec, approved: true })} disabled={review.isPending}>
+              <Button
+                onClick={() => review.mutate({ rec, approved: true })}
+                disabled={review.isPending}
+              >
                 Approve and publish to customer
               </Button>
               <Button

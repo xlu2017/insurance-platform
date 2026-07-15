@@ -100,15 +100,33 @@ export default function Documents() {
               ))}
             </View>
             <View style={{ gap: 8 }}>
-              <SecondaryButton label="Upload a PDF" onPress={() => upload("document")} disabled={busy} />
-              <SecondaryButton label="Take a photo" onPress={() => upload("camera")} disabled={busy} />
-              <SecondaryButton label="Choose from library" onPress={() => upload("library")} disabled={busy} />
+              <SecondaryButton
+                label="Upload a PDF"
+                onPress={() => upload("document")}
+                disabled={busy}
+              />
+              <SecondaryButton
+                label="Take a photo"
+                onPress={() => upload("camera")}
+                disabled={busy}
+              />
+              <SecondaryButton
+                label="Choose from library"
+                onPress={() => upload("library")}
+                disabled={busy}
+              />
             </View>
             {error ? <Body muted>{error}</Body> : null}
           </Card>
           {(documents ?? []).map((doc) => (
             <Card key={doc.id}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <View style={{ flex: 1, marginRight: 12 }}>
                   <Body>{doc.file_name}</Body>
                   <Caption>

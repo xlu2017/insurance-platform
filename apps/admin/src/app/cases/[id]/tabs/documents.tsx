@@ -7,7 +7,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { getExtractionProvider } from "@autopilot/database/providers";
 import { supabaseBrowser } from "@/lib/supabase";
-import { Badge, Button, Card, CardTitle, EmptyState, Input, Label, Select, Skeleton } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  EmptyState,
+  Input,
+  Label,
+  Select,
+  Skeleton,
+} from "@/components/ui";
 import { titleCase } from "@/lib/utils";
 import type { CaseDetail } from "../page";
 
@@ -222,7 +232,10 @@ export function DocumentsTab({ caseRow }: { caseRow: CaseDetail }) {
           </form>
         </Card>
       ) : (
-        <EmptyState title="Select a document" hint="Open a document to view it beside the extraction form." />
+        <EmptyState
+          title="Select a document"
+          hint="Open a document to view it beside the extraction form."
+        />
       )}
     </div>
   );

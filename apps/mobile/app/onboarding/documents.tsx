@@ -5,7 +5,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { pickDocument, pickImage, uploadPolicyDocument } from "@/lib/upload";
-import { Body, Caption, Card, Loading, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
+import {
+  Body,
+  Caption,
+  Card,
+  Loading,
+  PrimaryButton,
+  Screen,
+  SecondaryButton,
+  Title,
+} from "@/components/ui";
 
 export default function OnboardingDocuments() {
   const { data: household, isLoading } = useHousehold();
@@ -54,10 +63,7 @@ export default function OnboardingDocuments() {
           .eq("id", created.id);
       }
     }
-    await supabase
-      .from("households")
-      .update({ onboarding_step: "mandate" })
-      .eq("id", household.id);
+    await supabase.from("households").update({ onboarding_step: "mandate" }).eq("id", household.id);
     queryClient.invalidateQueries({ queryKey: ["household"] });
     setBusy(false);
     router.push("/onboarding/mandate");
@@ -75,7 +81,11 @@ export default function OnboardingDocuments() {
       <View style={{ height: 8 }} />
       <SecondaryButton label="Take a photo" onPress={() => upload("camera")} disabled={busy} />
       <View style={{ height: 8 }} />
-      <SecondaryButton label="Choose from library" onPress={() => upload("library")} disabled={busy} />
+      <SecondaryButton
+        label="Choose from library"
+        onPress={() => upload("library")}
+        disabled={busy}
+      />
       <View style={{ height: 16 }} />
       {uploaded.length > 0 ? (
         <Card>

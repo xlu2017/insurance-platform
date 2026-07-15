@@ -23,7 +23,9 @@ export function AuditTab({ caseRow }: { caseRow: CaseDetail }) {
     queryFn: async () => {
       const { data, error } = await supabaseBrowser()
         .from("audit_events")
-        .select("id, action, entity_type, actor_role, before_summary, after_summary, created_at, profiles:actor_profile_id(full_name)")
+        .select(
+          "id, action, entity_type, actor_role, before_summary, after_summary, created_at, profiles:actor_profile_id(full_name)",
+        )
         .or(`case_id.eq.${caseRow.id},household_id.eq.${caseRow.household_id}`)
         .order("created_at", { ascending: false })
         .limit(100);

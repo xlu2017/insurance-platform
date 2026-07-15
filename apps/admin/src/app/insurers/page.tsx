@@ -63,7 +63,9 @@ export default function InsurersPage() {
               <tr key={i.id}>
                 <Td className="font-medium">{i.name}</Td>
                 <Td>
-                  <Badge tone={i.active ? "accent" : "danger"}>{i.active ? "Active" : "Paused"}</Badge>
+                  <Badge tone={i.active ? "accent" : "danger"}>
+                    {i.active ? "Active" : "Paused"}
+                  </Badge>
                 </Td>
                 <Td>{i.provinces.join(", ")}</Td>
                 <Td>{i.products.join(", ")}</Td>

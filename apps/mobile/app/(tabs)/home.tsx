@@ -28,7 +28,9 @@ export default function Home() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("policies")
-        .select("insurer_name, product_line, annual_premium_cents, bundle_discount_cents, renewal_date")
+        .select(
+          "insurer_name, product_line, annual_premium_cents, bundle_discount_cents, renewal_date",
+        )
         .eq("household_id", household!.id)
         .eq("is_current", true);
       if (error) throw error;
@@ -74,7 +76,10 @@ export default function Home() {
         <Title>Finish setting up</Title>
         <Body muted>Create your household to start Autopilot.</Body>
         <View style={{ height: 16 }} />
-        <PrimaryButton label="Continue setup" onPress={() => router.push("/onboarding/household")} />
+        <PrimaryButton
+          label="Continue setup"
+          onPress={() => router.push("/onboarding/household")}
+        />
       </Screen>
     );
   }
@@ -91,7 +96,10 @@ export default function Home() {
     .sort()[0];
 
   const requiredAction = pendingQuestion
-    ? { label: "Answer a question from your insurer", action: () => router.push(`/question/${pendingQuestion.id}`) }
+    ? {
+        label: "Answer a question from your insurer",
+        action: () => router.push(`/question/${pendingQuestion.id}`),
+      }
     : activeCase?.state === "customer_decision"
       ? { label: "Review your recommendation", action: () => router.push("/recommendation") }
       : activeCase?.state === "awaiting_customer_confirmation"
@@ -116,7 +124,11 @@ export default function Home() {
               <Subtitle>Required action</Subtitle>
               <Body muted>{requiredAction.label}</Body>
               <View style={{ height: 12 }} />
-              <PrimaryButton label="Open" onPress={requiredAction.action} testID="required-action" />
+              <PrimaryButton
+                label="Open"
+                onPress={requiredAction.action}
+                testID="required-action"
+              />
             </Card>
           ) : null}
           <Card>

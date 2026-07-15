@@ -53,7 +53,9 @@ export default function LoginPage() {
           <div>
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" autoComplete="email" {...register("email")} />
-            {errors.email ? <p className="mt-1 text-xs text-danger">{errors.email.message}</p> : null}
+            {errors.email ? (
+              <p className="mt-1 text-xs text-danger">{errors.email.message}</p>
+            ) : null}
           </div>
           <div>
             <Label htmlFor="password">Password</Label>

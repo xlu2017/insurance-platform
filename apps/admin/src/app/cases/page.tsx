@@ -43,15 +43,18 @@ function CaseQueue() {
   const rows = (data ?? []).filter(
     (row) =>
       (!state || row.state === state) &&
-      (!customer ||
-        (row.households?.name ?? "").toLowerCase().includes(customer.toLowerCase())),
+      (!customer || (row.households?.name ?? "").toLowerCase().includes(customer.toLowerCase())),
   );
 
   return (
     <>
       <h1 className="mb-6 text-xl font-semibold">Case queue</h1>
       <div className="mb-4 flex flex-wrap gap-3">
-        <Select value={state} onChange={(e) => setState(e.target.value)} aria-label="Filter by status">
+        <Select
+          value={state}
+          onChange={(e) => setState(e.target.value)}
+          aria-label="Filter by status"
+        >
           <option value="">All statuses</option>
           {caseStates.map((s) => (
             <option key={s} value={s}>
@@ -87,7 +90,10 @@ function CaseQueue() {
             {rows.map((row) => (
               <tr key={row.id} className="hover:bg-surface-subtle">
                 <Td>
-                  <Link href={`/cases/${row.id}`} className="font-medium text-accent hover:underline">
+                  <Link
+                    href={`/cases/${row.id}`}
+                    className="font-medium text-accent hover:underline"
+                  >
                     {row.households?.name ?? "Household"}
                   </Link>
                 </Td>
@@ -97,7 +103,8 @@ function CaseQueue() {
                   </Badge>
                 </Td>
                 <Td>
-                  {row.case_assignments.map((a) => a.profiles?.full_name).join(", ") || "Unassigned"}
+                  {row.case_assignments.map((a) => a.profiles?.full_name).join(", ") ||
+                    "Unassigned"}
                 </Td>
                 <Td>{row.renewal_date ?? "—"}</Td>
                 <Td>

@@ -40,7 +40,10 @@ export default function Register() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <Screen style={{ justifyContent: "center" }}>
         <Title>Create your account</Title>
         <Body muted>

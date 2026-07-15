@@ -26,9 +26,7 @@ export default function Autopilot() {
 
   if (isLoading || caseLoading) return <Loading />;
 
-  const currentIndex = activeCase
-    ? timeline.findIndex((t) => t.state === activeCase.state)
-    : -1;
+  const currentIndex = activeCase ? timeline.findIndex((t) => t.state === activeCase.state) : -1;
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -48,7 +46,10 @@ export default function Autopilot() {
                   const done = currentIndex > i;
                   const current = currentIndex === i;
                   return (
-                    <View key={step.state} style={{ flexDirection: "row", alignItems: "flex-start", minHeight: 40 }}>
+                    <View
+                      key={step.state}
+                      style={{ flexDirection: "row", alignItems: "flex-start", minHeight: 40 }}
+                    >
                       <View style={{ alignItems: "center", width: 24 }}>
                         <View
                           style={{
@@ -60,7 +61,13 @@ export default function Autopilot() {
                           }}
                         />
                         {i < timeline.length - 1 ? (
-                          <View style={{ width: 2, flex: 1, backgroundColor: done ? colors.accent : colors.border }} />
+                          <View
+                            style={{
+                              width: 2,
+                              flex: 1,
+                              backgroundColor: done ? colors.accent : colors.border,
+                            }}
+                          />
                         ) : null}
                       </View>
                       <View style={{ flex: 1, paddingBottom: 12 }}>

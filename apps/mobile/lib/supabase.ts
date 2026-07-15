@@ -12,8 +12,7 @@ const secureStoreAdapter = {
     Platform.OS === "web" ? Promise.resolve() : SecureStore.deleteItemAsync(key),
 };
 
-export const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
 
 export const supabase = createClient(
   SUPABASE_URL,

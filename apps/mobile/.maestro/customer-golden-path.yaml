@@ -1,0 +1,40 @@
+# Maestro E2E flow: customer golden path.
+# Prerequisites: local Supabase running with seed data, Expo app running
+# (pnpm --filter @autopilot/mobile dev), and the seeded demo customer signed out.
+appId: com.insuranceautopilot.app
+---
+- launchApp
+- assertVisible: "Set your insurance requirements once.*"
+- tapOn:
+    id: "go-sign-in"
+- tapOn:
+    id: "email-input"
+- inputText: "customer@example.com"
+- tapOn:
+    id: "password-input"
+- inputText: "DemoCustomer123!"
+- tapOn:
+    id: "sign-in-button"
+# Home shows an active case and the pending insurer question.
+- assertVisible: "Autopilot active"
+- assertVisible: "Action required"
+- tapOn:
+    id: "required-action"
+# Answer the pending yes/no question.
+- tapOn:
+    id: "option-yes"
+- tapOn:
+    id: "submit-answer"
+# Open the published recommendation from the Autopilot tab.
+- tapOn: "Autopilot"
+- assertVisible: "Licensed review|Waiting for your decision"
+- tapOn:
+    id: "open-recommendation"
+# Review savings and coverage.
+- assertVisible: "Net annual savings"
+- assertVisible: "Material differences"
+# Approve the switch (reauthentication prompt is handled by the OS).
+- tapOn:
+    id: "approve-switch"
+# Switch-in-progress status is visible on the timeline.
+- assertVisible: "Switch in progress.*current"

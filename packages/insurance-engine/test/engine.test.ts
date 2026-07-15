@@ -126,10 +126,7 @@ describe("hard constraint filtering", () => {
       id: "q-telematics",
       insurerId: "insurer-telematics",
       insurerName: "Telematics Co",
-      components: [
-        autoComponent(120_000, { telematicsRequired: true }),
-        propertyComponent(90_000),
-      ],
+      components: [autoComponent(120_000, { telematicsRequired: true }), propertyComponent(90_000)],
     });
     const result = evaluateHousehold(scenarioInput({ quotes: [telematics] }));
     const cfg = result.evaluated.find(

@@ -123,10 +123,17 @@ export function Field(props: TextInputProps & { label: string; error?: string })
   );
 }
 
-export function StatusPill({ label, tone = "accent" }: { label: string; tone?: "accent" | "warning" | "neutral" }) {
+export function StatusPill({
+  label,
+  tone = "accent",
+}: {
+  label: string;
+  tone?: "accent" | "warning" | "neutral";
+}) {
   const bg =
     tone === "accent" ? colors.accentSoft : tone === "warning" ? "#FBF3E0" : colors.surfaceSubtle;
-  const fg = tone === "accent" ? colors.accent : tone === "warning" ? colors.warning : colors.inkMuted;
+  const fg =
+    tone === "accent" ? colors.accent : tone === "warning" ? colors.warning : colors.inkMuted;
   return (
     <View style={[styles.pill, { backgroundColor: bg }]}>
       <Text style={[styles.pillText, { color: fg }]}>{label}</Text>

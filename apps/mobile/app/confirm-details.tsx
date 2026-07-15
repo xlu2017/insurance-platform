@@ -22,7 +22,10 @@ export default function ConfirmDetails() {
       const [drivers, vehicles, properties, policies] = await Promise.all([
         supabase.from("drivers").select("full_name").eq("household_id", household!.id),
         supabase.from("vehicles").select("year, make, model").eq("household_id", household!.id),
-        supabase.from("properties").select("address_line1, city, province").eq("household_id", household!.id),
+        supabase
+          .from("properties")
+          .select("address_line1, city, province")
+          .eq("household_id", household!.id),
         supabase
           .from("policies")
           .select("insurer_name, product_line, annual_premium_cents, renewal_date")
@@ -69,7 +72,9 @@ export default function ConfirmDetails() {
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Confirm your details</Title>
-          <Body muted>Check what we extracted from your documents before we search the market.</Body>
+          <Body muted>
+            Check what we extracted from your documents before we search the market.
+          </Body>
           <Card>
             <Subtitle>Drivers</Subtitle>
             {data.drivers.map((d) => (

@@ -206,13 +206,23 @@ export default function Recommendation() {
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Your recommendation</Title>
           <Card testID="recommendation-summary">
-            <Subtitle>{recommendation.comparison.proposedInsurer ?? "Proposed configuration"}</Subtitle>
-            <Row label="Current annual cost" value={formatCad(recommendation.current_total_cents)} />
-            <Row label="Proposed annual cost" value={formatCad(recommendation.proposed_total_cents)} />
+            <Subtitle>
+              {recommendation.comparison.proposedInsurer ?? "Proposed configuration"}
+            </Subtitle>
+            <Row
+              label="Current annual cost"
+              value={formatCad(recommendation.current_total_cents)}
+            />
+            <Row
+              label="Proposed annual cost"
+              value={formatCad(recommendation.proposed_total_cents)}
+            />
             <Row label="Net annual savings" value={formatCad(recommendation.net_savings_cents)} />
             <Row
               label="Bundle"
-              value={recommendation.comparison.bundled ? "Home + auto bundled" : "Separate insurers"}
+              value={
+                recommendation.comparison.bundled ? "Home + auto bundled" : "Separate insurers"
+              }
             />
             <Row label="Meets all your requirements" value="Yes" />
           </Card>
@@ -256,9 +266,18 @@ export default function Recommendation() {
           ) : null}
           {error ? <Body muted>{error}</Body> : null}
           <View style={{ gap: 8 }}>
-            <PrimaryButton label="Approve switch" onPress={approve} loading={busy} testID="approve-switch" />
+            <PrimaryButton
+              label="Approve switch"
+              onPress={approve}
+              loading={busy}
+              testID="approve-switch"
+            />
             <SecondaryButton label="Keep current insurance" onPress={keepCurrent} disabled={busy} />
-            <SecondaryButton label="Ask a question" onPress={() => setAsking((v) => !v)} disabled={busy} />
+            <SecondaryButton
+              label="Ask a question"
+              onPress={() => setAsking((v) => !v)}
+              disabled={busy}
+            />
             <SecondaryButton
               label={showComparison ? "Hide full comparison" : "Review full comparison"}
               onPress={() => setShowComparison((v) => !v)}

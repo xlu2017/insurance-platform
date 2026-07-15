@@ -98,7 +98,9 @@ export function QuestionsTab({ caseRow }: { caseRow: CaseDetail }) {
         {(data ?? []).map((q) => (
           <Card key={q.id}>
             <div className="mb-1 flex items-center justify-between">
-              <Badge tone={q.status === "pending" ? "warning" : "accent"}>{titleCase(q.status)}</Badge>
+              <Badge tone={q.status === "pending" ? "warning" : "accent"}>
+                {titleCase(q.status)}
+              </Badge>
               <span className="text-xs text-ink-muted">{formatEdmonton(q.created_at)}</span>
             </div>
             <p className="text-sm font-medium">{q.prompt}</p>

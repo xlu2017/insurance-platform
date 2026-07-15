@@ -100,7 +100,9 @@ export function MandateTab({ caseRow }: { caseRow: CaseDetail }) {
             </li>
             <li className="flex justify-between">
               <span className="text-ink-muted">Renewal-only switching</span>
-              <span className="font-medium">{data.preferences.renewal_only_switching ? "Yes" : "No"}</span>
+              <span className="font-medium">
+                {data.preferences.renewal_only_switching ? "Yes" : "No"}
+              </span>
             </li>
             <li className="flex justify-between">
               <span className="text-ink-muted">Optimize home and auto together</span>
@@ -110,7 +112,9 @@ export function MandateTab({ caseRow }: { caseRow: CaseDetail }) {
             </li>
             <li className="flex justify-between">
               <span className="text-ink-muted">Split insurers allowed</span>
-              <span className="font-medium">{data.preferences.split_insurers_allowed ? "Yes" : "No"}</span>
+              <span className="font-medium">
+                {data.preferences.split_insurers_allowed ? "Yes" : "No"}
+              </span>
             </li>
             <li className="flex justify-between">
               <span className="text-ink-muted">Deductible increases allowed</span>

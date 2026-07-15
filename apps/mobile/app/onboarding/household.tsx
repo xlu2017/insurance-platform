@@ -55,8 +55,18 @@ export default function CreateHousehold() {
       <Title>Set up your household</Title>
       <Body muted>The Alberta demo defaults to province AB. Progress saves at every step.</Body>
       <View style={{ height: 16 }} />
-      <Field label="Household name" placeholder="Miller Household" value={name} onChangeText={setName} />
-      <Field label="Province" value={province} onChangeText={setProvince} autoCapitalize="characters" />
+      <Field
+        label="Household name"
+        placeholder="Miller Household"
+        value={name}
+        onChangeText={setName}
+      />
+      <Field
+        label="Province"
+        value={province}
+        onChangeText={setProvince}
+        autoCapitalize="characters"
+      />
       {error ? <Body muted>{error}</Body> : null}
       <View style={{ height: 12 }} />
       <PrimaryButton label="Continue" onPress={save} loading={loading} />

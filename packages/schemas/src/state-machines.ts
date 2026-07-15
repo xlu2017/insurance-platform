@@ -6,7 +6,11 @@ export const caseTransitions: TransitionMap<CaseState> = {
   draft: ["awaiting_documents", "cancelled"],
   awaiting_documents: ["extracting_information", "cancelled"],
   extracting_information: ["awaiting_customer_confirmation", "awaiting_documents", "cancelled"],
-  awaiting_customer_confirmation: ["ready_for_market_search", "extracting_information", "cancelled"],
+  awaiting_customer_confirmation: [
+    "ready_for_market_search",
+    "extracting_information",
+    "cancelled",
+  ],
   ready_for_market_search: ["requesting_quotes", "cancelled"],
   requesting_quotes: ["awaiting_quotes", "cancelled"],
   awaiting_quotes: ["comparing_quotes", "requesting_quotes", "cancelled"],
@@ -23,8 +27,20 @@ export const caseTransitions: TransitionMap<CaseState> = {
 export const quoteRequestTransitions: TransitionMap<QuoteRequestState> = {
   draft: ["queued", "cancelled"],
   queued: ["sent", "cancelled"],
-  sent: ["additional_information_required", "response_received", "declined", "no_response", "cancelled"],
-  additional_information_required: ["sent", "response_received", "declined", "no_response", "cancelled"],
+  sent: [
+    "additional_information_required",
+    "response_received",
+    "declined",
+    "no_response",
+    "cancelled",
+  ],
+  additional_information_required: [
+    "sent",
+    "response_received",
+    "declined",
+    "no_response",
+    "cancelled",
+  ],
   response_received: [],
   declined: [],
   no_response: [],
@@ -50,11 +66,7 @@ export const switchTransitions: TransitionMap<SwitchState> = {
   failed: [],
 };
 
-export function canTransition<S extends string>(
-  map: TransitionMap<S>,
-  from: S,
-  to: S,
-): boolean {
+export function canTransition<S extends string>(map: TransitionMap<S>, from: S, to: S): boolean {
   return map[from].includes(to);
 }
 

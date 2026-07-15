@@ -22,19 +22,31 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="coverage"
-        options={{ title: "Coverage", tabBarIcon: ({ color }) => <TabIcon symbol="✓" color={color} /> }}
+        options={{
+          title: "Coverage",
+          tabBarIcon: ({ color }) => <TabIcon symbol="✓" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="autopilot"
-        options={{ title: "Autopilot", tabBarIcon: ({ color }) => <TabIcon symbol="➤" color={color} /> }}
+        options={{
+          title: "Autopilot",
+          tabBarIcon: ({ color }) => <TabIcon symbol="➤" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="documents"
-        options={{ title: "Documents", tabBarIcon: ({ color }) => <TabIcon symbol="▤" color={color} /> }}
+        options={{
+          title: "Documents",
+          tabBarIcon: ({ color }) => <TabIcon symbol="▤" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: "Profile", tabBarIcon: ({ color }) => <TabIcon symbol="◉" color={color} /> }}
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color }) => <TabIcon symbol="◉" color={color} />,
+        }}
       />
     </Tabs>
   );

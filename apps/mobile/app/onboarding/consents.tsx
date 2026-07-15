@@ -51,7 +51,9 @@ export default function Consents() {
     <Screen>
       <ScrollView showsVerticalScrollIndicator={false}>
         <Title>Your consent</Title>
-        <Body muted>Each consent is recorded separately with a timestamp and disclosure version.</Body>
+        <Body muted>
+          Each consent is recorded separately with a timestamp and disclosure version.
+        </Body>
         <View style={{ height: 16 }} />
         <Card>
           {consentItems.map((c) => (
@@ -75,7 +77,12 @@ export default function Consents() {
           ))}
         </Card>
         {error ? <Body muted>{error}</Body> : null}
-        <PrimaryButton label="Agree and continue" onPress={save} loading={busy} disabled={!allGranted} />
+        <PrimaryButton
+          label="Agree and continue"
+          onPress={save}
+          loading={busy}
+          disabled={!allGranted}
+        />
       </ScrollView>
     </Screen>
   );

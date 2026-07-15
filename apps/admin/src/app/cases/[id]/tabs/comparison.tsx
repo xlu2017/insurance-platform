@@ -5,7 +5,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { evaluateHousehold, type EvaluatedConfiguration } from "@autopilot/insurance-engine";
 import { supabaseBrowser } from "@/lib/supabase";
 import { loadEngineInput } from "@/lib/engine-input";
-import { Badge, Button, Card, CardTitle, EmptyState, Skeleton, Table, Td, Th } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  EmptyState,
+  Skeleton,
+  Table,
+  Td,
+  Th,
+} from "@/components/ui";
 import { formatCad } from "@/lib/utils";
 import type { CaseDetail } from "../page";
 
@@ -136,7 +146,15 @@ export function ComparisonTab({ caseRow }: { caseRow: CaseDetail }) {
                   {formatCad(e.netSavingsCents)}
                 </Td>
                 <Td>
-                  <Badge tone={e.eligible ? "accent" : e.configuration.isIncumbentConfiguration ? "neutral" : "danger"}>
+                  <Badge
+                    tone={
+                      e.eligible
+                        ? "accent"
+                        : e.configuration.isIncumbentConfiguration
+                          ? "neutral"
+                          : "danger"
+                    }
+                  >
                     {e.configuration.isIncumbentConfiguration
                       ? "Incumbent"
                       : e.eligible

@@ -30,7 +30,12 @@ export function createResendProvider(apiKey: string, from: string): EmailProvide
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: message.to, subject: message.subject, text: message.body }),
+        body: JSON.stringify({
+          from,
+          to: message.to,
+          subject: message.subject,
+          text: message.body,
+        }),
       });
       if (!res.ok) throw new Error(`Resend send failed: ${res.status}`);
     },

@@ -44,8 +44,23 @@ export default function Preferences() {
     router.push("/onboarding/consents");
   };
 
-  const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 }}>
+  const Toggle = ({
+    label,
+    value,
+    onChange,
+  }: {
+    label: string;
+    value: boolean;
+    onChange: (v: boolean) => void;
+  }) => (
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingVertical: 6,
+      }}
+    >
       <Body>{label}</Body>
       <Switch value={value} onValueChange={onChange} />
     </View>
@@ -65,9 +80,21 @@ export default function Preferences() {
             onChangeText={setMinSavings}
           />
           <Toggle label="Only switch at renewal" value={renewalOnly} onChange={setRenewalOnly} />
-          <Toggle label="Optimize home and auto together" value={optimizeTogether} onChange={setOptimizeTogether} />
-          <Toggle label="Allow different insurers per policy" value={splitAllowed} onChange={setSplitAllowed} />
-          <Toggle label="Allow deductible increases" value={deductibleIncreases} onChange={setDeductibleIncreases} />
+          <Toggle
+            label="Optimize home and auto together"
+            value={optimizeTogether}
+            onChange={setOptimizeTogether}
+          />
+          <Toggle
+            label="Allow different insurers per policy"
+            value={splitAllowed}
+            onChange={setSplitAllowed}
+          />
+          <Toggle
+            label="Allow deductible increases"
+            value={deductibleIncreases}
+            onChange={setDeductibleIncreases}
+          />
           <Row label="Material coverage reductions" value="Never allowed" />
           <Row label="Your approval before any switch" value="Always required" />
         </Card>

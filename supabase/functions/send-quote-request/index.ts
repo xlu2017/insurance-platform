@@ -19,11 +19,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   const authHeader = req.headers.get("Authorization") ?? "";
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
-  );
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: authHeader } },
+  });
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -35,11 +33,7 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
   if (!profile || !["operations", "admin"].includes(profile.role)) {
     return new Response("Forbidden", { status: 403 });
   }
@@ -47,7 +41,9 @@ Deno.serve(async (req) => {
   const { quoteRequestId } = await req.json();
   const { data: qr } = await admin
     .from("quote_requests")
-    .select("id, state, product_lines, insurer_id, insurers(name), insurer_channels:insurer_id(address)")
+    .select(
+      "id, state, product_lines, insurer_id, insurers(name), insurer_channels:insurer_id(address)",
+    )
     .eq("id", quoteRequestId)
     .single();
   if (!qr) return new Response("Quote request not found", { status: 404 });

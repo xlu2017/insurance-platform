@@ -163,7 +163,10 @@ function checkHardRequirements(
     violations.push("PROPERTY_OVERLAND_WATER_MISSING");
   if (property.baseDeductibleCents > p.maxBaseDeductibleCents)
     violations.push("PROPERTY_BASE_DEDUCTIBLE_TOO_HIGH");
-  if (property.waterDeductibleCents !== null && property.waterDeductibleCents > p.maxWaterDeductibleCents)
+  if (
+    property.waterDeductibleCents !== null &&
+    property.waterDeductibleCents > p.maxWaterDeductibleCents
+  )
     violations.push("PROPERTY_WATER_DEDUCTIBLE_TOO_HIGH");
   if (p.additionalLivingExpensesRequired && !property.additionalLivingExpensesIncluded)
     violations.push("PROPERTY_ALE_MISSING");
@@ -202,7 +205,10 @@ function coverageReductionsVsIncumbent(
     reductions.push("property_sewer_backup_removed");
   if (incumbentProperty.overlandWaterIncluded && !property.overlandWaterIncluded)
     reductions.push("property_overland_water_removed");
-  if (incumbentProperty.additionalLivingExpensesIncluded && !property.additionalLivingExpensesIncluded)
+  if (
+    incumbentProperty.additionalLivingExpensesIncluded &&
+    !property.additionalLivingExpensesIncluded
+  )
     reductions.push("property_ale_removed");
   if (incumbentProperty.equipmentBreakdownIncluded && !property.equipmentBreakdownIncluded)
     reductions.push("property_equipment_breakdown_removed");
@@ -210,7 +216,10 @@ function coverageReductionsVsIncumbent(
   return reductions;
 }
 
-function deductibleIncreasedVsIncumbent(input: EngineInput, config: HouseholdConfiguration): boolean {
+function deductibleIncreasedVsIncumbent(
+  input: EngineInput,
+  config: HouseholdConfiguration,
+): boolean {
   const incumbentAuto = input.incumbentAuto.component.auto;
   const incumbentProperty = input.incumbentProperty.component.property;
   const auto = config.auto.component.auto;
@@ -232,9 +241,7 @@ function deductibleIncreasedVsIncumbent(input: EngineInput, config: HouseholdCon
   )
     return true;
   if (property.baseDeductibleCents > incumbentProperty.baseDeductibleCents) return true;
-  if (
-    numOr(property.waterDeductibleCents, 0) > numOr(incumbentProperty.waterDeductibleCents, 0)
-  )
+  if (numOr(property.waterDeductibleCents, 0) > numOr(incumbentProperty.waterDeductibleCents, 0))
     return true;
   return false;
 }

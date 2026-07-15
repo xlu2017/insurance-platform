@@ -96,7 +96,13 @@ export default function Profile() {
           </Card>
           <Card>
             <Subtitle>Security</Subtitle>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <Body>Biometric unlock</Body>
               <Switch value={biometrics} onValueChange={toggleBiometrics} />
             </View>

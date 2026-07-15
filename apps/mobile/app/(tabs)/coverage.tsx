@@ -16,7 +16,10 @@ export default function Coverage() {
       const [drivers, vehicles, properties, requirements, preferences] = await Promise.all([
         supabase.from("drivers").select("id, full_name").eq("household_id", household!.id),
         supabase.from("vehicles").select("id, year, make, model").eq("household_id", household!.id),
-        supabase.from("properties").select("id, address_line1, city").eq("household_id", household!.id),
+        supabase
+          .from("properties")
+          .select("id, address_line1, city")
+          .eq("household_id", household!.id),
         supabase
           .from("coverage_requirements")
           .select("auto_requirements, property_requirements")
@@ -42,7 +45,9 @@ export default function Coverage() {
 
   if (isLoading || !household) return <Loading />;
 
-  const auto = data?.requirements?.auto_requirements as Record<string, number | boolean> | undefined;
+  const auto = data?.requirements?.auto_requirements as
+    | Record<string, number | boolean>
+    | undefined;
   const property = data?.requirements?.property_requirements as
     | Record<string, number | boolean>
     | undefined;
@@ -58,14 +63,23 @@ export default function Coverage() {
           <Body muted>Your standing instructions. Every comparison is bound by these rules.</Body>
           <Card>
             <Subtitle>Household</Subtitle>
-            <Row label="Drivers" value={(data?.drivers ?? []).map((d) => d.full_name).join(", ") || "—"} />
+            <Row
+              label="Drivers"
+              value={(data?.drivers ?? []).map((d) => d.full_name).join(", ") || "—"}
+            />
             <Row
               label="Vehicles"
-              value={(data?.vehicles ?? []).map((v) => `${v.year} ${v.make} ${v.model}`).join(", ") || "—"}
+              value={
+                (data?.vehicles ?? []).map((v) => `${v.year} ${v.make} ${v.model}`).join(", ") ||
+                "—"
+              }
             />
             <Row
               label="Properties"
-              value={(data?.properties ?? []).map((p) => `${p.address_line1}, ${p.city}`).join("; ") || "—"}
+              value={
+                (data?.properties ?? []).map((p) => `${p.address_line1}, ${p.city}`).join("; ") ||
+                "—"
+              }
             />
           </Card>
           <Card>
@@ -82,8 +96,14 @@ export default function Coverage() {
               label="Max comprehensive deductible"
               value={auto ? formatCad(Number(auto.maxComprehensiveDeductibleCents ?? 0)) : "—"}
             />
-            <Row label="Accident forgiveness" value={auto ? yesNo(auto.accidentForgivenessRequired) : "—"} />
-            <Row label="Rental coverage" value={auto ? yesNo(auto.rentalVehicleCoverageRequired) : "—"} />
+            <Row
+              label="Accident forgiveness"
+              value={auto ? yesNo(auto.accidentForgivenessRequired) : "—"}
+            />
+            <Row
+              label="Rental coverage"
+              value={auto ? yesNo(auto.rentalVehicleCoverageRequired) : "—"}
+            />
             <Row label="Telematics allowed" value={auto ? yesNo(auto.telematicsAllowed) : "—"} />
           </Card>
           <Card>
@@ -92,9 +112,18 @@ export default function Coverage() {
               label="Minimum dwelling limit"
               value={property ? formatCad(Number(property.minDwellingLimitCents ?? 0)) : "—"}
             />
-            <Row label="Replacement cost" value={property ? yesNo(property.replacementCostRequired) : "—"} />
-            <Row label="Sewer backup" value={property ? yesNo(property.sewerBackupRequired) : "—"} />
-            <Row label="Overland water" value={property ? yesNo(property.overlandWaterRequired) : "—"} />
+            <Row
+              label="Replacement cost"
+              value={property ? yesNo(property.replacementCostRequired) : "—"}
+            />
+            <Row
+              label="Sewer backup"
+              value={property ? yesNo(property.sewerBackupRequired) : "—"}
+            />
+            <Row
+              label="Overland water"
+              value={property ? yesNo(property.overlandWaterRequired) : "—"}
+            />
             <Row
               label="Max base deductible"
               value={property ? formatCad(Number(property.maxBaseDeductibleCents ?? 0)) : "—"}
@@ -106,13 +135,22 @@ export default function Coverage() {
               label="Minimum net annual savings"
               value={prefs ? formatCad(prefs.min_net_annual_savings_cents) : "—"}
             />
-            <Row label="Only switch at renewal" value={prefs ? yesNo(prefs.renewal_only_switching) : "—"} />
+            <Row
+              label="Only switch at renewal"
+              value={prefs ? yesNo(prefs.renewal_only_switching) : "—"}
+            />
             <Row
               label="Optimize home and auto together"
               value={prefs ? yesNo(prefs.household_optimization_enabled) : "—"}
             />
-            <Row label="Split insurers allowed" value={prefs ? yesNo(prefs.split_insurers_allowed) : "—"} />
-            <Row label="Excluded insurers" value={String(prefs?.excluded_insurer_ids?.length ?? 0)} />
+            <Row
+              label="Split insurers allowed"
+              value={prefs ? yesNo(prefs.split_insurers_allowed) : "—"}
+            />
+            <Row
+              label="Excluded insurers"
+              value={String(prefs?.excluded_insurer_ids?.length ?? 0)}
+            />
             <Row label="Your approval before any switch" value="Always required" />
           </Card>
         </ScrollView>

@@ -147,9 +147,7 @@ export function ShortlistTab({ caseRow }: { caseRow: CaseDetail }) {
                   <Input
                     placeholder="Why include this insurer?"
                     value={reasons[insurer.id] ?? ""}
-                    onChange={(e) =>
-                      setReasons((r) => ({ ...r, [insurer.id]: e.target.value }))
-                    }
+                    onChange={(e) => setReasons((r) => ({ ...r, [insurer.id]: e.target.value }))}
                   />
                 </Td>
                 <Td>
@@ -195,7 +193,11 @@ export function ShortlistTab({ caseRow }: { caseRow: CaseDetail }) {
                 <Td className="max-w-56 truncate">{r.inclusion_reason}</Td>
                 <Td className="space-x-2 whitespace-nowrap">
                   {r.state === "queued" ? (
-                    <Button size="sm" onClick={() => sendEmail.mutate(r.id)} disabled={sendEmail.isPending}>
+                    <Button
+                      size="sm"
+                      onClick={() => sendEmail.mutate(r.id)}
+                      disabled={sendEmail.isPending}
+                    >
                       Send test email
                     </Button>
                   ) : null}
@@ -204,7 +206,9 @@ export function ShortlistTab({ caseRow }: { caseRow: CaseDetail }) {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => markResponse.mutate({ id: r.id, state: "response_received" })}
+                        onClick={() =>
+                          markResponse.mutate({ id: r.id, state: "response_received" })
+                        }
                       >
                         Response received
                       </Button>

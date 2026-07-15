@@ -48,7 +48,10 @@ export function SwitchingTab({ caseRow }: { caseRow: CaseDetail }) {
   const advance = useMutation({
     mutationFn: async ({ row, next }: { row: SwitchRow; next: SwitchState }) => {
       const supabase = supabaseBrowser();
-      const { error } = await supabase.from("switch_events").update({ state: next }).eq("id", row.id);
+      const { error } = await supabase
+        .from("switch_events")
+        .update({ state: next })
+        .eq("id", row.id);
       if (error) throw error;
       if (next === "completed") {
         const { error: caseError } = await supabase

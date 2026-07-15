@@ -85,7 +85,10 @@ export function propertyComponent(
   };
 }
 
-export function makeQuote(overrides: Partial<EngineQuote> & Pick<EngineQuote, "id" | "insurerId" | "insurerName" | "components">): EngineQuote {
+export function makeQuote(
+  overrides: Partial<EngineQuote> &
+    Pick<EngineQuote, "id" | "insurerId" | "insurerName" | "components">,
+): EngineQuote {
   return {
     state: "bindable",
     isIncumbent: false,

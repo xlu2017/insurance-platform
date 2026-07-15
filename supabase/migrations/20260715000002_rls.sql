@@ -153,6 +153,17 @@ create policy subscriptions_select on subscriptions for select using (profile_id
 create policy notifications_select on notifications for select using (profile_id = auth.uid() or is_admin());
 create policy notifications_update on notifications for update using (profile_id = auth.uid());
 
+-- =============================== grants ===============================
+
+-- Baseline privileges for signed-in users; RLS policies constrain rows.
+-- anon gets nothing: every table requires an authenticated session.
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+revoke all on all tables in schema public from anon;
+-- Audit rows are append-only: no update/delete even for admins.
+revoke update, delete on audit_events from authenticated;
+
 -- =============================== insurers ===============================
 
 -- Customers may see insurer names for display, but internal notes are staff-only
@@ -269,11 +280,11 @@ on conflict (id) do nothing;
 create policy "household docs read" on storage.objects for select
   using (
     bucket_id = 'policy-documents'
-    and can_access_household(((string_to_array(name, '/'))[2])::uuid)
+    and can_access_household(((string_to_array(name, '/'))[1])::uuid)
   );
 
 create policy "household docs write" on storage.objects for insert
   with check (
     bucket_id = 'policy-documents'
-    and can_access_household(((string_to_array(name, '/'))[2])::uuid)
+    and can_access_household(((string_to_array(name, '/'))[1])::uuid)
   );

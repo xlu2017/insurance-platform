@@ -128,7 +128,12 @@ export default function AnswerQuestion() {
           )}
           {error ? <Body muted>{error}</Body> : null}
           <View style={{ height: 16 }} />
-          <PrimaryButton label="Submit answer" onPress={submit} loading={busy} testID="submit-answer" />
+          <PrimaryButton
+            label="Submit answer"
+            onPress={submit}
+            loading={busy}
+            testID="submit-answer"
+          />
         </ScrollView>
       </Screen>
     </SafeAreaView>
