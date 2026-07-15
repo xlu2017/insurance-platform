@@ -1,0 +1,23 @@
+{
+  "name": "@autopilot/test-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@autopilot/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "@autopilot/config": "workspace:*",
+    "eslint": "9.17.0",
+    "typescript": "5.7.2"
+  }
+}

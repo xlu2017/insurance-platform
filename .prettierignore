@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+.next
+dist
+.turbo
+.expo
+supabase/migrations
+supabase/seed.sql
