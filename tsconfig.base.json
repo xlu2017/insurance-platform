@@ -9,6 +9,7 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "module": "ESNext",
     "target": "ES2022",
     "lib": ["ES2022"]

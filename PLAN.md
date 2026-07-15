@@ -19,11 +19,11 @@ Monorepo (pnpm + Turborepo, TypeScript strict) delivering:
 3. `packages/insurance-engine`: configuration construction (bundled + split), hard-constraint filtering, total-cost math, net savings vs incumbent, ranking, reason codes. Unit tests including the exact bundle-loss scenario (Alternative A rejected, Alternative B eligible at ≤ C$200 threshold).
 4. `supabase/migrations`: all core tables (UUID PKs, cents, UTC timestamps, created/updated audit columns), enums, transition-validation triggers, append-only `audit_events`, RLS on every exposed table, private storage buckets + storage policies.
 5. `supabase/seed.sql`: demo accounts (customer/operations/reviewer/admin), Alberta household, 2 drivers, 2 vehicles, property, policies, mandate, active case, 8 fictional insurers, quote scenarios incl. bundle-loss, recommendation awaiting review, one completed switch.
-6. Edge Functions: `stripe-webhook` (idempotent), `create-checkout-session` (with `PAYMENTS_BYPASS` flag), `send-quote-request` (email adapter: Resend or DB outbox).
+6. Edge Functions: `stripe-webhook` (idempotent), `create-checkout-session` (with `PAYMENTS_BYPASS` flag), `send-quote-request` (email adapter: Resend or DB outbox), `recommendation-generator` (invokes the deterministic engine and persists recommendation + ranked options).
 7. `apps/admin`: auth, overview dashboard, case queue with filters, case detail (household, policies, documents, mandate, shortlist, quote requests, quotes, comparison, questions, recommendation, switching, audit log), document extraction workflow (`DocumentExtractionProvider`: manual default, mock), insurer directory, licensed review, switch execution with ordering guard.
 8. `apps/mobile`: onboarding flow (register → household → province → membership → uploads → confirmation → mandate → preferences → consents → activate), 5 tabs (Home, Coverage, Autopilot timeline, Documents, Profile), question answering, recommendation review + reauthenticated approval, biometric unlock.
-9. Tests: engine + schema unit tests (Vitest), RLS isolation integration tests (against local Supabase), Playwright admin e2e, Maestro mobile golden path.
-10. CI: GitHub Actions — install, format, lint, typecheck, unit tests, admin build, Expo config validation. No production secrets required.
+9. Tests: engine + schema unit tests (Vitest), mobile Jest smoke test, RLS isolation integration tests (against local Supabase). Admin Playwright and mobile Maestro E2E flows are documented as next steps.
+10. CI: GitHub Actions — install, format:check, lint, typecheck, unit tests, admin build, Expo config validation. No production secrets required.
 11. Docs: README, architecture (Mermaid), data-model (ERD), security, demo script, deployment, regulatory-boundaries, roadmap.
 
 ## Non-goals (per spec)

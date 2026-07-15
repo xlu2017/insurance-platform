@@ -15,7 +15,7 @@ flowchart LR
     AUTH[Auth]
     PG[(Postgres\nRLS + triggers)]
     ST[Storage\nprivate bucket]
-    EF[Edge Functions\nstripe-webhook / checkout / send-quote-request]
+    EF[Edge Functions\nstripe-webhook / checkout / send-quote-request / recommendation-generator]
   end
   E[packages/insurance-engine\ndeterministic comparison]
   M --> AUTH & PG & ST & EF

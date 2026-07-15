@@ -24,7 +24,7 @@ packages/
   test-fixtures/       Deterministic engine fixtures, incl. the bundle-loss scenario
 supabase/
   migrations/          Schema, triggers, RLS
-  functions/           Edge Functions (Stripe webhook, checkout, quote-request email)
+  functions/           Edge Functions (Stripe webhook, checkout, quote-request email, recommendation generator)
   seed.sql             Demo users, insurers, household and active case
   tests/               pgTAP tests for RLS and state-machine guards
 docs/                  Architecture, data model, security, demo, deployment, regulatory, roadmap
@@ -76,9 +76,10 @@ a bundle-loss quote scenario, and a completed historical switch.
 pnpm test                 # unit tests (schemas, engine incl. bundle-loss scenario, mobile)
 pnpm typecheck            # strict TypeScript across the workspace
 pnpm lint
+pnpm format:check
 supabase test db          # pgTAP: RLS isolation, transition guards, audit immutability
-pnpm --filter @autopilot/admin exec playwright test    # admin E2E (needs supabase + seed)
-maestro test apps/mobile/.maestro/customer-golden-path.yaml   # mobile E2E
+pnpm --filter @autopilot/admin build
+pnpm --filter @autopilot/mobile expo:doctor
 ```
 
 ## Documentation

@@ -36,5 +36,8 @@ incumbent_cancelled → completed`. Trying to reach cancellation before replacem
 - Operations extraction: Documents tab → open a document → structured extraction form.
 - Quote entry: Quotes tab → enter premiums/fees/deductibles; Comparison tab re-runs the engine
   live and shows reason codes for every configuration.
+- Recommendation generator: when a case is in `comparing_quotes`, Operations can trigger the
+  `recommendation-generator` Edge Function to run the deterministic engine and persist a ranked
+  recommendation for licensed review.
 - Email outbox: send a quote-request email (Shortlist tab) and view it under Email outbox —
   no Resend key needed.

@@ -1,13 +1,15 @@
-import type { EngineQuote, HouseholdMandate, QuoteComponent } from "@autopilot/schemas";
 import type {
   CostBreakdown,
   EngineInput,
+  EngineQuote,
   EngineResult,
   EvaluatedConfiguration,
   HouseholdConfiguration,
+  HouseholdMandate,
   LineSelection,
+  QuoteComponent,
   ReasonCode,
-} from "./types";
+} from "./types.ts";
 
 const USABLE_QUOTE_STATES = new Set(["estimate", "conditional", "bindable", "selected"]);
 

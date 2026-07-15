@@ -14,7 +14,7 @@
 3. Deploy Edge Functions:
 
    ```bash
-   supabase functions deploy stripe-webhook create-checkout-session send-quote-request
+   supabase functions deploy stripe-webhook create-checkout-session send-quote-request recommendation-generator
    supabase secrets set STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_... RESEND_API_KEY=re_...
    ```
 

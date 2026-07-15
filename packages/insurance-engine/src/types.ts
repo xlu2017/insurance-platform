@@ -1,10 +1,87 @@
-import type {
-  AutoCoverageDetails,
-  EngineQuote,
-  HouseholdMandate,
-  PropertyCoverageDetails,
-  QuoteComponent,
-} from "@autopilot/schemas";
+export interface AutoCoverageDetails {
+  thirdPartyLiabilityCents: number;
+  collisionIncluded: boolean;
+  collisionDeductibleCents: number | null;
+  comprehensiveIncluded: boolean;
+  comprehensiveDeductibleCents: number | null;
+  accidentForgivenessIncluded: boolean;
+  rentalVehicleCoverageIncluded: boolean;
+  telematicsRequired: boolean;
+}
+
+export interface PropertyCoverageDetails {
+  dwellingLimitCents: number;
+  replacementCostIncluded: boolean;
+  sewerBackupIncluded: boolean;
+  overlandWaterIncluded: boolean;
+  baseDeductibleCents: number;
+  waterDeductibleCents: number | null;
+  additionalLivingExpensesIncluded: boolean;
+  equipmentBreakdownIncluded: boolean;
+}
+
+export type ProductLine = "auto" | "property";
+
+export interface QuoteComponent {
+  productLine: ProductLine;
+  annualPremiumCents: number;
+  auto: AutoCoverageDetails | null;
+  property: PropertyCoverageDetails | null;
+}
+
+export interface EngineQuote {
+  id: string;
+  insurerId: string;
+  insurerName: string;
+  state: string;
+  isIncumbent: boolean;
+  policyFeesCents: number;
+  paymentFeesCents: number;
+  bundleDiscountCents: number;
+  cancellationChargeCents: number;
+  underwritingConditions: string[];
+  components: QuoteComponent[];
+  expiresAt: string | null;
+}
+
+export interface AutoRequirements {
+  minThirdPartyLiabilityCents: number;
+  collisionRequired: boolean;
+  comprehensiveRequired: boolean;
+  maxCollisionDeductibleCents: number;
+  maxComprehensiveDeductibleCents: number;
+  accidentForgivenessRequired: boolean;
+  rentalVehicleCoverageRequired: boolean;
+  telematicsAllowed: boolean;
+}
+
+export interface PropertyRequirements {
+  minDwellingLimitCents: number;
+  replacementCostRequired: boolean;
+  sewerBackupRequired: boolean;
+  overlandWaterRequired: boolean;
+  maxBaseDeductibleCents: number;
+  maxWaterDeductibleCents: number;
+  additionalLivingExpensesRequired: boolean;
+  equipmentBreakdownRequired: boolean;
+}
+
+export interface SwitchingPreferences {
+  minNetAnnualSavingsCents: number;
+  renewalOnlySwitching: boolean;
+  householdOptimizationEnabled: boolean;
+  splitInsurersAllowed: boolean;
+  excludedInsurerIds: string[];
+  deductibleIncreasesAllowed: boolean;
+  materialCoverageReductionsAllowed: boolean;
+  customerApprovalRequired: boolean;
+}
+
+export interface HouseholdMandate {
+  auto: AutoRequirements;
+  property: PropertyRequirements;
+  switching: SwitchingPreferences;
+}
 
 export interface LineSelection {
   quoteId: string;

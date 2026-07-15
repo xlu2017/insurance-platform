@@ -53,7 +53,8 @@
   "jest": {
     "preset": "jest-expo",
     "moduleNameMapper": {
-      "^react$": "<rootDir>/node_modules/react"
+      "^react$": "<rootDir>/../../node_modules/react",
+      "^react-native$": "<rootDir>/../../node_modules/react-native"
     },
     "transformIgnorePatterns": [
       "node_modules/(?!(\\.pnpm/[^/]+/node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|react-native-svg|@autopilot)(/|@|-|$))"

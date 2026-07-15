@@ -160,6 +160,9 @@ create policy notifications_update on notifications for update using (profile_id
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
 revoke all on all tables in schema public from anon;
 -- Audit rows are append-only: no update/delete even for admins.
 revoke update, delete on audit_events from authenticated;
