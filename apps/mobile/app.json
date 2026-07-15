@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Insurance Autopilot",
+    "slug": "insurance-autopilot",
+    "version": "0.1.0",
+    "scheme": "insurance-autopilot",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.insuranceautopilot.app"
+    },
+    "android": {
+      "package": "com.insuranceautopilot.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "extra": {
+      "supabaseUrl": "http://127.0.0.1:54321",
+      "supabaseAnonKey": ""
+    }
+  }
+}
