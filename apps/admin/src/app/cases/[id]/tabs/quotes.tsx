@@ -45,6 +45,23 @@ const QuoteForm = z.object({
 });
 type QuoteForm = z.infer<typeof QuoteForm>;
 
+interface CoverageRow {
+  coverage: Json;
+  validation_status: string;
+  validation_errors: { path: string[]; code: string; message: string }[];
+  data_source: string | null;
+  validated_at: string | null;
+  validated_by: string | null;
+}
+
+interface QuoteComponentRow {
+  id: string;
+  product_line: string;
+  annual_premium_cents: number;
+  asset_id: string | null;
+  quote_coverages: CoverageRow[];
+}
+
 interface QuoteRow {
   id: string;
   state: string;
@@ -53,7 +70,7 @@ interface QuoteRow {
   bundle_discount_cents: number;
   underwriting_conditions: string[];
   insurers: { name: string } | null;
-  quote_policy_components: { product_line: string; annual_premium_cents: number }[];
+  quote_policy_components: QuoteComponentRow[];
 }
 
 export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
@@ -66,7 +83,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       const { data, error } = await supabaseBrowser()
         .from("quotes")
         .select(
-          "id, state, is_incumbent, policy_fees_cents, bundle_discount_cents, underwriting_conditions, insurers(name), quote_policy_components(product_line, annual_premium_cents)",
+          "id, state, is_incumbent, policy_fees_cents, bundle_discount_cents, underwriting_conditions, insurers(name), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, validation_status, validation_errors, data_source, validated_at, validated_by))",
         )
         .eq("case_id", caseRow.id)
         .order("created_at");
@@ -90,6 +107,39 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
   const { register, handleSubmit, reset, formState } = useForm<QuoteForm>({
     resolver: zodResolver(QuoteForm),
     defaultValues: { state: "estimate" },
+  });
+
+  interface ValidateQuoteArgs {
+    componentId: string;
+    coverage: Json;
+    dataSource?: string;
+  }
+
+  async function invokeValidateQuote({
+    componentId,
+    coverage,
+    dataSource,
+  }: ValidateQuoteArgs): Promise<unknown> {
+    const supabase = supabaseBrowser();
+    const { data, error } = await supabase.functions.invoke("validate-quote", {
+      body: {
+        quote_component_id: componentId,
+        coverage,
+        data_source: dataSource ?? "manual_entry",
+      },
+    });
+    if (error) throw new Error(error.message);
+    if (data && typeof data === "object" && "success" in data && !data.success) {
+      throw new Error((data as { message?: string }).message ?? "Quote validation failed");
+    }
+    return data;
+  }
+
+  const validateCoverage = useMutation<unknown, Error, ValidateQuoteArgs>({
+    mutationFn: invokeValidateQuote,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotes", caseRow.id] });
+    },
   });
 
   const createQuote = useMutation({
@@ -190,10 +240,11 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           .select("id")
           .single();
         if (compError) throw compError;
-        const { error: covError } = await supabase
-          .from("quote_coverages")
-          .insert({ quote_component_id: comp.id, coverage: component.coverage });
-        if (covError) throw covError;
+        await invokeValidateQuote({
+          componentId: comp.id,
+          coverage: component.coverage,
+          dataSource: "manual_entry",
+        });
       }
     },
     onSuccess: () => {
@@ -214,10 +265,10 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           <thead>
             <tr>
               <Th>Insurer</Th>
-              <Th>Lines</Th>
+              <Th>Lines / validation</Th>
               <Th>Premiums</Th>
               <Th>Bundle discount</Th>
-              <Th>Status</Th>
+              <Th>Quote state</Th>
               <Th>Conditions</Th>
             </tr>
           </thead>
@@ -228,7 +279,51 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
                   {q.insurers?.name}
                   {q.is_incumbent ? " (incumbent)" : ""}
                 </Td>
-                <Td>{q.quote_policy_components.map((c) => c.product_line).join(" + ")}</Td>
+                <Td>
+                  {q.quote_policy_components.map((c) => {
+                    const cov = c.quote_coverages?.[0];
+                    const tone =
+                      cov?.validation_status === "valid"
+                        ? "accent"
+                        : cov?.validation_status === "incomplete"
+                          ? "warning"
+                          : cov?.validation_status === "invalid"
+                            ? "danger"
+                            : "neutral";
+                    return (
+                      <div key={c.id} className="mb-2">
+                        <div className="text-xs uppercase text-ink-muted">{c.product_line}</div>
+                        {cov ? (
+                          <Badge tone={tone}>{titleCase(cov.validation_status)}</Badge>
+                        ) : (
+                          <span className="text-xs text-ink-muted">No coverage row</span>
+                        )}
+                        {cov?.validation_errors && cov.validation_errors.length > 0 ? (
+                          <ul className="mt-1 max-w-xs list-disc pl-4 text-xs text-danger">
+                            {cov.validation_errors.map((e, i) => (
+                              <li key={i}>{e.message}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1"
+                          disabled={validateCoverage.isPending}
+                          onClick={() =>
+                            validateCoverage.mutate({
+                              componentId: c.id,
+                              coverage: (cov?.coverage ?? {}) as Json,
+                              dataSource: cov?.data_source ?? "manual_entry",
+                            })
+                          }
+                        >
+                          Validate
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </Td>
                 <Td>
                   {q.quote_policy_components
                     .map((c) => `${c.product_line}: ${formatCad(c.annual_premium_cents)}`)

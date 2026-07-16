@@ -15,21 +15,21 @@ const REC_AUTO_COMP = "20000000-0000-0000-0000-0000000000a1";
 const REC_PROP_COMP = "20000000-0000-0000-0000-0000000000a2";
 const ACTOR_ID = "30000000-0000-0000-0000-000000000001";
 
-const baseSnapshot: RecommendationInputSnapshot = {
+const baseSnapshot = {
   caseId: "11111111-1111-1111-1111-111111111111",
   householdId: "22222222-2222-2222-2222-222222222222",
   mandateId: "33333333-3333-3333-3333-333333333333",
   mandateVersion: 1,
-  mandateSchemaVersion: 2,
-  jurisdiction: "AB",
+  mandateSchemaVersion: 2 as const,
+  jurisdiction: "AB" as const,
   switchingPreferencesId: "44444444-4444-4444-4444-444444444444",
   switchingPreferencesVersion: 1,
-  mandate: { jurisdiction: "AB", vehicleDefaults: {}, propertyDefaults: {} },
+  mandate: { jurisdiction: "AB" as const, vehicleDefaults: {}, propertyDefaults: {} },
   switching: {},
   assets: { vehicles: [], properties: [] },
   quotes: [],
   quoteSnapshot: [],
-};
+} as unknown as RecommendationInputSnapshot;
 
 describe("canonicalization", () => {
   it("excludes generatedAt from the canonical form", () => {
@@ -62,8 +62,13 @@ describe("persistence payload schema", () => {
   it("rejects unknown top-level fields", () => {
     const payload = {
       caseId: "11111111-1111-1111-1111-111111111111",
-      actorProfileId: "22222222-2222-2222-2222-222222222222",
-      mandate: { id: "33333333-3333-3333-3333-333333333333", version: 1, schemaVersion: 2, jurisdiction: "AB" },
+      actorProfileId: ACTOR_ID,
+      mandate: {
+        id: "33333333-3333-3333-3333-333333333333",
+        version: 1,
+        schemaVersion: 2,
+        jurisdiction: "AB",
+      },
       switchingPreferences: { id: "44444444-4444-4444-4444-444444444444", version: 1 },
       engine: { version: "1.0.0", sourceHash: "a".repeat(64) },
       inputSnapshotJson: {},
@@ -89,8 +94,13 @@ describe("persistence payload schema", () => {
   it("rejects an option missing component/asset identities", () => {
     const payload = {
       caseId: "11111111-1111-1111-1111-111111111111",
-      actorProfileId: "22222222-2222-2222-2222-222222222222",
-      mandate: { id: "33333333-3333-3333-3333-333333333333", version: 1, schemaVersion: 2, jurisdiction: "AB" },
+      actorProfileId: ACTOR_ID,
+      mandate: {
+        id: "33333333-3333-3333-3333-333333333333",
+        version: 1,
+        schemaVersion: 2,
+        jurisdiction: "AB",
+      },
       switchingPreferences: { id: "44444444-4444-4444-4444-444444444444", version: 1 },
       engine: { version: "1.0.0", sourceHash: "a".repeat(64) },
       inputSnapshotJson: {},
@@ -106,7 +116,12 @@ describe("persistence payload schema", () => {
         eligible: true,
         reason_codes: [],
         ranking_factors: {},
-        preference_alignment: { satisfied_count: 0, missed_count: 0, not_evaluable_count: 0, details: [] },
+        preference_alignment: {
+          satisfied_count: 0,
+          missed_count: 0,
+          not_evaluable_count: 0,
+          details: [],
+        },
         deductible_total_cents: 0,
         underwriting_condition_count: 0,
       },
@@ -134,7 +149,8 @@ describe("persistence payload schema", () => {
       incumbentProperty: s.incumbentProperty,
     };
     const result = evaluateHousehold(input);
-    const recommended = result.eligible[0];
+    expect(result.eligible.length).toBeGreaterThan(0);
+    const recommended = result.eligible[0]!;
     const option = {
       rank: 1,
       auto_quote_id: REC_QUOTE_A,
@@ -160,20 +176,13 @@ describe("persistence payload schema", () => {
       deductible_total_cents: recommended.deductibleTotalCents,
       underwriting_condition_count: recommended.underwritingConditionCount,
     };
-    const { canonical: inputJson, canonicalJson: inputCanonical } = canonicalSerializeRecommendationInput(
-      baseSnapshot,
-      "1.0.0",
-      "0".repeat(64),
-    );
-    const { canonical: outputJson, canonicalJson: outputCanonical } = canonicalSerializeRecommendationOutput(
-      result,
-      option,
-      [option],
-      [],
-    );
+    const { canonical: inputJson, canonicalJson: inputCanonical } =
+      canonicalSerializeRecommendationInput(baseSnapshot, "1.0.0", "0".repeat(64));
+    const { canonical: outputJson, canonicalJson: outputCanonical } =
+      canonicalSerializeRecommendationOutput(result, option, [option], []);
     const payload = {
       caseId: baseSnapshot.caseId,
-      actorProfileId: "22222222-2222-2222-2222-222222222222",
+      actorProfileId: ACTOR_ID,
       mandate: { id: baseSnapshot.mandateId, version: 1, schemaVersion: 2, jurisdiction: "AB" },
       switchingPreferences: { id: baseSnapshot.switchingPreferencesId, version: 1 },
       engine: { version: "1.0.0", sourceHash: "0".repeat(64) },

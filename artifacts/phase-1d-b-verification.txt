@@ -1,0 +1,136 @@
+
+> insurance-autopilot@0.1.0 ci:local /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-all.sh
+
+
+> insurance-autopilot@0.1.0 ci:static /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-static.sh
+
+
+> insurance-autopilot@0.1.0 format:check /home/ubuntu/repos/insurance-platform
+> prettier --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
+
+Checking formatting...
+All matched files use Prettier code style!
+
+> insurance-autopilot@0.1.0 lint /home/ubuntu/repos/insurance-platform
+> turbo run lint
+
+turbo 2.3.3
+
+• Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
+• Running lint in 8 packages
+• Remote caching disabled
+@autopilot/schemas:lint: cache hit, replaying logs fd327ac6e81302d2
+@autopilot/schemas:lint: 
+@autopilot/schemas:lint: > @autopilot/schemas@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:lint: > eslint src
+@autopilot/schemas:lint: 
+@autopilot/design-tokens:lint: cache hit, replaying logs 97188c87325023ce
+@autopilot/design-tokens:lint: 
+@autopilot/design-tokens:lint: > @autopilot/design-tokens@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/design-tokens
+@autopilot/design-tokens:lint: > eslint src
+@autopilot/design-tokens:lint: 
+@autopilot/test-fixtures:lint: cache hit, replaying logs 35e51dd758b4165d
+@autopilot/test-fixtures:lint: 
+@autopilot/test-fixtures:lint: > @autopilot/test-fixtures@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/test-fixtures
+@autopilot/test-fixtures:lint: > eslint src
+@autopilot/test-fixtures:lint: 
+@autopilot/database:lint: cache hit, replaying logs 8438040b28926060
+@autopilot/database:lint: 
+@autopilot/database:lint: > @autopilot/database@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:lint: > eslint src
+@autopilot/database:lint: 
+@autopilot/mobile:lint: cache hit, replaying logs 7f823dd463fa931d
+@autopilot/mobile:lint: 
+@autopilot/mobile:lint: > @autopilot/mobile@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:lint: > eslint app lib components
+@autopilot/mobile:lint: 
+@autopilot/insurance-engine:lint: cache miss, executing 82fa8f285835d9e6
+@autopilot/admin:lint: cache miss, executing d311accbaecacd71
+@autopilot/insurance-engine:lint: 
+@autopilot/insurance-engine:lint: > @autopilot/insurance-engine@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:lint: > eslint src test scripts
+@autopilot/insurance-engine:lint: 
+@autopilot/admin:lint: 
+@autopilot/admin:lint: > @autopilot/admin@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/admin
+@autopilot/admin:lint: > eslint .
+@autopilot/admin:lint: 
+@autopilot/insurance-engine:lint: 
+@autopilot/insurance-engine:lint: /home/ubuntu/repos/insurance-platform/packages/insurance-engine/test/digest-and-persistence.test.ts
+@autopilot/insurance-engine:lint:   16:7  error  'ACTOR_ID' is assigned a value but never used  @typescript-eslint/no-unused-vars
+@autopilot/insurance-engine:lint: 
+@autopilot/insurance-engine:lint: ✖ 1 problem (1 error, 0 warnings)
+@autopilot/insurance-engine:lint: 
+@autopilot/insurance-engine:lint:  ELIFECYCLE  Command failed with exit code 1.
+@autopilot/insurance-engine:lint: ERROR: command finished with error: command (/home/ubuntu/repos/insurance-platform/packages/insurance-engine) /home/ubuntu/.local/bin/pnpm run lint exited (1)
+@autopilot/insurance-engine#lint: command (/home/ubuntu/repos/insurance-platform/packages/insurance-engine) /home/ubuntu/.local/bin/pnpm run lint exited (1)
+
+ Tasks:    5 successful, 7 total
+Cached:    5 cached, 7 total
+  Time:    1.217s 
+Failed:    @autopilot/insurance-engine#lint
+
+ ERROR  run failed: command  exited (1)
+ ELIFECYCLE  Command failed with exit code 1.
+ ELIFECYCLE  Command failed with exit code 1.
+
+> insurance-autopilot@0.1.0 ci:database /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-database.sh
+
+Supabase local stack is already running; reusing existing stack.
+WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
+Resetting local database...
+Recreating database...
+Initialising schema...
+Seeding globals from roles.sql...
+Applying migration 20260715000001_schema.sql...
+NOTICE (42710): extension "pgcrypto" already exists, skipping
+Applying migration 20260715000002_rls.sql...
+Applying migration 20260715000003_remediation.sql...
+Applying migration 20260715000004_audit_triggers.sql...
+Applying migration 20260715000005_post_remediation_fixes.sql...
+Applying migration 20260715000006_rpc_renames.sql...
+Applying migration 20260715000007_rpc_lockdown.sql...
+NOTICE (00000): index "idx_recommendation_approvals_one_per_reviewer" does not exist, skipping
+Applying migration 20260715000008_generate_recommendation.sql...
+Applying migration 20260715000009_drop_old_rpc_overloads.sql...
+Applying migration 20260715000010_activate_autopilot.sql...
+Applying migration 20260715000011_quote_request_email.sql...
+Applying migration 20260715000012_rpc_grants_lockdown.sql...
+Applying migration 20260715000013_process_stripe_event.sql...
+Applying migration 20260715000014_document_restrictions.sql...
+Applying migration 20260716000002_coverage_mandate_expansion.sql...
+Applying migration 20260716000003_coverage_mandate_v2_foundation.sql...
+NOTICE (00000): trigger "vehicle_mandate_override_household_guard" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "property_mandate_override_household_guard" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_customer_select" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_customer_no_write" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_service_all" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_admin_select" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_customer_select" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_customer_no_write" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_service_all" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_customer_select" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_customer_no_write" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_service_all" for relation "property_mandate_overrides" does not exist, skipping
+Applying migration 20260716000004_quote_coverage_normalization.sql...
+Applying migration 20260716000005_phase_1c_v2_authoritative.sql...
+NOTICE (00000): trigger "quote_policy_component_asset_integrity_trigger" for relation "quote_policy_components" does not exist, skipping
+NOTICE (00000): function persist_household_mandate_v2(uuid,pg_catalog.int4,pg_catalog.int4,jsonb,jsonb,jsonb,jsonb,jsonb,text) does not exist, skipping
+NOTICE (00000): function persist_household_mandate_v2(uuid,pg_catalog.int4,pg_catalog.int4,jsonb,jsonb,jsonb,jsonb,jsonb,text,uuid) does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_staff_select" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_staff_select" for relation "property_mandate_overrides" does not exist, skipping
+Applying migration 20260716000006_allow_recommendation_regeneration.sql...
+Applying migration 20260716000007_phase_1d_recommendation_integrity.sql...
+Applying migration 20260716000008_quote_validation_status.sql...
+NOTICE (00000): trigger "quote_coverages_coverage_changed" for relation "quote_coverages" does not exist, skipping
+Applying migration 20260716000009_phase_1d_b_recommendation_integrity.sql...
+NOTICE (42710): extension "pgcrypto" already exists, skipping
+NOTICE (00000): constraint "recommendations_input_snapshot_digest_check" of relation "recommendations" does not exist, skipping
+NOTICE (00000): constraint "recommendations_engine_output_digest_check" of relation "recommendations" does not exist, skipping
+Seeding data from supabase/seed.sql...
+Restarting containers...
