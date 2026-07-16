@@ -11,6 +11,13 @@ export type { EngineInput, EngineResult } from "../src/types.ts";
 export { loadRecommendationInputSnapshot } from "../../database/src/recommendation-loader.ts";
 export type { SnapshotLoadError } from "../../database/src/recommendation-loader.ts";
 
+// Re-export quote coverage schemas for the validated quote-write boundary.
+export {
+  AutoCoverageDetails,
+  PropertyCoverageDetails,
+  QuoteComponent,
+} from "../../schemas/src/quotes.ts";
+
 // Expose the canonical V2 schemas so the public mandate-save Edge Function can
 // validate requests with the same definitions used by the workspace.
 export {

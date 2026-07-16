@@ -50,7 +50,7 @@ flowchart LR
   Both raw RPCs are revoked from authenticated users.
 - **One engine, two runtimes.** `packages/insurance-engine/src/engine.ts` is the only engine source.
   `pnpm --filter @autopilot/insurance-engine build:edge` bundles it into
-  `supabase/functions/recommendation-generator/_shared/autopilot.js` for the Supabase Edge Function;
+  `supabase/functions/_shared/autopilot.js` for use by the Supabase Edge Functions;
   the bundle header contains a SHA-256 source hash and CI enforces parity with `check:edge`.
 - **Deterministic engine.** `packages/insurance-engine` is pure and side-effect free. It builds
   every bundled/split household configuration from usable quotes, always includes the incumbent,

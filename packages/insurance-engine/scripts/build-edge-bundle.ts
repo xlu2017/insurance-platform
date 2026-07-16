@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const packageDir = resolve(dirname(__filename), "..");
 const root = resolve(packageDir, "..", "..");
 const entry = resolve(packageDir, "scripts", "edge-entry.ts");
-const outdir = resolve(root, "supabase", "functions", "recommendation-generator", "_shared");
+const outdir = resolve(root, "supabase", "functions", "_shared");
 const outfile = resolve(outdir, "autopilot.js");
 
 async function computeSourceHash(metafile: esbuild.Metafile): Promise<string> {

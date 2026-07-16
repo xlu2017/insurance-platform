@@ -13,7 +13,7 @@ import {
   type EngineRecommendationPersistencePayload,
   type EngineResult,
   type EvaluatedConfiguration,
-} from "./_shared/autopilot.js";
+} from "../_shared/autopilot.js";
 
 const ENGINE_VERSION = "1.0.0";
 

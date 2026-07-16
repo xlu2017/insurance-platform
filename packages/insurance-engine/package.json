@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build:edge": "tsx scripts/build-edge-bundle.ts",
-    "check:edge": "pnpm build:edge && git diff --exit-code ../../supabase/functions/recommendation-generator/_shared/autopilot.js"
+    "check:edge": "pnpm build:edge && git diff --exit-code ../../supabase/functions/_shared/autopilot.js"
   },
   "dependencies": {
     "@autopilot/schemas": "workspace:*",

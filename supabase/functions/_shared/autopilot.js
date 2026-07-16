@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 581603977e77bd22e27dc7174d0904aac56fff8fb7aaa1623fd4f9d8ac0073aa
+// source-hash: 0f39f39d395a0720bdbd34959e7b827612ff622c44a9bb500bfeed8b0f5cfdef
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -6588,8 +6588,11 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
   };
 }
 export {
+  AutoCoverageDetails,
   EngineRecommendationPersistencePayloadSchema,
   HouseholdCoverageMandateV2,
+  PropertyCoverageDetails,
+  QuoteComponent,
   SwitchingPreferencesV2,
   buildEngineInputFromSnapshot,
   evaluateHousehold,
@@ -6598,4 +6601,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "581603977e77bd22e27dc7174d0904aac56fff8fb7aaa1623fd4f9d8ac0073aa";
+export const __AUTOPILOT_SOURCE_HASH__ = "0f39f39d395a0720bdbd34959e7b827612ff622c44a9bb500bfeed8b0f5cfdef";

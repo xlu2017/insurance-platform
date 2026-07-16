@@ -3,10 +3,7 @@
 // schemas, checks household ownership and asset associations, then delegates
 // persistence to the service-role-only persist_household_mandate_v2 RPC.
 import { createClient } from "npm:@supabase/supabase-js@2";
-import {
-  HouseholdCoverageMandateV2,
-  SwitchingPreferencesV2,
-} from "../recommendation-generator/_shared/autopilot.js";
+import { HouseholdCoverageMandateV2, SwitchingPreferencesV2 } from "../_shared/autopilot.js";
 
 interface SaveMandateRequest {
   householdId: string;

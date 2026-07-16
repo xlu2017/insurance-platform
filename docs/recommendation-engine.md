@@ -162,7 +162,7 @@ competing quotes through the shared `loadRecommendationInputSnapshot` loader in
 `packages/database/src/recommendation-loader.ts`, which validates every JSON boundary against the
 V2 Zod schemas. It then calls the same `evaluateHousehold` engine used by workspace tests
 (`packages/insurance-engine/src/engine.ts`). The engine is bundled into
-`supabase/functions/recommendation-generator/_shared/autopilot.js` by
+`supabase/functions/_shared/autopilot.js` by
 `pnpm --filter @autopilot/insurance-engine build:edge`; the bundle header carries a SHA-256 source
 hash and CI enforces parity with `check:edge`.
 

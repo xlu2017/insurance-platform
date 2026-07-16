@@ -5,4 +5,4 @@ dist
 .expo
 supabase/migrations
 supabase/seed.sql
-supabase/functions/recommendation-generator/_shared/autopilot.js
+supabase/functions/_shared/autopilot.js
