@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 1863590c5e86f8057c84d954c33790197aad6a9ec88aef7e2ae6416e66954a4f
+// source-hash: df7dd03a98a37a9f89d148bd73e0bf5f91887f60060b45156c3c1cb38cf5c55b
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -4744,7 +4744,8 @@ var EngineQuote = z.object({
   paymentFrequency: PaymentFrequency.optional(),
   billingMethod: BillingMethod.optional(),
   distributionChannel: BrokerDirectPreference.optional(),
-  insurerFinancialRating: InsurerFinancialRating.optional()
+  insurerFinancialRating: InsurerFinancialRating.optional(),
+  insurerVersion: z.number().int().nonnegative().optional()
 });
 var QuoteValidationIssue = z.object({
   path: z.array(z.string()),
@@ -6454,6 +6455,15 @@ function canonicalSerializeRecommendationOutput(result, recommendedOption, ranke
   });
   return { canonical, canonicalJson: JSON.stringify(canonical) };
 }
+function verifyCanonicalString(canonicalJson) {
+  try {
+    const parsed = JSON.parse(canonicalJson);
+    const recomputed = JSON.stringify(canonicalizeForDigest(parsed));
+    return recomputed === canonicalJson;
+  } catch {
+    return false;
+  }
+}
 
 // ../database/src/mandate-repository.ts
 var MandateLoadError = class extends Error {
@@ -6714,7 +6724,8 @@ function toEngineQuote(q) {
     paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : void 0,
     billingMethod: billingMethod ? toBillingMethod(billingMethod) : void 0,
     distributionChannel,
-    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "unknown"
+    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "unknown",
+    insurerVersion: insurer?.version
   };
 }
 
@@ -6742,7 +6753,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     supabase.from("vehicles").select("id").eq("household_id", householdId),
     supabase.from("properties").select("id").eq("household_id", householdId),
     supabase.from("quotes").select(
-      "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
+      "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, version, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
     ).eq("case_id", caseId)
   ]);
   if (!mandateResult || "code" in mandateResult) {
@@ -6828,9 +6839,10 @@ export {
   canonicalSerializeRecommendationOutput,
   canonicalizeForDigest,
   evaluateHousehold,
-  loadRecommendationInputSnapshot
+  loadRecommendationInputSnapshot,
+  verifyCanonicalString
 };
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "1863590c5e86f8057c84d954c33790197aad6a9ec88aef7e2ae6416e66954a4f";
+export const __AUTOPILOT_SOURCE_HASH__ = "df7dd03a98a37a9f89d148bd73e0bf5f91887f60060b45156c3c1cb38cf5c55b";
