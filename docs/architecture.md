@@ -38,9 +38,10 @@ flowchart LR
   `authenticated` by RLS; the RPCs verify household membership, role and state before changing data.
 - **Deterministic engine.** `packages/insurance-engine` is pure and side-effect free. It builds
   every bundled/split household configuration from usable quotes, always includes the incumbent,
-  applies hard mandate constraints, computes total cost in integer cents (premiums + fees +
-  cancellation charges − bundle discounts) and ranks with explicit reason codes. No AI decides
-  coverage equivalence.
+  applies hard mandate constraints, handles asset-specific mandate inheritance (vehicle/property
+  overrides), detects coverage reductions vs the incumbent, computes total cost in integer cents
+  (premiums + fees + cancellation charges − bundle discounts) and ranks with explicit reason codes.
+  No AI decides coverage equivalence.
 - **Provider adapters.** Email (Resend → `email_outbox` fallback), push (Expo → local log) and
   document extraction (`manual` default, `mock` for demos) are interfaces in
   `packages/database/src/providers`, so the demo runs with zero external services.
@@ -81,7 +82,7 @@ stateDiagram-v2
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `apps/mobile`               | Customer app: onboarding, 5-tab navigation, documents, questions, recommendation approval with reauthentication       |
 | `apps/admin`                | Operations console: dashboard, case queue, case detail (11 tabs), quote entry, comparison, licensed review, switching |
-| `packages/schemas`          | Zod schemas, enums, transition maps                                                                                   |
+| `packages/schemas`          | Zod schemas, enums, mandate schemas, transition maps                                                                  |
 | `packages/insurance-engine` | Comparison and ranking engine + unit tests                                                                            |
 | `packages/database`         | Supabase typed client (`Database`), generated types and provider adapters                                             |
 | `packages/test-fixtures`    | Deterministic fixtures including the mandatory bundle-loss scenario                                                   |

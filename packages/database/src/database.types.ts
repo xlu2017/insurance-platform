@@ -168,9 +168,11 @@ export type Database = {
           household_id: string;
           id: string;
           is_current: boolean;
+          property_mandates: Json;
           property_requirements: Json;
           updated_at: string;
           updated_by: string | null;
+          vehicle_mandates: Json;
           version: number;
         };
         Insert: {
@@ -180,9 +182,11 @@ export type Database = {
           household_id: string;
           id?: string;
           is_current?: boolean;
+          property_mandates?: Json;
           property_requirements: Json;
           updated_at?: string;
           updated_by?: string | null;
+          vehicle_mandates?: Json;
           version?: number;
         };
         Update: {
@@ -192,9 +196,11 @@ export type Database = {
           household_id?: string;
           id?: string;
           is_current?: boolean;
+          property_mandates?: Json;
           property_requirements?: Json;
           updated_at?: string;
           updated_by?: string | null;
+          vehicle_mandates?: Json;
           version?: number;
         };
         Relationships: [
@@ -553,14 +559,17 @@ export type Database = {
         Row: {
           active: boolean;
           api_supported: boolean;
+          billing_methods: Database["public"]["Enums"]["billing_method"][];
           bundle_supported: boolean;
           contact_method: string;
           created_at: string;
           distribution: string;
           email_supported: boolean;
+          financial_strength_rating: Database["public"]["Enums"]["financial_rating"];
           id: string;
           internal_notes: string;
           name: string;
+          payment_frequencies: Database["public"]["Enums"]["payment_frequency"][];
           portal_supported: boolean;
           products: Database["public"]["Enums"]["product_line"][];
           provinces: string[];
@@ -569,14 +578,17 @@ export type Database = {
         Insert: {
           active?: boolean;
           api_supported?: boolean;
+          billing_methods?: Database["public"]["Enums"]["billing_method"][];
           bundle_supported?: boolean;
           contact_method?: string;
           created_at?: string;
           distribution?: string;
           email_supported?: boolean;
+          financial_strength_rating?: Database["public"]["Enums"]["financial_rating"];
           id?: string;
           internal_notes?: string;
           name: string;
+          payment_frequencies?: Database["public"]["Enums"]["payment_frequency"][];
           portal_supported?: boolean;
           products?: Database["public"]["Enums"]["product_line"][];
           provinces?: string[];
@@ -585,14 +597,17 @@ export type Database = {
         Update: {
           active?: boolean;
           api_supported?: boolean;
+          billing_methods?: Database["public"]["Enums"]["billing_method"][];
           bundle_supported?: boolean;
           contact_method?: string;
           created_at?: string;
           distribution?: string;
           email_supported?: boolean;
+          financial_strength_rating?: Database["public"]["Enums"]["financial_rating"];
           id?: string;
           internal_notes?: string;
           name?: string;
+          payment_frequencies?: Database["public"]["Enums"]["payment_frequency"][];
           portal_supported?: boolean;
           products?: Database["public"]["Enums"]["product_line"][];
           provinces?: string[];
@@ -909,6 +924,7 @@ export type Database = {
           id: string;
           owner_occupied: boolean;
           postal_code: string;
+          property_type: Database["public"]["Enums"]["property_type"];
           province: string;
           updated_at: string;
           updated_by: string | null;
@@ -924,6 +940,7 @@ export type Database = {
           id?: string;
           owner_occupied?: boolean;
           postal_code: string;
+          property_type?: Database["public"]["Enums"]["property_type"];
           province?: string;
           updated_at?: string;
           updated_by?: string | null;
@@ -939,6 +956,7 @@ export type Database = {
           id?: string;
           owner_occupied?: boolean;
           postal_code?: string;
+          property_type?: Database["public"]["Enums"]["property_type"];
           province?: string;
           updated_at?: string;
           updated_by?: string | null;
@@ -1615,6 +1633,8 @@ export type Database = {
       };
       switching_preferences: {
         Row: {
+          allow_bundle_breakup: boolean;
+          broker_direct_preference: Database["public"]["Enums"]["broker_direct_preference"];
           created_at: string;
           created_by: string | null;
           customer_approval_required: boolean;
@@ -1625,14 +1645,22 @@ export type Database = {
           id: string;
           is_current: boolean;
           material_coverage_reductions_allowed: boolean;
+          max_deductible_increase_cents: number;
+          max_premium_increase_cents: number;
           min_net_annual_savings_cents: number;
+          minimum_insurer_financial_rating: Database["public"]["Enums"]["financial_rating"];
+          preferred_billing_method: Database["public"]["Enums"]["billing_method"];
+          preferred_payment_frequency: Database["public"]["Enums"]["payment_frequency"];
           renewal_only_switching: boolean;
           split_insurers_allowed: boolean;
+          switch_only_after_customer_approval: boolean;
           updated_at: string;
           updated_by: string | null;
           version: number;
         };
         Insert: {
+          allow_bundle_breakup?: boolean;
+          broker_direct_preference?: Database["public"]["Enums"]["broker_direct_preference"];
           created_at?: string;
           created_by?: string | null;
           customer_approval_required?: boolean;
@@ -1643,14 +1671,22 @@ export type Database = {
           id?: string;
           is_current?: boolean;
           material_coverage_reductions_allowed?: boolean;
+          max_deductible_increase_cents?: number;
+          max_premium_increase_cents?: number;
           min_net_annual_savings_cents?: number;
+          minimum_insurer_financial_rating?: Database["public"]["Enums"]["financial_rating"];
+          preferred_billing_method?: Database["public"]["Enums"]["billing_method"];
+          preferred_payment_frequency?: Database["public"]["Enums"]["payment_frequency"];
           renewal_only_switching?: boolean;
           split_insurers_allowed?: boolean;
+          switch_only_after_customer_approval?: boolean;
           updated_at?: string;
           updated_by?: string | null;
           version?: number;
         };
         Update: {
+          allow_bundle_breakup?: boolean;
+          broker_direct_preference?: Database["public"]["Enums"]["broker_direct_preference"];
           created_at?: string;
           created_by?: string | null;
           customer_approval_required?: boolean;
@@ -1661,9 +1697,15 @@ export type Database = {
           id?: string;
           is_current?: boolean;
           material_coverage_reductions_allowed?: boolean;
+          max_deductible_increase_cents?: number;
+          max_premium_increase_cents?: number;
           min_net_annual_savings_cents?: number;
+          minimum_insurer_financial_rating?: Database["public"]["Enums"]["financial_rating"];
+          preferred_billing_method?: Database["public"]["Enums"]["billing_method"];
+          preferred_payment_frequency?: Database["public"]["Enums"]["payment_frequency"];
           renewal_only_switching?: boolean;
           split_insurers_allowed?: boolean;
+          switch_only_after_customer_approval?: boolean;
           updated_at?: string;
           updated_by?: string | null;
           version?: number;
@@ -1697,13 +1739,17 @@ export type Database = {
           annual_km: number | null;
           created_at: string;
           created_by: string | null;
+          financing_status: Database["public"]["Enums"]["financing_status"];
           household_id: string;
           id: string;
+          is_classic: boolean;
+          is_modified: boolean;
           make: string;
           model: string;
           primary_use: string;
           updated_at: string;
           updated_by: string | null;
+          vehicle_use_class: Database["public"]["Enums"]["vehicle_use_class"];
           vin: string | null;
           year: number;
         };
@@ -1711,13 +1757,17 @@ export type Database = {
           annual_km?: number | null;
           created_at?: string;
           created_by?: string | null;
+          financing_status?: Database["public"]["Enums"]["financing_status"];
           household_id: string;
           id?: string;
+          is_classic?: boolean;
+          is_modified?: boolean;
           make: string;
           model: string;
           primary_use?: string;
           updated_at?: string;
           updated_by?: string | null;
+          vehicle_use_class?: Database["public"]["Enums"]["vehicle_use_class"];
           vin?: string | null;
           year: number;
         };
@@ -1725,13 +1775,17 @@ export type Database = {
           annual_km?: number | null;
           created_at?: string;
           created_by?: string | null;
+          financing_status?: Database["public"]["Enums"]["financing_status"];
           household_id?: string;
           id?: string;
+          is_classic?: boolean;
+          is_modified?: boolean;
           make?: string;
           model?: string;
           primary_use?: string;
           updated_at?: string;
           updated_by?: string | null;
+          vehicle_use_class?: Database["public"]["Enums"]["vehicle_use_class"];
           vin?: string | null;
           year?: number;
         };
@@ -1948,6 +2002,14 @@ export type Database = {
       };
     };
     Enums: {
+      auto_coverage_form:
+        | "liability_only"
+        | "collision"
+        | "comprehensive"
+        | "specified_perils"
+        | "all_perils";
+      billing_method: "automatic_bank" | "credit_card" | "mail";
+      broker_direct_preference: "broker" | "direct" | "indifferent";
       case_state:
         | "draft"
         | "awaiting_documents"
@@ -1969,6 +2031,8 @@ export type Database = {
         | "share_for_quotation"
         | "generate_recommendations"
         | "electronic_communications";
+      coverage_preference: "required" | "preferred" | "indifferent" | "prohibited";
+      deductible_rule: "minimum" | "maximum" | "exact" | "match_current_or_better" | "any";
       document_category:
         | "current_auto_policy"
         | "current_property_policy"
@@ -1979,8 +2043,25 @@ export type Database = {
         | "cancellation_confirmation"
         | "other";
       document_status: "uploaded" | "in_review" | "extracted" | "rejected";
+      financial_rating: "A_plus" | "A" | "A_minus" | "B_plus" | "B_or_lower" | "any";
+      financing_status: "owned" | "financed" | "leased";
+      limit_rule: "minimum" | "maximum" | "exact" | "match_current_or_better" | "any";
       notification_channel: "push" | "email" | "local_log";
+      payment_frequency: "monthly" | "quarterly" | "semi_annual" | "annual";
       product_line: "auto" | "property";
+      property_coverage_form: "comprehensive" | "broad" | "named_perils" | "basic";
+      property_settlement:
+        | "replacement_cost"
+        | "guaranteed_replacement_cost"
+        | "extended_replacement_cost"
+        | "actual_cash_value";
+      property_type:
+        | "homeowner"
+        | "condo"
+        | "tenant"
+        | "landlord"
+        | "seasonal"
+        | "secondary_residence";
       question_status: "pending" | "answered" | "cancelled";
       question_type:
         | "yes_no"
@@ -2018,6 +2099,7 @@ export type Database = {
         | "completed"
         | "failed";
       user_role: "customer" | "operations" | "reviewer" | "admin";
+      vehicle_use_class: "personal" | "commercial" | "classic" | "modified";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -2143,6 +2225,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      auto_coverage_form: [
+        "liability_only",
+        "collision",
+        "comprehensive",
+        "specified_perils",
+        "all_perils",
+      ],
+      billing_method: ["automatic_bank", "credit_card", "mail"],
+      broker_direct_preference: ["broker", "direct", "indifferent"],
       case_state: [
         "draft",
         "awaiting_documents",
@@ -2166,6 +2257,8 @@ export const Constants = {
         "generate_recommendations",
         "electronic_communications",
       ],
+      coverage_preference: ["required", "preferred", "indifferent", "prohibited"],
+      deductible_rule: ["minimum", "maximum", "exact", "match_current_or_better", "any"],
       document_category: [
         "current_auto_policy",
         "current_property_policy",
@@ -2177,8 +2270,27 @@ export const Constants = {
         "other",
       ],
       document_status: ["uploaded", "in_review", "extracted", "rejected"],
+      financial_rating: ["A_plus", "A", "A_minus", "B_plus", "B_or_lower", "any"],
+      financing_status: ["owned", "financed", "leased"],
+      limit_rule: ["minimum", "maximum", "exact", "match_current_or_better", "any"],
       notification_channel: ["push", "email", "local_log"],
+      payment_frequency: ["monthly", "quarterly", "semi_annual", "annual"],
       product_line: ["auto", "property"],
+      property_coverage_form: ["comprehensive", "broad", "named_perils", "basic"],
+      property_settlement: [
+        "replacement_cost",
+        "guaranteed_replacement_cost",
+        "extended_replacement_cost",
+        "actual_cash_value",
+      ],
+      property_type: [
+        "homeowner",
+        "condo",
+        "tenant",
+        "landlord",
+        "seasonal",
+        "secondary_residence",
+      ],
       question_status: ["pending", "answered", "cancelled"],
       question_type: ["yes_no", "single_choice", "multiple_choice", "number", "date", "short_text"],
       quote_request_state: [
@@ -2213,6 +2325,7 @@ export const Constants = {
         "failed",
       ],
       user_role: ["customer", "operations", "reviewer", "admin"],
+      vehicle_use_class: ["personal", "commercial", "classic", "modified"],
     },
   },
 } as const;

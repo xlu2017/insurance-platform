@@ -14,21 +14,38 @@ const withFallback = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> =>
   }
 };
 
+const ls =
+  typeof globalThis !== "undefined" && (globalThis as Record<string, unknown>).localStorage
+    ? ((globalThis as unknown as { localStorage: Storage }).localStorage as Storage)
+    : null;
+
+const webStorage = {
+  getItem: (key: string) => Promise.resolve(ls?.getItem(key) ?? null),
+  setItem: (key: string, value: string) => {
+    ls?.setItem(key, value);
+    return Promise.resolve();
+  },
+  removeItem: (key: string) => {
+    ls?.removeItem(key);
+    return Promise.resolve();
+  },
+};
+
 const secureStoreAdapter = {
   getItem: (key: string) =>
     Platform.OS === "web"
-      ? Promise.resolve(null)
+      ? webStorage.getItem(key)
       : withFallback(() => SecureStore.getItemAsync(key), memoryStore.get(key) ?? null),
   setItem: (key: string, value: string) =>
     Platform.OS === "web"
-      ? Promise.resolve()
+      ? webStorage.setItem(key, value)
       : withFallback(
           () => SecureStore.setItemAsync(key, value),
           (memoryStore.set(key, value), undefined),
         ),
   removeItem: (key: string) =>
     Platform.OS === "web"
-      ? Promise.resolve()
+      ? webStorage.removeItem(key)
       : withFallback(() => SecureStore.deleteItemAsync(key), (memoryStore.delete(key), undefined)),
 };
 

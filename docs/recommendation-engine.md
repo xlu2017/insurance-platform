@@ -1,0 +1,153 @@
+# Recommendation Engine
+
+The recommendation engine is a pure, deterministic TypeScript function in
+`packages/insurance-engine/src/engine.ts`. It receives a normalized set of quotes and a household
+mandate and returns a ranked list of eligible household configurations, each with explicit reason
+codes. There is no AI, no probabilistic scoring, and no insurer-specific logic inside the comparison.
+
+## Entry point
+
+```ts
+export function evaluateHousehold(input: EngineInput): EngineResult;
+```
+
+`EngineInput` contains:
+
+- `mandate`: the full `HouseholdMandate` with household defaults and asset overrides.
+- `quotes`: competing insurer quotes normalized to `EngineQuote`.
+- `incumbentAuto`: the current auto policy as a `QuoteComponent`.
+- `incumbentProperty`: the current property policy as a `QuoteComponent`.
+
+## Quote normalization
+
+Incoming quotes are normalized into `EngineQuote` before they reach the engine. Each quote carries:
+
+- `id`, `insurerId`, `insurerName`, `state`, `isIncumbent`
+- Cost fields: `policyFeesCents`, `paymentFeesCents`, `bundleDiscountCents`, `cancellationChargeCents`
+- `components`: one or more `QuoteComponent` objects, each with `productLine` (`auto` / `property`),
+  optional `assetId`, `annualPremiumCents`, and the typed coverage details (`AutoCoverageDetails` or
+  `PropertyCoverageDetails`).
+- Switching metadata: `paymentFrequency`, `billingMethod`, `distributionChannel`,
+  `insurerFinancialRating`.
+
+No insurer-specific identifiers, strings, or proprietary forms participate in comparison. Every
+check operates on these normalized fields.
+
+## Configuration generation
+
+`buildConfigurations` creates every valid household configuration from usable quotes (states `estimate`,
+`conditional`, `bindable`, `selected`) plus the mandatory incumbent configuration. A configuration is:
+
+- `bundled` when the auto and property quote share the same `insurerId`.
+- `isIncumbentConfiguration` when both lines are the incumbent quote.
+
+Split configurations are generated when `switching.splitInsurersAllowed` is true or when only split
+quotes exist; eligibility is checked later.
+
+## Asset-specific inheritance
+
+Before hard checks, `effectiveAutoMandate` and `effectivePropertyMandate` merge the household default
+with any override keyed by `component.assetId`. The merge is deep for nested objects (coverage form,
+liability, deductibles, water coverage, etc.) and shallow for top-level fields, so an override only
+needs to specify the fields that differ for that asset.
+
+Example use cases:
+
+- A financed vehicle is required to carry collision (`vehicleOverrides[vehicleId].coverageForm.value = "collision"`).
+- An older vehicle can drop comprehensive.
+- A rental property has a higher base deductible than the household default.
+- A condo requires a specific endorsement set.
+
+## Hard requirement checks
+
+For each configuration the engine evaluates the effective mandate against the quote's normalized
+coverage.
+
+### Auto
+
+- Liability limit satisfies the limit rule.
+- Coverage form rank is at least the required form (or not equal when prohibited).
+- Collision/comprehensive/glass deductibles satisfy the deductible rule.
+- Each endorsement matches its `CoveragePreference` (`required`, `preferred`, `indifferent`, `prohibited`).
+- Vehicle class and financing status must match if specified.
+
+### Property
+
+- Property type must match if specified.
+- Coverage form and settlement basis must satisfy their preferences.
+- Dwelling, contents, detached structures, personal liability and ALE limits satisfy the limit rules.
+- Base, water, wind/hail and earthquake deductibles satisfy the deductible rules.
+- Sewer backup and overland water presence, limits and deductibles satisfy their rules.
+- Each optional coverage matches its `CoveragePreference`.
+
+### Switching / meta
+
+- Split configurations are rejected when `splitInsurersAllowed` is false.
+- Bundle breakup is rejected when the incumbent is bundled and `allowBundleBreakup` is false.
+- Excluded insurers are rejected.
+- Insurer financial rating must be at least `minimumInsurerFinancialRating`.
+
+## Incumbent comparison and coverage reduction
+
+`coverageReductionsVsIncumbent` compares the proposed coverage to the current policy and produces
+human-readable reduction strings. A configuration is ineligible when a required coverage is reduced
+relative to the incumbent:
+
+- Reduced auto endorsements (`auto_{endorsement}_removed`)
+- Reduced liability, lowered deductibles, reduced coverage form
+- Reduced property settlement basis (`property_settlement_reduced`)
+- Lowered property limits (dwelling, contents, detached structures, liability, ALE)
+- Removed water coverage or lowered limits/deductibles
+- Removed optional coverages (`property_{key}_removed`)
+
+## Cost and scoring
+
+`computeCost` calculates the annual household cost in integer Canadian cents:
+
+```
+total = autoPremium + propertyPremium + policyFees + paymentFees + cancellationCharges - bundleDiscount
+```
+
+Cancellation charges apply only to non-incumbent quotes. The bundle discount is the maximum discount
+available from the two quotes when they are bundled.
+
+The recommended configuration is the eligible configuration with the lowest total cost, then fewest
+coverage reductions, then lowest deductible total, then fewest underwriting conditions. The incumbent
+always participates and is ranked; it is the recommended option when no competitor saves enough.
+
+## Reason codes
+
+Every configuration receives one or more `ReasonCode` values:
+
+- Origin: `INCUMBENT_CONFIGURATION`, `BUNDLED_CONFIGURATION`, `SPLIT_CONFIGURATION`
+- Switching: `SPLIT_INSURERS_PROHIBITED`, `BUNDLE_BREAKUP_PROHIBITED`, `EXCLUDED_INSURER`,
+  `INSURER_RATING_BELOW_MINIMUM`, `DEDUCTIBLE_INCREASE_PROHIBITED`, `PREMIUM_INCREASE_TOO_HIGH`,
+  `BELOW_SAVINGS_THRESHOLD`
+- Auto: `AUTO_LIABILITY_BELOW_MINIMUM`, `AUTO_LIABILITY_EXCEEDS_MAXIMUM`,
+  `AUTO_LIABILITY_NOT_EXACT`, `AUTO_COVERAGE_FORM_INSUFFICIENT`, `AUTO_COVERAGE_FORM_PROHIBITED`,
+  `AUTO_COLLISION_DEDUCTIBLE_TOO_HIGH`, `AUTO_COMPREHENSIVE_DEDUCTIBLE_TOO_HIGH`,
+  `AUTO_GLASS_DEDUCTIBLE_TOO_HIGH`, `AUTO_ENDORSEMENT_MISSING`, `AUTO_ENDORSEMENT_PROHIBITED`,
+  `AUTO_TELEMATICS_REQUIRED`, `AUTO_TELEMATICS_PROHIBITED`, `AUTO_VEHICLE_CLASS_MISMATCH`,
+  `AUTO_FINANCING_STATUS_MISMATCH`
+- Property: `PROPERTY_TYPE_MISMATCH`, `PROPERTY_COVERAGE_FORM_INSUFFICIENT`,
+  `PROPERTY_COVERAGE_FORM_PROHIBITED`, `PROPERTY_SETTLEMENT_BELOW_REQUIRED`,
+  `PROPERTY_SETTLEMENT_PROHIBITED`, `PROPERTY_DWELLING_LIMIT_BELOW_MINIMUM`,
+  `PROPERTY_CONTENTS_LIMIT_TOO_LOW`, `PROPERTY_SEWER_BACKUP_MISSING`,
+  `PROPERTY_OVERLAND_WATER_DEDUCTIBLE_TOO_HIGH`, and others for every limit, deductible and
+  optional coverage.
+- Success: `MEETS_ALL_HARD_REQUIREMENTS`, `MEETS_SAVINGS_THRESHOLD`
+
+## Edge Function
+
+`supabase/functions/recommendation-generator` is a vendored, Deno-compatible copy of the workspace
+engine (`packages/insurance-engine`). It loads the household mandate, current policies, and all
+competing quotes from Postgres, calls `evaluateHousehold`, persists the top recommendation in
+`recommendations`, and writes the ranked options to `recommendation_options`. The function advances
+the case to `licensed_review`.
+
+## Tests
+
+Engine tests live in `packages/insurance-engine/test/engine.test.ts` and cover cost calculation,
+bundle-loss detection, hard constraints, exclusions, split-insurer handling, ranking,
+asset-specific inheritance, coverage reductions vs incumbent, quote normalization and switching
+filters.

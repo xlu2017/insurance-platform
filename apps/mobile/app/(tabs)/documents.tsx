@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import { Linking, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ import {
   Caption,
   Card,
   Loading,
+  PrimaryButton,
   Screen,
   SecondaryButton,
   Select,
@@ -66,7 +68,20 @@ export default function Documents() {
     },
   });
 
-  if (isLoading || !household) return <Loading />;
+  if (isLoading) return <Loading />;
+  if (!household) {
+    return (
+      <Screen style={{ justifyContent: "center" }}>
+        <Title>Finish setting up</Title>
+        <Body muted>Create your household to upload and view policy documents.</Body>
+        <View style={{ height: 16 }} />
+        <PrimaryButton
+          label="Continue setup"
+          onPress={() => router.push("/onboarding/household")}
+        />
+      </Screen>
+    );
+  }
 
   const upload = async (source: "document" | "camera" | "library") => {
     setBusy(true);
