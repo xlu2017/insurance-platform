@@ -147,7 +147,8 @@ async function loadV2Mandate(
     property_mandates: propertyMandates,
   };
 
-  const converted = expandedUnversionedMandateToV2(coverage, data.version, data.effective_from);
+  const effectiveFrom = new Date(data.effective_from).toISOString();
+  const converted = expandedUnversionedMandateToV2(coverage, data.version, effectiveFrom);
   return { mandate: validateMandate(converted), version: data.version };
 }
 
