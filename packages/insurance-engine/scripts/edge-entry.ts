@@ -22,6 +22,7 @@ export {
   PropertyCoverageDetails,
   QuoteComponent,
 } from "../../schemas/src/quotes.ts";
+export { QuoteDataSource } from "../../schemas/src/enums.ts";
 
 // Expose the canonical V2 schemas so the public mandate-save Edge Function can
 // validate requests with the same definitions used by the workspace.

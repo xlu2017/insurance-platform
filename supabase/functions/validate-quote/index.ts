@@ -7,6 +7,7 @@ import {
   AutoCoverageDetails,
   PropertyCoverageDetails,
   QuoteComponent,
+  QuoteDataSource,
 } from "../_shared/autopilot.js";
 
 const COVERAGE_SCHEMA_VERSION = 2;
@@ -154,6 +155,7 @@ Deno.serve(async (req) => {
     validationStatus = "invalid";
   }
 
+  const dataSource = QuoteDataSource.safeParse(body.data_source ?? "manual_entry");
   const now = new Date().toISOString();
   const payload = {
     quote_component_id: componentId,
@@ -163,7 +165,7 @@ Deno.serve(async (req) => {
     validated_at: now,
     validated_by: user.id,
     coverage_schema_version: COVERAGE_SCHEMA_VERSION,
-    data_source: body.data_source ?? "validate-quote-edge-function",
+    data_source: dataSource.success ? dataSource.data : "manual_entry",
   };
 
   let coverageId: string;

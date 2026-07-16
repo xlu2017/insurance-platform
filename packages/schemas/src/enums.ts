@@ -58,6 +58,17 @@ export const quoteValidationStatuses = [
 export const QuoteValidationStatus = z.enum(quoteValidationStatuses);
 export type QuoteValidationStatus = z.infer<typeof QuoteValidationStatus>;
 
+export const quoteDataSources = [
+  "manual_entry",
+  "insurer_document",
+  "insurer_portal",
+  "api",
+  "customer_confirmed",
+  "migration_unknown",
+] as const;
+export const QuoteDataSource = z.enum(quoteDataSources);
+export type QuoteDataSource = z.infer<typeof QuoteDataSource>;
+
 export const switchStates = [
   "customer_approved",
   "replacement_pending",

@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: a43c6c237a981dfadd6961eac1ccd69d149b041fa12032391866afe97388e78b
+// source-hash: 6452482aa031c07aeec336ee68d9e15082fc0da8be495bce922dcee109502ae3
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -4095,6 +4095,15 @@ var quoteValidationStatuses = [
   "superseded"
 ];
 var QuoteValidationStatus = z.enum(quoteValidationStatuses);
+var quoteDataSources = [
+  "manual_entry",
+  "insurer_document",
+  "insurer_portal",
+  "api",
+  "customer_confirmed",
+  "migration_unknown"
+];
+var QuoteDataSource = z.enum(quoteDataSources);
 var switchStates = [
   "customer_approved",
   "replacement_pending",
@@ -6727,6 +6736,7 @@ export {
   HouseholdCoverageMandateV2,
   PropertyCoverageDetails,
   QuoteComponent,
+  QuoteDataSource,
   SwitchingPreferencesV2,
   buildEngineInputFromSnapshot,
   canonicalSerializeRecommendationInput,
@@ -6738,4 +6748,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "a43c6c237a981dfadd6961eac1ccd69d149b041fa12032391866afe97388e78b";
+export const __AUTOPILOT_SOURCE_HASH__ = "6452482aa031c07aeec336ee68d9e15082fc0da8be495bce922dcee109502ae3";
