@@ -71,9 +71,11 @@ export default function Autopilot() {
                         ) : null}
                       </View>
                       <View style={{ flex: 1, paddingBottom: 12 }}>
-                        <Body muted={!done && !current}>
+                        <Body
+                          muted={!done && !current}
+                          style={current ? { color: colors.accent, fontWeight: "700" } : undefined}
+                        >
                           {step.label}
-                          {current ? "  ← current" : ""}
                         </Body>
                       </View>
                     </View>

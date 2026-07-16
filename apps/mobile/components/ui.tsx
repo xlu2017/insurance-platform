@@ -35,8 +35,16 @@ export function Subtitle({ children }: { children: React.ReactNode }) {
   return <Text style={styles.subtitle}>{children}</Text>;
 }
 
-export function Body({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
-  return <Text style={[styles.body, muted && styles.muted]}>{children}</Text>;
+export function Body({
+  children,
+  muted,
+  style,
+}: {
+  children: React.ReactNode;
+  muted?: boolean;
+  style?: React.ComponentProps<typeof Text>["style"];
+}) {
+  return <Text style={[styles.body, muted && styles.muted, style]}>{children}</Text>;
 }
 
 export function Caption({ children }: { children: React.ReactNode }) {
