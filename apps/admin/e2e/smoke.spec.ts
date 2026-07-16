@@ -21,7 +21,10 @@ test("staff can open a case and browse tabs", async ({ page }) => {
   await page.goto("/cases");
   await expect(page.getByText("Case queue")).toBeVisible();
 
-  const caseLink = page.getByRole("link").filter({ hasText: /Household/ }).first();
+  const caseLink = page
+    .getByRole("link")
+    .filter({ hasText: /Household/ })
+    .first();
   await expect(caseLink).toBeVisible();
   await caseLink.click();
 
@@ -38,7 +41,9 @@ test("customer accounts are rejected from the admin console", async ({ page }) =
   await page.getByLabel("Email").fill("customer@example.com");
   await page.getByLabel("Password").fill("DemoCustomer123!");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText("This console is for operations, reviewer and administrator accounts.")).toBeVisible();
+  await expect(
+    page.getByText("This console is for operations, reviewer and administrator accounts."),
+  ).toBeVisible();
 });
 
 test("unauthenticated users are redirected to login", async ({ page }) => {
