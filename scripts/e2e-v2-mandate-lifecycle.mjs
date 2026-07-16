@@ -200,7 +200,7 @@ async function ensureSingleAssetPerLine() {
   return { keepVehicle, keepProperty };
 }
 
-async function updateAutoLiabilityForCase(cents) {
+async function updateAutoLiabilityForCase(cents, actorProfileId) {
   const { data: quotes, error: quoteErr } = await serviceClient
     .from("quotes")
     .select("id")
@@ -227,6 +227,19 @@ async function updateAutoLiabilityForCase(cents) {
       .update({ coverage: updated })
       .eq("id", coverage.id);
     if (updErr) throw updErr;
+    // Mark the modified component as valid in a separate update so the
+    // coverage-changed trigger does not immediately reset it to draft.
+    const { error: valErr } = await serviceClient
+      .from("quote_coverages")
+      .update({
+        validation_status: "valid",
+        validated_at: new Date().toISOString(),
+        validated_by: actorProfileId,
+        coverage_schema_version: 2,
+        data_source: "e2e_test",
+      })
+      .eq("id", coverage.id);
+    if (valErr) throw valErr;
   }
 }
 
@@ -319,7 +332,7 @@ async function main() {
   }
 
   // 2. Update auto quote coverages to meet the new 2.5M liability requirement.
-  await updateAutoLiabilityForCase(250000000);
+  await updateAutoLiabilityForCase(250000000, USERS.operations.id);
   console.log("2. Updated auto quote coverages to 2.5M");
 
   // 3. Operations generates a recommendation via the Edge Function.
@@ -378,7 +391,7 @@ async function main() {
   console.log("8. Stale recommendation approval rejected:", staleApproval.error.message);
 
   // 9. Update quotes to meet the new 3M liability and regenerate.
-  await updateAutoLiabilityForCase(300000000);
+  await updateAutoLiabilityForCase(300000000, USERS.operations.id);
   const rec2Result = await invokeGenerateRecommendation();
   if (rec2Result.error) throw new Error(`second recommendation-generator failed: ${rec2Result.error.message}`);
   assert(rec2Result.data && rec2Result.data.recommendationId, "second recommendation did not return id");

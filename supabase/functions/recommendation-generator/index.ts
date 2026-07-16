@@ -60,18 +60,13 @@ function buildRankingFactors(e: EvaluatedConfiguration) {
     coverage_reductions_count: e.coverageReductions.length,
     deductible_total_cents: e.deductibleTotalCents,
     underwriting_condition_count: e.underwritingConditionCount,
-    preference_missed_count: 0,
-    preference_unknown_count: 0,
+    preference_missed_count: e.preferenceAlignment.missed_count,
+    preference_unknown_count: e.preferenceAlignment.not_evaluable_count,
   };
 }
 
-function buildPreferenceAlignment(_e: EvaluatedConfiguration) {
-  return {
-    satisfied_count: 0,
-    missed_count: 0,
-    not_evaluable_count: 0,
-    details: [] as { scope: string; item: string; outcome: string }[],
-  };
+function buildPreferenceAlignment(e: EvaluatedConfiguration) {
+  return e.preferenceAlignment;
 }
 
 function buildPersistedOption(rank: number, e: EvaluatedConfiguration) {
