@@ -36,19 +36,29 @@ flowchart LR
   approve/decline, licensed review, switch advancement, support questions) are exposed only as
   `security definer` functions. Direct `update`/`insert` on workflow tables is denied to
   `authenticated` by RLS; the RPCs verify household membership, role and state before changing data.
-- **Versioned mandate foundation.** `packages/schemas/src/mandate-v2.ts` defines the canonical
-  `HouseholdCoverageMandateV2` schema with discriminated monetary rules and explicit versioned
-  jurisdiction. Adapters in `packages/schemas/src/mandate-adapters.ts` convert V2 to the legacy
-  engine `HouseholdMandate` and back. `packages/database/src/mandate-repository.ts` is the typed
-  persistence boundary used by mobile, admin and the recommendation Edge Function; writes go through
-  the atomic `save_household_mandate_v2` RPC, not direct table writes.
+- **V2 coverage mandate is the active source of truth.** `packages/schemas/src/mandate-v2.ts`
+  defines the canonical `HouseholdCoverageMandateV2` schema with discriminated monetary rules and
+  explicit versioned jurisdiction. Adapters in `packages/schemas/src/mandate-adapters.ts` convert
+  V2 to the legacy engine `HouseholdMandate` and back. `packages/database/src/recommendation-loader.ts`
+  is the single trusted server-side loader used by the recommendation Edge Function and workspace
+  tests; it validates every row as V2 before the engine runs and never falls back to legacy values.
+- **Public mandate validation, internal persistence.** Mobile saves mandates through the authenticated
+  `save-household-mandate` Edge Function, which validates the full V2 schema and every asset association
+  before invoking the service-role-only `persist_household_mandate_v2` RPC. The raw RPC is revoked from
+  authenticated users.
+- **One engine, two runtimes.** `packages/insurance-engine/src/engine.ts` is the only engine source.
+  `pnpm --filter @autopilot/insurance-engine build:edge` bundles it into
+  `supabase/functions/recommendation-generator/_shared/autopilot.js` for the Supabase Edge Function;
+  the bundle header contains a SHA-256 source hash and CI enforces parity with `check:edge`.
 - **Deterministic engine.** `packages/insurance-engine` is pure and side-effect free. It builds
   every bundled/split household configuration from usable quotes, always includes the incumbent,
   applies hard mandate constraints, handles asset-specific mandate inheritance (vehicle/property
   overrides), detects coverage reductions vs the incumbent, computes total cost in integer cents
   (premiums + fees + cancellation charges − bundle discounts) and ranks with explicit reason codes.
   The engine is currently fail-closed on multi-asset optimization (more than one vehicle or more
-  than one property). No AI decides coverage equivalence.
+  than one property). No AI decides coverage equivalence. Legacy `coverage_requirements` rows remain
+  only for historical migration, diagnostics and rollback analysis; no active recommendation or
+  approval path reads them.
 - **Provider adapters.** Email (Resend → `email_outbox` fallback), push (Expo → local log) and
   document extraction (`manual` default, `mock` for demos) are interfaces in
   `packages/database/src/providers`, so the demo runs with zero external services.
@@ -80,6 +90,7 @@ stateDiagram-v2
   recommendation_ready --> customer_decision
   customer_decision --> switching
   customer_decision --> retained_incumbent
+  customer_decision --> licensed_review : mandate changed; regenerate
   switching --> completed
 ```
 
@@ -90,6 +101,6 @@ stateDiagram-v2
 | `apps/mobile`               | Customer app: onboarding, 5-tab navigation, documents, questions, recommendation approval with reauthentication       |
 | `apps/admin`                | Operations console: dashboard, case queue, case detail (11 tabs), quote entry, comparison, licensed review, switching |
 | `packages/schemas`          | Zod schemas, enums, mandate schemas, transition maps                                                                  |
-| `packages/insurance-engine` | Comparison and ranking engine + unit tests                                                                            |
+| `packages/insurance-engine` | Comparison and ranking engine + Edge Function bundle generation + unit tests                                          |
 | `packages/database`         | Supabase typed client (`Database`), generated types and provider adapters                                             |
 | `packages/test-fixtures`    | Deterministic fixtures including the mandatory bundle-loss scenario                                                   |

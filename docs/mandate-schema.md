@@ -1,10 +1,13 @@
 # Coverage Mandate Schema
 
 The mandate is the single source of truth for what a household considers acceptable coverage.
-Corrective Phase 1B introduces an explicitly versioned mandate schema (`HouseholdCoverageMandateV2`)
-persisted in `household_coverage_mandates`, `vehicle_mandate_overrides` and
-`property_mandate_overrides`. The legacy `coverage_requirements` row and `switching_preferences`
-row remain readable through the adapter layer but are no longer the authoritative contract.
+Corrective Phase 1C makes `HouseholdCoverageMandateV2` authoritative end-to-end: the mobile app
+saves V2 mandates, the admin console reads the same V2 mandates, the recommendation Edge Function
+evaluates the same V2 mandate, and recommendations are bound to the exact V2 mandate snapshot for
+approval and audit. V2 data is persisted in `household_coverage_mandates`,
+`vehicle_mandate_overrides` and `property_mandate_overrides`. The legacy `coverage_requirements`
+table remains only for historical migration, diagnostics, read-only compatibility and rollback
+analysis; no active recommendation, persistence or approval path reads it.
 
 ## Design principles
 

@@ -157,11 +157,22 @@ Every configuration receives one or more `ReasonCode` values:
 
 ## Edge Function
 
-`supabase/functions/recommendation-generator` is a vendored, Deno-compatible copy of the workspace
-engine (`packages/insurance-engine`). It loads the household mandate, current policies, and all
-competing quotes from Postgres, calls `evaluateHousehold`, persists the top recommendation in
-`recommendations`, and writes the ranked options to `recommendation_options`. The function advances
-the case to `licensed_review`.
+`supabase/functions/recommendation-generator` loads the household mandate, current policies, and all
+competing quotes through the shared `loadRecommendationInputSnapshot` loader in
+`packages/database/src/recommendation-loader.ts`, which validates every JSON boundary against the
+V2 Zod schemas. It then calls the same `evaluateHousehold` engine used by workspace tests
+(`packages/insurance-engine/src/engine.ts`). The engine is bundled into
+`supabase/functions/recommendation-generator/_shared/autopilot.js` by
+`pnpm --filter @autopilot/insurance-engine build:edge`; the bundle header carries a SHA-256 source
+hash and CI enforces parity with `check:edge`.
+
+The Edge Function handles `result.rejection` explicitly (multi-asset, missing insured asset,
+invalid quote data) and returns structured non-2xx responses. When a recommendation is persisted,
+`persist_recommendation` records the exact V2 mandate identity (`mandate_id`, `mandate_version`,
+`mandate_schema_version`, `mandate_jurisdiction`, `switching_preferences_id`,
+`switching_preferences_version`), a quote snapshot, and the engine version. `review_recommendation`,
+`approve_customer_recommendation` and `decline_customer_recommendation` validate that the recorded
+V2 snapshot is still current, so a stale mandate blocks approval.
 
 ## Tests
 
