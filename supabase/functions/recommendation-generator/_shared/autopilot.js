@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 27a70541f2219a519586359e38abe699101057158a6237391e9e63d51164d802
+// source-hash: 2d41a83d27449c8308e58b504f1276dad3d94f48a7fd29974d3bb249e411f670
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -4690,6 +4690,74 @@ var EngineQuote = z.object({
   insurerFinancialRating: FinancialRating.optional()
 });
 
+// ../schemas/src/recommendation.ts
+var HexDigest = z.string().regex(/^[0-9a-f]{64}$/, "Expected a 64-character lowercase hex SHA-256 digest");
+var RankingFactorsSchema = z.object({
+  total_cents: z.number().int().nonnegative(),
+  coverage_reductions_count: z.number().int().nonnegative(),
+  deductible_total_cents: z.number().int().nonnegative(),
+  underwriting_condition_count: z.number().int().nonnegative(),
+  preference_missed_count: z.number().int().nonnegative(),
+  preference_unknown_count: z.number().int().nonnegative()
+});
+var PreferenceAlignmentSchema = z.object({
+  satisfied_count: z.number().int().nonnegative(),
+  missed_count: z.number().int().nonnegative(),
+  not_evaluable_count: z.number().int().nonnegative(),
+  details: z.array(
+    z.object({
+      scope: z.string(),
+      item: z.string(),
+      outcome: z.enum(["satisfied", "missed", "unknown", "not_applicable"])
+    })
+  )
+});
+var PersistedRecommendationOptionSchema = z.object({
+  rank: z.number().int().positive(),
+  auto_quote_id: z.string().uuid(),
+  property_quote_id: z.string().uuid(),
+  bundled: z.boolean(),
+  total_cents: z.number().int().nonnegative(),
+  net_savings_cents: z.number().int(),
+  eligible: z.boolean(),
+  reason_codes: z.array(z.string()),
+  ranking_factors: RankingFactorsSchema,
+  preference_alignment: PreferenceAlignmentSchema,
+  deductible_total_cents: z.number().int().nonnegative(),
+  underwriting_condition_count: z.number().int().nonnegative()
+});
+var EngineRecommendationPersistencePayloadSchema = z.object({
+  caseId: z.string().uuid(),
+  actorProfileId: z.string().uuid(),
+  mandate: z.object({
+    id: z.string().uuid(),
+    version: z.number().int().positive(),
+    schemaVersion: z.literal(2),
+    jurisdiction: z.literal("AB")
+  }),
+  switchingPreferences: z.object({
+    id: z.string().uuid(),
+    version: z.number().int().positive()
+  }),
+  engine: z.object({
+    version: z.string().min(1),
+    sourceHash: HexDigest
+  }),
+  inputSnapshotJson: z.record(z.unknown()),
+  inputSnapshotDigest: HexDigest,
+  recommendedOption: PersistedRecommendationOptionSchema,
+  rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
+  rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
+  engineOutputJson: z.record(z.unknown()),
+  engineOutputDigest: HexDigest,
+  currentTotalCents: z.number().int().nonnegative(),
+  proposedTotalCents: z.number().int().nonnegative(),
+  netSavingsCents: z.number().int(),
+  reasonCodes: z.array(z.string()),
+  comparison: z.record(z.unknown()),
+  disclosureVersion: z.string().default("v1")
+});
+
 // ../schemas/src/entities.ts
 var uuid = z.string().uuid();
 var timestamptz = z.string();
@@ -6093,6 +6161,8 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     properties: (propertiesRes.data ?? []).map((p) => ({ id: p.id }))
   };
   return {
+    caseId,
+    householdId,
     mandateId: mandateResult.mandateId,
     mandateVersion: mandateResult.mandateVersion,
     mandateSchemaVersion: 2,
@@ -6107,6 +6177,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
   };
 }
 export {
+  EngineRecommendationPersistencePayloadSchema,
   HouseholdCoverageMandateV2,
   SwitchingPreferencesV2,
   buildEngineInputFromSnapshot,
@@ -6115,3 +6186,5 @@ export {
 };
 // autopilot-edge-bundle end
 
+
+export const __AUTOPILOT_SOURCE_HASH__ = "2d41a83d27449c8308e58b504f1276dad3d94f48a7fd29974d3bb249e411f670";

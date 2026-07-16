@@ -44,7 +44,11 @@ const result = await esbuild.build({
 const hash = await computeSourceHash(result.metafile);
 const banner = `// This file is generated from packages/insurance-engine. Do not edit manually.\n// source-hash: ${hash}\n`;
 const generated = await readFile(outfile, "utf8");
-await writeFile(outfile, banner + generated.replace(/^\/\/ This file is generated.*?\n/, ""));
+const sourceHashExport = `\nexport const __AUTOPILOT_SOURCE_HASH__ = "${hash}";\n`;
+await writeFile(
+  outfile,
+  banner + generated.replace(/^\/\/ This file is generated.*?\n/, "") + sourceHashExport,
+);
 
 process.stdout.write(
   `Edge bundle written to ${outfile} (${Object.keys(result.metafile.inputs).length} inputs, hash ${hash})\n`,

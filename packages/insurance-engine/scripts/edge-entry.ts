@@ -17,3 +17,13 @@ export {
   HouseholdCoverageMandateV2,
   SwitchingPreferencesV2,
 } from "../../schemas/src/mandate-v2.ts";
+
+// Re-export recommendation persistence schemas so the Edge Function can build
+// and validate the trusted persistence payload before calling the internal RPC.
+export {
+  EngineRecommendationPersistencePayloadSchema,
+  type EngineRecommendationPersistencePayload,
+  type PreferenceAlignment,
+  type RankingFactors,
+  type PersistedRecommendationOption,
+} from "../../schemas/src/recommendation.ts";
