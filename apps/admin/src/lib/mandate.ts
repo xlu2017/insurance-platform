@@ -7,6 +7,7 @@ import type {
   DeductibleRule,
   FinancialRating,
   LimitRule,
+  MonetaryRule,
   PaymentFrequency,
   PropertyCoverageForm,
   PropertySettlement,
@@ -144,16 +145,30 @@ export function labelForPreference(value?: CoveragePreference): string {
   return value ? coveragePreferenceLabels[value] : "—";
 }
 
-export function labelForLimit(rule?: LimitRule, cents?: number): string {
-  if (!rule) return "—";
-  if (rule === "any") return "Any";
-  return `${limitRuleLabels[rule]} ${formatCad(cents ?? 0)}`;
+function monetaryAmount(rule: MonetaryRule): number | undefined {
+  return "amountCents" in rule ? (rule as { amountCents: number }).amountCents : undefined;
 }
 
-export function labelForDeductible(rule?: DeductibleRule, cents?: number): string {
+export function labelForLimit(rule?: MonetaryRule | LimitRule): string {
   if (!rule) return "—";
-  if (rule === "any") return "Any";
-  return `${deductibleRuleLabels[rule]} ${formatCad(cents ?? 0)}`;
+  if (typeof rule === "string") {
+    if (rule === "any") return "Any";
+    return limitRuleLabels[rule];
+  }
+  if (rule.rule === "any") return "Any";
+  if (rule.rule === "match_current_or_better") return limitRuleLabels[rule.rule];
+  return `${limitRuleLabels[rule.rule]} ${formatCad(monetaryAmount(rule) ?? 0)}`;
+}
+
+export function labelForDeductible(rule?: MonetaryRule | DeductibleRule): string {
+  if (!rule) return "—";
+  if (typeof rule === "string") {
+    if (rule === "any") return "Any";
+    return deductibleRuleLabels[rule];
+  }
+  if (rule.rule === "any") return "Any";
+  if (rule.rule === "match_current_or_better") return deductibleRuleLabels[rule.rule];
+  return `${deductibleRuleLabels[rule.rule]} ${formatCad(monetaryAmount(rule) ?? 0)}`;
 }
 
 export function labelForAutoForm(value?: AutoCoverageForm): string {

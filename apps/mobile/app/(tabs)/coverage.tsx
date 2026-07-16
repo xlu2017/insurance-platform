@@ -216,9 +216,15 @@ function SwitchingRows({ prefs }: { prefs: SwitchingPreferencesV2 }) {
 }
 
 export default function Coverage() {
-  const { data: household, isLoading } = useHousehold();
+  const { data: household, isLoading: isLoadingHousehold } = useHousehold();
 
-  const { data } = useQuery({
+  const {
+    data,
+    isLoading: isLoadingCoverage,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["coverage", household?.id],
     enabled: !!household,
     queryFn: async () => {
@@ -253,7 +259,7 @@ export default function Coverage() {
     },
   });
 
-  if (isLoading) return <Loading />;
+  if (isLoadingHousehold || isLoadingCoverage) return <Loading />;
   if (!household) {
     return (
       <Screen style={{ justifyContent: "center" }}>
@@ -264,6 +270,22 @@ export default function Coverage() {
           label="Continue setup"
           onPress={() => router.push("/onboarding/household")}
         />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    const code = error instanceof Error ? error.name : "LOAD_FAILED";
+    const message = error instanceof Error ? error.message : "Could not load coverage details";
+    return (
+      <Screen style={{ justifyContent: "center" }}>
+        <Title>Coverage unavailable</Title>
+        <Body muted>{message}</Body>
+        <Body muted style={{ marginTop: 8 }}>
+          Code: {code}
+        </Body>
+        <View style={{ height: 16 }} />
+        <PrimaryButton label="Retry" onPress={() => refetch()} />
       </Screen>
     );
   }

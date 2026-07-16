@@ -1,6 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import {
+  loadHouseholdMandateV2,
+  resolveEffectivePropertyMandateV2,
+  resolveEffectiveVehicleMandateV2,
+} from "@autopilot/database";
 import { supabaseBrowser } from "@/lib/supabase";
 import { Card, CardTitle, Skeleton } from "@/components/ui";
 import { formatCad } from "@/lib/utils";
@@ -11,22 +16,20 @@ import {
   labelForBrokerDirect,
   labelForDeductible,
   labelForFinancialRating,
-  labelForFinancingStatus,
   labelForLimit,
   labelForPaymentFrequency,
   labelForPreference,
   labelForPropertyForm,
-  labelForPropertyType,
   labelForSettlement,
-  labelForVehicleUseClass,
   propertyOptionalCoverageLabels,
 } from "@/lib/mandate";
 import type { CaseDetail } from "../page";
 import type {
-  AutoRequirements,
-  HouseholdMandate,
-  PropertyRequirements,
-  SwitchingPreferences,
+  AutoMandateV2,
+  HouseholdCoverageMandateV2,
+  PropertyMandateV2,
+  SwitchingPreferencesV2,
+  WaterCoverageRequirementV2,
 } from "@autopilot/schemas";
 
 function KV({ label, value }: { label: string; value: string }) {
@@ -38,20 +41,20 @@ function KV({ label, value }: { label: string; value: string }) {
   );
 }
 
-function WaterRows({ name, water }: { name: string; water: PropertyRequirements["sewerBackup"] }) {
+function WaterRows({ name, water }: { name: string; water: WaterCoverageRequirementV2 }) {
   return (
     <>
       <KV label={`${name} preference`} value={labelForPreference(water.preference)} />
-      <KV label={`${name} limit`} value={labelForLimit(water.limit.rule, water.limit.cents)} />
+      <KV label={`${name} limit`} value={water.limit ? labelForLimit(water.limit) : "—"} />
       <KV
         label={`${name} deductible`}
-        value={labelForDeductible(water.deductible.rule, water.deductible.cents)}
+        value={water.deductible ? labelForDeductible(water.deductible) : "—"}
       />
     </>
   );
 }
 
-function AutoMandate({ auto }: { auto: AutoRequirements }) {
+function AutoMandate({ auto }: { auto: AutoMandateV2 }) {
   return (
     <ul className="space-y-1">
       <KV label="Coverage form" value={labelForAutoForm(auto.coverageForm.value)} />
@@ -59,37 +62,25 @@ function AutoMandate({ auto }: { auto: AutoRequirements }) {
         label="Coverage form preference"
         value={labelForPreference(auto.coverageForm.preference)}
       />
-      <KV label="Liability" value={labelForLimit(auto.liability.rule, auto.liability.cents)} />
-      <KV
-        label="Collision deductible"
-        value={labelForDeductible(auto.collisionDeductible.rule, auto.collisionDeductible.cents)}
-      />
+      <KV label="Liability" value={labelForLimit(auto.liability)} />
+      <KV label="Collision deductible" value={labelForDeductible(auto.collisionDeductible)} />
       <KV
         label="Comprehensive deductible"
-        value={labelForDeductible(
-          auto.comprehensiveDeductible.rule,
-          auto.comprehensiveDeductible.cents,
-        )}
+        value={labelForDeductible(auto.comprehensiveDeductible)}
       />
-      <KV
-        label="Glass deductible"
-        value={labelForDeductible(auto.glassDeductible.rule, auto.glassDeductible.cents)}
-      />
+      <KV label="Glass deductible" value={labelForDeductible(auto.glassDeductible)} />
       {(
-        Object.entries(autoEndorsementLabels) as [keyof AutoRequirements["endorsements"], string][]
+        Object.entries(autoEndorsementLabels) as [keyof AutoMandateV2["endorsements"], string][]
       ).map(([key, label]) => (
         <KV key={key} label={label} value={labelForPreference(auto.endorsements[key])} />
       ))}
-      <KV label="Vehicle use class" value={labelForVehicleUseClass(auto.vehicleClass)} />
-      <KV label="Financing status" value={labelForFinancingStatus(auto.financingStatus)} />
     </ul>
   );
 }
 
-function PropertyMandate({ property }: { property: PropertyRequirements }) {
+function PropertyMandate({ property }: { property: PropertyMandateV2 }) {
   return (
     <ul className="space-y-1">
-      <KV label="Property type" value={labelForPropertyType(property.propertyType)} />
       <KV label="Coverage form" value={labelForPropertyForm(property.coverageForm.value)} />
       <KV
         label="Coverage form preference"
@@ -100,62 +91,26 @@ function PropertyMandate({ property }: { property: PropertyRequirements }) {
         label="Settlement preference"
         value={labelForPreference(property.settlementBasis.preference)}
       />
-      <KV
-        label="Dwelling limit"
-        value={labelForLimit(property.dwellingLimit.rule, property.dwellingLimit.cents)}
-      />
-      <KV
-        label="Contents limit"
-        value={labelForLimit(property.contentsLimit.rule, property.contentsLimit.cents)}
-      />
+      <KV label="Dwelling limit" value={labelForLimit(property.dwellingLimit)} />
+      <KV label="Contents limit" value={labelForLimit(property.contentsLimit)} />
       <KV
         label="Detached structures limit"
-        value={labelForLimit(
-          property.detachedStructuresLimit.rule,
-          property.detachedStructuresLimit.cents,
-        )}
+        value={labelForLimit(property.detachedStructuresLimit)}
       />
-      <KV
-        label="Personal liability limit"
-        value={labelForLimit(
-          property.personalLiabilityLimit.rule,
-          property.personalLiabilityLimit.cents,
-        )}
-      />
+      <KV label="Personal liability limit" value={labelForLimit(property.personalLiabilityLimit)} />
       <KV
         label="Additional living expense limit"
-        value={labelForLimit(
-          property.additionalLivingExpenseLimit.rule,
-          property.additionalLivingExpenseLimit.cents,
-        )}
+        value={labelForLimit(property.additionalLivingExpenseLimit)}
       />
-      <KV
-        label="Base deductible"
-        value={labelForDeductible(property.baseDeductible.rule, property.baseDeductible.cents)}
-      />
-      <KV
-        label="Water deductible"
-        value={labelForDeductible(property.waterDeductible.rule, property.waterDeductible.cents)}
-      />
-      <KV
-        label="Wind/hail deductible"
-        value={labelForDeductible(
-          property.windHailDeductible.rule,
-          property.windHailDeductible.cents,
-        )}
-      />
-      <KV
-        label="Earthquake deductible"
-        value={labelForDeductible(
-          property.earthquakeDeductible.rule,
-          property.earthquakeDeductible.cents,
-        )}
-      />
+      <KV label="Base deductible" value={labelForDeductible(property.baseDeductible)} />
+      <KV label="Water deductible" value={labelForDeductible(property.waterDeductible)} />
+      <KV label="Wind/hail deductible" value={labelForDeductible(property.windHailDeductible)} />
+      <KV label="Earthquake deductible" value={labelForDeductible(property.earthquakeDeductible)} />
       <WaterRows name="Sewer backup" water={property.sewerBackup} />
       <WaterRows name="Overland water" water={property.overlandWater} />
       {(
         Object.entries(propertyOptionalCoverageLabels) as [
-          keyof PropertyRequirements["optionalCoverages"],
+          keyof PropertyMandateV2["optionalCoverages"],
           string,
         ][]
       ).map(([key, label]) => (
@@ -169,7 +124,7 @@ function SwitchingRules({
   prefs,
   excludedNames,
 }: {
-  prefs: SwitchingPreferences;
+  prefs: SwitchingPreferencesV2;
   excludedNames: string[];
 }) {
   return (
@@ -225,23 +180,11 @@ function SwitchingRules({
 }
 
 export function MandateTab({ caseRow }: { caseRow: CaseDetail }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["mandate", caseRow.household_id],
     queryFn: async () => {
       const supabase = supabaseBrowser();
-      const [req, prefs, vehicles, properties, insurers] = await Promise.all([
-        supabase
-          .from("coverage_requirements")
-          .select("auto_requirements, property_requirements, vehicle_mandates, property_mandates")
-          .eq("household_id", caseRow.household_id)
-          .eq("is_current", true)
-          .maybeSingle(),
-        supabase
-          .from("switching_preferences")
-          .select("*")
-          .eq("household_id", caseRow.household_id)
-          .eq("is_current", true)
-          .maybeSingle(),
+      const [vehicles, properties, insurers, mandateResult] = await Promise.all([
         supabase
           .from("vehicles")
           .select("id, year, make, model")
@@ -251,23 +194,15 @@ export function MandateTab({ caseRow }: { caseRow: CaseDetail }) {
           .select("id, address_line1, city")
           .eq("household_id", caseRow.household_id),
         supabase.from("insurers").select("id, name"),
+        loadHouseholdMandateV2(supabase, caseRow.household_id),
       ]);
-      const mandate: HouseholdMandate | null = req.data
-        ? {
-            auto: req.data.auto_requirements as HouseholdMandate["auto"],
-            property: req.data.property_requirements as HouseholdMandate["property"],
-            switching: prefs.data as unknown as HouseholdMandate["switching"],
-            vehicleOverrides: (req.data.vehicle_mandates ??
-              {}) as HouseholdMandate["vehicleOverrides"],
-            propertyOverrides: (req.data.property_mandates ??
-              {}) as HouseholdMandate["propertyOverrides"],
-          }
-        : null;
-      const excludedNames = ((prefs.data?.excluded_insurer_ids as string[] | undefined) ?? [])
-        .map((id) => insurers.data?.find((i) => i.id === id)?.name)
+      const insurerMap = new Map((insurers.data ?? []).map((i) => [i.id, i.name]));
+      const excludedNames = (mandateResult.switching.excludedInsurerIds ?? [])
+        .map((id) => insurerMap.get(id))
         .filter((name): name is string => Boolean(name));
       return {
-        mandate,
+        mandate: mandateResult.mandate as HouseholdCoverageMandateV2,
+        switching: mandateResult.switching as SwitchingPreferencesV2,
         vehicles: vehicles.data ?? [],
         properties: properties.data ?? [],
         excludedNames,
@@ -275,22 +210,38 @@ export function MandateTab({ caseRow }: { caseRow: CaseDetail }) {
     },
   });
 
-  if (isLoading || !data) return <Skeleton className="h-48" />;
+  if (isLoading) return <Skeleton className="h-48" />;
+
+  if (isError) {
+    return (
+      <Card>
+        <CardTitle>Mandate unavailable</CardTitle>
+        <p className="text-sm text-ink-muted">Could not load this household&apos;s mandate.</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-4 rounded bg-primary px-4 py-2 text-sm text-white"
+        >
+          Retry
+        </button>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
+
+  const { mandate, switching } = data;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card>
         <CardTitle>Auto — household defaults</CardTitle>
-        {data.mandate ? (
-          <AutoMandate auto={data.mandate.auto} />
-        ) : (
-          <p className="text-sm text-ink-muted">Not set.</p>
-        )}
+        <AutoMandate auto={mandate.householdAutoDefaults} />
       </Card>
 
       {data.vehicles.map((vehicle) => {
-        const override = data.mandate?.vehicleOverrides?.[vehicle.id];
-        const effective = override ? { ...data.mandate!.auto, ...override } : data.mandate?.auto;
+        const effective = resolveEffectiveVehicleMandateV2(mandate, vehicle.id);
+        const override = mandate.vehicleOverrides.find((o) => o.vehicleId === vehicle.id);
         return (
           <Card key={vehicle.id}>
             <CardTitle>
@@ -299,29 +250,19 @@ export function MandateTab({ caseRow }: { caseRow: CaseDetail }) {
             {override ? (
               <p className="mb-2 text-xs text-ink-muted">Overrides apply to this vehicle.</p>
             ) : null}
-            {effective ? (
-              <AutoMandate auto={effective} />
-            ) : (
-              <p className="text-sm text-ink-muted">Not set.</p>
-            )}
+            <AutoMandate auto={effective} />
           </Card>
         );
       })}
 
       <Card>
         <CardTitle>Property — household defaults</CardTitle>
-        {data.mandate ? (
-          <PropertyMandate property={data.mandate.property} />
-        ) : (
-          <p className="text-sm text-ink-muted">Not set.</p>
-        )}
+        <PropertyMandate property={mandate.householdPropertyDefaults} />
       </Card>
 
       {data.properties.map((property) => {
-        const override = data.mandate?.propertyOverrides?.[property.id];
-        const effective = override
-          ? { ...data.mandate!.property, ...override }
-          : data.mandate?.property;
+        const effective = resolveEffectivePropertyMandateV2(mandate, property.id);
+        const override = mandate.propertyOverrides.find((o) => o.propertyId === property.id);
         return (
           <Card key={property.id}>
             <CardTitle>
@@ -330,22 +271,14 @@ export function MandateTab({ caseRow }: { caseRow: CaseDetail }) {
             {override ? (
               <p className="mb-2 text-xs text-ink-muted">Overrides apply to this property.</p>
             ) : null}
-            {effective ? (
-              <PropertyMandate property={effective} />
-            ) : (
-              <p className="text-sm text-ink-muted">Not set.</p>
-            )}
+            <PropertyMandate property={effective} />
           </Card>
         );
       })}
 
       <Card>
         <CardTitle>Switching rules</CardTitle>
-        {data.mandate ? (
-          <SwitchingRules prefs={data.mandate.switching} excludedNames={data.excludedNames} />
-        ) : (
-          <p className="text-sm text-ink-muted">Not set.</p>
-        )}
+        <SwitchingRules prefs={switching} excludedNames={data.excludedNames} />
       </Card>
     </div>
   );

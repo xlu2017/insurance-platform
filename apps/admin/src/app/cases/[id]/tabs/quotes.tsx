@@ -116,15 +116,31 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
         .single();
       if (error) throw error;
 
+      const { data: vehicles } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("household_id", caseRow.household_id)
+        .limit(1);
+      const { data: properties } = await supabase
+        .from("properties")
+        .select("id")
+        .eq("household_id", caseRow.household_id)
+        .limit(1);
+      const autoAssetId = vehicles?.[0]?.id;
+      const propertyAssetId = properties?.[0]?.id;
+
       const components: {
         product_line: ProductLine;
         annual_premium_cents: number;
+        asset_id: string;
         coverage: Json;
       }[] = [];
       if (values.autoPremiumDollars && values.autoPremiumDollars > 0) {
+        if (!autoAssetId) throw new Error("No vehicle asset found for this household.");
         components.push({
           product_line: "auto",
           annual_premium_cents: Math.round(values.autoPremiumDollars * 100),
+          asset_id: autoAssetId,
           coverage: {
             thirdPartyLiabilityCents: Math.round(values.liabilityLimitDollars * 100),
             collisionIncluded: true,
@@ -140,9 +156,11 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
         });
       }
       if (values.propertyPremiumDollars && values.propertyPremiumDollars > 0) {
+        if (!propertyAssetId) throw new Error("No property asset found for this household.");
         components.push({
           product_line: "property",
           annual_premium_cents: Math.round(values.propertyPremiumDollars * 100),
+          asset_id: propertyAssetId,
           coverage: {
             dwellingLimitCents: Math.round(values.dwellingLimitDollars * 100),
             replacementCostIncluded: true,
@@ -167,6 +185,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
             quote_id: quote.id,
             product_line: component.product_line,
             annual_premium_cents: component.annual_premium_cents,
+            asset_id: component.asset_id,
           })
           .select("id")
           .single();

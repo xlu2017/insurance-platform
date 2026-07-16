@@ -136,8 +136,6 @@ export default function Recommendation() {
     const { error: rpcError } = await supabase.rpc("approve_customer_recommendation", {
       p_recommendation_id: recommendation.id,
       p_expected_rec_version: recommendation.version,
-      p_expected_mandate_version: recommendation.mandate_version,
-      p_expected_switching_version: recommendation.switching_preferences_version,
     });
     setBusy(false);
     if (rpcError) {
@@ -154,8 +152,6 @@ export default function Recommendation() {
     const { error: rpcError } = await supabase.rpc("decline_customer_recommendation", {
       p_recommendation_id: recommendation.id,
       p_expected_rec_version: recommendation.version,
-      p_expected_mandate_version: recommendation.mandate_version,
-      p_expected_switching_version: recommendation.switching_preferences_version,
     });
     setBusy(false);
     if (rpcError) {
