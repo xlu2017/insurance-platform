@@ -174,7 +174,7 @@ end,
   now(),
   '00000000-0000-0000-0000-000000000002'::uuid,
   2,
-  'seed'
+  'manual_entry'
 from quote_policy_components;
 
 -- Pending customer question.

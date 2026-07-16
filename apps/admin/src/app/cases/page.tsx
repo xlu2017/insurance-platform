@@ -1,9 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { caseStates } from "@autopilot/schemas";
 import { supabaseBrowser } from "@/lib/supabase";
 import { Shell } from "@/components/shell";
@@ -21,9 +20,12 @@ interface QueueRow {
 }
 
 function CaseQueue() {
-  const params = useSearchParams();
-  const [state, setState] = useState(params.get("state") ?? "");
+  const [state, setState] = useState("");
   const [customer, setCustomer] = useState("");
+
+  useEffect(() => {
+    setState(new URLSearchParams(window.location.search).get("state") ?? "");
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ["case-queue"],
@@ -125,9 +127,7 @@ function CaseQueue() {
 export default function CasesPage() {
   return (
     <Shell>
-      <Suspense fallback={<Skeleton className="h-48" />}>
-        <CaseQueue />
-      </Suspense>
+      <CaseQueue />
     </Shell>
   );
 }
