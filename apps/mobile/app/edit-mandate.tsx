@@ -237,17 +237,6 @@ export default function EditMandate() {
       }
     }
 
-    await supabase.from("audit_events").insert({
-      action: "coverage_mandate_updated",
-      entity_type: "coverage_requirements",
-      entity_id: coverageId,
-      household_id: household.id,
-      after_summary: {
-        auto_requirements: autoRequirements,
-        property_requirements: propertyRequirements,
-      },
-    });
-
     queryClient.invalidateQueries({ queryKey: ["coverage", household.id] });
     queryClient.invalidateQueries({ queryKey: ["edit-mandate", household.id] });
     setBusy(false);

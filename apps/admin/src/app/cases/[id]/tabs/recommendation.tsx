@@ -80,52 +80,12 @@ export function RecommendationTab({ caseRow }: { caseRow: CaseDetail }) {
   const review = useMutation({
     mutationFn: async ({ rec, approved }: { rec: RecommendationRow; approved: boolean }) => {
       const supabase = supabaseBrowser();
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Not signed in");
-
-      const { error: approvalError } = await supabase.from("recommendation_approvals").insert({
-        recommendation_id: rec.id,
-        approver_profile_id: userData.user.id,
-        approver_role: "reviewer",
-        approved,
-        notes: approved ? "Licensed review approval" : "Licensed review rejection",
+      const { error } = await supabase.rpc("review_recommendation", {
+        p_recommendation_id: rec.id,
+        p_approved: approved,
+        p_notes: approved ? "Licensed review approval" : "Licensed review rejection",
       });
-      if (approvalError) throw approvalError;
-
-      const { error } = await supabase
-        .from("recommendations")
-        .update({ status: approved ? "published" : "rejected" })
-        .eq("id", rec.id);
       if (error) throw error;
-
-      if (approved) {
-        // Two-step transition through recommendation_ready to customer_decision.
-        const { error: c1 } = await supabase
-          .from("optimization_cases")
-          .update({ state: "recommendation_ready" })
-          .eq("id", caseRow.id);
-        if (c1) throw c1;
-        const { error: c2 } = await supabase
-          .from("optimization_cases")
-          .update({ state: "customer_decision" })
-          .eq("id", caseRow.id);
-        if (c2) throw c2;
-      } else {
-        const { error: c } = await supabase
-          .from("optimization_cases")
-          .update({ state: "comparing_quotes" })
-          .eq("id", caseRow.id);
-        if (c) throw c;
-      }
-
-      await supabase.from("audit_events").insert({
-        action: approved ? "licensed_review_approved" : "licensed_review_rejected",
-        entity_type: "recommendation",
-        entity_id: rec.id,
-        household_id: caseRow.household_id,
-        case_id: caseRow.id,
-        after_summary: { approved },
-      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recommendation", caseRow.id] });

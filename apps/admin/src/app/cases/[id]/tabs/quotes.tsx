@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import type { ProductLine } from "@autopilot/schemas";
+import type { Json } from "@autopilot/database";
 import { supabaseBrowser } from "@/lib/supabase";
 import {
   Badge,
@@ -115,9 +117,9 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       if (error) throw error;
 
       const components: {
-        product_line: string;
+        product_line: ProductLine;
         annual_premium_cents: number;
-        coverage: Record<string, unknown>;
+        coverage: Json;
       }[] = [];
       if (values.autoPremiumDollars && values.autoPremiumDollars > 0) {
         components.push({
@@ -174,15 +176,6 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           .insert({ quote_component_id: comp.id, coverage: component.coverage });
         if (covError) throw covError;
       }
-
-      await supabase.from("audit_events").insert({
-        action: "quote_created",
-        entity_type: "quote",
-        entity_id: quote.id,
-        household_id: caseRow.household_id,
-        case_id: caseRow.id,
-        after_summary: { components: components.length },
-      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes", caseRow.id] });

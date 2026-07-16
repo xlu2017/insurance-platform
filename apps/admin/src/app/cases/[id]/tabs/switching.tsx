@@ -48,18 +48,11 @@ export function SwitchingTab({ caseRow }: { caseRow: CaseDetail }) {
   const advance = useMutation({
     mutationFn: async ({ row, next }: { row: SwitchRow; next: SwitchState }) => {
       const supabase = supabaseBrowser();
-      const { error } = await supabase
-        .from("switch_events")
-        .update({ state: next })
-        .eq("id", row.id);
+      const { error } = await supabase.rpc("advance_switch_event", {
+        p_switch_event_id: row.id,
+        p_target_state: next,
+      });
       if (error) throw error;
-      if (next === "completed") {
-        const { error: caseError } = await supabase
-          .from("optimization_cases")
-          .update({ state: "completed" })
-          .eq("id", caseRow.id);
-        if (caseError) throw caseError;
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["switch", caseRow.id] });

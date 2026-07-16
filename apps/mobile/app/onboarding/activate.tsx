@@ -19,12 +19,6 @@ export default function Activate() {
       .from("households")
       .update({ autopilot_active: true, onboarding_step: "complete" })
       .eq("id", household.id);
-    await supabase.from("audit_events").insert({
-      action: "autopilot_activated",
-      entity_type: "household",
-      entity_id: household.id,
-      household_id: household.id,
-    });
     queryClient.invalidateQueries({ queryKey: ["household"] });
     setBusy(false);
     router.replace("/(tabs)/home");

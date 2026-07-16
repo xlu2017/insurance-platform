@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Linking, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { documentCategories, type DocumentCategory } from "@autopilot/schemas";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
-import { pickDocument, pickImage, uploadPolicyDocument } from "@/lib/upload";
+import { pickDocument, pickImage, uploadPolicyDocument, type PickedFile } from "@/lib/upload";
 import { formatEdmontonDate } from "@/lib/format";
 import {
   Body,
@@ -19,15 +20,21 @@ import {
   Title,
 } from "@/components/ui";
 
-const categories = [
-  { value: "current_policy", label: "Current policy" },
-  { value: "renewal_notice", label: "Renewal notice" },
-  { value: "competing_quote", label: "Competing quote" },
-  { value: "proof_of_insurance", label: "Proof of insurance" },
-  { value: "authorization", label: "Authorization" },
-  { value: "cancellation_confirmation", label: "Cancellation confirmation" },
-  { value: "other", label: "Other" },
-];
+const categoryLabels: Record<DocumentCategory, string> = {
+  current_auto_policy: "Current auto policy",
+  current_property_policy: "Current property policy",
+  renewal_notice: "Renewal notice",
+  competing_quote: "Competing quote",
+  proof_of_insurance: "Proof of insurance",
+  signed_authorization: "Signed authorization",
+  cancellation_confirmation: "Cancellation confirmation",
+  other: "Other",
+};
+
+const categoryOptions = documentCategories.map((value) => ({
+  value,
+  label: categoryLabels[value],
+}));
 
 interface DocumentRow {
   id: string;
@@ -41,7 +48,7 @@ interface DocumentRow {
 export default function Documents() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
-  const [category, setCategory] = useState("current_policy");
+  const [category, setCategory] = useState<DocumentCategory>("current_auto_policy");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -65,7 +72,7 @@ export default function Documents() {
     setBusy(true);
     setError(null);
     try {
-      const file =
+      const file: PickedFile | null =
         source === "document" ? await pickDocument() : await pickImage(source === "camera");
       if (file) {
         await uploadPolicyDocument(household.id, category, file);
@@ -94,9 +101,9 @@ export default function Documents() {
             <Subtitle>Upload</Subtitle>
             <Select
               label="Category"
-              options={categories}
+              options={categoryOptions}
               value={category}
-              onValueChange={setCategory}
+              onValueChange={(value) => setCategory(value)}
             />
             <View style={{ gap: 8 }}>
               <SecondaryButton
@@ -129,7 +136,7 @@ export default function Documents() {
                 <View style={{ flex: 1, marginRight: 12 }}>
                   <Body>{doc.file_name}</Body>
                   <Caption>
-                    {categories.find((c) => c.value === doc.category)?.label ?? doc.category} ·{" "}
+                    {categoryLabels[doc.category as DocumentCategory] ?? doc.category} ·{" "}
                     {formatEdmontonDate(doc.created_at)}
                   </Caption>
                 </View>

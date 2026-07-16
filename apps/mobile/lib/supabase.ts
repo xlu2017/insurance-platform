@@ -1,5 +1,6 @@
 import "react-native-url-polyfill/auto";
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@autopilot/database";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
@@ -33,7 +34,7 @@ const secureStoreAdapter = {
 
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
 
-export const supabase = createClient(
+export const supabase = createClient<Database>(
   SUPABASE_URL,
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
   {

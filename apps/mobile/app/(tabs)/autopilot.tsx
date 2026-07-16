@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@autopilot/design-tokens";
-import { useActiveCase, useHousehold } from "@/lib/household";
+import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
 import { Body, Card, Loading, PrimaryButton, Screen, StatusPill, Title } from "@/components/ui";
 
 const timeline: { state: string; label: string }[] = [
@@ -20,9 +20,16 @@ const timeline: { state: string; label: string }[] = [
   { state: "completed", label: "Switch completed" },
 ];
 
+const outcomeText: Record<string, string> = {
+  completed: "Your last case completed with a successful switch.",
+  retained_incumbent: "Your last case completed; you kept your current insurance.",
+  cancelled: "Your last case was cancelled.",
+};
+
 export default function Autopilot() {
   const { data: household, isLoading } = useHousehold();
   const { data: activeCase, isLoading: caseLoading } = useActiveCase(household?.id);
+  const { data: historicalCase } = useHistoricalCase(household?.id);
 
   if (isLoading || caseLoading) return <Loading />;
 
@@ -33,13 +40,25 @@ export default function Autopilot() {
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Autopilot</Title>
-          {!activeCase ? (
+          {!activeCase && historicalCase ? (
+            <Card>
+              <StatusPill label="No active case" tone="neutral" />
+              <View style={{ height: 8 }} />
+              <Body muted>{outcomeText[historicalCase.state] ?? "Last case completed."}</Body>
+              <View style={{ height: 8 }} />
+              <Body muted>
+                A new renewal case will be created when your policy renewal date approaches.
+              </Body>
+            </Card>
+          ) : null}
+          {!activeCase && !historicalCase ? (
             <Card>
               <StatusPill label="Autopilot active" />
               <View style={{ height: 8 }} />
               <Body muted>No optimization in progress. We are monitoring your renewals.</Body>
             </Card>
-          ) : (
+          ) : null}
+          {activeCase ? (
             <>
               <Card testID="case-timeline">
                 {timeline.map((step, i) => {
@@ -56,7 +75,11 @@ export default function Autopilot() {
                             width: 12,
                             height: 12,
                             borderRadius: 6,
-                            backgroundColor: done || current ? colors.accent : colors.border,
+                            backgroundColor: current
+                              ? colors.accent
+                              : done
+                                ? colors.success
+                                : colors.border,
                             marginTop: 4,
                           }}
                         />
@@ -65,7 +88,7 @@ export default function Autopilot() {
                             style={{
                               width: 2,
                               flex: 1,
-                              backgroundColor: done ? colors.accent : colors.border,
+                              backgroundColor: done ? colors.success : colors.border,
                             }}
                           />
                         ) : null}
@@ -73,7 +96,13 @@ export default function Autopilot() {
                       <View style={{ flex: 1, paddingBottom: 12 }}>
                         <Body
                           muted={!done && !current}
-                          style={current ? { color: colors.accent, fontWeight: "700" } : undefined}
+                          style={
+                            current
+                              ? { color: colors.accent, fontWeight: "700" }
+                              : done
+                                ? { color: colors.success }
+                                : undefined
+                          }
                         >
                           {step.label}
                         </Body>
@@ -90,7 +119,7 @@ export default function Autopilot() {
                 />
               ) : null}
             </>
-          )}
+          ) : null}
         </ScrollView>
       </Screen>
     </SafeAreaView>

@@ -62,25 +62,13 @@ export function QuestionsTab({ caseRow }: { caseRow: CaseDetail }) {
               .map((s) => s.trim())
               .filter(Boolean)
           : null;
-      const { data: question, error } = await supabase
-        .from("customer_questions")
-        .insert({
-          case_id: caseRow.id,
-          question_type: values.questionType,
-          prompt: values.prompt,
-          options,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-      await supabase.from("audit_events").insert({
-        action: "customer_question_created",
-        entity_type: "customer_question",
-        entity_id: question.id,
-        household_id: caseRow.household_id,
+      const { error } = await supabase.from("customer_questions").insert({
         case_id: caseRow.id,
-        after_summary: { question_type: values.questionType },
+        question_type: values.questionType,
+        prompt: values.prompt,
+        options,
       });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["questions", caseRow.id] });

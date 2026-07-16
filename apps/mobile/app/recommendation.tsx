@@ -99,8 +99,16 @@ export default function Recommendation() {
       });
       return result.success ? "ok" : "failed";
     }
-    // Devices without biometrics require the account password before approval.
     return "needs-password";
+  };
+
+  const verifyPassword = async (): Promise<boolean> => {
+    const { data: userData } = await supabase.auth.getUser();
+    const { error: pwError } = await supabase.auth.signInWithPassword({
+      email: userData.user?.email ?? "",
+      password,
+    });
+    return !pwError;
   };
 
   const approve = async () => {
@@ -116,103 +124,57 @@ export default function Recommendation() {
         return;
       }
     } else {
-      const { data: userData } = await supabase.auth.getUser();
-      const { error: pwError } = await supabase.auth.signInWithPassword({
-        email: userData.user?.email ?? "",
-        password,
-      });
-      if (pwError) {
+      const ok = await verifyPassword();
+      if (!ok) {
         setError("Password is incorrect");
         return;
       }
     }
+
     setBusy(true);
-    const { data: userData } = await supabase.auth.getUser();
-    const { error: approvalError } = await supabase.from("recommendation_approvals").insert({
-      recommendation_id: recommendation.id,
-      approver_profile_id: userData.user?.id,
-      approver_role: "customer",
-      approved: true,
-      notes: "Customer approved switch",
-      metadata: {
-        recommendation_version: recommendation.version,
-        quote_ids: recommendation.quote_ids,
-        mandate_version: recommendation.mandate_version,
-        disclosure_version: "v1",
-        approved_at: new Date().toISOString(),
-      },
+    const { error: rpcError } = await supabase.rpc("approve_customer_recommendation", {
+      p_recommendation_id: recommendation.id,
+      p_expected_rec_version: recommendation.version,
+      p_expected_mandate_version: recommendation.mandate_version,
     });
-    if (approvalError) {
-      setBusy(false);
-      setError(approvalError.message);
-      return;
-    }
-    const { error: recError } = await supabase
-      .from("recommendations")
-      .update({ status: "accepted" })
-      .eq("id", recommendation.id);
-    if (recError) {
-      setBusy(false);
-      setError(recError.message);
-      return;
-    }
-    const { error: switchError } = await supabase.from("switch_events").insert({
-      case_id: activeCase.id,
-      recommendation_id: recommendation.id,
-      state: "customer_approved",
-    });
-    if (switchError) {
-      setBusy(false);
-      setError(switchError.message);
-      return;
-    }
-    const { error: caseError } = await supabase
-      .from("optimization_cases")
-      .update({ state: "switching" })
-      .eq("id", activeCase.id);
-    if (caseError) {
-      setBusy(false);
-      setError(caseError.message);
-      return;
-    }
-    await supabase.from("audit_events").insert({
-      action: "switch_approved_by_customer",
-      entity_type: "recommendation",
-      entity_id: recommendation.id,
-      household_id: household?.id,
-      case_id: activeCase.id,
-      after_summary: { net_savings_cents: recommendation.net_savings_cents },
-    });
-    queryClient.invalidateQueries();
     setBusy(false);
+    if (rpcError) {
+      setError(rpcError.message);
+      return;
+    }
+    queryClient.invalidateQueries();
     router.replace("/(tabs)/autopilot");
   };
 
   const keepCurrent = async () => {
     setBusy(true);
-    await supabase
-      .from("recommendations")
-      .update({ status: "declined" })
-      .eq("id", recommendation.id);
-    await supabase
-      .from("optimization_cases")
-      .update({ state: "retained_incumbent" })
-      .eq("id", activeCase.id);
-    queryClient.invalidateQueries();
+    setError(null);
+    const { error: rpcError } = await supabase.rpc("decline_customer_recommendation", {
+      p_recommendation_id: recommendation.id,
+      p_expected_rec_version: recommendation.version,
+      p_expected_mandate_version: recommendation.mandate_version,
+    });
     setBusy(false);
+    if (rpcError) {
+      setError(rpcError.message);
+      return;
+    }
+    queryClient.invalidateQueries();
     router.replace("/(tabs)/home");
   };
 
   const askQuestion = async () => {
     if (questionText.trim().length < 5) return;
     setBusy(true);
-    await supabase.from("customer_questions").insert({
-      case_id: activeCase.id,
-      question_type: "short_text",
-      prompt: `Customer question: ${questionText.trim()}`,
-      status: "pending",
+    const { error: rpcError } = await supabase.rpc("create_customer_support_question", {
+      p_case_id: activeCase.id,
+      p_prompt: questionText.trim(),
     });
     setBusy(false);
+    if (rpcError) {
+      setError(rpcError.message);
+      return;
+    }
     setAsking(false);
     setQuestionText("");
   };

@@ -45,26 +45,28 @@ export default function Profile() {
   });
 
   const { data: subscription } = useQuery({
-    queryKey: ["subscription", household?.id],
-    enabled: !!household,
+    queryKey: ["subscription"],
     queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return null;
       const { data } = await supabase
         .from("subscriptions")
         .select("status, current_period_end")
-        .eq("household_id", household!.id)
+        .eq("profile_id", userData.user.id)
         .maybeSingle();
       return data;
     },
   });
 
   const { data: consents } = useQuery({
-    queryKey: ["consents", household?.id],
-    enabled: !!household,
+    queryKey: ["consents"],
     queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return [];
       const { data } = await supabase
         .from("consents")
         .select("consent_type, granted, disclosure_version, created_at")
-        .eq("household_id", household!.id)
+        .eq("profile_id", userData.user.id)
         .order("created_at", { ascending: false });
       return data ?? [];
     },
@@ -95,13 +97,6 @@ export default function Profile() {
       setAutopilot(!value);
       return;
     }
-    await supabase.from("audit_events").insert({
-      action: value ? "autopilot_resumed" : "autopilot_paused",
-      entity_type: "household",
-      entity_id: household.id,
-      household_id: household.id,
-      after_summary: { autopilot_active: value },
-    });
     queryClient.invalidateQueries({ queryKey: ["household"] });
   };
 

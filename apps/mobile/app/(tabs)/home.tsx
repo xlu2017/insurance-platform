@@ -3,7 +3,7 @@ import { ScrollView, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
-import { useActiveCase, useHousehold } from "@/lib/household";
+import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
 import { formatCad, formatEdmontonDate } from "@/lib/format";
 import {
   Body,
@@ -21,6 +21,7 @@ import {
 export default function Home() {
   const { data: household, isLoading } = useHousehold();
   const { data: activeCase } = useActiveCase(household?.id);
+  const { data: historicalCase } = useHistoricalCase(household?.id);
 
   const { data: policies } = useQuery({
     queryKey: ["current-policies", household?.id],
@@ -63,7 +64,7 @@ export default function Home() {
         .select("net_savings_cents, optimization_cases!inner(household_id, state)")
         .eq("optimization_cases.household_id", household!.id)
         .eq("optimization_cases.state", "completed")
-        .eq("status", "accepted");
+        .eq("status", "customer_approved");
       if (error) throw error;
       return (data ?? []).reduce((sum, r) => sum + r.net_savings_cents, 0);
     },
@@ -106,6 +107,14 @@ export default function Home() {
         ? { label: "Confirm your policy details", action: () => router.push("/confirm-details") }
         : null;
 
+  const historicalOutcome = historicalCase
+    ? historicalCase.state === "completed"
+      ? "Last case completed with a switch."
+      : historicalCase.state === "retained_incumbent"
+        ? "Last case completed; you kept your current insurance."
+        : "Last case was cancelled."
+    : null;
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
@@ -118,6 +127,7 @@ export default function Home() {
             />
             <View style={{ height: 8 }} />
             <Body muted>{requiredAction ? "Action required" : "No action required"}</Body>
+            {historicalOutcome && !requiredAction ? <Caption>{historicalOutcome}</Caption> : null}
           </Card>
           {requiredAction ? (
             <Card>

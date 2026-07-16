@@ -4,17 +4,23 @@ import { ScrollView, Switch, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { Body, Card, Loading, PrimaryButton, Screen, Title } from "@/components/ui";
+import type { ConsentType } from "@autopilot/schemas";
 
-const consentItems = [
-  { type: "document_storage", label: "Store my insurance documents securely" },
-  { type: "quotation_sharing", label: "Share my information with insurers for quotations" },
-  { type: "recommendations", label: "Receive optimization recommendations" },
+const consentItems: { type: ConsentType; label: string }[] = [
+  { type: "store_documents", label: "Store my insurance documents securely" },
+  { type: "share_for_quotation", label: "Share my information with insurers for quotations" },
+  { type: "generate_recommendations", label: "Receive optimization recommendations" },
   { type: "electronic_communications", label: "Receive electronic communications" },
-] as const;
+];
 
 export default function Consents() {
   const { data: household, isLoading } = useHousehold();
-  const [granted, setGranted] = useState<Record<string, boolean>>({});
+  const [granted, setGranted] = useState<Record<ConsentType, boolean>>({
+    store_documents: false,
+    share_for_quotation: false,
+    generate_recommendations: false,
+    electronic_communications: false,
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -26,8 +32,14 @@ export default function Consents() {
     setBusy(true);
     setError(null);
     const { data: userData } = await supabase.auth.getUser();
+    const profileId = userData.user?.id;
+    if (!profileId) {
+      setBusy(false);
+      setError("Not signed in");
+      return;
+    }
     const rows = consentItems.map((c) => ({
-      profile_id: userData.user?.id,
+      profile_id: profileId,
       household_id: household.id,
       consent_type: c.type,
       granted: true,

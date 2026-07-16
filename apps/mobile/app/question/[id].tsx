@@ -60,30 +60,16 @@ export default function AnswerQuestion() {
     }
     setBusy(true);
     setError(null);
-    const { data: userData } = await supabase.auth.getUser();
-    const { error: updateError } = await supabase
-      .from("customer_questions")
-      .update({
-        status: "answered",
-        answer: finalAnswer,
-        answered_by: userData.user?.id,
-        answered_at: new Date().toISOString(),
-      })
-      .eq("id", question.id);
-    if (updateError) {
-      setBusy(false);
-      setError(updateError.message);
+    const { error: rpcError } = await supabase.rpc("answer_customer_question", {
+      p_question_id: question.id,
+      p_answer: finalAnswer.trim(),
+    });
+    setBusy(false);
+    if (rpcError) {
+      setError(rpcError.message);
       return;
     }
-    await supabase.from("audit_events").insert({
-      action: "customer_question_answered",
-      entity_type: "customer_question",
-      entity_id: question.id,
-      case_id: question.case_id,
-      after_summary: { question_type: question.question_type },
-    });
     queryClient.invalidateQueries({ queryKey: ["pending-question"] });
-    setBusy(false);
     router.back();
   };
 

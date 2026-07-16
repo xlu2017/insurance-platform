@@ -44,3 +44,22 @@ export function useActiveCase(householdId: string | undefined) {
     },
   });
 }
+
+export function useHistoricalCase(householdId: string | undefined) {
+  return useQuery({
+    queryKey: ["historical-case", householdId],
+    enabled: !!householdId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("optimization_cases")
+        .select("id, state, renewal_date")
+        .eq("household_id", householdId!)
+        .in("state", ["completed", "retained_incumbent", "cancelled"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}

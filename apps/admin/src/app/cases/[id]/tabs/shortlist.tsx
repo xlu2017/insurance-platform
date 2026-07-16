@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabaseBrowser } from "@/lib/supabase";
+import type { ProductLine, QuoteRequestState } from "@autopilot/schemas";
 import { Badge, Button, Card, CardTitle, Input, Skeleton, Table, Td, Th } from "@/components/ui";
 import { formatEdmonton, titleCase } from "@/lib/utils";
 import type { CaseDetail } from "../page";
@@ -61,21 +62,17 @@ export function ShortlistTab({ caseRow }: { caseRow: CaseDetail }) {
   const createRequest = useMutation({
     mutationFn: async (insurer: InsurerRow) => {
       const supabase = supabaseBrowser();
+      const productLines = insurer.products.filter(
+        (p): p is ProductLine => p === "auto" || p === "property",
+      );
       const { error } = await supabase.from("quote_requests").insert({
         case_id: caseRow.id,
         insurer_id: insurer.id,
         state: "queued",
-        product_lines: insurer.products,
+        product_lines: productLines,
         inclusion_reason: reasons[insurer.id] ?? "Candidate insurer",
       });
       if (error) throw error;
-      await supabase.from("audit_events").insert({
-        action: "quote_request_created",
-        entity_type: "quote_request",
-        household_id: caseRow.household_id,
-        case_id: caseRow.id,
-        after_summary: { insurer: insurer.name },
-      });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["quote-requests", caseRow.id] }),
     onError: (e: Error) => setMessage(e.message),
@@ -106,7 +103,7 @@ export function ShortlistTab({ caseRow }: { caseRow: CaseDetail }) {
   });
 
   const markResponse = useMutation({
-    mutationFn: async ({ id, state }: { id: string; state: string }) => {
+    mutationFn: async ({ id, state }: { id: string; state: QuoteRequestState }) => {
       const { error } = await supabaseBrowser()
         .from("quote_requests")
         .update({ state })

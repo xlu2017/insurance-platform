@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
-import { pickDocument, pickImage, uploadPolicyDocument } from "@/lib/upload";
+import { pickDocument, pickImage, uploadPolicyDocument, type PickedFile } from "@/lib/upload";
 import {
   Body,
   Caption,
@@ -16,24 +16,32 @@ import {
   Title,
 } from "@/components/ui";
 
+interface UploadedFile {
+  name: string;
+  category: string;
+}
+
 export default function OnboardingDocuments() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
-  const [uploaded, setUploaded] = useState<string[]>([]);
+  const [uploaded, setUploaded] = useState<UploadedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (isLoading || !household) return <Loading />;
 
-  const upload = async (source: "document" | "camera" | "library") => {
+  const upload = async (
+    category: "current_auto_policy" | "current_property_policy",
+    source: "document" | "camera" | "library",
+  ) => {
     setBusy(true);
     setError(null);
     try {
-      const file =
+      const file: PickedFile | null =
         source === "document" ? await pickDocument() : await pickImage(source === "camera");
       if (file) {
-        await uploadPolicyDocument(household.id, "current_policy", file);
-        setUploaded((u) => [...u, file.name]);
+        await uploadPolicyDocument(household.id, category, file);
+        setUploaded((u) => [...u, { name: file.name, category }]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
@@ -48,6 +56,7 @@ export default function OnboardingDocuments() {
       .from("optimization_cases")
       .select("id")
       .eq("household_id", household.id)
+      .not("state", "in", "(completed,retained_incumbent,cancelled)")
       .limit(1)
       .maybeSingle();
     if (!existingCase) {
@@ -80,20 +89,55 @@ export default function OnboardingDocuments() {
         typing required.
       </Body>
       <View style={{ height: 16 }} />
-      <SecondaryButton label="Upload a PDF" onPress={() => upload("document")} disabled={busy} />
-      <View style={{ height: 8 }} />
-      <SecondaryButton label="Take a photo" onPress={() => upload("camera")} disabled={busy} />
-      <View style={{ height: 8 }} />
-      <SecondaryButton
-        label="Choose from library"
-        onPress={() => upload("library")}
-        disabled={busy}
-      />
-      <View style={{ height: 16 }} />
+
+      <Card>
+        <Caption>Auto policy</Caption>
+        <View style={{ gap: 8, marginTop: 8 }}>
+          <SecondaryButton
+            label="Upload a PDF"
+            onPress={() => upload("current_auto_policy", "document")}
+            disabled={busy}
+          />
+          <SecondaryButton
+            label="Take a photo"
+            onPress={() => upload("current_auto_policy", "camera")}
+            disabled={busy}
+          />
+          <SecondaryButton
+            label="Choose from library"
+            onPress={() => upload("current_auto_policy", "library")}
+            disabled={busy}
+          />
+        </View>
+      </Card>
+
+      <Card>
+        <Caption>Property policy</Caption>
+        <View style={{ gap: 8, marginTop: 8 }}>
+          <SecondaryButton
+            label="Upload a PDF"
+            onPress={() => upload("current_property_policy", "document")}
+            disabled={busy}
+          />
+          <SecondaryButton
+            label="Take a photo"
+            onPress={() => upload("current_property_policy", "camera")}
+            disabled={busy}
+          />
+          <SecondaryButton
+            label="Choose from library"
+            onPress={() => upload("current_property_policy", "library")}
+            disabled={busy}
+          />
+        </View>
+      </Card>
+
       {uploaded.length > 0 ? (
         <Card>
-          {uploaded.map((name) => (
-            <Caption key={name}>Uploaded: {name}</Caption>
+          {uploaded.map((f, i) => (
+            <Caption key={`${f.name}-${i}`}>
+              {f.category === "current_auto_policy" ? "Auto" : "Property"}: {f.name}
+            </Caption>
           ))}
         </Card>
       ) : null}
