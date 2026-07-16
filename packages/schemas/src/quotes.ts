@@ -113,6 +113,7 @@ export const EngineQuote = z.object({
   billingMethod: BillingMethod.optional(),
   distributionChannel: BrokerDirectPreference.optional(),
   insurerFinancialRating: InsurerFinancialRating.optional(),
+  insurerVersion: z.number().int().nonnegative().optional(),
 });
 export type EngineQuote = z.infer<typeof EngineQuote>;
 

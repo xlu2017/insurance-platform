@@ -644,6 +644,8 @@ export type Database = {
           products: Database["public"]["Enums"]["product_line"][];
           provinces: string[];
           updated_at: string;
+          version: number;
+          versioned_at: string | null;
         };
         Insert: {
           active?: boolean;
@@ -663,6 +665,8 @@ export type Database = {
           products?: Database["public"]["Enums"]["product_line"][];
           provinces?: string[];
           updated_at?: string;
+          version?: number;
+          versioned_at?: string | null;
         };
         Update: {
           active?: boolean;
@@ -682,6 +686,8 @@ export type Database = {
           products?: Database["public"]["Enums"]["product_line"][];
           provinces?: string[];
           updated_at?: string;
+          version?: number;
+          versioned_at?: string | null;
         };
         Relationships: [];
       };
@@ -1194,6 +1200,13 @@ export type Database = {
             foreignKeyName: "quote_policy_components_quote_id_fkey";
             columns: ["quote_id"];
             isOneToOne: false;
+            referencedRelation: "quote_readiness";
+            referencedColumns: ["quote_id"];
+          },
+          {
+            foreignKeyName: "quote_policy_components_quote_id_fkey";
+            columns: ["quote_id"];
+            isOneToOne: false;
             referencedRelation: "quotes";
             referencedColumns: ["id"];
           },
@@ -1640,8 +1653,22 @@ export type Database = {
             foreignKeyName: "recommendation_options_auto_quote_id_fkey";
             columns: ["auto_quote_id"];
             isOneToOne: false;
+            referencedRelation: "quote_readiness";
+            referencedColumns: ["quote_id"];
+          },
+          {
+            foreignKeyName: "recommendation_options_auto_quote_id_fkey";
+            columns: ["auto_quote_id"];
+            isOneToOne: false;
             referencedRelation: "quotes";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recommendation_options_property_quote_id_fkey";
+            columns: ["property_quote_id"];
+            isOneToOne: false;
+            referencedRelation: "quote_readiness";
+            referencedColumns: ["quote_id"];
           },
           {
             foreignKeyName: "recommendation_options_property_quote_id_fkey";
@@ -2206,6 +2233,30 @@ export type Database = {
           updated_at?: string | null;
         };
         Relationships: [];
+      };
+      quote_readiness: {
+        Row: {
+          case_id: string | null;
+          component_count: number | null;
+          draft_component_count: number | null;
+          expires_at: string | null;
+          incomplete_component_count: number | null;
+          invalid_component_count: number | null;
+          is_incumbent: boolean | null;
+          quote_id: string | null;
+          readiness_status: string | null;
+          state: Database["public"]["Enums"]["quote_state"] | null;
+          valid_component_count: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "quotes_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "optimization_cases";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Functions: {

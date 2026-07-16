@@ -10,6 +10,7 @@ import {
   buildEngineInputFromSnapshot,
   canonicalSerializeRecommendationInput,
   canonicalSerializeRecommendationOutput,
+  verifyCanonicalString,
   evaluateHousehold,
   loadRecommendationInputSnapshot,
   EngineRecommendationPersistencePayloadSchema,
@@ -299,6 +300,25 @@ Deno.serve(async (req) => {
   const { canonical: inputSnapshotJson, canonicalJson: inputSnapshotCanonical } =
     canonicalSerializeRecommendationInput(snapshot, ENGINE_VERSION, __AUTOPILOT_SOURCE_HASH__);
   const inputSnapshotDigest = await sha256Hex(inputSnapshotCanonical);
+  if (!verifyCanonicalString(inputSnapshotCanonical)) {
+    await recordAttempt({
+      status: "input_rejected",
+      mandateId: snapshot.mandateId,
+      mandateVersion: snapshot.mandateVersion,
+      switchingPreferencesId: snapshot.switchingPreferencesId,
+      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+      errorCode: "CANONICAL_INPUT_UNSTABLE",
+      safeErrorMessage:
+        "Supplied canonical input snapshot does not match regenerated canonical JSON.",
+    });
+    return jsonResponse(
+      {
+        code: "CANONICAL_INPUT_UNSTABLE",
+        message: "Canonical input snapshot is not reproducible.",
+      },
+      422,
+    );
+  }
 
   const { canonical: engineOutputJson, canonicalJson: engineOutputCanonical } =
     canonicalSerializeRecommendationOutput(
@@ -308,6 +328,25 @@ Deno.serve(async (req) => {
       rejectedOptions,
     );
   const engineOutputDigest = await sha256Hex(engineOutputCanonical);
+  if (!verifyCanonicalString(engineOutputCanonical)) {
+    await recordAttempt({
+      status: "failed",
+      mandateId: snapshot.mandateId,
+      mandateVersion: snapshot.mandateVersion,
+      switchingPreferencesId: snapshot.switchingPreferencesId,
+      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+      errorCode: "CANONICAL_OUTPUT_UNSTABLE",
+      safeErrorMessage:
+        "Supplied canonical engine output does not match regenerated canonical JSON.",
+    });
+    return jsonResponse(
+      {
+        code: "CANONICAL_OUTPUT_UNSTABLE",
+        message: "Canonical engine output is not reproducible.",
+      },
+      500,
+    );
+  }
 
   const payload: EngineRecommendationPersistencePayload = {
     caseId,

@@ -7,6 +7,7 @@ export {
   canonicalizeForDigest,
   canonicalSerializeRecommendationInput,
   canonicalSerializeRecommendationOutput,
+  verifyCanonicalString,
 } from "./canonical.ts";
 export {
   AutoCoverageDetails,

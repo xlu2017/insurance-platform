@@ -20,6 +20,7 @@ export interface DbQuote {
   expires_at: string | null;
   insurers: {
     name: string;
+    version: number;
     financial_strength_rating: string;
     payment_frequencies: string[];
     billing_methods: string[];
@@ -195,6 +196,7 @@ export function toEngineQuote(q: DbQuote): EngineQuote | QuoteCoverageError {
     insurerFinancialRating: insurer
       ? toFinancialRating(insurer.financial_strength_rating)
       : "unknown",
+    insurerVersion: insurer?.version,
   };
 }
 

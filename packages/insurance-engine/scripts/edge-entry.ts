@@ -8,6 +8,7 @@ export {
   canonicalizeForDigest,
   canonicalSerializeRecommendationInput,
   canonicalSerializeRecommendationOutput,
+  verifyCanonicalString,
 } from "../src/canonical.ts";
 export type { EngineInput, EngineResult } from "../src/types.ts";
 

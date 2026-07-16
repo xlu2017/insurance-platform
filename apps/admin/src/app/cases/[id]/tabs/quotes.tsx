@@ -32,6 +32,11 @@ import {
 import { formatCad, titleCase } from "@/lib/utils";
 import type { CaseDetail } from "../page";
 
+const optionalDollars = z.preprocess(
+  (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
+  z.number().nonnegative().optional(),
+);
+
 const triStateOptions = [
   { value: "", label: "Unanswered" },
   { value: "yes", label: "Yes" },
@@ -64,22 +69,22 @@ const QuoteForm = z.object({
   paymentFeesDollars: z.coerce.number().nonnegative().default(0),
   bundleDiscountDollars: z.coerce.number().nonnegative().default(0),
   cancellationChargeDollars: z.coerce.number().nonnegative().default(0),
-  liabilityLimitDollars: z.coerce.number().nonnegative().default(2_000_000),
-  collisionDeductibleDollars: z.coerce.number().nonnegative().default(500),
-  comprehensiveDeductibleDollars: z.coerce.number().nonnegative().default(500),
-  dwellingLimitDollars: z.coerce.number().nonnegative().default(450_000),
-  baseDeductibleDollars: z.coerce.number().nonnegative().default(1000),
-  contentsLimitDollars: z.coerce.number().nonnegative().default(0),
-  detachedStructuresLimitDollars: z.coerce.number().nonnegative().default(0),
-  personalLiabilityLimitDollars: z.coerce.number().nonnegative().default(0),
-  additionalLivingExpenseLimitDollars: z.coerce.number().nonnegative().default(0),
-  waterDeductibleDollars: z.coerce.number().nonnegative().optional(),
-  windHailDeductibleDollars: z.coerce.number().nonnegative().optional(),
-  earthquakeDeductibleDollars: z.coerce.number().nonnegative().optional(),
-  sewerBackupLimitDollars: z.coerce.number().nonnegative().default(0),
-  sewerBackupDeductibleDollars: z.coerce.number().nonnegative().default(0),
-  overlandWaterLimitDollars: z.coerce.number().nonnegative().default(0),
-  overlandWaterDeductibleDollars: z.coerce.number().nonnegative().default(0),
+  liabilityLimitDollars: optionalDollars,
+  collisionDeductibleDollars: optionalDollars,
+  comprehensiveDeductibleDollars: optionalDollars,
+  dwellingLimitDollars: optionalDollars,
+  baseDeductibleDollars: optionalDollars,
+  contentsLimitDollars: optionalDollars,
+  detachedStructuresLimitDollars: optionalDollars,
+  personalLiabilityLimitDollars: optionalDollars,
+  additionalLivingExpenseLimitDollars: optionalDollars,
+  waterDeductibleDollars: optionalDollars,
+  windHailDeductibleDollars: optionalDollars,
+  earthquakeDeductibleDollars: optionalDollars,
+  sewerBackupLimitDollars: optionalDollars,
+  sewerBackupDeductibleDollars: optionalDollars,
+  overlandWaterLimitDollars: optionalDollars,
+  overlandWaterDeductibleDollars: optionalDollars,
   autoCoverageForm: z
     .enum(autoCoverageForms as unknown as [string, ...string[]])
     .default("unknown"),
@@ -237,6 +242,13 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       const autoAssetId = values.autoAssetId ?? householdAssets?.vehicles[0]?.id;
       const propertyAssetId = values.propertyAssetId ?? householdAssets?.properties[0]?.id;
 
+      function toCents(dollars: number | undefined): number | undefined {
+        return typeof dollars === "number" ? Math.round(dollars * 100) : undefined;
+      }
+      function setIfDef(coverage: Record<string, unknown>, key: string, value: unknown) {
+        if (value !== undefined) coverage[key] = value;
+      }
+
       const components: {
         productLine: "auto" | "property";
         assetId: string;
@@ -248,21 +260,32 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
         if (!autoAssetId) throw new Error("No vehicle asset found for this household.");
         const collisionIncluded = buildCoverageFlag(values, "collisionIncluded");
         const comprehensiveIncluded = buildCoverageFlag(values, "comprehensiveIncluded");
-        const coverage: Record<string, unknown> = {
-          thirdPartyLiabilityCents: Math.round(values.liabilityLimitDollars * 100),
-          coverageForm: values.autoCoverageForm,
-          collisionDeductibleCents: collisionIncluded
-            ? Math.round(values.collisionDeductibleDollars * 100)
-            : null,
-          comprehensiveDeductibleCents: comprehensiveIncluded
-            ? Math.round(values.comprehensiveDeductibleDollars * 100)
-            : null,
-          glassDeductibleCents: null,
-          vehicleClass: values.vehicleClass,
-          financingStatus: values.financingStatus,
-          endorsements: values.endorsements,
-          exclusions: values.exclusions,
-        };
+        const coverage: Record<string, unknown> = {};
+        setIfDef(coverage, "thirdPartyLiabilityCents", toCents(values.liabilityLimitDollars));
+        setIfDef(coverage, "coverageForm", values.autoCoverageForm);
+        if (collisionIncluded === true) {
+          setIfDef(
+            coverage,
+            "collisionDeductibleCents",
+            toCents(values.collisionDeductibleDollars),
+          );
+        } else if (collisionIncluded === false) {
+          coverage.collisionDeductibleCents = null;
+        }
+        if (comprehensiveIncluded === true) {
+          setIfDef(
+            coverage,
+            "comprehensiveDeductibleCents",
+            toCents(values.comprehensiveDeductibleDollars),
+          );
+        } else if (comprehensiveIncluded === false) {
+          coverage.comprehensiveDeductibleCents = null;
+        }
+        coverage.glassDeductibleCents = null;
+        setIfDef(coverage, "vehicleClass", values.vehicleClass);
+        setIfDef(coverage, "financingStatus", values.financingStatus);
+        setIfDef(coverage, "endorsements", values.endorsements || undefined);
+        setIfDef(coverage, "exclusions", values.exclusions || undefined);
         const autoFlags: [string, string][] = [
           ["collisionIncluded", "collisionIncluded"],
           ["comprehensiveIncluded", "comprehensiveIncluded"],
@@ -291,38 +314,38 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
 
       if (values.propertyPremiumDollars && values.propertyPremiumDollars > 0) {
         if (!propertyAssetId) throw new Error("No property asset found for this household.");
-        const replacementCost = buildCoverageFlag(values, "replacementCostIncluded");
-        const additionalLiving = buildCoverageFlag(values, "additionalLivingExpensesIncluded");
-        const coverage: Record<string, unknown> = {
-          propertyType: values.propertyType,
-          coverageForm: values.propertyCoverageForm,
-          settlementBasis: values.settlementBasis,
-          dwellingLimitCents: Math.round(values.dwellingLimitDollars * 100),
-          contentsLimitCents: Math.round(values.contentsLimitDollars * 100),
-          detachedStructuresLimitCents: Math.round(values.detachedStructuresLimitDollars * 100),
-          personalLiabilityLimitCents: Math.round(values.personalLiabilityLimitDollars * 100),
-          additionalLivingExpenseLimitCents: additionalLiving
-            ? Math.round(values.additionalLivingExpenseLimitDollars * 100)
-            : 0,
-          baseDeductibleCents: Math.round(values.baseDeductibleDollars * 100),
-          waterDeductibleCents: values.waterDeductibleDollars
-            ? Math.round(values.waterDeductibleDollars * 100)
-            : null,
-          windHailDeductibleCents: values.windHailDeductibleDollars
-            ? Math.round(values.windHailDeductibleDollars * 100)
-            : null,
-          earthquakeDeductibleCents: values.earthquakeDeductibleDollars
-            ? Math.round(values.earthquakeDeductibleDollars * 100)
-            : null,
-          sewerBackupLimitCents: Math.round(values.sewerBackupLimitDollars * 100),
-          sewerBackupDeductibleCents: Math.round(values.sewerBackupDeductibleDollars * 100),
-          overlandWaterLimitCents: Math.round(values.overlandWaterLimitDollars * 100),
-          overlandWaterDeductibleCents: Math.round(values.overlandWaterDeductibleDollars * 100),
-          replacementCostIncluded: replacementCost ?? false,
-          additionalLivingExpensesIncluded: additionalLiving ?? false,
-          endorsements: values.endorsements,
-          exclusions: values.exclusions,
-        };
+        const coverage: Record<string, unknown> = {};
+        setIfDef(coverage, "propertyType", values.propertyType);
+        setIfDef(coverage, "coverageForm", values.propertyCoverageForm);
+        setIfDef(coverage, "settlementBasis", values.settlementBasis);
+        setIfDef(coverage, "dwellingLimitCents", toCents(values.dwellingLimitDollars));
+        setIfDef(coverage, "contentsLimitCents", toCents(values.contentsLimitDollars));
+        setIfDef(
+          coverage,
+          "detachedStructuresLimitCents",
+          toCents(values.detachedStructuresLimitDollars),
+        );
+        setIfDef(
+          coverage,
+          "personalLiabilityLimitCents",
+          toCents(values.personalLiabilityLimitDollars),
+        );
+        setIfDef(
+          coverage,
+          "additionalLivingExpenseLimitCents",
+          toCents(values.additionalLivingExpenseLimitDollars),
+        );
+        setIfDef(coverage, "baseDeductibleCents", toCents(values.baseDeductibleDollars));
+        coverage.waterDeductibleCents = toCents(values.waterDeductibleDollars) ?? null;
+        coverage.windHailDeductibleCents = toCents(values.windHailDeductibleDollars) ?? null;
+        coverage.earthquakeDeductibleCents = toCents(values.earthquakeDeductibleDollars) ?? null;
+        coverage.sewerBackupLimitCents = toCents(values.sewerBackupLimitDollars) ?? null;
+        coverage.sewerBackupDeductibleCents = toCents(values.sewerBackupDeductibleDollars) ?? null;
+        coverage.overlandWaterLimitCents = toCents(values.overlandWaterLimitDollars) ?? null;
+        coverage.overlandWaterDeductibleCents =
+          toCents(values.overlandWaterDeductibleDollars) ?? null;
+        setIfDef(coverage, "endorsements", values.endorsements || undefined);
+        setIfDef(coverage, "exclusions", values.exclusions || undefined);
         const propertyFlags: [string, string][] = [
           ["windHailIncluded", "windHailIncluded"],
           ["earthquakeIncluded", "earthquakeIncluded"],

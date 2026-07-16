@@ -315,10 +315,10 @@ begin
     v_product_line := v_component->>'product_line';
     v_asset_id := nullif(v_component->>'asset_id', '')::uuid;
     v_premium := (v_component->>'annual_premium_cents')::bigint;
-    v_raw_coverage := v_component->'raw_coverage';
-    v_normalized_coverage := v_component->'normalized_coverage';
+    v_raw_coverage := nullif(v_component->'raw_coverage', 'null'::jsonb);
+    v_normalized_coverage := nullif(v_component->'normalized_coverage', 'null'::jsonb);
     v_validation_status := v_component->>'validation_status';
-    v_validation_errors := coalesce(v_component->'validation_errors', '[]'::jsonb);
+    v_validation_errors := coalesce(nullif(v_component->'validation_errors', 'null'::jsonb), '[]'::jsonb);
     v_schema_version := coalesce((v_component->>'coverage_schema_version')::int, 2);
 
     if v_product_line not in ('auto', 'property') then
@@ -379,9 +379,9 @@ begin
     insert into quote_coverages (quote_component_id, coverage, raw_coverage, normalized_coverage)
     values (v_component_id, v_raw_coverage, v_raw_coverage, v_normalized_coverage)
     on conflict (quote_component_id) where validation_status is distinct from 'superseded' do update
-    set coverage = excluded.coverage,
-        raw_coverage = excluded.raw_coverage,
-        normalized_coverage = excluded.normalized_coverage,
+    set coverage = nullif(excluded.coverage, 'null'::jsonb),
+        raw_coverage = nullif(excluded.raw_coverage, 'null'::jsonb),
+        normalized_coverage = nullif(excluded.normalized_coverage, 'null'::jsonb),
         updated_at = now();
 
     -- Now record the classification, provenance and validator. This second update does not touch coverage,

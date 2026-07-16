@@ -132,3 +132,17 @@ export function canonicalSerializeRecommendationOutput(
   });
   return { canonical, canonicalJson: JSON.stringify(canonical) };
 }
+
+/**
+ * Cross-check that a canonical JSON string is stable: parse it and re-canonicalize;
+ * the result must be byte-for-byte identical to the supplied string.
+ */
+export function verifyCanonicalString(canonicalJson: string): boolean {
+  try {
+    const parsed = JSON.parse(canonicalJson);
+    const recomputed = JSON.stringify(canonicalizeForDigest(parsed));
+    return recomputed === canonicalJson;
+  } catch {
+    return false;
+  }
+}
