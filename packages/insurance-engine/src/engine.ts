@@ -17,43 +17,20 @@ import type {
 import type {
   AutoEndorsementKey,
   CoveragePreference,
-  DeductibleRule,
-  LimitRule,
   PropertyOptionalCoverageKey,
   WaterCoverageRequirement,
 } from "@autopilot/schemas";
+import { evaluateMonetaryRule } from "./rule-evaluator.ts";
+import { evaluatePreferenceAlignment } from "./preference-evaluator.ts";
 
 const USABLE_QUOTE_STATES = new Set(["estimate", "conditional", "bindable", "selected"]);
 
-const autoCoverageFormRank: Record<AutoCoverageDetails["coverageForm"], number> = {
-  liability_only: 1,
-  collision: 2,
-  comprehensive: 3,
-  specified_perils: 4,
-  all_perils: 5,
-};
-
-const propertyCoverageFormRank: Record<PropertyCoverageDetails["coverageForm"], number> = {
-  basic: 1,
-  named_perils: 2,
-  broad: 3,
-  comprehensive: 4,
-};
-
-const propertySettlementRank: Record<PropertyCoverageDetails["settlementBasis"], number> = {
-  actual_cash_value: 1,
-  replacement_cost: 2,
-  extended_replacement_cost: 3,
-  guaranteed_replacement_cost: 4,
-};
-
-const financialRatingRank: Record<NonNullable<EngineQuote["insurerFinancialRating"]>, number> = {
+const financialRatingRank: Record<string, number> = {
   B_or_lower: 1,
   B_plus: 2,
   A_minus: 3,
   A: 4,
   A_plus: 5,
-  any: 0,
 };
 
 const autoEndorsementMap: Record<AutoEndorsementKey, keyof AutoCoverageDetails> = {
@@ -296,62 +273,141 @@ export function computeCost(input: EngineInput, config: HouseholdConfiguration):
   };
 }
 
-function limitTarget(rule: LimitRule, required: number, incumbent: number | undefined): number {
-  if (rule === "match_current_or_better") return incumbent ?? required;
-  return required;
-}
+// =============================================================================
+// Monetary-rule evaluator (reusable, typed, unknown-aware)
+// =============================================================================
 
-function deductibleTarget(
-  rule: DeductibleRule,
-  required: number,
-  incumbent: number | undefined,
-): number {
-  if (rule === "match_current_or_better") return incumbent ?? required;
-  return required;
-}
-
-function limitSatisfies(
-  rule: LimitRule,
-  required: number,
-  actual: number,
-  incumbent: number | undefined,
-): { below: boolean; above: boolean; notExact: boolean } {
-  const target = limitTarget(rule, required, incumbent);
-  switch (rule) {
-    case "minimum":
-    case "match_current_or_better":
-      return { below: actual < target, above: false, notExact: false };
-    case "maximum":
-      return { below: false, above: actual > target, notExact: false };
-    case "exact":
-      return { below: false, above: false, notExact: actual !== target };
-    case "any":
-      return { below: false, above: false, notExact: false };
-    default:
-      return { below: false, above: false, notExact: false };
+function pushLimitViolations(
+  result: ReturnType<typeof evaluateMonetaryRule>,
+  reasonCodes: ReasonCode[],
+  belowMinimum: ReasonCode,
+  exceedsMaximum: ReasonCode,
+  notExact: ReasonCode,
+  unknown: ReasonCode,
+) {
+  switch (result.status) {
+    case "below_minimum":
+      reasonCodes.push(belowMinimum);
+      break;
+    case "above_maximum":
+      reasonCodes.push(exceedsMaximum);
+      break;
+    case "not_exact":
+      reasonCodes.push(notExact);
+      break;
+    case "unknown_actual":
+    case "unknown_incumbent":
+      reasonCodes.push(unknown);
+      break;
+    case "satisfied":
+    case "below_incumbent":
+    case "above_incumbent_deductible":
+      break;
   }
 }
 
-function deductibleSatisfies(
-  rule: DeductibleRule,
-  required: number,
-  actual: number,
-  incumbent: number | undefined,
-): { below: boolean; above: boolean; notExact: boolean } {
-  const target = deductibleTarget(rule, required, incumbent);
-  switch (rule) {
-    case "minimum":
-      return { below: actual < target, above: false, notExact: false };
-    case "maximum":
-    case "match_current_or_better":
-      return { below: false, above: actual > target, notExact: false };
-    case "exact":
-      return { below: false, above: false, notExact: actual !== target };
-    case "any":
-      return { below: false, above: false, notExact: false };
-    default:
-      return { below: false, above: false, notExact: false };
+function pushDeductibleViolations(
+  result: ReturnType<typeof evaluateMonetaryRule>,
+  reasonCodes: ReasonCode[],
+  tooHigh: ReasonCode,
+  notExact: ReasonCode,
+  unknown: ReasonCode,
+) {
+  switch (result.status) {
+    case "above_maximum":
+    case "above_incumbent_deductible":
+      reasonCodes.push(tooHigh);
+      break;
+    case "not_exact":
+      reasonCodes.push(notExact);
+      break;
+    case "unknown_actual":
+    case "unknown_incumbent":
+      reasonCodes.push(unknown);
+      break;
+    case "satisfied":
+    case "below_minimum":
+    case "below_incumbent":
+      break;
   }
+}
+
+function pushWaterLimitViolations(
+  result: ReturnType<typeof evaluateMonetaryRule>,
+  reasonCodes: ReasonCode[],
+  belowMinimum: ReasonCode,
+  exceedsMaximum: ReasonCode,
+  notExact: ReasonCode,
+  unknown: ReasonCode,
+) {
+  pushLimitViolations(result, reasonCodes, belowMinimum, exceedsMaximum, notExact, unknown);
+}
+
+function pushWaterDeductibleViolations(
+  result: ReturnType<typeof evaluateMonetaryRule>,
+  reasonCodes: ReasonCode[],
+  tooHigh: ReasonCode,
+  notExact: ReasonCode,
+  unknown: ReasonCode,
+) {
+  pushDeductibleViolations(result, reasonCodes, tooHigh, notExact, unknown);
+}
+
+// =============================================================================
+// Coverage-form compatibility (capability-based, not a single numeric rank)
+// =============================================================================
+
+const autoFormCapabilities: Record<AutoCoverageDetails["coverageForm"], string[]> = {
+  liability_only: ["third_party_liability"],
+  collision: ["third_party_liability", "collision_damage"],
+  comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
+  specified_perils: ["third_party_liability", "specified_perils"],
+  all_perils: [
+    "third_party_liability",
+    "collision_damage",
+    "comprehensive_perils",
+    "all_perils_extensions",
+  ],
+};
+
+const propertyFormCapabilities: Record<PropertyCoverageDetails["coverageForm"], string[]> = {
+  basic: ["fire_lightning"],
+  named_perils: ["fire_lightning", "named_perils"],
+  broad: ["fire_lightning", "named_perils", "broad_perils"],
+  comprehensive: ["all_risks"],
+};
+
+const settlementRank: Record<PropertyCoverageDetails["settlementBasis"], number> = {
+  actual_cash_value: 1,
+  replacement_cost: 2,
+  extended_replacement_cost: 3,
+  guaranteed_replacement_cost: 4,
+};
+
+function hasAllCapabilities(actual: string[], required: string[]): boolean {
+  const set = new Set(actual);
+  return required.every((c) => set.has(c));
+}
+
+function autoFormMeetsOrExceeds(
+  actual: AutoCoverageDetails["coverageForm"],
+  required: AutoCoverageDetails["coverageForm"],
+): boolean {
+  return hasAllCapabilities(autoFormCapabilities[actual], autoFormCapabilities[required]);
+}
+
+function propertyFormMeetsOrExceeds(
+  actual: PropertyCoverageDetails["coverageForm"],
+  required: PropertyCoverageDetails["coverageForm"],
+): boolean {
+  return hasAllCapabilities(propertyFormCapabilities[actual], propertyFormCapabilities[required]);
+}
+
+function settlementMeetsOrExceeds(
+  actual: PropertyCoverageDetails["settlementBasis"],
+  required: PropertyCoverageDetails["settlementBasis"],
+): boolean {
+  return settlementRank[actual] >= settlementRank[required];
 }
 
 function autoFormSatisfies(
@@ -361,8 +417,7 @@ function autoFormSatisfies(
 ): boolean {
   if (preference === "indifferent" || preference === "preferred") return true;
   if (preference === "prohibited") return actualForm !== requiredForm;
-  if (preference === "required")
-    return autoCoverageFormRank[actualForm] >= autoCoverageFormRank[requiredForm];
+  if (preference === "required") return autoFormMeetsOrExceeds(actualForm, requiredForm);
   return true;
 }
 
@@ -373,8 +428,7 @@ function propertyFormSatisfies(
 ): boolean {
   if (preference === "indifferent" || preference === "preferred") return true;
   if (preference === "prohibited") return actualForm !== requiredForm;
-  if (preference === "required")
-    return propertyCoverageFormRank[actualForm] >= propertyCoverageFormRank[requiredForm];
+  if (preference === "required") return propertyFormMeetsOrExceeds(actualForm, requiredForm);
   return true;
 }
 
@@ -386,9 +440,13 @@ function settlementSatisfies(
   if (preference === "indifferent" || preference === "preferred") return true;
   if (preference === "prohibited") return actualSettlement !== requiredSettlement;
   if (preference === "required")
-    return propertySettlementRank[actualSettlement] >= propertySettlementRank[requiredSettlement];
+    return settlementMeetsOrExceeds(actualSettlement, requiredSettlement);
   return true;
 }
+
+// =============================================================================
+// Hard-requirement checks
+// =============================================================================
 
 function checkAutoHardRequirements(
   mandate: AutoRequirements,
@@ -396,17 +454,22 @@ function checkAutoHardRequirements(
   incumbent: AutoCoverageDetails | undefined,
 ): ReasonCode[] {
   const violations: ReasonCode[] = [];
-  const incumbentLiability = incumbent?.thirdPartyLiabilityCents;
 
-  const liability = limitSatisfies(
-    mandate.liability.rule,
-    mandate.liability.cents,
-    auto.thirdPartyLiabilityCents,
-    incumbentLiability,
+  const liability = evaluateMonetaryRule({
+    rule: mandate.liability.rule,
+    required: mandate.liability.cents,
+    actual: auto.thirdPartyLiabilityCents,
+    incumbent: incumbent?.thirdPartyLiabilityCents,
+    fieldKind: "limit",
+  });
+  pushLimitViolations(
+    liability,
+    violations,
+    "AUTO_LIABILITY_BELOW_MINIMUM",
+    "AUTO_LIABILITY_EXCEEDS_MAXIMUM",
+    "AUTO_LIABILITY_NOT_EXACT",
+    "AUTO_LIABILITY_UNKNOWN",
   );
-  if (liability.below) violations.push("AUTO_LIABILITY_BELOW_MINIMUM");
-  if (liability.above) violations.push("AUTO_LIABILITY_EXCEEDS_MAXIMUM");
-  if (liability.notExact) violations.push("AUTO_LIABILITY_NOT_EXACT");
 
   if (
     !autoFormSatisfies(
@@ -426,35 +489,57 @@ function checkAutoHardRequirements(
   if (mandate.financingStatus && auto.financingStatus !== mandate.financingStatus)
     violations.push("AUTO_FINANCING_STATUS_MISMATCH");
 
-  const collisionDed = deductibleSatisfies(
-    mandate.collisionDeductible.rule,
-    mandate.collisionDeductible.cents,
-    auto.collisionDeductibleCents ?? 0,
-    incumbent?.collisionDeductibleCents ?? undefined,
-  );
   if (auto.collisionIncluded) {
-    if (collisionDed.above) violations.push("AUTO_COLLISION_DEDUCTIBLE_TOO_HIGH");
-    if (collisionDed.notExact) violations.push("AUTO_COLLISION_DEDUCTIBLE_NOT_EXACT");
+    const collisionDed = evaluateMonetaryRule({
+      rule: mandate.collisionDeductible.rule,
+      required: mandate.collisionDeductible.cents,
+      actual: auto.collisionDeductibleCents,
+      incumbent: incumbent?.collisionDeductibleCents,
+      fieldKind: "deductible",
+    });
+    pushDeductibleViolations(
+      collisionDed,
+      violations,
+      "AUTO_COLLISION_DEDUCTIBLE_TOO_HIGH",
+      "AUTO_COLLISION_DEDUCTIBLE_NOT_EXACT",
+      "AUTO_COLLISION_DEDUCTIBLE_UNKNOWN",
+    );
   }
 
-  const comprehensiveDed = deductibleSatisfies(
-    mandate.comprehensiveDeductible.rule,
-    mandate.comprehensiveDeductible.cents,
-    auto.comprehensiveDeductibleCents ?? 0,
-    incumbent?.comprehensiveDeductibleCents ?? undefined,
-  );
   if (auto.comprehensiveIncluded) {
-    if (comprehensiveDed.above) violations.push("AUTO_COMPREHENSIVE_DEDUCTIBLE_TOO_HIGH");
-    if (comprehensiveDed.notExact) violations.push("AUTO_COMPREHENSIVE_DEDUCTIBLE_NOT_EXACT");
+    const comprehensiveDed = evaluateMonetaryRule({
+      rule: mandate.comprehensiveDeductible.rule,
+      required: mandate.comprehensiveDeductible.cents,
+      actual: auto.comprehensiveDeductibleCents,
+      incumbent: incumbent?.comprehensiveDeductibleCents,
+      fieldKind: "deductible",
+    });
+    pushDeductibleViolations(
+      comprehensiveDed,
+      violations,
+      "AUTO_COMPREHENSIVE_DEDUCTIBLE_TOO_HIGH",
+      "AUTO_COMPREHENSIVE_DEDUCTIBLE_NOT_EXACT",
+      "AUTO_COMPREHENSIVE_DEDUCTIBLE_UNKNOWN",
+    );
   }
 
-  const glassDed = deductibleSatisfies(
-    mandate.glassDeductible.rule,
-    mandate.glassDeductible.cents,
-    auto.glassDeductibleCents ?? 0,
-    undefined,
-  );
-  if (glassDed.above) violations.push("AUTO_GLASS_DEDUCTIBLE_TOO_HIGH");
+  const hasGlassCoverage = auto.glassCoverageIncluded || auto.glassDeductibleCents !== null;
+  if (hasGlassCoverage) {
+    const glassDed = evaluateMonetaryRule({
+      rule: mandate.glassDeductible.rule,
+      required: mandate.glassDeductible.cents,
+      actual: auto.glassDeductibleCents,
+      incumbent: undefined,
+      fieldKind: "deductible",
+    });
+    pushDeductibleViolations(
+      glassDed,
+      violations,
+      "AUTO_GLASS_DEDUCTIBLE_TOO_HIGH",
+      "AUTO_GLASS_DEDUCTIBLE_NOT_EXACT",
+      "AUTO_GLASS_DEDUCTIBLE_UNKNOWN",
+    );
+  }
 
   const telematicsPreference = mandate.endorsements.telematics;
   if (telematicsPreference === "required" && !auto.telematicsRequired)
@@ -496,43 +581,64 @@ function checkWaterCoverage(
   const incumbentDeductible = isSewer
     ? incumbent?.sewerBackupDeductibleCents
     : incumbent?.overlandWaterDeductibleCents;
-  const missingCode: ReasonCode = isSewer
-    ? "PROPERTY_SEWER_BACKUP_MISSING"
-    : "PROPERTY_OVERLAND_WATER_MISSING";
-  const prohibitedCode: ReasonCode = isSewer
-    ? "PROPERTY_SEWER_BACKUP_PROHIBITED"
-    : "PROPERTY_OVERLAND_WATER_PROHIBITED";
-  const limitCode: ReasonCode = isSewer
-    ? "PROPERTY_SEWER_BACKUP_LIMIT_TOO_LOW"
-    : "PROPERTY_OVERLAND_WATER_LIMIT_TOO_LOW";
-  const deductibleCode: ReasonCode = isSewer
-    ? "PROPERTY_SEWER_BACKUP_DEDUCTIBLE_TOO_HIGH"
-    : "PROPERTY_OVERLAND_WATER_DEDUCTIBLE_TOO_HIGH";
 
-  if (requirement.preference === "prohibited" && included) violations.push(prohibitedCode);
-  if (requirement.preference === "required" && !included) violations.push(missingCode);
+  if (requirement.preference === "prohibited" && included) {
+    violations.push(
+      isSewer ? "PROPERTY_SEWER_BACKUP_PROHIBITED" : "PROPERTY_OVERLAND_WATER_PROHIBITED",
+    );
+  }
+  if (requirement.preference === "required" && !included) {
+    violations.push(isSewer ? "PROPERTY_SEWER_BACKUP_MISSING" : "PROPERTY_OVERLAND_WATER_MISSING");
+  }
 
   if (
     (requirement.preference === "required" || requirement.preference === "preferred") &&
     included
   ) {
     if (limit !== null) {
-      const limitCheck = limitSatisfies(
-        requirement.limit.rule,
-        requirement.limit.cents,
-        limit,
-        incumbentLimit ?? undefined,
+      const limitCheck = evaluateMonetaryRule({
+        rule: requirement.limit.rule,
+        required: requirement.limit.cents,
+        actual: limit,
+        incumbent: incumbentLimit,
+        fieldKind: "limit",
+      });
+      pushWaterLimitViolations(
+        limitCheck,
+        violations,
+        isSewer
+          ? "PROPERTY_SEWER_BACKUP_LIMIT_BELOW_MINIMUM"
+          : "PROPERTY_OVERLAND_WATER_LIMIT_BELOW_MINIMUM",
+        isSewer
+          ? "PROPERTY_SEWER_BACKUP_LIMIT_EXCEEDS_MAXIMUM"
+          : "PROPERTY_OVERLAND_WATER_LIMIT_EXCEEDS_MAXIMUM",
+        isSewer
+          ? "PROPERTY_SEWER_BACKUP_LIMIT_NOT_EXACT"
+          : "PROPERTY_OVERLAND_WATER_LIMIT_NOT_EXACT",
+        isSewer ? "PROPERTY_SEWER_BACKUP_LIMIT_UNKNOWN" : "PROPERTY_OVERLAND_WATER_LIMIT_UNKNOWN",
       );
-      if (limitCheck.below) violations.push(limitCode);
     }
     if (deductible !== null) {
-      const dedCheck = deductibleSatisfies(
-        requirement.deductible.rule,
-        requirement.deductible.cents,
-        deductible,
-        incumbentDeductible ?? undefined,
+      const dedCheck = evaluateMonetaryRule({
+        rule: requirement.deductible.rule,
+        required: requirement.deductible.cents,
+        actual: deductible,
+        incumbent: incumbentDeductible,
+        fieldKind: "deductible",
+      });
+      pushWaterDeductibleViolations(
+        dedCheck,
+        violations,
+        isSewer
+          ? "PROPERTY_SEWER_BACKUP_DEDUCTIBLE_TOO_HIGH"
+          : "PROPERTY_OVERLAND_WATER_DEDUCTIBLE_TOO_HIGH",
+        isSewer
+          ? "PROPERTY_SEWER_BACKUP_DEDUCTIBLE_NOT_EXACT"
+          : "PROPERTY_OVERLAND_WATER_DEDUCTIBLE_NOT_EXACT",
+        isSewer
+          ? "PROPERTY_SEWER_BACKUP_DEDUCTIBLE_UNKNOWN"
+          : "PROPERTY_OVERLAND_WATER_DEDUCTIBLE_UNKNOWN",
       );
-      if (dedCheck.above) violations.push(deductibleCode);
     }
   }
 
@@ -575,80 +681,149 @@ function checkPropertyHardRequirements(
         : "PROPERTY_SETTLEMENT_BELOW_REQUIRED",
     );
 
-  const dwelling = limitSatisfies(
-    mandate.dwellingLimit.rule,
-    mandate.dwellingLimit.cents,
-    property.dwellingLimitCents,
-    incumbent?.dwellingLimitCents,
+  const dwelling = evaluateMonetaryRule({
+    rule: mandate.dwellingLimit.rule,
+    required: mandate.dwellingLimit.cents,
+    actual: property.dwellingLimitCents,
+    incumbent: incumbent?.dwellingLimitCents,
+    fieldKind: "limit",
+  });
+  pushLimitViolations(
+    dwelling,
+    violations,
+    "PROPERTY_DWELLING_LIMIT_BELOW_MINIMUM",
+    "PROPERTY_DWELLING_LIMIT_EXCEEDS_MAXIMUM",
+    "PROPERTY_DWELLING_LIMIT_NOT_EXACT",
+    "PROPERTY_DWELLING_LIMIT_UNKNOWN",
   );
-  if (dwelling.below) violations.push("PROPERTY_DWELLING_LIMIT_BELOW_MINIMUM");
-  if (dwelling.above) violations.push("PROPERTY_DWELLING_LIMIT_EXCEEDS_MAXIMUM");
-  if (dwelling.notExact) violations.push("PROPERTY_DWELLING_LIMIT_NOT_EXACT");
 
-  const contents = limitSatisfies(
-    mandate.contentsLimit.rule,
-    mandate.contentsLimit.cents,
-    property.contentsLimitCents,
-    incumbent?.contentsLimitCents,
+  const contents = evaluateMonetaryRule({
+    rule: mandate.contentsLimit.rule,
+    required: mandate.contentsLimit.cents,
+    actual: property.contentsLimitCents,
+    incumbent: incumbent?.contentsLimitCents,
+    fieldKind: "limit",
+  });
+  pushLimitViolations(
+    contents,
+    violations,
+    "PROPERTY_CONTENTS_LIMIT_BELOW_MINIMUM",
+    "PROPERTY_CONTENTS_LIMIT_EXCEEDS_MAXIMUM",
+    "PROPERTY_CONTENTS_LIMIT_NOT_EXACT",
+    "PROPERTY_CONTENTS_LIMIT_UNKNOWN",
   );
-  if (contents.below) violations.push("PROPERTY_CONTENTS_LIMIT_TOO_LOW");
 
-  const detached = limitSatisfies(
-    mandate.detachedStructuresLimit.rule,
-    mandate.detachedStructuresLimit.cents,
-    property.detachedStructuresLimitCents,
-    incumbent?.detachedStructuresLimitCents,
+  const detached = evaluateMonetaryRule({
+    rule: mandate.detachedStructuresLimit.rule,
+    required: mandate.detachedStructuresLimit.cents,
+    actual: property.detachedStructuresLimitCents,
+    incumbent: incumbent?.detachedStructuresLimitCents,
+    fieldKind: "limit",
+  });
+  pushLimitViolations(
+    detached,
+    violations,
+    "PROPERTY_DETACHED_STRUCTURES_LIMIT_BELOW_MINIMUM",
+    "PROPERTY_DETACHED_STRUCTURES_LIMIT_EXCEEDS_MAXIMUM",
+    "PROPERTY_DETACHED_STRUCTURES_LIMIT_NOT_EXACT",
+    "PROPERTY_DETACHED_STRUCTURES_LIMIT_UNKNOWN",
   );
-  if (detached.below) violations.push("PROPERTY_DETACHED_STRUCTURES_LIMIT_TOO_LOW");
 
-  const liability = limitSatisfies(
-    mandate.personalLiabilityLimit.rule,
-    mandate.personalLiabilityLimit.cents,
-    property.personalLiabilityLimitCents,
-    incumbent?.personalLiabilityLimitCents,
+  const liability = evaluateMonetaryRule({
+    rule: mandate.personalLiabilityLimit.rule,
+    required: mandate.personalLiabilityLimit.cents,
+    actual: property.personalLiabilityLimitCents,
+    incumbent: incumbent?.personalLiabilityLimitCents,
+    fieldKind: "limit",
+  });
+  pushLimitViolations(
+    liability,
+    violations,
+    "PROPERTY_PERSONAL_LIABILITY_BELOW_MINIMUM",
+    "PROPERTY_PERSONAL_LIABILITY_EXCEEDS_MAXIMUM",
+    "PROPERTY_PERSONAL_LIABILITY_NOT_EXACT",
+    "PROPERTY_PERSONAL_LIABILITY_UNKNOWN",
   );
-  if (liability.below) violations.push("PROPERTY_PERSONAL_LIABILITY_LIMIT_TOO_LOW");
 
-  const ale = limitSatisfies(
-    mandate.additionalLivingExpenseLimit.rule,
-    mandate.additionalLivingExpenseLimit.cents,
-    property.additionalLivingExpenseLimitCents,
-    incumbent?.additionalLivingExpenseLimitCents,
+  const ale = evaluateMonetaryRule({
+    rule: mandate.additionalLivingExpenseLimit.rule,
+    required: mandate.additionalLivingExpenseLimit.cents,
+    actual: property.additionalLivingExpenseLimitCents,
+    incumbent: incumbent?.additionalLivingExpenseLimitCents,
+    fieldKind: "limit",
+  });
+  pushLimitViolations(
+    ale,
+    violations,
+    "PROPERTY_ADDITIONAL_LIVING_EXPENSE_BELOW_MINIMUM",
+    "PROPERTY_ADDITIONAL_LIVING_EXPENSE_EXCEEDS_MAXIMUM",
+    "PROPERTY_ADDITIONAL_LIVING_EXPENSE_NOT_EXACT",
+    "PROPERTY_ADDITIONAL_LIVING_EXPENSE_UNKNOWN",
   );
-  if (ale.below) violations.push("PROPERTY_ADDITIONAL_LIVING_EXPENSE_LIMIT_TOO_LOW");
 
-  const baseDed = deductibleSatisfies(
-    mandate.baseDeductible.rule,
-    mandate.baseDeductible.cents,
-    property.baseDeductibleCents,
-    incumbent?.baseDeductibleCents,
+  const baseDed = evaluateMonetaryRule({
+    rule: mandate.baseDeductible.rule,
+    required: mandate.baseDeductible.cents,
+    actual: property.baseDeductibleCents,
+    incumbent: incumbent?.baseDeductibleCents,
+    fieldKind: "deductible",
+  });
+  pushDeductibleViolations(
+    baseDed,
+    violations,
+    "PROPERTY_BASE_DEDUCTIBLE_TOO_HIGH",
+    "PROPERTY_BASE_DEDUCTIBLE_NOT_EXACT",
+    "PROPERTY_BASE_DEDUCTIBLE_UNKNOWN",
   );
-  if (baseDed.above) violations.push("PROPERTY_BASE_DEDUCTIBLE_TOO_HIGH");
-  if (baseDed.notExact) violations.push("PROPERTY_BASE_DEDUCTIBLE_NOT_EXACT");
 
-  const waterDed = deductibleSatisfies(
-    mandate.waterDeductible.rule,
-    mandate.waterDeductible.cents,
-    property.waterDeductibleCents ?? 0,
-    incumbent?.waterDeductibleCents ?? undefined,
+  const waterDed = evaluateMonetaryRule({
+    rule: mandate.waterDeductible.rule,
+    required: mandate.waterDeductible.cents,
+    actual: property.waterDeductibleCents,
+    incumbent: incumbent?.waterDeductibleCents,
+    fieldKind: "deductible",
+  });
+  pushDeductibleViolations(
+    waterDed,
+    violations,
+    "PROPERTY_WATER_DEDUCTIBLE_TOO_HIGH",
+    "PROPERTY_WATER_DEDUCTIBLE_NOT_EXACT",
+    "PROPERTY_WATER_DEDUCTIBLE_UNKNOWN",
   );
-  if (waterDed.above) violations.push("PROPERTY_WATER_DEDUCTIBLE_TOO_HIGH");
 
-  const windHailDed = deductibleSatisfies(
-    mandate.windHailDeductible.rule,
-    mandate.windHailDeductible.cents,
-    property.windHailDeductibleCents ?? 0,
-    incumbent?.windHailDeductibleCents ?? undefined,
-  );
-  if (windHailDed.above) violations.push("PROPERTY_WIND_HAIL_DEDUCTIBLE_TOO_HIGH");
+  if (property.windHailIncluded) {
+    const windHailDed = evaluateMonetaryRule({
+      rule: mandate.windHailDeductible.rule,
+      required: mandate.windHailDeductible.cents,
+      actual: property.windHailDeductibleCents,
+      incumbent: incumbent?.windHailDeductibleCents,
+      fieldKind: "deductible",
+    });
+    pushDeductibleViolations(
+      windHailDed,
+      violations,
+      "PROPERTY_WIND_HAIL_DEDUCTIBLE_TOO_HIGH",
+      "PROPERTY_WIND_HAIL_DEDUCTIBLE_NOT_EXACT",
+      "PROPERTY_WIND_HAIL_DEDUCTIBLE_UNKNOWN",
+    );
+  }
 
-  const earthquakeDed = deductibleSatisfies(
-    mandate.earthquakeDeductible.rule,
-    mandate.earthquakeDeductible.cents,
-    property.earthquakeDeductibleCents ?? 0,
-    incumbent?.earthquakeDeductibleCents ?? undefined,
-  );
-  if (earthquakeDed.above) violations.push("PROPERTY_EARTHQUAKE_DEDUCTIBLE_TOO_HIGH");
+  if (property.earthquakeIncluded) {
+    const earthquakeDed = evaluateMonetaryRule({
+      rule: mandate.earthquakeDeductible.rule,
+      required: mandate.earthquakeDeductible.cents,
+      actual: property.earthquakeDeductibleCents,
+      incumbent: incumbent?.earthquakeDeductibleCents,
+      fieldKind: "deductible",
+    });
+    pushDeductibleViolations(
+      earthquakeDed,
+      violations,
+      "PROPERTY_EARTHQUAKE_DEDUCTIBLE_TOO_HIGH",
+      "PROPERTY_EARTHQUAKE_DEDUCTIBLE_NOT_EXACT",
+      "PROPERTY_EARTHQUAKE_DEDUCTIBLE_UNKNOWN",
+    );
+  }
 
   violations.push(...checkWaterCoverage("sewerBackup", mandate.sewerBackup, property, incumbent));
   violations.push(
@@ -711,7 +886,7 @@ function coverageReductionsVsIncumbent(
 
   if (auto.thirdPartyLiabilityCents < incumbentAuto.thirdPartyLiabilityCents)
     reductions.push("auto_liability_reduced");
-  if (autoCoverageFormRank[auto.coverageForm] < autoCoverageFormRank[incumbentAuto.coverageForm])
+  if (!autoFormMeetsOrExceeds(auto.coverageForm, incumbentAuto.coverageForm))
     reductions.push("auto_coverage_form_reduced");
   if (incumbentAuto.collisionIncluded && !auto.collisionIncluded)
     reductions.push("auto_collision_removed");
@@ -729,15 +904,9 @@ function coverageReductionsVsIncumbent(
 
   if (property.dwellingLimitCents < incumbentProperty.dwellingLimitCents)
     reductions.push("property_dwelling_limit_reduced");
-  if (
-    propertyCoverageFormRank[property.coverageForm] <
-    propertyCoverageFormRank[incumbentProperty.coverageForm]
-  )
+  if (!propertyFormMeetsOrExceeds(property.coverageForm, incumbentProperty.coverageForm))
     reductions.push("property_coverage_form_reduced");
-  if (
-    propertySettlementRank[property.settlementBasis] <
-    propertySettlementRank[incumbentProperty.settlementBasis]
-  )
+  if (!settlementMeetsOrExceeds(property.settlementBasis, incumbentProperty.settlementBasis))
     reductions.push("property_settlement_reduced");
   if (property.contentsLimitCents < incumbentProperty.contentsLimitCents)
     reductions.push("property_contents_limit_reduced");
@@ -836,15 +1005,15 @@ function totalDeductibles(config: HouseholdConfiguration): number {
   const property = config.property.component.property;
   let total = 0;
   if (auto) {
-    total += auto.collisionIncluded ? (auto.collisionDeductibleCents ?? 0) : 0;
-    total += auto.comprehensiveIncluded ? (auto.comprehensiveDeductibleCents ?? 0) : 0;
-    total += auto.glassDeductibleCents ?? 0;
+    total += auto.collisionIncluded ? numOr(auto.collisionDeductibleCents, 0) : 0;
+    total += auto.comprehensiveIncluded ? numOr(auto.comprehensiveDeductibleCents, 0) : 0;
+    total += numOr(auto.glassDeductibleCents, 0);
   }
   if (property) {
     total += property.baseDeductibleCents;
-    total += property.waterDeductibleCents ?? 0;
-    total += property.windHailIncluded ? (property.windHailDeductibleCents ?? 0) : 0;
-    total += property.earthquakeIncluded ? (property.earthquakeDeductibleCents ?? 0) : 0;
+    total += numOr(property.waterDeductibleCents, 0);
+    total += property.windHailIncluded ? numOr(property.windHailDeductibleCents, 0) : 0;
+    total += property.earthquakeIncluded ? numOr(property.earthquakeDeductibleCents, 0) : 0;
   }
   return total;
 }
@@ -1032,12 +1201,19 @@ export function evaluateHousehold(input: EngineInput): EngineResult {
       mandate.switching.minimumInsurerFinancialRating !== undefined
     ) {
       const requiredRank = financialRatingRank[mandate.switching.minimumInsurerFinancialRating];
-      for (const q of [autoQuote, propertyQuote]) {
-        const quoteRating = q.insurerFinancialRating ?? "any";
-        if (quoteRating !== "any" && financialRatingRank[quoteRating] < requiredRank) {
-          eligible = false;
-          reasonCodes.push("INSURER_RATING_BELOW_MINIMUM");
-          break;
+      if (requiredRank !== undefined) {
+        for (const q of [autoQuote, propertyQuote]) {
+          const quoteRating = q.insurerFinancialRating;
+          if (quoteRating === undefined || financialRatingRank[quoteRating] === undefined) {
+            eligible = false;
+            reasonCodes.push("INSURER_RATING_UNKNOWN");
+            break;
+          }
+          if (financialRatingRank[quoteRating] < requiredRank) {
+            eligible = false;
+            reasonCodes.push("INSURER_RATING_BELOW_MINIMUM");
+            break;
+          }
         }
       }
     }
@@ -1058,14 +1234,12 @@ export function evaluateHousehold(input: EngineInput): EngineResult {
       reasonCodes.push("COVERAGE_REDUCTION_VS_INCUMBENT");
     }
 
-    const deductibleIncreaseCents = config.isIncumbentConfiguration
-      ? 0
-      : deductibleIncreasedVsIncumbent(input, config).increaseCents;
+    const deductibleIncrease = deductibleIncreasedVsIncumbent(input, config);
     if (!config.isIncumbentConfiguration) {
       const allowedDeductibleIncreaseCents = mandate.switching.deductibleIncreasesAllowed
         ? (mandate.switching.maxDeductibleIncreaseCents ?? Number.MAX_SAFE_INTEGER)
         : 0;
-      if (deductibleIncreaseCents > allowedDeductibleIncreaseCents) {
+      if (deductibleIncrease.increaseCents > allowedDeductibleIncreaseCents) {
         eligible = false;
         reasonCodes.push("DEDUCTIBLE_INCREASE_PROHIBITED");
       }
@@ -1089,6 +1263,8 @@ export function evaluateHousehold(input: EngineInput): EngineResult {
       }
     }
 
+    const preferenceAlignment = evaluatePreferenceAlignment(input, config);
+
     return {
       configuration: config,
       cost,
@@ -1098,6 +1274,7 @@ export function evaluateHousehold(input: EngineInput): EngineResult {
       coverageReductions,
       deductibleTotalCents: totalDeductibles(config),
       underwritingConditionCount: underwritingConditionCount(input, config),
+      preferenceAlignment,
     };
   });
 
@@ -1113,9 +1290,15 @@ export function evaluateHousehold(input: EngineInput): EngineResult {
   };
 }
 
-/** Rank by total cost, then no coverage reductions, then lower deductibles, then fewer underwriting conditions, then preference alignment. */
+/** Rank by total cost, then fewer missed preferred requirements, then fewer unknown preferred requirements, then lower deductible exposure, then fewer underwriting conditions, then stable deterministic identifier. */
 export function rankConfigurations(a: EvaluatedConfiguration, b: EvaluatedConfiguration): number {
   if (a.cost.totalCents !== b.cost.totalCents) return a.cost.totalCents - b.cost.totalCents;
+  const aMissed = a.preferenceAlignment.missed_count;
+  const bMissed = b.preferenceAlignment.missed_count;
+  if (aMissed !== bMissed) return aMissed - bMissed;
+  const aUnknown = a.preferenceAlignment.not_evaluable_count;
+  const bUnknown = b.preferenceAlignment.not_evaluable_count;
+  if (aUnknown !== bUnknown) return aUnknown - bUnknown;
   if (a.coverageReductions.length !== b.coverageReductions.length)
     return a.coverageReductions.length - b.coverageReductions.length;
   if (a.deductibleTotalCents !== b.deductibleTotalCents)
