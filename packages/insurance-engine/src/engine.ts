@@ -856,7 +856,9 @@ function underwritingConditionCount(input: EngineInput, config: HouseholdConfigu
   return quotes.reduce((n, q) => n + q.underwritingConditions.length, 0);
 }
 
-function validateEngineInput(input: EngineInput): { code: ReasonCode; message: string } | null {
+export function validateEngineInput(
+  input: EngineInput,
+): { code: ReasonCode; message: string } | null {
   const autoIds = new Set<string | undefined>();
   const propertyIds = new Set<string | undefined>();
 
