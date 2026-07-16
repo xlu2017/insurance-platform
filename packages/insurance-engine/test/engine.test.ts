@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { AutoCoverageDetails, PropertyCoverageDetails, QuoteComponent } from "@autopilot/schemas";
+import type {
+  AutoCoverageDetails,
+  PropertyCoverageDetails,
+  QuoteComponent,
+} from "@autopilot/schemas";
 import {
   TEST_PROPERTY_ID,
   TEST_VEHICLE_ID,
@@ -455,7 +459,9 @@ describe("fail-closed multi-asset guard", () => {
       },
       incumbentProperty: {
         quote: badQuote,
-        component: propertyComponent(100_000) as QuoteComponent & { property: PropertyCoverageDetails },
+        component: propertyComponent(100_000) as QuoteComponent & {
+          property: PropertyCoverageDetails;
+        },
       },
       assets: { vehicles: [{ id: TEST_VEHICLE_ID }], properties: [{ id: TEST_PROPERTY_ID }] },
     });
