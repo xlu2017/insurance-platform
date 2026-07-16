@@ -1,17 +1,28 @@
-// Sends a structured quote-request email for a quote request through the
-// email provider adapter: Resend when RESEND_API_KEY is set, otherwise the
-// email_outbox table. Staff only. DB-backed rate-limited per user.
+// Sends a structured quote-request email for a quote request.
+// Resend is used when RESEND_API_KEY is set; otherwise the email is recorded in the outbox.
+// All state changes are persisted atomically through the send_quote_request_email RPC, which
+// validates role/assignment, state, and idempotency.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const RATE_LIMIT = 30; // sends per hour per user
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_RE.test(value);
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey",
+};
+
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+  }
 
   const authHeader = req.headers.get("Authorization") ?? "";
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -20,68 +31,56 @@ Deno.serve(async (req) => {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
-
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
+  if (!user) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
 
   const { quoteRequestId } = await req.json();
   if (!isUuid(quoteRequestId)) {
-    return new Response("Invalid quote request id", { status: 400 });
+    return new Response("Invalid quote request id", { status: 400, headers: corsHeaders });
   }
 
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
-  if (!profile || !["operations", "admin"].includes(profile.role)) {
-    return new Response("Forbidden", { status: 403 });
-  }
-
-  const { data: qr } = await admin
+  // Compose email body using the quote request metadata.
+  const { data: qr, error: qrErr } = await supabase
     .from("quote_requests")
     .select("id, state, product_lines, insurer_id, case_id, insurers(name)")
     .eq("id", quoteRequestId)
     .single();
-  if (!qr) return new Response("Quote request not found", { status: 404 });
-  if (qr.state !== "queued") {
-    return new Response(`Quote request is not queued (current state: ${qr.state})`, {
-      status: 409,
-    });
+  if (qrErr || !qr)
+    return new Response("Quote request not found", { status: 404, headers: corsHeaders });
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (!profile || !["operations", "admin"].includes(profile.role)) {
+    return new Response("Forbidden", { status: 403, headers: corsHeaders });
   }
 
-  // Verify the caller is assigned to this case (or is an admin).
   if (profile.role !== "admin") {
-    const { data: assignment } = await admin
+    const { data: assignment } = await supabase
       .from("case_assignments")
       .select("id")
       .eq("case_id", qr.case_id)
       .eq("assignee_profile_id", user.id)
       .maybeSingle();
     if (!assignment) {
-      return new Response("Not assigned to this case", { status: 403 });
+      return new Response("Not assigned to this case", { status: 403, headers: corsHeaders });
     }
   }
 
-  // DB-backed rate limit per user.
-  const { count, error: rateError } = await admin
-    .from("email_outbox")
-    .select("id", { count: "exact", head: true })
-    .eq("created_by", user.id)
-    .gte("created_at", new Date(Date.now() - 3600_000).toISOString());
-  if (rateError) {
-    return new Response(`Rate limit check failed: ${rateError.message}`, { status: 500 });
-  }
-  if ((count ?? 0) >= RATE_LIMIT) {
-    return new Response("Rate limit exceeded", { status: 429 });
+  if (qr.state !== "queued") {
+    return new Response(`Quote request is not queued (current state: ${qr.state})`, {
+      status: 409,
+      headers: corsHeaders,
+    });
   }
 
-  const { data: channel } = await admin
+  const { data: channel } = await supabase
     .from("insurer_channels")
     .select("address")
     .eq("insurer_id", qr.insurer_id)
     .eq("channel_type", "email")
     .maybeSingle();
-
   const toEmail = channel?.address ?? "quotes@example.invalid";
   const insurerName = (qr.insurers as unknown as { name?: string })?.name ?? "the insurer";
   const productLines = ((qr.product_lines as string[]) ?? ["auto", "property"]).join(", ");
@@ -97,65 +96,73 @@ Deno.serve(async (req) => {
   ].join("\n");
 
   let provider = "outbox";
-  let resendResponse: Response | null = null;
-  let resendOk = false;
+  let externalSuccess = true;
+  let resendError: string | null = null;
+
   const resendKey = Deno.env.get("RESEND_API_KEY");
   if (resendKey) {
     provider = "resend";
-    resendResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: Deno.env.get("EMAIL_FROM") ?? "autopilot@example.com",
-        to: toEmail,
-        subject,
-        text: body,
-      }),
-    });
-    resendOk = resendResponse.ok;
-    if (!resendOk) {
-      const resendBody = await resendResponse.text();
-      // Do not mark sent if the provider call fails. Record the attempt for audit.
-      await admin.from("email_outbox").insert({
-        to_email: toEmail,
-        email_type: "quote_request",
-        subject,
-        body,
-        provider,
-        sent_at: new Date().toISOString(),
-        created_by: user.id,
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: Deno.env.get("EMAIL_FROM") ?? "autopilot@example.com",
+          to: toEmail,
+          subject,
+          text: body,
+        }),
       });
-      return new Response(JSON.stringify({ sent: false, provider, error: resendBody }), {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      });
+      externalSuccess = res.ok;
+      if (!externalSuccess) {
+        resendError = await res.text();
+      }
+    } catch (e) {
+      externalSuccess = false;
+      resendError = e instanceof Error ? e.message : "Resend request failed";
     }
   }
 
-  await admin.from("email_outbox").insert({
-    to_email: toEmail,
-    email_type: "quote_request",
-    subject,
-    body,
-    provider,
-    sent_at: new Date().toISOString(),
-    created_by: user.id,
+  // Persist the result through the atomic RPC.
+  const { data: rpcData, error: rpcError } = await supabase.rpc("send_quote_request_email", {
+    p_quote_request_id: quoteRequestId,
+    p_provider: provider,
+    p_external_success: externalSuccess,
   });
 
-  const { error: updateError } = await admin
-    .from("quote_requests")
-    .update({ state: "sent", sent_at: new Date().toISOString() })
-    .eq("id", qr.id)
-    .eq("state", "queued");
-
-  if (updateError) {
-    return new Response(JSON.stringify({ sent: false, provider, error: updateError.message }), {
+  if (rpcError) {
+    return new Response(JSON.stringify({ sent: false, provider, error: rpcError.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  return new Response(JSON.stringify({ sent: true, provider }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  const result = rpcData as {
+    sent: boolean;
+    duplicate?: boolean;
+    provider: string;
+    error?: string;
+  };
+  if (!result.sent) {
+    const status =
+      result.error?.includes("not queued") || result.error?.includes("already sent") ? 409 : 502;
+    return new Response(JSON.stringify(result), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (provider === "resend" && resendError) {
+    return new Response(JSON.stringify({ sent: false, provider, error: resendError }), {
+      status: 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  return new Response(
+    JSON.stringify({ sent: true, provider, duplicate: result.duplicate ?? false }),
+    {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
+  );
 });
