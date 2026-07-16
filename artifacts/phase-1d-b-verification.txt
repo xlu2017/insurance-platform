@@ -21,16 +21,16 @@ turbo 2.3.3
 • Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
 • Running lint in 8 packages
 • Remote caching disabled
-@autopilot/schemas:lint: cache hit, replaying logs fd327ac6e81302d2
-@autopilot/schemas:lint: 
-@autopilot/schemas:lint: > @autopilot/schemas@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/schemas
-@autopilot/schemas:lint: > eslint src
-@autopilot/schemas:lint: 
 @autopilot/design-tokens:lint: cache hit, replaying logs 97188c87325023ce
 @autopilot/design-tokens:lint: 
 @autopilot/design-tokens:lint: > @autopilot/design-tokens@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/design-tokens
 @autopilot/design-tokens:lint: > eslint src
 @autopilot/design-tokens:lint: 
+@autopilot/schemas:lint: cache hit, replaying logs fd327ac6e81302d2
+@autopilot/schemas:lint: 
+@autopilot/schemas:lint: > @autopilot/schemas@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:lint: > eslint src
+@autopilot/schemas:lint: 
 @autopilot/test-fixtures:lint: cache hit, replaying logs 35e51dd758b4165d
 @autopilot/test-fixtures:lint: 
 @autopilot/test-fixtures:lint: > @autopilot/test-fixtures@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/test-fixtures
@@ -46,34 +46,246 @@ turbo 2.3.3
 @autopilot/mobile:lint: > @autopilot/mobile@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/mobile
 @autopilot/mobile:lint: > eslint app lib components
 @autopilot/mobile:lint: 
-@autopilot/insurance-engine:lint: cache miss, executing 82fa8f285835d9e6
-@autopilot/admin:lint: cache miss, executing d311accbaecacd71
-@autopilot/insurance-engine:lint: 
-@autopilot/insurance-engine:lint: > @autopilot/insurance-engine@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/insurance-engine
-@autopilot/insurance-engine:lint: > eslint src test scripts
-@autopilot/insurance-engine:lint: 
+@autopilot/insurance-engine:lint: cache miss, executing 81458079e6c82f3e
+@autopilot/admin:lint: cache miss, executing 196a379d5f2e03c4
 @autopilot/admin:lint: 
 @autopilot/admin:lint: > @autopilot/admin@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/admin
 @autopilot/admin:lint: > eslint .
 @autopilot/admin:lint: 
 @autopilot/insurance-engine:lint: 
-@autopilot/insurance-engine:lint: /home/ubuntu/repos/insurance-platform/packages/insurance-engine/test/digest-and-persistence.test.ts
-@autopilot/insurance-engine:lint:   16:7  error  'ACTOR_ID' is assigned a value but never used  @typescript-eslint/no-unused-vars
+@autopilot/insurance-engine:lint: > @autopilot/insurance-engine@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:lint: > eslint src test scripts
 @autopilot/insurance-engine:lint: 
-@autopilot/insurance-engine:lint: ✖ 1 problem (1 error, 0 warnings)
-@autopilot/insurance-engine:lint: 
-@autopilot/insurance-engine:lint:  ELIFECYCLE  Command failed with exit code 1.
-@autopilot/insurance-engine:lint: ERROR: command finished with error: command (/home/ubuntu/repos/insurance-platform/packages/insurance-engine) /home/ubuntu/.local/bin/pnpm run lint exited (1)
-@autopilot/insurance-engine#lint: command (/home/ubuntu/repos/insurance-platform/packages/insurance-engine) /home/ubuntu/.local/bin/pnpm run lint exited (1)
 
- Tasks:    5 successful, 7 total
+ Tasks:    7 successful, 7 total
 Cached:    5 cached, 7 total
-  Time:    1.217s 
-Failed:    @autopilot/insurance-engine#lint
+  Time:    1.236s 
 
- ERROR  run failed: command  exited (1)
- ELIFECYCLE  Command failed with exit code 1.
- ELIFECYCLE  Command failed with exit code 1.
+
+> insurance-autopilot@0.1.0 typecheck /home/ubuntu/repos/insurance-platform
+> turbo run typecheck
+
+turbo 2.3.3
+
+• Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
+• Running typecheck in 8 packages
+• Remote caching disabled
+@autopilot/design-tokens:typecheck: cache hit, replaying logs 7981a3c0f31d4728
+@autopilot/design-tokens:typecheck: 
+@autopilot/design-tokens:typecheck: > @autopilot/design-tokens@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/design-tokens
+@autopilot/design-tokens:typecheck: > tsc --noEmit
+@autopilot/design-tokens:typecheck: 
+@autopilot/schemas:typecheck: cache hit, replaying logs 89798901c9e7438d
+@autopilot/schemas:typecheck: 
+@autopilot/schemas:typecheck: > @autopilot/schemas@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:typecheck: > tsc --noEmit
+@autopilot/schemas:typecheck: 
+@autopilot/database:typecheck: cache hit, replaying logs ca478dcc5b8ef967
+@autopilot/database:typecheck: 
+@autopilot/database:typecheck: > @autopilot/database@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:typecheck: > tsc --noEmit
+@autopilot/database:typecheck: 
+@autopilot/test-fixtures:typecheck: cache hit, replaying logs b5ad40d4d533e91d
+@autopilot/test-fixtures:typecheck: 
+@autopilot/test-fixtures:typecheck: > @autopilot/test-fixtures@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/test-fixtures
+@autopilot/test-fixtures:typecheck: > tsc --noEmit
+@autopilot/test-fixtures:typecheck: 
+@autopilot/insurance-engine:typecheck: cache miss, executing 6e4f85ca4b9aa879
+@autopilot/mobile:typecheck: cache hit, replaying logs 3398bc1fd17ec463
+@autopilot/mobile:typecheck: 
+@autopilot/mobile:typecheck: > @autopilot/mobile@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:typecheck: > tsc --noEmit
+@autopilot/mobile:typecheck: 
+@autopilot/admin:typecheck: cache miss, executing 71e0a49265c1c1a6
+@autopilot/insurance-engine:typecheck: 
+@autopilot/insurance-engine:typecheck: > @autopilot/insurance-engine@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:typecheck: > tsc --noEmit
+@autopilot/insurance-engine:typecheck: 
+@autopilot/admin:typecheck: 
+@autopilot/admin:typecheck: > @autopilot/admin@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/apps/admin
+@autopilot/admin:typecheck: > tsc --noEmit
+@autopilot/admin:typecheck: 
+
+ Tasks:    7 successful, 7 total
+Cached:    5 cached, 7 total
+  Time:    1.952s 
+
+
+> insurance-autopilot@0.1.0 test /home/ubuntu/repos/insurance-platform
+> turbo run test
+
+turbo 2.3.3
+
+• Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
+• Running test in 8 packages
+• Remote caching disabled
+@autopilot/schemas:test: cache hit, replaying logs 588f949ab7c49a01
+@autopilot/schemas:test: 
+@autopilot/schemas:test: > @autopilot/schemas@0.1.0 test /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:test: > vitest run
+@autopilot/schemas:test: 
+@autopilot/schemas:test: 
+@autopilot/schemas:test:  RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:test: 
+@autopilot/schemas:test:  ✓ test/mandate-v2.test.ts (22 tests) 15ms
+@autopilot/schemas:test:  ✓ test/state-machines.test.ts (9 tests) 16ms
+@autopilot/schemas:test: 
+@autopilot/schemas:test:  Test Files  2 passed (2)
+@autopilot/schemas:test:       Tests  31 passed (31)
+@autopilot/schemas:test:    Start at  14:52:41
+@autopilot/schemas:test:    Duration  388ms (transform 116ms, setup 0ms, collect 195ms, tests 31ms, environment 0ms, prepare 150ms)
+@autopilot/schemas:test: 
+@autopilot/database:test: cache hit, replaying logs 96d7f1dcbd6736d8
+@autopilot/database:test: 
+@autopilot/database:test: > @autopilot/database@0.1.0 test /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:test: > vitest run --exclude '**/*.integration.test.ts'
+@autopilot/database:test: 
+@autopilot/database:test: 
+@autopilot/database:test:  RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:test: 
+@autopilot/database:test:  ✓ test/providers.test.ts (2 tests) 2ms
+@autopilot/database:test: 
+@autopilot/database:test:  Test Files  1 passed (1)
+@autopilot/database:test:       Tests  2 passed (2)
+@autopilot/database:test:    Start at  14:52:41
+@autopilot/database:test:    Duration  212ms (transform 64ms, setup 0ms, collect 50ms, tests 2ms, environment 0ms, prepare 62ms)
+@autopilot/database:test: 
+@autopilot/insurance-engine:test: cache miss, executing 5d732b75c407c168
+@autopilot/mobile:test: cache hit, replaying logs 818d193290bcaf9b
+@autopilot/mobile:test: 
+@autopilot/mobile:test: > @autopilot/mobile@0.1.0 test /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:test: > jest
+@autopilot/mobile:test: 
+@autopilot/mobile:test: PASS __tests__/welcome.test.tsx
+@autopilot/mobile:test:   Welcome screen
+@autopilot/mobile:test:     ✓ shows the value proposition and demo disclaimer (185 ms)
+@autopilot/mobile:test: 
+@autopilot/mobile:test: Test Suites: 1 passed, 1 total
+@autopilot/mobile:test: Tests:       1 passed, 1 total
+@autopilot/mobile:test: Snapshots:   0 total
+@autopilot/mobile:test: Time:        0.628 s, estimated 1 s
+@autopilot/mobile:test: Ran all test suites.
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test: > @autopilot/insurance-engine@0.1.0 test /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:test: > vitest run
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test:  RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test:  ✓ test/rule-evaluator.test.ts (8 tests) 2ms
+@autopilot/insurance-engine:test:  ✓ test/property-rule-outcomes.test.ts (9 tests) 9ms
+@autopilot/insurance-engine:test:  ✓ test/quote-integrity.test.ts (5 tests) 14ms
+@autopilot/insurance-engine:test:  ✓ test/digest-and-persistence.test.ts (6 tests) 15ms
+@autopilot/insurance-engine:test:  ✓ test/engine.test.ts (26 tests) 24ms
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test:  Test Files  5 passed (5)
+@autopilot/insurance-engine:test:       Tests  54 passed (54)
+@autopilot/insurance-engine:test:    Start at  15:00:40
+@autopilot/insurance-engine:test:    Duration  317ms (transform 232ms, setup 0ms, collect 691ms, tests 64ms, environment 1ms, prepare 189ms)
+@autopilot/insurance-engine:test: 
+
+ Tasks:    4 successful, 4 total
+Cached:    3 cached, 4 total
+  Time:    864ms 
+
+
+> @autopilot/admin@0.1.0 build /home/ubuntu/repos/insurance-platform/apps/admin
+> next build
+
+   ▲ Next.js 15.1.3
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+
+ ⚠ The Next.js plugin was not detected in your ESLint configuration. See https://nextjs.org/docs/app/api-reference/config/eslint#migrating-existing-config
+   Collecting page data ...
+   Generating static pages (0/8) ...
+   Generating static pages (2/8) 
+   Generating static pages (4/8) 
+   Generating static pages (6/8) 
+ ✓ Generating static pages (8/8)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    2.03 kB         184 kB
+├ ○ /_not-found                          981 B           106 kB
+├ ○ /cases                               2.12 kB         184 kB
+├ ƒ /cases/[id]                          23.5 kB         206 kB
+├ ○ /insurers                            1.66 kB         184 kB
+├ ○ /login                               1.16 kB         172 kB
+└ ○ /outbox                              1.63 kB         184 kB
++ First Load JS shared by all            105 kB
+  ├ chunks/855-ac3395ea8999401f.js       50.5 kB
+  ├ chunks/87c73c54-e8bfbe05d15b87d8.js  52.9 kB
+  └ other shared chunks (total)          1.94 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+> @autopilot/mobile@0.1.0 expo:doctor /home/ubuntu/repos/insurance-platform/apps/mobile
+> expo config --type public
+
+
+{
+  name: [32m'Insurance Autopilot'[39m,
+  slug: [32m'insurance-autopilot'[39m,
+  version: [32m'0.1.0'[39m,
+  scheme: [32m'insurance-autopilot'[39m,
+  orientation: [32m'portrait'[39m,
+  userInterfaceStyle: [32m'light'[39m,
+  newArchEnabled: [33mtrue[39m,
+  plugins: [
+    [32m'expo-router'[39m,
+    [32m'expo-secure-store'[39m,
+    [32m'expo-local-authentication'[39m,
+    [
+      [32m'expo-notifications'[39m,
+      {
+        defaultChannel: [32m'default'[39m
+      }
+    ]
+  ],
+  description: [90mundefined[39m,
+  sdkVersion: [32m'52.0.0'[39m,
+  platforms: [
+    [32m'ios'[39m,
+    [32m'android'[39m,
+    [32m'web'[39m
+  ],
+  ios: {
+    supportsTablet: [33mfalse[39m,
+    bundleIdentifier: [32m'com.insuranceautopilot.app'[39m
+  },
+  android: {
+    package: [32m'com.insuranceautopilot.app'[39m,
+    permissions: [
+      [32m'android.permission.USE_BIOMETRIC'[39m,
+      [32m'android.permission.USE_FINGERPRINT'[39m
+    ]
+  },
+  extra: {
+    supabaseUrl: [32m'http://127.0.0.1:54321'[39m,
+    supabaseAnonKey: [32m''[39m,
+    router: {
+      origin: [33mfalse[39m
+    }
+  }
+}
+
+
+> @autopilot/insurance-engine@0.1.0 check:edge /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+> pnpm build:edge && git diff --exit-code ../../supabase/functions/_shared/autopilot.js
+
+
+> @autopilot/insurance-engine@0.1.0 build:edge /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+> tsx scripts/build-edge-bundle.ts
+
+Edge bundle written to /home/ubuntu/repos/insurance-platform/supabase/functions/_shared/autopilot.js (20 inputs, hash 6452482aa031c07aeec336ee68d9e15082fc0da8be495bce922dcee109502ae3)
 
 > insurance-autopilot@0.1.0 ci:database /home/ubuntu/repos/insurance-platform
 > bash scripts/ci/run-database.sh
@@ -134,3 +346,203 @@ NOTICE (00000): constraint "recommendations_input_snapshot_digest_check" of rela
 NOTICE (00000): constraint "recommendations_engine_output_digest_check" of relation "recommendations" does not exist, skipping
 Seeding data from supabase/seed.sql...
 Restarting containers...
+Finished supabase db reset on branch devin/1784150712-mvp-scaffold.
+
+> insurance-autopilot@0.1.0 db:types:check /home/ubuntu/repos/insurance-platform
+> supabase gen types typescript --local --schema public > /tmp/database.types.ts && pnpm prettier --config .prettierrc --write /tmp/database.types.ts && diff -u packages/database/src/database.types.ts /tmp/database.types.ts
+
+WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
+Connecting to db 5432
+../../../../tmp/database.types.ts 201ms
+Connecting to local database...
+psql:/home/ubuntu/repos/insurance-platform/supabase/tests/001_rls_and_guards.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+/home/ubuntu/repos/insurance-platform/supabase/tests/001_rls_and_guards.sql ....... ok
+psql:/home/ubuntu/repos/insurance-platform/supabase/tests/002_security_tests.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+/home/ubuntu/repos/insurance-platform/supabase/tests/002_security_tests.sql ....... ok
+psql:/home/ubuntu/repos/insurance-platform/supabase/tests/003_workflow_rpc_tests.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+/home/ubuntu/repos/insurance-platform/supabase/tests/003_workflow_rpc_tests.sql ... ok
+psql:/home/ubuntu/repos/insurance-platform/supabase/tests/004_document_tests.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+/home/ubuntu/repos/insurance-platform/supabase/tests/004_document_tests.sql ....... ok
+psql:/home/ubuntu/repos/insurance-platform/supabase/tests/005_activation_tests.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+/home/ubuntu/repos/insurance-platform/supabase/tests/005_activation_tests.sql ..... ok
+psql:/home/ubuntu/repos/insurance-platform/supabase/tests/006_quote_request_tests.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+/home/ubuntu/repos/insurance-platform/supabase/tests/006_quote_request_tests.sql .. ok
+psql:/home/ubuntu/repos/insurance-platform/supabase/tests/007_mandate_v2_tests.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+/home/ubuntu/repos/insurance-platform/supabase/tests/007_mandate_v2_tests.sql ..... ok
+All tests successful.
+Files=7, Tests=79,  0 wallclock secs ( 0.02 usr  0.01 sys +  0.04 cusr  0.01 csys =  0.08 CPU)
+Result: PASS
+
+> @autopilot/database@0.1.0 test:integration /home/ubuntu/repos/insurance-platform/packages/database
+> vitest run test/mandate-save-reload.integration.test.ts
+
+
+ RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/database
+
+ ✓ test/mandate-save-reload.integration.test.ts (2 tests) 66ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  15:01:31
+   Duration  351ms (transform 90ms, setup 0ms, collect 144ms, tests 66ms, environment 0ms, prepare 43ms)
+
+
+> insurance-autopilot@0.1.0 ci:e2e /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-e2e.sh
+
+Supabase local stack is already running; reusing existing stack.
+
+> @autopilot/insurance-engine@0.1.0 build:edge /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+> tsx scripts/build-edge-bundle.ts
+
+Edge bundle written to /home/ubuntu/repos/insurance-platform/supabase/functions/_shared/autopilot.js (20 inputs, hash 6452482aa031c07aeec336ee68d9e15082fc0da8be495bce922dcee109502ae3)
+Supabase environment exported to /tmp/tmp.sAuJxWHiVq
+WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
+Resetting local database...
+Recreating database...
+Initialising schema...
+Seeding globals from roles.sql...
+Applying migration 20260715000001_schema.sql...
+NOTICE (42710): extension "pgcrypto" already exists, skipping
+Applying migration 20260715000002_rls.sql...
+Applying migration 20260715000003_remediation.sql...
+Applying migration 20260715000004_audit_triggers.sql...
+Applying migration 20260715000005_post_remediation_fixes.sql...
+Applying migration 20260715000006_rpc_renames.sql...
+Applying migration 20260715000007_rpc_lockdown.sql...
+NOTICE (00000): index "idx_recommendation_approvals_one_per_reviewer" does not exist, skipping
+Applying migration 20260715000008_generate_recommendation.sql...
+Applying migration 20260715000009_drop_old_rpc_overloads.sql...
+Applying migration 20260715000010_activate_autopilot.sql...
+Applying migration 20260715000011_quote_request_email.sql...
+Applying migration 20260715000012_rpc_grants_lockdown.sql...
+Applying migration 20260715000013_process_stripe_event.sql...
+Applying migration 20260715000014_document_restrictions.sql...
+Applying migration 20260716000002_coverage_mandate_expansion.sql...
+Applying migration 20260716000003_coverage_mandate_v2_foundation.sql...
+NOTICE (00000): trigger "vehicle_mandate_override_household_guard" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "property_mandate_override_household_guard" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_customer_select" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_customer_no_write" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_service_all" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_admin_select" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_customer_select" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_customer_no_write" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_service_all" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_customer_select" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_customer_no_write" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_service_all" for relation "property_mandate_overrides" does not exist, skipping
+Applying migration 20260716000004_quote_coverage_normalization.sql...
+Applying migration 20260716000005_phase_1c_v2_authoritative.sql...
+NOTICE (00000): trigger "quote_policy_component_asset_integrity_trigger" for relation "quote_policy_components" does not exist, skipping
+NOTICE (00000): function persist_household_mandate_v2(uuid,pg_catalog.int4,pg_catalog.int4,jsonb,jsonb,jsonb,jsonb,jsonb,text) does not exist, skipping
+NOTICE (00000): function persist_household_mandate_v2(uuid,pg_catalog.int4,pg_catalog.int4,jsonb,jsonb,jsonb,jsonb,jsonb,text,uuid) does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_staff_select" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_staff_select" for relation "property_mandate_overrides" does not exist, skipping
+Applying migration 20260716000006_allow_recommendation_regeneration.sql...
+Applying migration 20260716000007_phase_1d_recommendation_integrity.sql...
+Applying migration 20260716000008_quote_validation_status.sql...
+NOTICE (00000): trigger "quote_coverages_coverage_changed" for relation "quote_coverages" does not exist, skipping
+Applying migration 20260716000009_phase_1d_b_recommendation_integrity.sql...
+NOTICE (42710): extension "pgcrypto" already exists, skipping
+NOTICE (00000): constraint "recommendations_input_snapshot_digest_check" of relation "recommendations" does not exist, skipping
+NOTICE (00000): constraint "recommendations_engine_output_digest_check" of relation "recommendations" does not exist, skipping
+Seeding data from supabase/seed.sql...
+Restarting containers...
+Finished supabase db reset on branch devin/1784150712-mvp-scaffold.
+
+Running 4 tests using 1 worker
+
+  ✓  1 smoke.spec.ts:13:5 › operations can sign in and view the dashboard (1.6s)
+  ✓  2 smoke.spec.ts:19:5 › staff can open a case and browse tabs (3.1s)
+  ✓  3 smoke.spec.ts:39:5 › customer accounts are rejected from the admin console (766ms)
+  ✓  4 smoke.spec.ts:49:5 › unauthenticated users are redirected to login (572ms)
+
+  4 passed (10.1s)
+WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
+Resetting local database...
+Recreating database...
+Initialising schema...
+Seeding globals from roles.sql...
+Applying migration 20260715000001_schema.sql...
+NOTICE (42710): extension "pgcrypto" already exists, skipping
+Applying migration 20260715000002_rls.sql...
+Applying migration 20260715000003_remediation.sql...
+Applying migration 20260715000004_audit_triggers.sql...
+Applying migration 20260715000005_post_remediation_fixes.sql...
+Applying migration 20260715000006_rpc_renames.sql...
+Applying migration 20260715000007_rpc_lockdown.sql...
+NOTICE (00000): index "idx_recommendation_approvals_one_per_reviewer" does not exist, skipping
+Applying migration 20260715000008_generate_recommendation.sql...
+Applying migration 20260715000009_drop_old_rpc_overloads.sql...
+Applying migration 20260715000010_activate_autopilot.sql...
+Applying migration 20260715000011_quote_request_email.sql...
+Applying migration 20260715000012_rpc_grants_lockdown.sql...
+Applying migration 20260715000013_process_stripe_event.sql...
+Applying migration 20260715000014_document_restrictions.sql...
+Applying migration 20260716000002_coverage_mandate_expansion.sql...
+Applying migration 20260716000003_coverage_mandate_v2_foundation.sql...
+NOTICE (00000): trigger "vehicle_mandate_override_household_guard" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "property_mandate_override_household_guard" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): trigger "set_updated_at" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_customer_select" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_customer_no_write" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_service_all" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "household_coverage_mandates_admin_select" for relation "household_coverage_mandates" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_customer_select" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_customer_no_write" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_service_all" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_customer_select" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_customer_no_write" for relation "property_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_service_all" for relation "property_mandate_overrides" does not exist, skipping
+Applying migration 20260716000004_quote_coverage_normalization.sql...
+Applying migration 20260716000005_phase_1c_v2_authoritative.sql...
+NOTICE (00000): trigger "quote_policy_component_asset_integrity_trigger" for relation "quote_policy_components" does not exist, skipping
+NOTICE (00000): function persist_household_mandate_v2(uuid,pg_catalog.int4,pg_catalog.int4,jsonb,jsonb,jsonb,jsonb,jsonb,text) does not exist, skipping
+NOTICE (00000): function persist_household_mandate_v2(uuid,pg_catalog.int4,pg_catalog.int4,jsonb,jsonb,jsonb,jsonb,jsonb,text,uuid) does not exist, skipping
+NOTICE (00000): policy "vehicle_mandate_overrides_staff_select" for relation "vehicle_mandate_overrides" does not exist, skipping
+NOTICE (00000): policy "property_mandate_overrides_staff_select" for relation "property_mandate_overrides" does not exist, skipping
+Applying migration 20260716000006_allow_recommendation_regeneration.sql...
+Applying migration 20260716000007_phase_1d_recommendation_integrity.sql...
+Applying migration 20260716000008_quote_validation_status.sql...
+NOTICE (00000): trigger "quote_coverages_coverage_changed" for relation "quote_coverages" does not exist, skipping
+Applying migration 20260716000009_phase_1d_b_recommendation_integrity.sql...
+NOTICE (42710): extension "pgcrypto" already exists, skipping
+NOTICE (00000): constraint "recommendations_input_snapshot_digest_check" of relation "recommendations" does not exist, skipping
+NOTICE (00000): constraint "recommendations_engine_output_digest_check" of relation "recommendations" does not exist, skipping
+Seeding data from supabase/seed.sql...
+Restarting containers...
+Finished supabase db reset on branch devin/1784150712-mvp-scaffold.
+Connecting to http://127.0.0.1:54321
+1. Customer saved V2 mandate 1
+   V2 mandate row liability = 2.5M, version 1
+   Legacy coverage_requirements row remains at 2M
+2. Updated auto quote coverages to 2.5M
+3. Generated recommendation 72950ac3-c526-4230-9176-7e8a23356d49 version 1
+4. Recommendation bound to exact V2 snapshot 21d451b2-7d7e-46df-91e0-ea1f50bc734a v1
+5. Case advanced to licensed_review
+6. Reviewer published recommendation
+7. Customer changed V2 mandate to 3M, new version 2
+8. Stale recommendation approval rejected: mandate used by this recommendation is no longer current
+9. Regenerated recommendation 2c480799-0ff8-4948-8d3d-410dbc64749c
+10. Reviewer published replacement recommendation
+11. Multi-asset household rejected by Edge Function: {"code":"MISSING_INSURED_ASSET","message":"No auto component matches the insured vehicle 22000000-0000-0000-0000-000000000099"}
+12. Legacy mandate change did not affect V2 recommendation a412208b-0939-4f83-9d50-7b8bf800db60
+13. Customer approved final recommendation; switch 8fde38e3-6cb0-4f1e-a8f3-721cead96c81
+14. Switch advanced to completed
+15. Audit events contain V2 mandate identity 21d451b2-7d7e-46df-91e0-ea1f50bc734a
+
+--- Negative tests ---
+16. Malformed V2 JSON rejected
+17. Customer internal persist RPC denied
+18. Duplicate override asset IDs rejected
+19. Skipped cross-household override (no other vehicle found)
+
+V2 mandate lifecycle E2E passed.
+
+All local CI checks passed in 132s.
