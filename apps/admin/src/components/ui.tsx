@@ -69,29 +69,35 @@ export function Badge({
   return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
 }
 
-export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      className={cn(
-        "h-9 w-full rounded-md border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-accent",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const Input = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, ...props }, ref) => (
+  <input
+    ref={ref}
+    className={cn(
+      "h-9 w-full rounded-md border border-line bg-surface px-3 text-sm focus-visible:outline-2 focus-visible:outline-accent",
+      className,
+    )}
+    {...props}
+  />
+));
+Input.displayName = "Input";
 
-export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className={cn(
-        "h-9 rounded-md border border-line bg-surface px-2 text-sm focus-visible:outline-2 focus-visible:outline-accent",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const Select = React.forwardRef<
+  HTMLSelectElement,
+  React.SelectHTMLAttributes<HTMLSelectElement>
+>(({ className, ...props }, ref) => (
+  <select
+    ref={ref}
+    className={cn(
+      "h-9 rounded-md border border-line bg-surface px-2 text-sm focus-visible:outline-2 focus-visible:outline-accent",
+      className,
+    )}
+    {...props}
+  />
+));
+Select.displayName = "Select";
 
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   return (

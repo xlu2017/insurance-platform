@@ -2,45 +2,59 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabaseBrowser } from "@/lib/supabase";
 import { Button, Card, Input, Label } from "@/components/ui";
 
 const LoginForm = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
+  email: z.string().email("Enter a valid email"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
-type LoginForm = z.infer<typeof LoginForm>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [error, setError] = useState<string | null>(null);
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginForm>({ resolver: zodResolver(LoginForm) });
+  const [loading, setLoading] = useState(false);
 
-  const onSubmit = async (values: LoginForm) => {
+  const signIn = async () => {
     setError(null);
-    const supabase = supabaseBrowser();
-    const { data, error } = await supabase.auth.signInWithPassword(values);
-    if (error) {
-      setError(error.message);
+    setErrors({});
+
+    const parsed = LoginForm.safeParse({ email: email.trim(), password });
+    if (!parsed.success) {
+      const formatted = parsed.error.format();
+      setErrors({
+        email: formatted.email?._errors[0],
+        password: formatted.password?._errors[0],
+      });
       return;
     }
+
+    setLoading(true);
+    const supabase = supabaseBrowser();
+    const { data, error: signInError } = await supabase.auth.signInWithPassword(parsed.data);
+    setLoading(false);
+
+    if (signInError) {
+      setError(signInError.message);
+      return;
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", data.user.id)
       .single();
+
     if (!profile || profile.role === "customer") {
       await supabase.auth.signOut();
       setError("This console is for operations, reviewer and administrator accounts.");
       return;
     }
+
     router.push("/");
   };
 
@@ -49,13 +63,25 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <h1 className="mb-1 text-lg font-semibold">Insurance Autopilot</h1>
         <p className="mb-5 text-sm text-ink-muted">Operations console sign in</p>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            signIn();
+          }}
+          noValidate
+        >
           <div>
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" autoComplete="email" {...register("email")} />
-            {errors.email ? (
-              <p className="mt-1 text-xs text-danger">{errors.email.message}</p>
-            ) : null}
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+            />
+            {errors.email ? <p className="mt-1 text-xs text-danger">{errors.email}</p> : null}
           </div>
           <div>
             <Label htmlFor="password">Password</Label>
@@ -63,15 +89,15 @@ export default function LoginPage() {
               id="password"
               type="password"
               autoComplete="current-password"
-              {...register("password")}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
             />
-            {errors.password ? (
-              <p className="mt-1 text-xs text-danger">{errors.password.message}</p>
-            ) : null}
+            {errors.password ? <p className="mt-1 text-xs text-danger">{errors.password}</p> : null}
           </div>
           {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "Signing in…" : "Sign in"}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
       </Card>
