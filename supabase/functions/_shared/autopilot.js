@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 13838e6bf36ceac066166e33bf3ff92be28f6eb08ebeffdbd3f7790b05597c7d
+// source-hash: a43c6c237a981dfadd6961eac1ccd69d149b041fa12032391866afe97388e78b
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -4196,7 +4196,13 @@ var propertyTypes = [
   "unknown"
 ];
 var PropertyType = z.enum(propertyTypes);
-var propertyCoverageForms = ["unknown", "comprehensive", "broad", "named_perils", "basic"];
+var propertyCoverageForms = [
+  "unknown",
+  "comprehensive",
+  "broad",
+  "named_perils",
+  "basic"
+];
 var PropertyCoverageForm = z.enum(propertyCoverageForms);
 var propertySettlements = [
   "unknown",
@@ -4206,7 +4212,13 @@ var propertySettlements = [
   "actual_cash_value"
 ];
 var PropertySettlement = z.enum(propertySettlements);
-var vehicleUseClasses = ["personal", "commercial", "classic", "modified", "unknown"];
+var vehicleUseClasses = [
+  "personal",
+  "commercial",
+  "classic",
+  "modified",
+  "unknown"
+];
 var VehicleUseClass = z.enum(vehicleUseClasses);
 var financingStatuses = ["owned", "financed", "leased", "unknown"];
 var FinancingStatus = z.enum(financingStatuses);
@@ -4216,9 +4228,23 @@ var billingMethods = ["automatic_bank", "credit_card", "mail"];
 var BillingMethod = z.enum(billingMethods);
 var brokerDirectPreferences = ["broker", "direct", "indifferent"];
 var BrokerDirectPreference = z.enum(brokerDirectPreferences);
-var insurerFinancialRatings = ["unknown", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"];
+var insurerFinancialRatings = [
+  "unknown",
+  "A_plus",
+  "A",
+  "A_minus",
+  "B_plus",
+  "B_or_lower"
+];
 var InsurerFinancialRating = z.enum(insurerFinancialRatings);
-var customerMinimumInsurerFinancialRatings = ["any", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"];
+var customerMinimumInsurerFinancialRatings = [
+  "any",
+  "A_plus",
+  "A",
+  "A_minus",
+  "B_plus",
+  "B_or_lower"
+];
 var CustomerMinimumInsurerFinancialRating = z.enum(customerMinimumInsurerFinancialRatings);
 var FinancialRating = CustomerMinimumInsurerFinancialRating;
 
@@ -6299,9 +6325,9 @@ function canonicalizeForDigest(value) {
         return sortByKey(canonicalized, "id").map(canonicalizeForDigest);
       }
       if ("path" in first2) {
-        return sortByPath(canonicalized).map(
-          canonicalizeForDigest
-        );
+        return sortByPath(
+          canonicalized
+        ).map(canonicalizeForDigest);
       }
       if ("scope" in first2 && "item" in first2) {
         return [...canonicalized].sort((a, b) => {
@@ -6312,7 +6338,9 @@ function canonicalizeForDigest(value) {
         }).map(canonicalizeForDigest);
       }
     }
-    if (canonicalized.every((x) => typeof x === "string" || typeof x === "number" || typeof x === "boolean" || x === null)) {
+    if (canonicalized.every(
+      (x) => typeof x === "string" || typeof x === "number" || typeof x === "boolean" || x === null
+    )) {
       return [...canonicalized].sort(sortPrimitives);
     }
     return canonicalized;
@@ -6686,7 +6714,11 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     switching: mandateResult.switching,
     assets,
     quotes: engineQuotes,
-    quoteSnapshot: dbQuotes.map((q) => ({ id: q.id, updated_at: q.updated_at, is_incumbent: q.is_incumbent }))
+    quoteSnapshot: dbQuotes.map((q) => ({
+      id: q.id,
+      updated_at: q.updated_at,
+      is_incumbent: q.is_incumbent
+    }))
   };
 }
 export {
@@ -6706,4 +6738,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "13838e6bf36ceac066166e33bf3ff92be28f6eb08ebeffdbd3f7790b05597c7d";
+export const __AUTOPILOT_SOURCE_HASH__ = "a43c6c237a981dfadd6961eac1ccd69d149b041fa12032391866afe97388e78b";
