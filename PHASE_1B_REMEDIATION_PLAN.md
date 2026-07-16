@@ -24,6 +24,7 @@ This phase corrects those foundation defects and does **not** add new coverages,
 The mobile helper `defaultHouseholdMandate()` calls `HouseholdMandate.parse({})`. Because the Zod object has no defaults on `auto`, `property`, or `switching`, parsing fails and the `catch` block silently returns `defaultHouseholdMandate()` again, creating an infinite or hidden fallback. Shared mutable nested objects (`defaultAutoEndorsements` and `defaultPropertyOptionalCoverages` are cast through `as unknown as`) mean two parsed mandates can mutate the same endorsement map.
 
 **Affected files**
+
 - `packages/schemas/src/mandate.ts`
 - `apps/mobile/lib/mandate.ts`
 - `apps/mobile/app/edit-mandate.tsx`
@@ -33,6 +34,7 @@ The mobile helper `defaultHouseholdMandate()` calls `HouseholdMandate.parse({})`
 
 **Proposed solution**
 Replace `HouseholdMandate.parse({})` with an explicit pure factory `createDefaultHouseholdCoverageMandateV2()` in `packages/schemas/src/mandate-v2.ts` (new file). The factory:
+
 - Builds every required root object explicitly.
 - Uses fresh objects for every nested structure (endorsements, optional coverages, water coverage).
 - Calls `HouseholdCoverageMandateV2.parse()` at the end to validate the result.
@@ -44,6 +46,7 @@ Remove the `as unknown as` casts in `defaultAutoEndorsements` and `defaultProper
 None required for the database. Zod-only change. Remove the old mobile helper and re-export the new factory.
 
 **Regression tests**
+
 - Test that `createDefaultHouseholdCoverageMandateV2()` returns a valid object.
 - Test that two successive calls produce objects whose nested endorsement/property-coverage maps are not `===` to each other.
 - Test that mutating one returned object does not affect a later returned object.
@@ -60,6 +63,7 @@ Legacy `HouseholdMandate` type remains exported for existing callers during the 
 No `schemaVersion` or `jurisdiction` field exists in `HouseholdMandate`. The database stores unversioned JSONB in `coverage_requirements.auto_requirements` / `property_requirements`. Migration and backwards compatibility are therefore guesswork based on shape.
 
 **Affected files**
+
 - `packages/schemas/src/mandate.ts`
 - New `packages/schemas/src/mandate-v2.ts`
 - `packages/insurance-engine/src/types.ts`
@@ -101,6 +105,7 @@ The V2 schema uses the discriminated `MonetaryRule` union (see 2.3) and removes 
 No immediate database migration for schema shape (the V2 tables in 2.6 will store V2 JSON). The new schema file is additive.
 
 **Regression tests**
+
 - Test that every V2 object validates only when `schemaVersion === 2` and `jurisdiction === "AB"`.
 - Test that `version` is a positive integer.
 - Test that `effectiveFrom` is a valid ISO timestamp.
@@ -117,6 +122,7 @@ The unversioned `HouseholdMandate` type is deprecated but kept as a compatibilit
 `LimitRequirement` and `DeductibleRequirement` are `z.object({ rule, cents: NonNegativeCents.default(0) })`. For `match_current_or_better` and `any` the `cents` value is meaningless, but the schema attaches `0` silently and accepts an amount if provided. This makes it impossible to distinguish a real $0 requirement from a rule that should ignore amount.
 
 **Affected files**
+
 - `packages/schemas/src/mandate.ts`
 - `packages/schemas/src/mandate-v2.ts`
 - `packages/insurance-engine/src/engine.ts`
@@ -139,6 +145,7 @@ type MonetaryRuleV2 =
 ```
 
 Implement `LimitRuleV2` and `DeductibleRuleV2` as aliases to `MonetaryRuleV2` with identical validation. The Zod schema:
+
 - Requires `amountCents` for `minimum`/`maximum`/`exact` and rejects it for the other rules.
 - Rejects unknown properties.
 - Does not default `amountCents` to `0`.
@@ -149,6 +156,7 @@ Update the mobile `LimitField` and `DeductibleField` components so the amount in
 Add a conversion helper `monetaryRuleV1toV2` that accepts the old `{ rule, cents }` shape and produces the new shape. The V1-to-V2 adapter will map `cents: 0` for `match_current_or_better` / `any` to the no-amount variant. Because the legacy default was `0`, this is safe for rules that truly meant "any". Rules with `match_current_or_better` and a non-zero amount are semantically invalid and the adapter will fail with a structured error.
 
 **Regression tests**
+
 - Test every rule variant with and without `amountCents`.
 - Test that `minimum`/`maximum`/`exact` reject missing `amountCents`.
 - Test that `match_current_or_better` and `any` reject `amountCents`.
@@ -167,6 +175,7 @@ The engine and UI must be updated to consume `MonetaryRuleV2`. Old fixtures and 
 `AssetAutoOverride = AutoRequirements.partial()` and `AssetPropertyOverride = PropertyRequirements.partial()` allow any subset of the full requirement object. This permits accidentally overriding derived/risk-fact fields and makes deletion/reset non-obvious. The record keyed by asset UUID is also unvalidated at the database boundary.
 
 **Affected files**
+
 - `packages/schemas/src/mandate.ts`
 - `packages/schemas/src/mandate-v2.ts`
 - `packages/insurance-engine/src/engine.ts`
@@ -210,6 +219,7 @@ The override wrapper objects contain `vehicleId` / `propertyId` (UUID) and `valu
 No database migration until 2.6. The new schemas and resolvers are added alongside the existing partial types, then the old partial types are removed once the UI is updated.
 
 **Regression tests**
+
 - Test that `resolveVehicleMandateV2` with no override returns defaults.
 - Test that an override of `liability` only leaves all other fields at default.
 - Test that nested override (e.g. `endorsements.telematics`) merges with defaults.
@@ -228,6 +238,7 @@ The legacy `vehicleOverrides` / `propertyOverrides` maps keyed by UUID will be c
 `AutoRequirements` includes `vehicleClass` and `financingStatus`; `PropertyRequirements` includes `propertyType`. These are underwriting facts about the asset, not customer-selectable coverage preferences. Exposing them in the mandate editor allows customers to change data that should be derived from the vehicle/property record.
 
 **Affected files**
+
 - `packages/schemas/src/mandate.ts`
 - `packages/schemas/src/mandate-v2.ts`
 - `packages/insurance-engine/src/engine.ts`
@@ -246,6 +257,7 @@ Update the mobile edit screen and coverage summary to display these facts read-o
 Remove the columns from mental model; database columns added by `20260716000002_coverage_mandate_expansion.sql` remain because they are factual asset metadata. The migration that added `vehicle_use_class`, `financing_status`, `is_classic`, `is_modified` to `vehicles` and `property_type` to `properties` is correct and stays.
 
 **Regression tests**
+
 - Test that `AutoMandateV2` rejects `vehicleClass` / `financingStatus`.
 - Test that `PropertyMandateV2` rejects `propertyType`.
 - Test that the engine still matches quote coverage facts to the asset record.
@@ -261,6 +273,7 @@ Existing mandate JSON that contains these fields will be stripped during V1-to-V
 The current model extends `coverage_requirements` with `vehicle_mandates` and `property_mandates` JSONB columns, and extends `switching_preferences` with ad-hoc columns. This is not versioned, not normalized for overrides, and cannot enforce one current mandate per household.
 
 **Affected files**
+
 - `supabase/migrations/20260716000002_coverage_mandate_expansion.sql` (do not edit; forward migration only)
 - New `supabase/migrations/20260716000003_coverage_mandate_v2_foundation.sql`
 - `packages/database/src/database.types.ts` (regenerated)
@@ -324,6 +337,7 @@ Enable RLS and revoke direct customer `insert`/`update`/`delete` on these tables
 Forward-only migration. The legacy `coverage_requirements` and `switching_preferences` tables remain. Backfill is handled by the migration or a trusted function (see 2.8). New code reads V2 tables first, falls back to legacy dual read (see 2.7).
 
 **Regression tests**
+
 - pgTAP: one current mandate per household.
 - pgTAP: immutable version history (updating `is_current` to false and inserting new version is allowed, changing JSON is not).
 - pgTAP: one override per asset and mandate.
@@ -342,6 +356,7 @@ Legacy tables remain readable. Existing code paths that read `coverage_requireme
 No adapter exists to convert legacy `coverage_requirements` / `switching_preferences` rows, the expanded unversioned JSON shape, or the new V2 shape into a single canonical domain object. The mobile UI and engine each reconstruct the mandate differently with raw casts.
 
 **Affected files**
+
 - `apps/mobile/lib/mandate.ts`
 - `apps/admin/src/lib/engine-input.ts`
 - `packages/insurance-engine/src/engine.ts`
@@ -358,6 +373,7 @@ Create a shared adapter module `packages/schemas/src/mandate-adapters.ts` export
 - `mandateRowToV2(row, vehicleOverrides, propertyOverrides)`
 
 `loadHouseholdMandateV2` must:
+
 1. Query `household_coverage_mandates` for `is_current = true` for the household.
 2. If found, load `vehicle_mandate_overrides` / `property_mandate_overrides` for that `mandate_id`.
 3. If not found, fall back to `coverage_requirements` + `switching_preferences` `is_current = true`.
@@ -371,6 +387,7 @@ Malformed stored data must produce a structured error (Zod `ZodError` mapped to 
 Add the adapter module. Update `apps/mobile/lib/mandate.ts` to re-export `loadHouseholdMandateV2`. Update `apps/admin/src/lib/engine-input.ts` and the Edge Function to use the same helper.
 
 **Regression tests**
+
 - Test legacy row conversion.
 - Test expanded unversioned row conversion.
 - Test V2 row load and override assembly.
@@ -388,6 +405,7 @@ All consumers switch to the adapter-based loader. Legacy tables remain the fallb
 New V2 tables are empty, but `seed.sql` and existing local databases contain rows in `coverage_requirements` and `switching_preferences` that must remain usable.
 
 **Affected files**
+
 - `supabase/migrations/20260716000003_coverage_mandate_v2_foundation.sql`
 - `supabase/seed.sql`
 
@@ -404,6 +422,7 @@ $$;
 ```
 
 The backfill:
+
 - Skips households that already have a current V2 mandate.
 - Converts legacy monetary rules to V2 discriminated form.
 - Strips risk facts from override values.
@@ -414,6 +433,7 @@ The backfill:
 Call `select backfill_coverage_mandate_v2();` at the end of the migration. The migration is forward-only and safe to re-run.
 
 **Regression tests**
+
 - pgTAP: running backfill twice leaves one current V2 mandate per household and one override per asset.
 - pgTAP: backfill produces rows that validate against the V2 schema.
 
@@ -428,6 +448,7 @@ Legacy rows are left untouched. The backfill does not delete or modify `coverage
 `apps/admin/src/lib/engine-input.ts` and `apps/mobile/app/edit-mandate.tsx` pass snake_case database rows directly to camelCase Zod schemas and spread camelCase objects directly into Supabase payloads. This works only when field names accidentally align and silently drops or renames fields that differ.
 
 **Affected files**
+
 - `packages/schemas/src/mandate-v2.ts` or new `packages/schemas/src/switching.ts`
 - `apps/mobile/lib/mandate.ts`
 - `apps/admin/src/lib/engine-input.ts`
@@ -442,6 +463,7 @@ switchingDomainToRow(domain: SwitchingPreferencesV2): SwitchingPreferencesRow
 ```
 
 Map every field individually, including:
+
 - `min_net_annual_savings_cents` <-> `minNetAnnualSavingsCents`
 - `renewal_only_switching` <-> `renewalOnlySwitching`
 - `household_optimization_enabled` <-> `householdOptimizationEnabled`
@@ -465,6 +487,7 @@ Remove `materialCoverageReductionsAllowed` from the UI because the database inva
 No database migration. The mapper is code-only. The migration already added the needed columns.
 
 **Regression tests**
+
 - Unit test the row-to-domain and domain-to-row mappers for every field.
 - Test round-trip with sample rows.
 - Test that unknown snake_case fields are ignored and required fields are present.
@@ -480,6 +503,7 @@ Existing rows keep their values. The UI simply stops exposing fields that are co
 The mobile edit screen updates `coverage_requirements` and `switching_preferences` in two separate client calls, each potentially incrementing a version manually. There is no transaction, no ownership check beyond RLS, and no stale-version conflict.
 
 **Affected files**
+
 - `supabase/migrations/20260716000003_coverage_mandate_v2_foundation.sql`
 - `apps/mobile/app/edit-mandate.tsx`
 - `apps/mobile/lib/mandate.ts`
@@ -516,6 +540,7 @@ $$;
 ```
 
 The function:
+
 - Checks `auth.uid()` owns the household or has service role.
 - Verifies `p_expected_mandate_version` matches the current `household_coverage_mandates.version` (or 0 if none).
 - Verifies `p_expected_switching_version` matches `switching_preferences.version` (or 0 if none).
@@ -529,6 +554,7 @@ Update the mobile edit screen to call `save_household_mandate_v2` and handle the
 Add the RPC in the V2 migration. RLS on V2 tables denies direct customer writes. The legacy `coverage_requirements` / `switching_preferences` tables remain writable by their existing RLS policies until the legacy fallback is removed.
 
 **Regression tests**
+
 - pgTAP: save succeeds and creates a new version.
 - pgTAP: save with stale version returns conflict.
 - pgTAP: save with mismatched switching version returns conflict.
@@ -546,6 +572,7 @@ The legacy edit path no longer exists after this change; the mobile UI uses the 
 The migration `20260716000002_coverage_mandate_expansion.sql` and `seed.sql` populate `quote_coverages.coverage` with legacy or partial objects. Some required auto fields are missing and irrelevant auto fields appear in property coverage. The admin loader casts these with `as unknown as AutoCoverageDetails`.
 
 **Affected files**
+
 - `supabase/migrations/20260716000002_coverage_mandate_expansion.sql` (do not edit)
 - New `supabase/migrations/20260716000004_quote_coverage_normalization.sql`
 - `supabase/seed.sql`
@@ -554,6 +581,7 @@ The migration `20260716000002_coverage_mandate_expansion.sql` and `seed.sql` pop
 
 **Proposed solution**
 Create a repair migration `20260716000004_quote_coverage_normalization.sql` that:
+
 - For every `quote_coverages.coverage` row whose parent `quote_policy_components.product_line = 'auto'`:
   - Ensures all fields in `AutoCoverageDetails` are present, inserting safe defaults (`false`, `null`, or the lowest coverage form) where missing.
   - Removes any property-only fields.
@@ -569,6 +597,7 @@ Replace `as unknown as AutoCoverageDetails` in `engine-input.ts` with `AutoCover
 Forward-only repair migration. Use a Postgres `do` block or `create or replace function normalize_quote_coverage()` applied idempotently by `quote_coverages.id`.
 
 **Regression tests**
+
 - pgTAP: every `quote_coverages.coverage` row parses through `AutoCoverageDetails` or `PropertyCoverageDetails` depending on product line.
 - Unit test: `toEngineQuote` skips invalid coverage with a logged error rather than crashing.
 
@@ -583,6 +612,7 @@ Existing quote records are normalized in place. The `quotes` table API is unchan
 Mobile, admin, and the Edge Function each independently query columns, cast JSON, and build `HouseholdMandate`. There is no single source of truth for mandate persistence semantics.
 
 **Affected files**
+
 - New `packages/schemas/src/mandate-repository.ts` (or extend `apps/mobile/lib/mandate.ts` and `apps/admin/src/lib/mandate.ts`)
 - `apps/mobile/app/edit-mandate.tsx`
 - `apps/mobile/app/(tabs)/coverage.tsx`
@@ -605,6 +635,7 @@ All JSON from Supabase passes through Zod validation. All callers (mobile, admin
 Add the repository module and update callers. No database migration.
 
 **Regression tests**
+
 - Test that the repository validates malformed JSON and returns a structured error.
 - Test that `resolveEffectiveVehicleMandate` returns the override when present and defaults otherwise.
 
@@ -619,6 +650,7 @@ The repository is additive. Callers can be migrated incrementally, but this phas
 The recommendation engine currently takes the first auto and first property component and builds all combinations, but does not check whether the household has multiple vehicles or properties, whether an override has no matching asset, or whether a quote omits an active insured asset. This silently produces incorrect recommendations.
 
 **Affected files**
+
 - `packages/insurance-engine/src/engine.ts`
 - `packages/insurance-engine/src/types.ts`
 - `supabase/functions/recommendation-generator/index.ts`
@@ -643,6 +675,7 @@ Add the active assets (vehicles, properties) to `EngineInput` so the engine can 
 No database migration. The Edge Function and admin loader pass the asset list. Tests are updated.
 
 **Regression tests**
+
 - Engine test: two vehicles -> error.
 - Engine test: two properties -> error.
 - Engine test: quote with duplicate auto components -> error.
@@ -658,6 +691,7 @@ The demo fixture has one vehicle and one property, so existing happy-path tests 
 
 **Root cause**
 The edit screen currently:
+
 - Defaults through `HouseholdMandate.parse({})`.
 - Shows amount inputs for `match_current_or_better` and `any`.
 - Lets users toggle `materialCoverageReductionsAllowed`, `switchOnlyAfterCustomerApproval`, and `maxPremiumIncreaseCents` as if they are active rules.
@@ -666,6 +700,7 @@ The edit screen currently:
 - Does not surface structured validation or version conflicts.
 
 **Affected files**
+
 - `apps/mobile/app/edit-mandate.tsx`
 - `apps/mobile/app/(tabs)/coverage.tsx`
 - `apps/mobile/lib/mandate.ts`
@@ -673,6 +708,7 @@ The edit screen currently:
 - `apps/admin/src/lib/mandate.ts`
 
 **Proposed solution**
+
 - Initialize form state from `loadHouseholdMandateV2()`.
 - Show amount inputs only for `minimum`, `maximum`, `exact`.
 - Remove toggles for `materialCoverageReductionsAllowed` and `switchOnlyAfterCustomerApproval`; show them read-only.
@@ -687,6 +723,7 @@ The edit screen currently:
 No database migration beyond V2 tables/RPC. UI is updated in place.
 
 **Regression tests**
+
 - Mobile unit/integration: open edit, load, change one rule, change one switching rule, add an override, save, reopen, verify exact values, remove override, save, verify inheritance restored.
 
 **Compatibility implications**

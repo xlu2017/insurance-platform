@@ -36,12 +36,19 @@ flowchart LR
   approve/decline, licensed review, switch advancement, support questions) are exposed only as
   `security definer` functions. Direct `update`/`insert` on workflow tables is denied to
   `authenticated` by RLS; the RPCs verify household membership, role and state before changing data.
+- **Versioned mandate foundation.** `packages/schemas/src/mandate-v2.ts` defines the canonical
+  `HouseholdCoverageMandateV2` schema with discriminated monetary rules and explicit versioned
+  jurisdiction. Adapters in `packages/schemas/src/mandate-adapters.ts` convert V2 to the legacy
+  engine `HouseholdMandate` and back. `packages/database/src/mandate-repository.ts` is the typed
+  persistence boundary used by mobile, admin and the recommendation Edge Function; writes go through
+  the atomic `save_household_mandate_v2` RPC, not direct table writes.
 - **Deterministic engine.** `packages/insurance-engine` is pure and side-effect free. It builds
   every bundled/split household configuration from usable quotes, always includes the incumbent,
   applies hard mandate constraints, handles asset-specific mandate inheritance (vehicle/property
   overrides), detects coverage reductions vs the incumbent, computes total cost in integer cents
   (premiums + fees + cancellation charges − bundle discounts) and ranks with explicit reason codes.
-  No AI decides coverage equivalence.
+  The engine is currently fail-closed on multi-asset optimization (more than one vehicle or more
+  than one property). No AI decides coverage equivalence.
 - **Provider adapters.** Email (Resend → `email_outbox` fallback), push (Expo → local log) and
   document extraction (`manual` default, `mock` for demos) are interfaces in
   `packages/database/src/providers`, so the demo runs with zero external services.

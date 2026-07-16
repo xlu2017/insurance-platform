@@ -15,6 +15,9 @@ erDiagram
   households ||--o{ policy_documents : has
   households ||--o{ coverage_requirements : versions
   households ||--o{ switching_preferences : versions
+  households ||--o{ household_coverage_mandates : versions
+  household_coverage_mandates ||--o{ vehicle_mandate_overrides : overrides
+  household_coverage_mandates ||--o{ property_mandate_overrides : overrides
   households ||--o{ optimization_cases : opens
   optimization_cases ||--o{ case_assignments : assigned
   optimization_cases ||--o{ quote_requests : sends
@@ -40,12 +43,14 @@ erDiagram
   `household_members`, `drivers`, `vehicles`, `properties`.
 - **Policies & documents**: `policies` (current and historical), `policy_documents` (category,
   status, private storage path).
-- **Mandate**: `coverage_requirements` and `switching_preferences`, versioned with `is_current`.
-  `coverage_requirements` holds `auto_requirements`, `property_requirements`, `vehicle_mandates`
-  and `property_mandates` (asset-specific overrides). `switching_preferences` adds `max_premium_increase_cents`,
-  `max_deductible_increase_cents`, `allow_bundle_breakup`, `preferred_payment_frequency`,
-  `preferred_billing_method`, `broker_direct_preference`, `minimum_insurer_financial_rating` and
-  `switch_only_after_customer_approval`. `customer_approval_required` is constrained true.
+- **Mandate**: `household_coverage_mandates` is the authoritative versioned mandate table
+  (`schema_version`, `version`, `jurisdiction`, `effective_from`, `household_auto_defaults`,
+  `household_property_defaults`, `is_current`). Asset-specific overrides live in
+  `vehicle_mandate_overrides` and `property_mandate_overrides`, guarded by a trigger that rejects
+  cross-household assets. `switching_preferences` remains versioned and stores economic/process
+  rules; `customer_approval_required` is constrained true and `material_coverage_reductions_allowed`
+  is constrained false. The legacy `coverage_requirements` table is still readable for backward
+  compatibility but new writes go through `save_household_mandate_v2`.
 - **Market**: `insurers` (8 fictional carriers), `insurer_channels`.
 - **Workflow**: `optimization_cases`, `case_assignments`, `quote_requests`, `quotes`,
   `quote_policy_components`, `quote_coverages`, `customer_questions`.

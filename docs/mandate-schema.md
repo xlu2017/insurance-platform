@@ -1,19 +1,48 @@
 # Coverage Mandate Schema
 
 The mandate is the single source of truth for what a household considers acceptable coverage.
-It is stored in `coverage_requirements` (household auto/property defaults and asset overrides) and
-`switching_preferences` (economic and process rules).
+Corrective Phase 1B introduces an explicitly versioned mandate schema (`HouseholdCoverageMandateV2`)
+persisted in `household_coverage_mandates`, `vehicle_mandate_overrides` and
+`property_mandate_overrides`. The legacy `coverage_requirements` row and `switching_preferences`
+row remain readable through the adapter layer but are no longer the authoritative contract.
 
 ## Design principles
 
+- **Versioning**: every stored mandate has `schemaVersion: 2`, `jurisdiction: 'AB'`, a monotonic
+  `version` and an `effectiveFrom` ISO datetime.
 - **Inheritance**: household defaults apply to every vehicle and property unless an asset-specific
-  override exists in `vehicle_mandates` or `property_mandates`.
+  override exists in `vehicleOverrides` or `propertyOverrides`.
 - **Rich preference semantics**: most coverage items use `required | preferred | indifferent | prohibited`
   instead of booleans.
-- **Limit and deductible rules**: numeric requirements use `minimum | maximum | exact | match_current_or_better | any`.
+- **Discriminated monetary rules**: numeric rules are a tagged union
+  `{ rule: 'minimum' | 'maximum' | 'exact'; amountCents: number }` or
+  `{ rule: 'match_current_or_better' }` or `{ rule: 'any' }`. Non-amount rules never carry a default
+  `amountCents`.
 - **Type-safe**: every field is validated by Zod in `packages/schemas` before it reaches the engine.
 
-## Household mandate (`HouseholdMandate`)
+## Versioned household mandate (`HouseholdCoverageMandateV2`)
+
+```ts
+interface HouseholdCoverageMandateV2 {
+  schemaVersion: 2;
+  jurisdiction: "AB";
+  version: number;
+  effectiveFrom: string; // ISO 8601 datetime
+  householdAutoDefaults: AutoMandateV2;
+  householdPropertyDefaults: PropertyMandateV2;
+  vehicleOverrides: Array<{ vehicleId: string; values: Partial<AutoMandateV2> }>;
+  propertyOverrides: Array<{ propertyId: string; values: Partial<PropertyMandateV2> }>;
+}
+```
+
+Use `createDefaultHouseholdCoverageMandateV2()` to build a valid default mandate. The factory
+returns a fully populated object; two calls never share nested object references.
+
+Pure resolvers (`resolveVehicleMandateV2`, `resolvePropertyMandateV2`) produce the effective
+mandate for an asset by deep-merging the household default with the asset-specific override.
+`updateVehicleOverrideV2` / `clearVehicleOverrideV2` provide immutable edit helpers.
+
+## Legacy engine mandate (`HouseholdMandate`)
 
 ```ts
 interface HouseholdMandate {
@@ -128,5 +157,35 @@ Every optional coverage uses `CoveragePreference`:
 
 `packages/schemas/src/mandate.ts` provides default objects (`defaultAutoEndorsements`,
 `defaultPropertyOptionalCoverages`) where every endorsement/optional coverage is `indifferent`.
-`HouseholdMandate.parse({})` returns a complete, valid default mandate so the UI and engine always
-have a fully populated object to work with.
+
+**Important:** the legacy `HouseholdMandate.parse({})` does **not** produce a complete mandate. It
+is a compatibility schema that requires callers to supply all required fields or use the V2
+factory and adapters. For new code, call `createDefaultHouseholdCoverageMandateV2()` and convert to
+the engine-facing `HouseholdMandate` with `mandateV2ToEngineMandate(v2, switching)`.
+
+## Mapping and persistence
+
+- `legacyMandateToV2(...)` converts an old `coverage_requirements` row to V2.
+- `expandedUnversionedMandateToV2(...)` converts the expanded Phase 1 mandate shape to V2.
+- `mandateV2ToEngineMandate(v2, switching?)` and `v2ToLegacyProjection(v2, switching?)` produce the
+  engine input `HouseholdMandate`.
+- `switchingRowToDomain` / `switchingDomainToRow` translate the `switching_preferences` row to and
+  from `SwitchingPreferencesV2`.
+- The typed repository in `packages/database/src/mandate-repository.ts` loads and saves V2 mandates
+  atomically through the `save_household_mandate_v2` RPC.
+
+## Current limitations
+
+- Multi-asset optimization (more than one vehicle or more than one property) is intentionally
+  fail-closed in the recommendation engine.
+- Risk facts such as financing status, vehicle use class, classic/modified flags and property type
+  live on `vehicles` / `properties` rows; they are not part of the customer coverage preference
+  mandate.
+- `maxPremiumIncreaseCents` is retained in `switching_preferences` for compatibility but is not
+  active in the UI or recommendation logic while `minNetAnnualSavingsCents` provides the positive
+  savings threshold.
+- `materialCoverageReductionsAllowed` is fixed to `false` and `customerApprovalRequired` is fixed to
+  `true`.
+- Multiple-vehicle, multiple-property, preferred-coverage scoring, a new auto coverage hierarchy,
+  carrier APIs, automated extraction, additional coverage fields, visual redesign, new ranking logic,
+  silent/automatic switching and other feature work are deferred until the foundation is reviewed.

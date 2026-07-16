@@ -1,5 +1,16 @@
 # Roadmap
 
+## Corrective Phase 1B (completed)
+
+- Versioned `HouseholdCoverageMandateV2` schema with discriminated monetary rules.
+- Immutable `household_coverage_mandates`, `vehicle_mandate_overrides`, `property_mandate_overrides`
+  tables and atomic `save_household_mandate_v2` RPC.
+- Typed mandate repository and V2-to-engine adapters.
+- Legacy mandate fallback and quote coverage normalization repair migration.
+- Mobile mandate edit/save/load using V2; removed contradictory switching toggles.
+- Recommendation engine fail-closed on multi-asset and missing-asset cases.
+- pgTAP, unit and integration tests for schema, mapping, persistence, RLS and fail-closed guards.
+
 ## Now (hardening the MVP)
 
 1. Password reauthentication fallback for switch approval on devices without biometrics.
@@ -23,3 +34,14 @@
 - Licensed-entity operating model per province; regulated disclosures.
 - Savings analytics across the book of business.
 - Dark mode and accessibility audit (deferred from MVP).
+
+## Deferred until after foundation review
+
+The following items are intentionally not part of Corrective Phase 1B and require a reviewed
+foundation before implementation:
+
+- Multiple-vehicle and multiple-property configuration generation.
+- Preferred-coverage scoring and a new auto coverage hierarchy.
+- Carrier APIs and automated policy extraction.
+- Additional coverage fields, visual redesign and new insurer-ranking logic.
+- Silent or automatic switching.

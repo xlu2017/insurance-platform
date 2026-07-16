@@ -13,10 +13,28 @@ export function evaluateHousehold(input: EngineInput): EngineResult;
 
 `EngineInput` contains:
 
-- `mandate`: the full `HouseholdMandate` with household defaults and asset overrides.
+- `mandate`: the full `HouseholdMandate` with household defaults and asset overrides. This is the
+  legacy engine shape produced by `mandateV2ToEngineMandate(v2, switching)` from the versioned
+  `HouseholdCoverageMandateV2`.
 - `quotes`: competing insurer quotes normalized to `EngineQuote`.
 - `incumbentAuto`: the current auto policy as a `QuoteComponent`.
 - `incumbentProperty`: the current property policy as a `QuoteComponent`.
+- `assets` (optional): the household's `vehicles` and `properties` UUIDs used to fail-closed on
+  multi-asset or missing-asset cases.
+
+## Fail-closed guard
+
+`validateEngineInput` runs before any comparison and rejects the request when:
+
+- a single quote contains more than one `auto` or more than one `property` component;
+- more than one distinct `assetId` appears for auto or for property across all quotes/incumbents;
+- any component references an asset not in the supplied `assets` list;
+- any household vehicle or property lacks a matching component;
+- any mandate override references an asset not in the household.
+
+In all of these cases `evaluateHousehold` returns `rejection:
+{ code: 'MULTI_ASSET_OPTIMIZATION_NOT_ENABLED' | 'MISSING_INSURED_ASSET', message: '...' }`
+and an empty `evaluated` list. Multi-asset optimization is explicitly deferred to a later phase.
 
 ## Quote normalization
 
@@ -149,5 +167,5 @@ the case to `licensed_review`.
 
 Engine tests live in `packages/insurance-engine/test/engine.test.ts` and cover cost calculation,
 bundle-loss detection, hard constraints, exclusions, split-insurer handling, ranking,
-asset-specific inheritance, coverage reductions vs incumbent, quote normalization and switching
-filters.
+asset-specific inheritance, coverage reductions vs incumbent, quote normalization, switching
+filters and the fail-closed multi-asset guard.
