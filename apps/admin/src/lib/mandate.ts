@@ -34,7 +34,6 @@ export const limitRuleLabels: Record<LimitRule, string> = {
 };
 
 export const deductibleRuleLabels: Record<DeductibleRule, string> = {
-  minimum: "At least",
   maximum: "At most",
   exact: "Exactly",
   match_current_or_better: "Match current or better",
@@ -174,7 +173,10 @@ export function labelForDeductible(rule?: MonetaryRule | DeductibleRule): string
   }
   if (rule.rule === "any") return "Any";
   if (rule.rule === "match_current_or_better") return deductibleRuleLabels[rule.rule];
-  return `${deductibleRuleLabels[rule.rule]} ${formatCad(monetaryAmount(rule) ?? 0)}`;
+  const label =
+    (deductibleRuleLabels as Record<string, string>)[rule.rule] ??
+    limitRuleLabels[rule.rule as LimitRule];
+  return `${label} ${formatCad(monetaryAmount(rule) ?? 0)}`;
 }
 
 export function labelForAutoForm(value?: AutoCoverageForm): string {

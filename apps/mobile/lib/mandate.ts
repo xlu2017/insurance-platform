@@ -46,7 +46,6 @@ export const limitRuleOptions: { value: LimitRule; label: string }[] = [
 ];
 
 export const deductibleRuleOptions: { value: DeductibleRule; label: string }[] = [
-  { value: "minimum", label: "At least" },
   { value: "maximum", label: "At most" },
   { value: "exact", label: "Exactly" },
   { value: "match_current_or_better", label: "Match current or better" },

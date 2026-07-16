@@ -167,13 +167,7 @@ export const limitRules = [
 export const LimitRule = z.enum(limitRules);
 export type LimitRule = z.infer<typeof LimitRule>;
 
-export const deductibleRules = [
-  "minimum",
-  "maximum",
-  "exact",
-  "match_current_or_better",
-  "any",
-] as const;
+export const deductibleRules = ["maximum", "exact", "match_current_or_better", "any"] as const;
 export const DeductibleRule = z.enum(deductibleRules);
 export type DeductibleRule = z.infer<typeof DeductibleRule>;
 

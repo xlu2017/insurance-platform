@@ -22,6 +22,7 @@ import type {
 } from "@autopilot/schemas";
 import { evaluateMonetaryRule } from "./rule-evaluator.ts";
 import { evaluatePreferenceAlignment } from "./preference-evaluator.ts";
+import { autoFormMeetsOrExceeds, propertyFormMeetsOrExceeds } from "./coverage-capabilities.ts";
 
 const USABLE_QUOTE_STATES = new Set(["estimate", "conditional", "bindable", "selected"]);
 
@@ -357,28 +358,6 @@ function pushWaterDeductibleViolations(
 // Coverage-form compatibility (capability-based, not a single numeric rank)
 // =============================================================================
 
-const autoFormCapabilities: Record<AutoCoverageDetails["coverageForm"], string[]> = {
-  unknown: [],
-  liability_only: ["third_party_liability"],
-  collision: ["third_party_liability", "collision_damage"],
-  comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
-  specified_perils: ["third_party_liability", "specified_perils"],
-  all_perils: [
-    "third_party_liability",
-    "collision_damage",
-    "comprehensive_perils",
-    "all_perils_extensions",
-  ],
-};
-
-const propertyFormCapabilities: Record<PropertyCoverageDetails["coverageForm"], string[]> = {
-  unknown: [],
-  basic: ["fire_lightning"],
-  named_perils: ["fire_lightning", "named_perils"],
-  broad: ["fire_lightning", "named_perils", "broad_perils"],
-  comprehensive: ["all_risks"],
-};
-
 const settlementRank: Record<PropertyCoverageDetails["settlementBasis"], number> = {
   unknown: 0,
   actual_cash_value: 1,
@@ -386,25 +365,6 @@ const settlementRank: Record<PropertyCoverageDetails["settlementBasis"], number>
   extended_replacement_cost: 3,
   guaranteed_replacement_cost: 4,
 };
-
-function hasAllCapabilities(actual: string[], required: string[]): boolean {
-  const set = new Set(actual);
-  return required.every((c) => set.has(c));
-}
-
-function autoFormMeetsOrExceeds(
-  actual: AutoCoverageDetails["coverageForm"],
-  required: AutoCoverageDetails["coverageForm"],
-): boolean {
-  return hasAllCapabilities(autoFormCapabilities[actual], autoFormCapabilities[required]);
-}
-
-function propertyFormMeetsOrExceeds(
-  actual: PropertyCoverageDetails["coverageForm"],
-  required: PropertyCoverageDetails["coverageForm"],
-): boolean {
-  return hasAllCapabilities(propertyFormCapabilities[actual], propertyFormCapabilities[required]);
-}
 
 function settlementMeetsOrExceeds(
   actual: PropertyCoverageDetails["settlementBasis"],
