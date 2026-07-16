@@ -100,6 +100,8 @@ export async function loadRecommendationInputSnapshot(
   };
 
   return {
+    caseId,
+    householdId,
     mandateId: mandateResult.mandateId,
     mandateVersion: mandateResult.mandateVersion,
     mandateSchemaVersion: 2,

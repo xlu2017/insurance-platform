@@ -1,12 +1,18 @@
 // Generates a licensed-review recommendation for a case in `comparing_quotes`.
 // Loads the current V2 mandate, switching preferences, assets and quotes, runs
-// the same deterministic insurance engine used by workspace tests, and persists
-// the recommendation bound to the exact V2 snapshot.
+// the same deterministic insurance engine used by workspace tests, builds a
+// canonical input/output digest, and persists the result through an internal
+// service-role-only RPC.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   buildEngineInputFromSnapshot,
   evaluateHousehold,
   loadRecommendationInputSnapshot,
+  EngineRecommendationPersistencePayloadSchema,
+  __AUTOPILOT_SOURCE_HASH__,
+  type EngineRecommendationPersistencePayload,
+  type EngineResult,
+  type EvaluatedConfiguration,
 } from "./_shared/autopilot.js";
 
 const ENGINE_VERSION = "1.0.0";
@@ -20,6 +26,69 @@ function jsonResponse(body: unknown, status = 200, extraHeaders?: Record<string,
       ...extraHeaders,
     },
   });
+}
+
+function canonicalizeForDigest(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    const sorted = value.map(canonicalizeForDigest).sort((a: unknown, b: unknown) => {
+      const ka = JSON.stringify(a);
+      const kb = JSON.stringify(b);
+      return ka.localeCompare(kb);
+    });
+    return sorted;
+  }
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    sorted[key] = canonicalizeForDigest((value as Record<string, unknown>)[key]);
+  }
+  return sorted;
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function buildRankingFactors(e: EvaluatedConfiguration) {
+  return {
+    total_cents: e.cost.totalCents,
+    coverage_reductions_count: e.coverageReductions.length,
+    deductible_total_cents: e.deductibleTotalCents,
+    underwriting_condition_count: e.underwritingConditionCount,
+    preference_missed_count: 0,
+    preference_unknown_count: 0,
+  };
+}
+
+function buildPreferenceAlignment(_e: EvaluatedConfiguration) {
+  return {
+    satisfied_count: 0,
+    missed_count: 0,
+    not_evaluable_count: 0,
+    details: [] as { scope: string; item: string; outcome: string }[],
+  };
+}
+
+function buildPersistedOption(rank: number, e: EvaluatedConfiguration) {
+  return {
+    rank,
+    auto_quote_id: e.configuration.auto.quoteId,
+    property_quote_id: e.configuration.property.quoteId,
+    bundled: e.configuration.bundled,
+    total_cents: e.cost.totalCents,
+    net_savings_cents: e.netSavingsCents,
+    eligible: e.eligible,
+    reason_codes: e.reasonCodes,
+    ranking_factors: buildRankingFactors(e),
+    preference_alignment: buildPreferenceAlignment(e),
+    deductible_total_cents: e.deductibleTotalCents,
+    underwriting_condition_count: e.underwritingConditionCount,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -86,7 +155,6 @@ Deno.serve(async (req) => {
 
   const snapshot = await loadRecommendationInputSnapshot(supabase, caseId);
   if ("code" in snapshot) {
-    // Operational snapshot-load errors include no rows, validation failures, etc.
     return jsonResponse(
       { code: snapshot.code, message: snapshot.message, details: snapshot.details },
       snapshot.code === "MANDATE_NOT_FOUND" || snapshot.code === "QUOTE_NOT_USABLE" ? 400 : 422,
@@ -101,7 +169,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const result = evaluateHousehold(engineInput);
+  const result: EngineResult = evaluateHousehold(engineInput);
 
   if (result.rejection) {
     return jsonResponse({ code: result.rejection.code, message: result.rejection.message }, 422);
@@ -116,52 +184,126 @@ Deno.serve(async (req) => {
     });
   }
 
-  const rec = result.recommended;
-  const ranked = result.evaluated
-    .slice()
-    .sort((a, b) => a.cost.totalCents - b.cost.totalCents)
-    .slice(0, 10);
+  const rankedOptions = result.eligible.map((e, i) => buildPersistedOption(i + 1, e));
+  const rejectedOptions = result.evaluated
+    .filter((e) => !e.eligible && !e.configuration.isIncumbentConfiguration)
+    .map((e, i) => buildPersistedOption(rankedOptions.length + i + 1, e));
+  const recommendedOption = rankedOptions[0];
 
-  const optionsPayload = ranked.map((e, i) => ({
-    rank: i + 1,
-    auto_quote_id: e.configuration.auto.quoteId,
-    property_quote_id: e.configuration.property.quoteId,
-    bundled: e.configuration.bundled,
-    total_cents: e.cost.totalCents,
-    net_savings_cents: e.netSavingsCents,
-    eligible: e.eligible,
-    reason_codes: e.reasonCodes,
-  }));
+  const canonicalInput: Record<string, unknown> = canonicalizeForDigest({
+    caseId: snapshot.caseId,
+    householdId: snapshot.householdId,
+    mandateId: snapshot.mandateId,
+    mandateVersion: snapshot.mandateVersion,
+    mandateSchemaVersion: snapshot.mandateSchemaVersion,
+    jurisdiction: snapshot.jurisdiction,
+    switchingPreferencesId: snapshot.switchingPreferencesId,
+    switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+    mandate: snapshot.mandate,
+    switching: snapshot.switching,
+    assets: snapshot.assets,
+    quotes: snapshot.quotes,
+    quoteSnapshot: snapshot.quoteSnapshot,
+    engineVersion: ENGINE_VERSION,
+    engineSourceHash: __AUTOPILOT_SOURCE_HASH__,
+    generatedAt: new Date().toISOString(),
+  }) as Record<string, unknown>;
+  const inputSnapshotJson = canonicalInput;
+  const inputSnapshotDigest = await sha256Hex(JSON.stringify(canonicalInput));
 
-  const { data: persistData, error: persistError } = await supabase.rpc("persist_recommendation", {
-    p_case_id: caseId,
-    p_mandate_id: snapshot.mandateId,
-    p_mandate_version: snapshot.mandateVersion,
-    p_mandate_schema_version: snapshot.mandateSchemaVersion,
-    p_mandate_jurisdiction: snapshot.jurisdiction,
-    p_switching_preferences_id: snapshot.switchingPreferencesId,
-    p_switching_preferences_version: snapshot.switchingPreferencesVersion,
-    p_quote_snapshot: snapshot.quoteSnapshot ?? [],
-    p_engine_version: ENGINE_VERSION,
-    p_current_total_cents: result.incumbentTotalCents,
-    p_proposed_total_cents: rec.cost.totalCents,
-    p_net_savings_cents: rec.netSavingsCents,
-    p_reason_codes: rec.reasonCodes,
-    p_comparison: {
-      proposedInsurer: rec.configuration.auto.insurerName,
-      bundled: rec.configuration.bundled,
-      materialDifferences: rec.coverageReductions,
+  const engineOutputJson = canonicalizeForDigest({
+    incumbentTotalCents: result.incumbentTotalCents,
+    recommendedOption,
+    rankedOptions,
+    rejectedOptions,
+  }) as Record<string, unknown>;
+  const engineOutputDigest = await sha256Hex(JSON.stringify(engineOutputJson));
+
+  const payload: EngineRecommendationPersistencePayload = {
+    caseId,
+    actorProfileId: user.id,
+    mandate: {
+      id: snapshot.mandateId,
+      version: snapshot.mandateVersion,
+      schemaVersion: 2,
+      jurisdiction: "AB",
+    },
+    switchingPreferences: {
+      id: snapshot.switchingPreferencesId,
+      version: snapshot.switchingPreferencesVersion,
+    },
+    engine: {
+      version: ENGINE_VERSION,
+      sourceHash: __AUTOPILOT_SOURCE_HASH__,
+    },
+    inputSnapshotJson,
+    inputSnapshotDigest,
+    recommendedOption,
+    rankedOptions,
+    rejectedOptions,
+    engineOutputJson,
+    engineOutputDigest,
+    currentTotalCents: result.incumbentTotalCents,
+    proposedTotalCents: recommendedOption.total_cents,
+    netSavingsCents: recommendedOption.net_savings_cents,
+    reasonCodes: recommendedOption.reason_codes,
+    comparison: {
+      proposedInsurer: result.recommended.configuration.auto.insurerName,
+      bundled: result.recommended.configuration.bundled,
+      materialDifferences: result.recommended.coverageReductions,
       deductibleDifferences: [],
     },
-    p_recommended: {
-      auto_quote_id: rec.configuration.auto.quoteId,
-      property_quote_id: rec.configuration.property.quoteId,
-      bundled: rec.configuration.bundled,
-      insurer_name: rec.configuration.auto.insurerName,
+    disclosureVersion: "v1",
+  };
+
+  const parsed = EngineRecommendationPersistencePayloadSchema.safeParse(payload);
+  if (!parsed.success) {
+    return jsonResponse(
+      { code: "PERSISTENCE_PAYLOAD_INVALID", message: parsed.error.message },
+      500,
+    );
+  }
+
+  const serviceRoleKey =
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+    Deno.env.get("SERVICE_ROLE_KEY") ??
+    Deno.env.get("EDGE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    return jsonResponse(
+      { code: "SERVICE_ROLE_KEY_MISSING", message: "Server cannot persist recommendations" },
+      500,
+    );
+  }
+  const serviceClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
+
+  const { data: persistData, error: persistError } = await serviceClient.rpc(
+    "persist_engine_recommendation_v2",
+    {
+      p_case_id: payload.caseId,
+      p_actor_profile_id: payload.actorProfileId,
+      p_mandate_id: payload.mandate.id,
+      p_mandate_version: payload.mandate.version,
+      p_mandate_schema_version: payload.mandate.schemaVersion,
+      p_mandate_jurisdiction: payload.mandate.jurisdiction,
+      p_switching_preferences_id: payload.switchingPreferences.id,
+      p_switching_preferences_version: payload.switchingPreferences.version,
+      p_input_snapshot_json: payload.inputSnapshotJson,
+      p_input_snapshot_digest: payload.inputSnapshotDigest,
+      p_engine_version: payload.engine.version,
+      p_engine_source_hash: payload.engine.sourceHash,
+      p_engine_output_json: payload.engineOutputJson,
+      p_engine_output_digest: payload.engineOutputDigest,
+      p_current_total_cents: payload.currentTotalCents,
+      p_proposed_total_cents: payload.proposedTotalCents,
+      p_net_savings_cents: payload.netSavingsCents,
+      p_reason_codes: payload.reasonCodes,
+      p_recommended_option_json: payload.recommendedOption,
+      p_ranked_options_json: payload.rankedOptions,
+      p_rejected_options_json: payload.rejectedOptions,
+      p_comparison_json: payload.comparison,
+      p_disclosure_version: payload.disclosureVersion,
     },
-    p_options: optionsPayload,
-    p_disclosure_version: "v1",
-  });
+  );
 
   if (persistError) {
     return jsonResponse({ code: "PERSIST_FAILED", message: persistError.message }, 409);
@@ -170,18 +312,19 @@ Deno.serve(async (req) => {
   const persisted = persistData as {
     recommendationId?: string;
     version?: number;
-    status?: string;
   } | null;
   return jsonResponse({
     recommendationId: persisted?.recommendationId,
     version: persisted?.version,
     recommended: {
-      totalCents: rec.cost.totalCents,
-      netSavingsCents: rec.netSavingsCents,
-      autoInsurer: rec.configuration.auto.insurerName,
-      propertyInsurer: rec.configuration.property.insurerName,
-      bundled: rec.configuration.bundled,
+      totalCents: result.recommended.cost.totalCents,
+      netSavingsCents: result.recommended.netSavingsCents,
+      autoInsurer: result.recommended.configuration.auto.insurerName,
+      propertyInsurer: result.recommended.configuration.property.insurerName,
+      bundled: result.recommended.configuration.bundled,
     },
-    optionsCount: optionsPayload.length,
+    optionsCount: rankedOptions.length,
+    inputSnapshotDigest,
+    engineOutputDigest,
   });
 });

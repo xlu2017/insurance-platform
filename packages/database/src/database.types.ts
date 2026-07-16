@@ -1449,47 +1449,144 @@ export type Database = {
           },
         ];
       };
+      recommendation_generation_attempts: {
+        Row: {
+          actor_profile_id: string | null;
+          case_id: string;
+          completed_at: string | null;
+          created_at: string;
+          engine_output_digest: string | null;
+          engine_source_hash: string | null;
+          engine_version: string | null;
+          error_code: string | null;
+          id: string;
+          input_snapshot_digest: string | null;
+          mandate_id: string | null;
+          mandate_version: number | null;
+          recommendation_id: string | null;
+          safe_error_message: string | null;
+          started_at: string;
+          status: string;
+          switching_preferences_id: string | null;
+          switching_preferences_version: number | null;
+        };
+        Insert: {
+          actor_profile_id?: string | null;
+          case_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          engine_output_digest?: string | null;
+          engine_source_hash?: string | null;
+          engine_version?: string | null;
+          error_code?: string | null;
+          id?: string;
+          input_snapshot_digest?: string | null;
+          mandate_id?: string | null;
+          mandate_version?: number | null;
+          recommendation_id?: string | null;
+          safe_error_message?: string | null;
+          started_at?: string;
+          status?: string;
+          switching_preferences_id?: string | null;
+          switching_preferences_version?: number | null;
+        };
+        Update: {
+          actor_profile_id?: string | null;
+          case_id?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          engine_output_digest?: string | null;
+          engine_source_hash?: string | null;
+          engine_version?: string | null;
+          error_code?: string | null;
+          id?: string;
+          input_snapshot_digest?: string | null;
+          mandate_id?: string | null;
+          mandate_version?: number | null;
+          recommendation_id?: string | null;
+          safe_error_message?: string | null;
+          started_at?: string;
+          status?: string;
+          switching_preferences_id?: string | null;
+          switching_preferences_version?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_generation_attempts_actor_profile_id_fkey";
+            columns: ["actor_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recommendation_generation_attempts_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "optimization_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recommendation_generation_attempts_recommendation_id_fkey";
+            columns: ["recommendation_id"];
+            isOneToOne: false;
+            referencedRelation: "recommendations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       recommendation_options: {
         Row: {
           auto_quote_id: string | null;
           bundled: boolean;
           created_at: string;
+          deductible_total_cents: number | null;
           eligible: boolean;
           id: string;
           net_savings_cents: number;
+          preference_alignment: Json | null;
           property_quote_id: string | null;
           rank: number;
+          ranking_factors: Json | null;
           reason_codes: string[];
           recommendation_id: string;
           total_cents: number;
+          underwriting_condition_count: number | null;
           updated_at: string;
         };
         Insert: {
           auto_quote_id?: string | null;
           bundled?: boolean;
           created_at?: string;
+          deductible_total_cents?: number | null;
           eligible?: boolean;
           id?: string;
           net_savings_cents: number;
+          preference_alignment?: Json | null;
           property_quote_id?: string | null;
           rank: number;
+          ranking_factors?: Json | null;
           reason_codes?: string[];
           recommendation_id: string;
           total_cents: number;
+          underwriting_condition_count?: number | null;
           updated_at?: string;
         };
         Update: {
           auto_quote_id?: string | null;
           bundled?: boolean;
           created_at?: string;
+          deductible_total_cents?: number | null;
           eligible?: boolean;
           id?: string;
           net_savings_cents?: number;
+          preference_alignment?: Json | null;
           property_quote_id?: string | null;
           rank?: number;
+          ranking_factors?: Json | null;
           reason_codes?: string[];
           recommendation_id?: string;
           total_cents?: number;
+          underwriting_condition_count?: number | null;
           updated_at?: string;
         };
         Relationships: [
@@ -1525,8 +1622,12 @@ export type Database = {
           current_total_cents: number;
           disclosure_version: string;
           effective_date: string | null;
+          engine_output_digest: string | null;
+          engine_output_json: Json | null;
           engine_version: string;
           id: string;
+          input_snapshot_digest: string | null;
+          input_snapshot_json: Json | null;
           mandate_id: string | null;
           mandate_jurisdiction: string | null;
           mandate_schema_version: number | null;
@@ -1536,6 +1637,7 @@ export type Database = {
           quote_ids: string[];
           quote_snapshot: Json;
           reason_codes: string[];
+          rejected_options_json: Json | null;
           status: Database["public"]["Enums"]["recommendation_status"];
           switching_preferences_id: string | null;
           switching_preferences_version: number;
@@ -1551,8 +1653,12 @@ export type Database = {
           current_total_cents: number;
           disclosure_version?: string;
           effective_date?: string | null;
+          engine_output_digest?: string | null;
+          engine_output_json?: Json | null;
           engine_version?: string;
           id?: string;
+          input_snapshot_digest?: string | null;
+          input_snapshot_json?: Json | null;
           mandate_id?: string | null;
           mandate_jurisdiction?: string | null;
           mandate_schema_version?: number | null;
@@ -1562,6 +1668,7 @@ export type Database = {
           quote_ids?: string[];
           quote_snapshot?: Json;
           reason_codes?: string[];
+          rejected_options_json?: Json | null;
           status?: Database["public"]["Enums"]["recommendation_status"];
           switching_preferences_id?: string | null;
           switching_preferences_version?: number;
@@ -1577,8 +1684,12 @@ export type Database = {
           current_total_cents?: number;
           disclosure_version?: string;
           effective_date?: string | null;
+          engine_output_digest?: string | null;
+          engine_output_json?: Json | null;
           engine_version?: string;
           id?: string;
+          input_snapshot_digest?: string | null;
+          input_snapshot_json?: Json | null;
           mandate_id?: string | null;
           mandate_jurisdiction?: string | null;
           mandate_schema_version?: number | null;
@@ -1588,6 +1699,7 @@ export type Database = {
           quote_ids?: string[];
           quote_snapshot?: Json;
           reason_codes?: string[];
+          rejected_options_json?: Json | null;
           status?: Database["public"]["Enums"]["recommendation_status"];
           switching_preferences_id?: string | null;
           switching_preferences_version?: number;
@@ -2088,6 +2200,10 @@ export type Database = {
       };
       backfill_coverage_mandate_v2: { Args: never; Returns: undefined };
       can_access_case: { Args: { cid: string }; Returns: boolean };
+      can_access_case_for_profile: {
+        Args: { p_case_id: string; p_profile_id: string };
+        Returns: boolean;
+      };
       can_access_household: { Args: { hid: string }; Returns: boolean };
       canonicalize_quote_auto_coverage: { Args: { input: Json }; Returns: Json };
       canonicalize_quote_property_coverage: {
@@ -2117,6 +2233,34 @@ export type Database = {
           household_id: string;
         };
         Returns: undefined;
+      };
+      persist_engine_recommendation_v2: {
+        Args: {
+          p_actor_profile_id: string;
+          p_case_id: string;
+          p_comparison_json?: Json;
+          p_current_total_cents: number;
+          p_disclosure_version?: string;
+          p_engine_output_digest: string;
+          p_engine_output_json: Json;
+          p_engine_source_hash: string;
+          p_engine_version: string;
+          p_input_snapshot_digest: string;
+          p_input_snapshot_json: Json;
+          p_mandate_id: string;
+          p_mandate_jurisdiction: string;
+          p_mandate_schema_version: number;
+          p_mandate_version: number;
+          p_net_savings_cents: number;
+          p_proposed_total_cents: number;
+          p_ranked_options_json: Json;
+          p_reason_codes: string[];
+          p_recommended_option_json: Json;
+          p_rejected_options_json?: Json;
+          p_switching_preferences_id: string;
+          p_switching_preferences_version: number;
+        };
+        Returns: Json;
       };
       persist_household_mandate_v2: {
         Args: {
