@@ -1561,6 +1561,8 @@ export type Database = {
       };
       recommendation_options: {
         Row: {
+          auto_asset_id: string | null;
+          auto_component_id: string | null;
           auto_quote_id: string | null;
           bundled: boolean;
           created_at: string;
@@ -1569,6 +1571,8 @@ export type Database = {
           id: string;
           net_savings_cents: number;
           preference_alignment: Json | null;
+          property_asset_id: string | null;
+          property_component_id: string | null;
           property_quote_id: string | null;
           rank: number;
           ranking_factors: Json | null;
@@ -1579,6 +1583,8 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          auto_asset_id?: string | null;
+          auto_component_id?: string | null;
           auto_quote_id?: string | null;
           bundled?: boolean;
           created_at?: string;
@@ -1587,6 +1593,8 @@ export type Database = {
           id?: string;
           net_savings_cents: number;
           preference_alignment?: Json | null;
+          property_asset_id?: string | null;
+          property_component_id?: string | null;
           property_quote_id?: string | null;
           rank: number;
           ranking_factors?: Json | null;
@@ -1597,6 +1605,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          auto_asset_id?: string | null;
+          auto_component_id?: string | null;
           auto_quote_id?: string | null;
           bundled?: boolean;
           created_at?: string;
@@ -1605,6 +1615,8 @@ export type Database = {
           id?: string;
           net_savings_cents?: number;
           preference_alignment?: Json | null;
+          property_asset_id?: string | null;
+          property_component_id?: string | null;
           property_quote_id?: string | null;
           rank?: number;
           ranking_factors?: Json | null;
@@ -2236,6 +2248,24 @@ export type Database = {
         Returns: Json;
       };
       canonicalize_v2_monetary_rules: { Args: { input: Json }; Returns: Json };
+      complete_recommendation_generation_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_engine_output_digest?: string;
+          p_engine_source_hash?: string;
+          p_engine_version?: string;
+          p_error_code?: string;
+          p_input_snapshot_digest?: string;
+          p_mandate_id?: string;
+          p_mandate_version?: number;
+          p_recommendation_id?: string;
+          p_safe_error_message?: string;
+          p_status: string;
+          p_switching_preferences_id?: string;
+          p_switching_preferences_version?: number;
+        };
+        Returns: undefined;
+      };
       create_customer_support_question: {
         Args: { p_case_id: string; p_prompt: string };
         Returns: Json;
@@ -2243,6 +2273,14 @@ export type Database = {
       decline_customer_recommendation: {
         Args: { p_expected_rec_version: number; p_recommendation_id: string };
         Returns: Json;
+      };
+      fail_recommendation_generation_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_error_code?: string;
+          p_safe_error_message?: string;
+        };
+        Returns: undefined;
       };
       is_admin: { Args: never; Returns: boolean };
       is_household_member: { Args: { hid: string }; Returns: boolean };
@@ -2266,10 +2304,12 @@ export type Database = {
           p_comparison_json?: Json;
           p_current_total_cents: number;
           p_disclosure_version?: string;
+          p_engine_output_canonical: string;
           p_engine_output_digest: string;
           p_engine_output_json: Json;
           p_engine_source_hash: string;
           p_engine_version: string;
+          p_input_snapshot_canonical: string;
           p_input_snapshot_digest: string;
           p_input_snapshot_json: Json;
           p_mandate_id: string;
@@ -2299,28 +2339,6 @@ export type Database = {
           p_property_overrides: Json;
           p_switching_preferences: Json;
           p_vehicle_overrides: Json;
-        };
-        Returns: Json;
-      };
-      persist_recommendation: {
-        Args: {
-          p_case_id: string;
-          p_comparison: Json;
-          p_current_total_cents: number;
-          p_disclosure_version?: string;
-          p_engine_version: string;
-          p_mandate_id: string;
-          p_mandate_jurisdiction: string;
-          p_mandate_schema_version: number;
-          p_mandate_version: number;
-          p_net_savings_cents: number;
-          p_options: Json;
-          p_proposed_total_cents: number;
-          p_quote_snapshot: Json;
-          p_reason_codes: string[];
-          p_recommended: Json;
-          p_switching_preferences_id: string;
-          p_switching_preferences_version: number;
         };
         Returns: Json;
       };
@@ -2357,6 +2375,10 @@ export type Database = {
         Returns: Json;
       };
       staff_can_access_household: { Args: { hid: string }; Returns: boolean };
+      start_recommendation_generation_attempt: {
+        Args: { p_actor_profile_id: string; p_case_id: string };
+        Returns: string;
+      };
       supersede_prior_recommendations: {
         Args: { p_case_id: string };
         Returns: undefined;

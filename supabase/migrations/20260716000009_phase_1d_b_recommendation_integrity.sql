@@ -294,12 +294,12 @@ begin
   end if;
 
   -- Verify recomputed digests match the supplied digests.
-  v_input_digest_computed := encode(digest(p_input_snapshot_canonical::bytea, 'sha256'), 'hex');
+  v_input_digest_computed := encode(extensions.digest(p_input_snapshot_canonical::bytea, 'sha256'), 'hex');
   if v_input_digest_computed is distinct from p_input_snapshot_digest then
     raise exception 'input snapshot digest mismatch';
   end if;
 
-  v_output_digest_computed := encode(digest(p_engine_output_canonical::bytea, 'sha256'), 'hex');
+  v_output_digest_computed := encode(extensions.digest(p_engine_output_canonical::bytea, 'sha256'), 'hex');
   if v_output_digest_computed is distinct from p_engine_output_digest then
     raise exception 'engine output digest mismatch';
   end if;
@@ -326,7 +326,7 @@ begin
     if v_quote_record.id is null then
       raise exception 'quote % in snapshot does not belong to this case or no longer exists', v_snap.value->>'id';
     end if;
-    if v_quote_record.updated_at::text is distinct from (v_snap.value->>'updated_at') then
+    if v_quote_record.updated_at is distinct from (v_snap.value->>'updated_at')::timestamptz then
       raise exception 'quote % changed since evaluation', v_snap.value->>'id';
     end if;
   end loop;
