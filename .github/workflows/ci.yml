@@ -70,3 +70,59 @@ jobs:
 
       - name: Database tests (pgTAP)
         run: supabase test db
+
+  e2e:
+    needs: [checks, database]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Seed database
+        run: supabase db reset
+
+      - name: Capture Supabase status
+        run: supabase status > /tmp/supabase-status.json 2>/dev/null
+
+      - name: Create admin env file
+        run: |
+          mkdir -p apps/admin
+          node -e "
+            const s = JSON.parse(require('fs').readFileSync('/tmp/supabase-status.json','utf8'));
+            const lines = [
+              'NEXT_PUBLIC_SUPABASE_URL=' + s.API_URL,
+              'NEXT_PUBLIC_SUPABASE_ANON_KEY=' + s.ANON_KEY,
+              'SUPABASE_SERVICE_ROLE_KEY=' + s.SERVICE_ROLE_KEY,
+              'PAYMENTS_BYPASS=true'
+            ];
+            require('fs').writeFileSync('apps/admin/.env.local', lines.join('\n') + '\n');
+          "
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @autopilot/admin exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: pnpm --filter @autopilot/admin exec playwright test
+
+      - name: Reset database and run end-to-end golden path
+        run: |
+          supabase db reset
+          node scripts/e2e-golden-path.mjs

@@ -33,6 +33,57 @@
 - Sessions are stored with Expo SecureStore on device; switch approval requires reauthentication
   (biometric where available).
 
+## `SECURITY DEFINER` executor grants
+
+Every `SECURITY DEFINER` function is classified by who may invoke it directly over PostgREST.
+Internal helpers and triggers have no direct grants; workflow RPCs are granted to `authenticated`
+and service-only functions to `service_role`.
+
+| Function                                               | Classification        | Allowed direct grant |
+| ------------------------------------------------------ | --------------------- | -------------------- |
+| `app_role()`                                           | RLS helper            | `authenticated`      |
+| `is_staff()`                                           | RLS helper            | `authenticated`      |
+| `is_admin()`                                           | RLS helper            | `authenticated`      |
+| `is_household_member(uuid)`                            | RLS helper            | `authenticated`      |
+| `staff_can_access_household(uuid)`                     | RLS helper            | `authenticated`      |
+| `can_access_household(uuid)`                           | RLS helper            | `authenticated`      |
+| `can_access_case(uuid)`                                | RLS helper            | `authenticated`      |
+| `activate_autopilot(uuid)`                             | Customer workflow RPC | `authenticated`      |
+| `answer_customer_question(uuid, text)`                 | Customer workflow RPC | `authenticated`      |
+| `create_customer_support_question(uuid, text)`         | Customer workflow RPC | `authenticated`      |
+| `approve_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC | `authenticated`      |
+| `decline_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC | `authenticated`      |
+| `persist_recommendation(...)`                          | Staff workflow RPC    | `authenticated`      |
+| `review_recommendation(uuid, boolean, text)`           | Staff workflow RPC    | `authenticated`      |
+| `advance_switch_event(uuid, switch_state)`             | Staff workflow RPC    | `authenticated`      |
+| `update_case_state(uuid, case_state)`                  | Staff workflow RPC    | `authenticated`      |
+| `send_quote_request_email(uuid, text, boolean)`        | Staff workflow RPC    | `authenticated`      |
+| `process_stripe_event(...)`                            | Service-only RPC      | `service_role`       |
+| `assign_staff_role(uuid, uuid, user_role)`             | Service-only RPC      | `service_role`       |
+| `handle_new_user()`                                    | Auth trigger          | none                 |
+| `set_updated_at()`                                     | Trigger               | none                 |
+| `set_household_updated_by()`                           | Trigger               | none                 |
+| `set_coverage_requirements_updated_by()`               | Trigger               | none                 |
+| `set_switching_preferences_updated_by()`               | Trigger               | none                 |
+| `set_policy_document_uploaded_by()`                    | Trigger               | none                 |
+| `set_customer_questions_created_by()`                  | Trigger               | none                 |
+| `set_coverage_requirements_ownership()`                | Trigger               | none                 |
+| `set_switching_preferences_ownership()`                | Trigger               | none                 |
+| `audit_context()`                                      | Audit helper          | none                 |
+| `log_audit(...)`                                       | Audit helper          | none                 |
+| `audit_policy_document_insert()`                       | Audit trigger         | none                 |
+| `audit_household_changes()`                            | Audit trigger         | none                 |
+| `audit_coverage_requirements_change()`                 | Audit trigger         | none                 |
+| `audit_switching_preferences_change()`                 | Audit trigger         | none                 |
+| `audit_customer_question_insert()`                     | Audit trigger         | none                 |
+| `reject_audit_mutation()`                              | Audit trigger         | none                 |
+| `validate_case_transition()`                           | State-machine trigger | none                 |
+| `validate_quote_request_transition()`                  | State-machine trigger | none                 |
+| `validate_quote_transition()`                          | State-machine trigger | none                 |
+| `validate_switch_transition()`                         | State-machine trigger | none                 |
+| `require_household_member_for_recommendation(uuid)`    | Internal helper       | none                 |
+| `supersede_prior_recommendations(uuid)`                | Internal helper       | none                 |
+
 ## Auditability
 
 `audit_events` is append-only: update/delete are revoked and a trigger raises on any attempt.
