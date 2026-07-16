@@ -4,6 +4,11 @@
 // artifact is deterministic and small.
 export { buildEngineInputFromSnapshot } from "../src/input-from-snapshot.ts";
 export { evaluateHousehold } from "../src/engine.ts";
+export {
+  canonicalizeForDigest,
+  canonicalSerializeRecommendationInput,
+  canonicalSerializeRecommendationOutput,
+} from "../src/canonical.ts";
 export type { EngineInput, EngineResult } from "../src/types.ts";
 
 // Re-export the shared workspace loader so the Edge Function evaluates the same

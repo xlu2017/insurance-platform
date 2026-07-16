@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 0f39f39d395a0720bdbd34959e7b827612ff622c44a9bb500bfeed8b0f5cfdef
+// source-hash: 1dcf8e7e1f8138a6541ad0a8aaa398017fb4ce2ac724b7a1ff0a9626e33ab8e1
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -4178,6 +4178,7 @@ var deductibleRules = [
 ];
 var DeductibleRule = z.enum(deductibleRules);
 var autoCoverageForms = [
+  "unknown",
   "liability_only",
   "collision",
   "comprehensive",
@@ -4191,21 +4192,23 @@ var propertyTypes = [
   "tenant",
   "landlord",
   "seasonal",
-  "secondary_residence"
+  "secondary_residence",
+  "unknown"
 ];
 var PropertyType = z.enum(propertyTypes);
-var propertyCoverageForms = ["comprehensive", "broad", "named_perils", "basic"];
+var propertyCoverageForms = ["unknown", "comprehensive", "broad", "named_perils", "basic"];
 var PropertyCoverageForm = z.enum(propertyCoverageForms);
 var propertySettlements = [
+  "unknown",
   "replacement_cost",
   "guaranteed_replacement_cost",
   "extended_replacement_cost",
   "actual_cash_value"
 ];
 var PropertySettlement = z.enum(propertySettlements);
-var vehicleUseClasses = ["personal", "commercial", "classic", "modified"];
+var vehicleUseClasses = ["personal", "commercial", "classic", "modified", "unknown"];
 var VehicleUseClass = z.enum(vehicleUseClasses);
-var financingStatuses = ["owned", "financed", "leased"];
+var financingStatuses = ["owned", "financed", "leased", "unknown"];
 var FinancingStatus = z.enum(financingStatuses);
 var paymentFrequencies = ["monthly", "quarterly", "semi_annual", "annual"];
 var PaymentFrequency = z.enum(paymentFrequencies);
@@ -4213,8 +4216,11 @@ var billingMethods = ["automatic_bank", "credit_card", "mail"];
 var BillingMethod = z.enum(billingMethods);
 var brokerDirectPreferences = ["broker", "direct", "indifferent"];
 var BrokerDirectPreference = z.enum(brokerDirectPreferences);
-var financialRatings = ["A_plus", "A", "A_minus", "B_plus", "B_or_lower", "any"];
-var FinancialRating = z.enum(financialRatings);
+var insurerFinancialRatings = ["unknown", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"];
+var InsurerFinancialRating = z.enum(insurerFinancialRatings);
+var customerMinimumInsurerFinancialRatings = ["any", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"];
+var CustomerMinimumInsurerFinancialRating = z.enum(customerMinimumInsurerFinancialRatings);
+var FinancialRating = CustomerMinimumInsurerFinancialRating;
 
 // ../schemas/src/money.ts
 var Cents = z.number().int();
@@ -4469,7 +4475,7 @@ var SwitchingPreferencesV2 = z.object({
   preferredPaymentFrequency: PaymentFrequency.default("annual"),
   preferredBillingMethod: BillingMethod.default("automatic_bank"),
   brokerDirectPreference: BrokerDirectPreference.default("indifferent"),
-  minimumInsurerFinancialRating: FinancialRating.default("any")
+  minimumInsurerFinancialRating: CustomerMinimumInsurerFinancialRating.default("any")
 });
 function createDefaultSwitchingPreferencesV2() {
   return SwitchingPreferencesV2.parse({});
@@ -4632,11 +4638,11 @@ var AutoCoverageDetails = z.object({
   disappearingDeductibleIncluded: z.boolean(),
   glassCoverageIncluded: z.boolean(),
   telematicsRequired: z.boolean(),
-  vehicleClass: VehicleUseClass.default("personal"),
-  financingStatus: FinancingStatus.default("owned")
+  vehicleClass: VehicleUseClass,
+  financingStatus: FinancingStatus
 });
 var PropertyCoverageDetails = z.object({
-  propertyType: PropertyType.default("homeowner"),
+  propertyType: PropertyType,
   coverageForm: PropertyCoverageForm,
   settlementBasis: PropertySettlement,
   dwellingLimitCents: NonNegativeCents,
@@ -4671,7 +4677,7 @@ var PropertyCoverageDetails = z.object({
 var QuoteComponent = z.object({
   id: z.string().uuid().optional(),
   productLine: ProductLine,
-  assetId: z.string().uuid().optional(),
+  assetId: z.string().uuid().nullable().optional(),
   assetLabel: z.string().optional(),
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
@@ -4703,7 +4709,7 @@ var EngineQuote = z.object({
   paymentFrequency: PaymentFrequency.optional(),
   billingMethod: BillingMethod.optional(),
   distributionChannel: BrokerDirectPreference.optional(),
-  insurerFinancialRating: FinancialRating.optional()
+  insurerFinancialRating: InsurerFinancialRating.optional()
 });
 
 // ../schemas/src/recommendation.ts
@@ -4732,6 +4738,10 @@ var PersistedRecommendationOptionSchema = z.object({
   rank: z.number().int().positive(),
   auto_quote_id: z.string().uuid(),
   property_quote_id: z.string().uuid(),
+  auto_component_id: z.string().uuid(),
+  property_component_id: z.string().uuid(),
+  auto_asset_id: z.string().uuid(),
+  property_asset_id: z.string().uuid(),
   bundled: z.boolean(),
   total_cents: z.number().int().nonnegative(),
   net_savings_cents: z.number().int(),
@@ -4741,7 +4751,7 @@ var PersistedRecommendationOptionSchema = z.object({
   preference_alignment: PreferenceAlignmentSchema,
   deductible_total_cents: z.number().int().nonnegative(),
   underwriting_condition_count: z.number().int().nonnegative()
-});
+}).strict();
 var EngineRecommendationPersistencePayloadSchema = z.object({
   caseId: z.string().uuid(),
   actorProfileId: z.string().uuid(),
@@ -4750,29 +4760,31 @@ var EngineRecommendationPersistencePayloadSchema = z.object({
     version: z.number().int().positive(),
     schemaVersion: z.literal(2),
     jurisdiction: z.literal("AB")
-  }),
+  }).strict(),
   switchingPreferences: z.object({
     id: z.string().uuid(),
     version: z.number().int().positive()
-  }),
+  }).strict(),
   engine: z.object({
     version: z.string().min(1),
     sourceHash: HexDigest
-  }),
+  }).strict(),
   inputSnapshotJson: z.record(z.unknown()),
   inputSnapshotDigest: HexDigest,
+  inputSnapshotCanonical: z.string().min(1),
   recommendedOption: PersistedRecommendationOptionSchema,
   rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
   rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
   engineOutputJson: z.record(z.unknown()),
   engineOutputDigest: HexDigest,
+  engineOutputCanonical: z.string().min(1),
   currentTotalCents: z.number().int().nonnegative(),
   proposedTotalCents: z.number().int().nonnegative(),
   netSavingsCents: z.number().int(),
   reasonCodes: z.array(z.string()),
   comparison: z.record(z.unknown()),
   disclosureVersion: z.string().default("v1")
-});
+}).strict();
 
 // ../schemas/src/entities.ts
 var uuid = z.string().uuid();
@@ -4983,6 +4995,7 @@ function evaluateMonetaryRule({
 
 // src/preference-evaluator.ts
 var autoFormCapabilities = {
+  unknown: [],
   liability_only: ["third_party_liability"],
   collision: ["third_party_liability", "collision_damage"],
   comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
@@ -4995,12 +5008,14 @@ var autoFormCapabilities = {
   ]
 };
 var propertyFormCapabilities = {
+  unknown: [],
   basic: ["fire_lightning"],
   named_perils: ["fire_lightning", "named_perils"],
   broad: ["fire_lightning", "named_perils", "broad_perils"],
   comprehensive: ["all_risks"]
 };
 var settlementRank = {
+  unknown: 0,
   actual_cash_value: 1,
   replacement_cost: 2,
   extended_replacement_cost: 3,
@@ -5377,6 +5392,7 @@ function pushWaterDeductibleViolations(result, reasonCodes, tooHigh, notExact, u
   pushDeductibleViolations(result, reasonCodes, tooHigh, notExact, unknown);
 }
 var autoFormCapabilities2 = {
+  unknown: [],
   liability_only: ["third_party_liability"],
   collision: ["third_party_liability", "collision_damage"],
   comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
@@ -5389,12 +5405,14 @@ var autoFormCapabilities2 = {
   ]
 };
 var propertyFormCapabilities2 = {
+  unknown: [],
   basic: ["fire_lightning"],
   named_perils: ["fire_lightning", "named_perils"],
   broad: ["fire_lightning", "named_perils", "broad_perils"],
   comprehensive: ["all_risks"]
 };
 var settlementRank2 = {
+  unknown: 0,
   actual_cash_value: 1,
   replacement_cost: 2,
   extended_replacement_cost: 3,
@@ -5891,7 +5909,7 @@ function validateEngineInput(input) {
           };
         }
         autoSeen = true;
-        autoIds.add(component.assetId);
+        if (component.assetId) autoIds.add(component.assetId);
       }
       if (component.productLine === "property") {
         if (propertySeen) {
@@ -5901,7 +5919,7 @@ function validateEngineInput(input) {
           };
         }
         propertySeen = true;
-        propertyIds.add(component.assetId);
+        if (component.assetId) propertyIds.add(component.assetId);
       }
     }
   }
@@ -6244,6 +6262,90 @@ function buildEngineInputFromSnapshot(snapshot) {
   return input;
 }
 
+// src/canonical.ts
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function sortPrimitives(a, b) {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b));
+}
+function isRecordArray(value) {
+  return value.length > 0 && value.every((x) => isPlainObject(x));
+}
+function sortByKey(items, key) {
+  return [...items].sort((a, b) => String(a[key]).localeCompare(String(b[key])));
+}
+function sortByPath(items) {
+  return [...items].sort((a, b) => JSON.stringify(a.path).localeCompare(JSON.stringify(b.path)));
+}
+function sortByRank(items) {
+  return [...items].sort((a, b) => a.rank - b.rank);
+}
+function canonicalizeForDigest(value) {
+  if (value === void 0) return void 0;
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    const canonicalized = value.map(canonicalizeForDigest).filter((x) => x !== void 0);
+    if (canonicalized.length === 0) return [];
+    if (isRecordArray(canonicalized)) {
+      const first2 = canonicalized[0];
+      if ("rank" in first2) {
+        return sortByRank(canonicalized).map(
+          canonicalizeForDigest
+        );
+      }
+      if ("id" in first2) {
+        return sortByKey(canonicalized, "id").map(canonicalizeForDigest);
+      }
+      if ("path" in first2) {
+        return sortByPath(canonicalized).map(
+          canonicalizeForDigest
+        );
+      }
+      if ("scope" in first2 && "item" in first2) {
+        return [...canonicalized].sort((a, b) => {
+          const scopeA = String(a.scope);
+          const scopeB = String(b.scope);
+          if (scopeA !== scopeB) return scopeA.localeCompare(scopeB);
+          return String(a.item).localeCompare(String(b.item));
+        }).map(canonicalizeForDigest);
+      }
+    }
+    if (canonicalized.every((x) => typeof x === "string" || typeof x === "number" || typeof x === "boolean" || x === null)) {
+      return [...canonicalized].sort(sortPrimitives);
+    }
+    return canonicalized;
+  }
+  const obj = value;
+  const sorted = {};
+  for (const key of Object.keys(obj).sort()) {
+    if (key === "generatedAt") continue;
+    const child = canonicalizeForDigest(obj[key]);
+    if (child !== void 0) {
+      sorted[key] = child;
+    }
+  }
+  return sorted;
+}
+function canonicalSerializeRecommendationInput(snapshot, engineVersion, engineSourceHash) {
+  const canonical = canonicalizeForDigest({
+    ...snapshot,
+    engineVersion,
+    engineSourceHash
+  });
+  return { canonicalJson: JSON.stringify(canonical) };
+}
+function canonicalSerializeRecommendationOutput(result, recommendedOption, rankedOptions, rejectedOptions) {
+  const canonical = canonicalizeForDigest({
+    incumbentTotalCents: result.incumbentTotalCents,
+    recommendedOption,
+    rankedOptions,
+    rejectedOptions
+  });
+  return { canonicalJson: JSON.stringify(canonical) };
+}
+
 // ../database/src/mandate-repository.ts
 var MandateLoadError = class extends Error {
   constructor(message, operation, resource, code) {
@@ -6395,8 +6497,8 @@ function first(arr) {
   return arr && arr.length > 0 ? arr[0] : void 0;
 }
 function toFinancialRating(value) {
-  const known = ["A_plus", "A", "A_minus", "B_plus", "B_or_lower"];
-  return known.includes(value) ? value : void 0;
+  const known = ["unknown", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"];
+  return known.includes(value) ? value : "unknown";
 }
 function toPaymentFrequency(value) {
   const known = ["monthly", "quarterly", "semi_annual", "annual"];
@@ -6495,7 +6597,7 @@ function toEngineQuote(q) {
     paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : void 0,
     billingMethod: billingMethod ? toBillingMethod(billingMethod) : void 0,
     distributionChannel,
-    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "any"
+    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "unknown"
   };
 }
 
@@ -6595,10 +6697,13 @@ export {
   QuoteComponent,
   SwitchingPreferencesV2,
   buildEngineInputFromSnapshot,
+  canonicalSerializeRecommendationInput,
+  canonicalSerializeRecommendationOutput,
+  canonicalizeForDigest,
   evaluateHousehold,
   loadRecommendationInputSnapshot
 };
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "0f39f39d395a0720bdbd34959e7b827612ff622c44a9bb500bfeed8b0f5cfdef";
+export const __AUTOPILOT_SOURCE_HASH__ = "1dcf8e7e1f8138a6541ad0a8aaa398017fb4ce2ac724b7a1ff0a9626e33ab8e1";
