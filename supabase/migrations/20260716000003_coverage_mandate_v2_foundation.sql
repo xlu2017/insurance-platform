@@ -46,6 +46,10 @@ create table if not exists property_mandate_overrides (
   unique (mandate_id, property_id)
 );
 
+-- Signed-in users receive baseline privileges; RLS policies constrain rows.
+grant usage on schema public to authenticated, service_role;
+grant select, insert, update, delete on household_coverage_mandates, vehicle_mandate_overrides, property_mandate_overrides to authenticated, service_role;
+
 -- Ensure only one current switching preferences row per household.
 create unique index if not exists idx_switching_preferences_current
   on switching_preferences (household_id)
@@ -379,10 +383,10 @@ begin
     true,
     coalesce((p_switching_preferences->>'switchOnlyAfterCustomerApproval')::boolean, true),
     coalesce((p_switching_preferences->>'allowBundleBreakup')::boolean, false),
-    coalesce((p_switching_preferences->>'minimumInsurerFinancialRating')::text, 'any'),
-    coalesce((p_switching_preferences->>'preferredPaymentFrequency')::text, 'annual'),
-    coalesce((p_switching_preferences->>'preferredBillingMethod')::text, 'automatic_bank'),
-    coalesce((p_switching_preferences->>'brokerDirectPreference')::text, 'indifferent'),
+    coalesce((p_switching_preferences->>'minimumInsurerFinancialRating')::financial_rating, 'any'),
+    coalesce((p_switching_preferences->>'preferredPaymentFrequency')::payment_frequency, 'annual'),
+    coalesce((p_switching_preferences->>'preferredBillingMethod')::billing_method, 'automatic_bank'),
+    coalesce((p_switching_preferences->>'brokerDirectPreference')::broker_direct_preference, 'indifferent'),
     true,
     v_user_id,
     v_user_id
