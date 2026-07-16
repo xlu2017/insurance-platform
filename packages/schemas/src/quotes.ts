@@ -3,6 +3,7 @@ import { NonNegativeCents, Cents } from "./money";
 import {
   ProductLine,
   QuoteState,
+  QuoteDataSource,
   QuoteValidationStatus,
   AutoCoverageForm,
   PropertyCoverageForm,
@@ -118,3 +119,56 @@ export const EngineQuote = z.object({
 export type EngineQuote = z.infer<typeof EngineQuote>;
 
 export const CentsDelta = Cents;
+
+export const QuoteValidationIssue = z.object({
+  path: z.array(z.string()),
+  code: z.string(),
+  expected: z.string().optional(),
+  received: z.unknown(),
+  message: z.string(),
+});
+export type QuoteValidationIssue = z.infer<typeof QuoteValidationIssue>;
+
+export const AutoCoverageDetailsDraft = AutoCoverageDetails;
+export type AutoCoverageDetailsDraft = z.infer<typeof AutoCoverageDetailsDraft>;
+
+export const PropertyCoverageDetailsDraft = PropertyCoverageDetails;
+export type PropertyCoverageDetailsDraft = z.infer<typeof PropertyCoverageDetailsDraft>;
+
+export const QuoteComponentDraft = z.discriminatedUnion("productLine", [
+  z.object({
+    componentId: z.string().uuid().optional(),
+    productLine: z.literal("auto"),
+    assetId: z.string().uuid(),
+    annualPremiumCents: NonNegativeCents,
+    coverage: AutoCoverageDetailsDraft,
+  }),
+  z.object({
+    componentId: z.string().uuid().optional(),
+    productLine: z.literal("property"),
+    assetId: z.string().uuid(),
+    annualPremiumCents: NonNegativeCents,
+    coverage: PropertyCoverageDetailsDraft,
+  }),
+]);
+export type QuoteComponentDraft = z.infer<typeof QuoteComponentDraft>;
+
+export const SaveCaseQuoteRequest = z
+  .object({
+    caseId: z.string().uuid(),
+    quoteId: z.string().uuid().optional(),
+    expectedVersion: z.number().int().nonnegative().optional(),
+    insurerId: z.string().uuid(),
+    state: QuoteState,
+    isIncumbent: z.boolean(),
+    expiresAt: z.string().datetime().nullable().optional(),
+    policyFeesCents: NonNegativeCents.default(0),
+    paymentFeesCents: NonNegativeCents.default(0),
+    bundleDiscountCents: NonNegativeCents.default(0),
+    cancellationChargeCents: NonNegativeCents.default(0),
+    underwritingConditions: z.array(z.string()).default([]),
+    dataSource: QuoteDataSource,
+    components: z.array(QuoteComponentDraft).min(1),
+  })
+  .strict();
+export type SaveCaseQuoteRequest = z.infer<typeof SaveCaseQuoteRequest>;

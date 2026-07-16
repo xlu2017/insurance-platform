@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { RecommendationInputSnapshot } from "@autopilot/schemas";
-import { EngineRecommendationPersistencePayloadSchema } from "@autopilot/schemas";
+import {
+  createDefaultHouseholdCoverageMandateV2,
+  createDefaultSwitchingPreferencesV2,
+  EngineRecommendationPersistencePayloadSchema,
+} from "@autopilot/schemas";
 import { bundleLossScenario, demoMandate } from "@autopilot/test-fixtures";
 import {
   canonicalizeForDigest,
@@ -15,21 +19,31 @@ const REC_AUTO_COMP = "20000000-0000-0000-0000-0000000000a1";
 const REC_PROP_COMP = "20000000-0000-0000-0000-0000000000a2";
 const ACTOR_ID = "30000000-0000-0000-0000-000000000001";
 
-const baseSnapshot = {
+const s = bundleLossScenario();
+const VALID_QUOTE_ID = "11111111-1111-1111-1111-111111111111";
+const validQuote = { ...s.altBBundle, id: VALID_QUOTE_ID };
+const baseSnapshot: RecommendationInputSnapshot = {
   caseId: "11111111-1111-1111-1111-111111111111",
   householdId: "22222222-2222-2222-2222-222222222222",
   mandateId: "33333333-3333-3333-3333-333333333333",
   mandateVersion: 1,
-  mandateSchemaVersion: 2 as const,
-  jurisdiction: "AB" as const,
+  mandateSchemaVersion: 2,
+  jurisdiction: "AB",
   switchingPreferencesId: "44444444-4444-4444-4444-444444444444",
   switchingPreferencesVersion: 1,
-  mandate: { jurisdiction: "AB" as const, vehicleDefaults: {}, propertyDefaults: {} },
-  switching: {},
+  mandate: createDefaultHouseholdCoverageMandateV2(),
+  switching: createDefaultSwitchingPreferencesV2(),
   assets: { vehicles: [], properties: [] },
-  quotes: [],
-  quoteSnapshot: [],
-} as unknown as RecommendationInputSnapshot;
+  quotes: [validQuote],
+  quoteSnapshot: [
+    {
+      id: VALID_QUOTE_ID,
+      updated_at: "2026-07-16T00:00:00Z",
+      version: 1,
+      is_incumbent: validQuote.isIncumbent,
+    },
+  ],
+};
 
 describe("canonicalization", () => {
   it("excludes generatedAt from the canonical form", () => {

@@ -8,6 +8,7 @@ import {
 export interface DbQuote {
   id: string;
   updated_at: string;
+  version: number;
   insurer_id: string;
   state: string;
   is_incumbent: boolean;
@@ -88,9 +89,17 @@ function validationErrorMessage(
 }
 
 function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageError {
-  const row = c.quote_coverages[0] ?? { coverage: {} };
-  const coverage = row.coverage ?? {};
-  const validationStatus = row.validation_status ?? "valid";
+  const row = c.quote_coverages.find((r) => r.validation_status !== "superseded");
+  if (!row) {
+    return {
+      quoteId: undefined,
+      componentId: c.id,
+      productLine: c.product_line,
+      message: "Quote component has no active coverage row",
+    };
+  }
+  const coverage = row.coverage;
+  const validationStatus = row.validation_status;
   const validationErrors = row.validation_errors ?? [];
 
   if (validationStatus !== "valid") {

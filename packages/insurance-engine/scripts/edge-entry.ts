@@ -21,6 +21,9 @@ export {
   AutoCoverageDetails,
   PropertyCoverageDetails,
   QuoteComponent,
+  QuoteComponentDraft,
+  QuoteValidationIssue,
+  SaveCaseQuoteRequest,
 } from "../../schemas/src/quotes.ts";
 export { QuoteDataSource } from "../../schemas/src/enums.ts";
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { EngineQuote } from "./quotes";
-import type { HouseholdCoverageMandateV2, SwitchingPreferencesV2 } from "./mandate-v2";
+import { EngineQuote } from "./quotes";
+import { HouseholdCoverageMandateV2, SwitchingPreferencesV2 } from "./mandate-v2";
 
 export interface HouseholdAssets {
   vehicles: Array<{ id: string }>;
@@ -20,14 +20,14 @@ export interface RecommendationInputSnapshot {
   switching: SwitchingPreferencesV2;
   assets: HouseholdAssets;
   quotes: EngineQuote[];
-  quoteSnapshot?: { id: string; updated_at: string; is_incumbent: boolean }[];
+  quoteSnapshot?: { id: string; updated_at: string; version: number; is_incumbent: boolean }[];
 }
 
 export interface CanonicalRecommendationInputSnapshot extends RecommendationInputSnapshot {
   caseId: string;
   householdId: string;
   generatedAt: string;
-  quoteSnapshot: { id: string; updated_at: string; is_incumbent: boolean }[];
+  quoteSnapshot: { id: string; updated_at: string; version: number; is_incumbent: boolean }[];
 }
 
 export interface PreferenceAlignmentDetail {
@@ -66,6 +66,48 @@ export interface PersistedRecommendationOption {
   deductible_total_cents: number;
   underwriting_condition_count: number;
 }
+
+export const QuoteSnapshotSchema = z
+  .object({
+    id: z.string().uuid(),
+    updated_at: z.string().datetime({ offset: true }),
+    version: z.number().int().nonnegative(),
+    is_incumbent: z.boolean(),
+  })
+  .strict();
+
+export const CanonicalComponentSnapshotSchema = z
+  .object({
+    id: z.string().uuid(),
+    productLine: z.enum(["auto", "property"]),
+    assetId: z.string().uuid(),
+    annualPremiumCents: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const CanonicalInsurerMetadataSnapshotSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string(),
+    financialStrengthRating: z.string(),
+    paymentFrequencies: z.array(z.string()),
+    billingMethods: z.array(z.string()),
+    distribution: z.string(),
+  })
+  .strict();
+
+export const CanonicalReasonDetailSchema = z
+  .object({
+    scope: z.string(),
+    quoteId: z.string().uuid().optional(),
+    componentId: z.string().uuid().optional(),
+    assetId: z.string().uuid().optional(),
+    field: z.string(),
+    expectedRule: z.string().optional(),
+    actualValue: z.unknown().optional(),
+    reasonCode: z.string(),
+  })
+  .strict();
 
 const HexDigest = z
   .string()
@@ -114,6 +156,42 @@ export const PersistedRecommendationOptionSchema = z
   })
   .strict();
 
+const CanonicalQuoteSnapshot = EngineQuote.strict();
+
+export const CanonicalRecommendationInputSnapshotSchema = z
+  .object({
+    caseId: z.string().uuid(),
+    householdId: z.string().uuid(),
+    mandateId: z.string().uuid(),
+    mandateVersion: z.number().int().positive(),
+    mandateSchemaVersion: z.literal(2),
+    jurisdiction: z.literal("AB"),
+    switchingPreferencesId: z.string().uuid(),
+    switchingPreferencesVersion: z.number().int().positive(),
+    assets: z
+      .object({
+        vehicles: z.array(z.object({ id: z.string().uuid() }).strict()),
+        properties: z.array(z.object({ id: z.string().uuid() }).strict()),
+      })
+      .strict(),
+    quotes: z.array(CanonicalQuoteSnapshot).min(1),
+    quoteSnapshot: z.array(QuoteSnapshotSchema).min(1),
+    mandate: HouseholdCoverageMandateV2,
+    switching: SwitchingPreferencesV2,
+    engineVersion: z.string(),
+    engineSourceHash: HexDigest,
+  })
+  .strict();
+
+export const CanonicalEngineOutputSchema = z
+  .object({
+    incumbentTotalCents: z.number().int().nonnegative(),
+    recommendedOption: PersistedRecommendationOptionSchema,
+    rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
+    rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
+  })
+  .strict();
+
 export const EngineRecommendationPersistencePayloadSchema = z
   .object({
     caseId: z.string().uuid(),
@@ -138,13 +216,13 @@ export const EngineRecommendationPersistencePayloadSchema = z
         sourceHash: HexDigest,
       })
       .strict(),
-    inputSnapshotJson: z.record(z.unknown()),
+    inputSnapshotJson: CanonicalRecommendationInputSnapshotSchema,
     inputSnapshotDigest: HexDigest,
     inputSnapshotCanonical: z.string().min(1),
     recommendedOption: PersistedRecommendationOptionSchema,
     rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
     rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
-    engineOutputJson: z.record(z.unknown()),
+    engineOutputJson: CanonicalEngineOutputSchema,
     engineOutputDigest: HexDigest,
     engineOutputCanonical: z.string().min(1),
     currentTotalCents: z.number().int().nonnegative(),

@@ -45,7 +45,7 @@ export async function loadRecommendationInputSnapshot(
     supabase
       .from("quotes")
       .select(
-        "id, updated_at, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))",
+        "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))",
       )
       .eq("case_id", caseId),
   ]);
@@ -115,6 +115,7 @@ export async function loadRecommendationInputSnapshot(
     quoteSnapshot: dbQuotes.map((q) => ({
       id: q.id,
       updated_at: q.updated_at,
+      version: q.version,
       is_incumbent: q.is_incumbent,
     })),
   };

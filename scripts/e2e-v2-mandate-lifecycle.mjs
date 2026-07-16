@@ -200,46 +200,75 @@ async function ensureSingleAssetPerLine() {
   return { keepVehicle, keepProperty };
 }
 
-async function updateAutoLiabilityForCase(cents, actorProfileId) {
+const operationsToken = createAccessToken(
+  { sub: USERS.operations.id, appRole: USERS.operations.role, email: USERS.operations.email },
+  JWT_SECRET,
+  3600,
+);
+
+async function loadQuoteAggregate(quoteId) {
+  const { data: quote, error: quoteErr } = await serviceClient
+    .from("quotes")
+    .select("*")
+    .eq("id", quoteId)
+    .single();
+  if (quoteErr) throw quoteErr;
+  const { data: components, error: compErr } = await serviceClient
+    .from("quote_policy_components")
+    .select("*, quote_coverages(*)")
+    .eq("quote_id", quoteId);
+  if (compErr) throw compErr;
+  return { quote, components: components || [] };
+}
+
+async function saveCaseQuote(quoteId, components, dataSource) {
+  const { quote } = await loadQuoteAggregate(quoteId);
+  const payloadComponents = components.map((c) => {
+    const coverageRow = c.quote_coverages?.find((r) => r.validation_status !== "superseded");
+    const coverage = coverageRow ? { ...coverageRow.coverage } : {};
+    return {
+      componentId: c.id,
+      productLine: c.product_line,
+      assetId: c.asset_id,
+      annualPremiumCents: c.annual_premium_cents,
+      coverage,
+    };
+  });
+  const res = await invokeEdgeFunction(operationsToken, "save-case-quote", {
+    caseId,
+    quoteId: quote.id,
+    expectedVersion: quote.version,
+    insurerId: quote.insurer_id,
+    state: quote.state,
+    isIncumbent: quote.is_incumbent,
+    expiresAt: quote.expires_at,
+    policyFeesCents: quote.policy_fees_cents || 0,
+    paymentFeesCents: quote.payment_fees_cents || 0,
+    bundleDiscountCents: quote.bundle_discount_cents || 0,
+    cancellationChargeCents: quote.cancellation_charge_cents || 0,
+    underwritingConditions: quote.underwriting_conditions || [],
+    dataSource,
+    components: payloadComponents,
+  });
+  if (res.error) throw new Error(`save-case-quote failed: ${res.error.message}`);
+  return res.data;
+}
+
+async function updateAutoLiabilityForCase(cents) {
   const { data: quotes, error: quoteErr } = await serviceClient
     .from("quotes")
     .select("id")
     .eq("case_id", caseId);
   if (quoteErr) throw quoteErr;
-  const quoteIds = (quotes || []).map((q) => q.id);
-  if (quoteIds.length === 0) return;
-  const { data: components, error } = await serviceClient
-    .from("quote_policy_components")
-    .select("id")
-    .eq("product_line", "auto")
-    .in("quote_id", quoteIds);
-  if (error) throw error;
-  for (const c of components || []) {
-    const { data: coverage, error: covErr } = await serviceClient
-      .from("quote_coverages")
-      .select("id, coverage")
-      .eq("quote_component_id", c.id)
-      .single();
-    if (covErr) throw covErr;
-    const updated = { ...coverage.coverage, thirdPartyLiabilityCents: cents };
-    const { error: updErr } = await serviceClient
-      .from("quote_coverages")
-      .update({ coverage: updated })
-      .eq("id", coverage.id);
-    if (updErr) throw updErr;
-    // Mark the modified component as valid in a separate update so the
-    // coverage-changed trigger does not immediately reset it to draft.
-    const { error: valErr } = await serviceClient
-      .from("quote_coverages")
-      .update({
-        validation_status: "valid",
-        validated_at: new Date().toISOString(),
-        validated_by: actorProfileId,
-        coverage_schema_version: 2,
-        data_source: "e2e_test",
-      })
-      .eq("id", coverage.id);
-    if (valErr) throw valErr;
+  for (const quote of quotes || []) {
+    const { components } = await loadQuoteAggregate(quote.id);
+    const updatedComponents = components.map((c) => {
+      if (c.product_line !== "auto") return c;
+      const coverageRow = c.quote_coverages?.find((r) => r.validation_status !== "superseded");
+      const updatedCoverage = coverageRow ? { ...coverageRow.coverage, thirdPartyLiabilityCents: cents } : {};
+      return { ...c, quote_coverages: [{ ...coverageRow, coverage: updatedCoverage }] };
+    });
+    await saveCaseQuote(quote.id, updatedComponents, "manual_entry");
   }
 }
 
@@ -332,7 +361,7 @@ async function main() {
   }
 
   // 2. Update auto quote coverages to meet the new 2.5M liability requirement.
-  await updateAutoLiabilityForCase(250000000, USERS.operations.id);
+  await updateAutoLiabilityForCase(250000000);
   console.log("2. Updated auto quote coverages to 2.5M");
 
   // 3. Operations generates a recommendation via the Edge Function.
@@ -391,7 +420,7 @@ async function main() {
   console.log("8. Stale recommendation approval rejected:", staleApproval.error.message);
 
   // 9. Update quotes to meet the new 3M liability and regenerate.
-  await updateAutoLiabilityForCase(300000000, USERS.operations.id);
+  await updateAutoLiabilityForCase(300000000);
   const rec2Result = await invokeGenerateRecommendation();
   if (rec2Result.error) throw new Error(`second recommendation-generator failed: ${rec2Result.error.message}`);
   assert(rec2Result.data && rec2Result.data.recommendationId, "second recommendation did not return id");
