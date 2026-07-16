@@ -100,7 +100,7 @@ jobs:
         run: supabase db reset
 
       - name: Capture Supabase status
-        run: supabase status > /tmp/supabase-status.json 2>/dev/null
+        run: supabase status -o json > /tmp/supabase-status.json 2>/dev/null
 
       - name: Create admin env file
         run: |
