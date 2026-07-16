@@ -1101,24 +1101,42 @@ export type Database = {
       quote_coverages: {
         Row: {
           coverage: Json;
+          coverage_schema_version: number;
           created_at: string;
+          data_source: string | null;
           id: string;
           quote_component_id: string;
           updated_at: string;
+          validated_at: string | null;
+          validated_by: string | null;
+          validation_errors: Json;
+          validation_status: Database["public"]["Enums"]["quote_validation_status"];
         };
         Insert: {
           coverage: Json;
+          coverage_schema_version?: number;
           created_at?: string;
+          data_source?: string | null;
           id?: string;
           quote_component_id: string;
           updated_at?: string;
+          validated_at?: string | null;
+          validated_by?: string | null;
+          validation_errors?: Json;
+          validation_status?: Database["public"]["Enums"]["quote_validation_status"];
         };
         Update: {
           coverage?: Json;
+          coverage_schema_version?: number;
           created_at?: string;
+          data_source?: string | null;
           id?: string;
           quote_component_id?: string;
           updated_at?: string;
+          validated_at?: string | null;
+          validated_by?: string | null;
+          validation_errors?: Json;
+          validation_status?: Database["public"]["Enums"]["quote_validation_status"];
         };
         Relationships: [
           {
@@ -1126,6 +1144,13 @@ export type Database = {
             columns: ["quote_component_id"];
             isOneToOne: false;
             referencedRelation: "quote_policy_components";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "quote_coverages_validated_by_fkey";
+            columns: ["validated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -2423,6 +2448,7 @@ export type Database = {
         | "no_response"
         | "cancelled";
       quote_state: "estimate" | "conditional" | "bindable" | "expired" | "rejected" | "selected";
+      quote_validation_status: "draft" | "incomplete" | "valid" | "invalid" | "superseded";
       recommendation_status:
         | "draft"
         | "awaiting_review"
@@ -2647,6 +2673,7 @@ export const Constants = {
         "cancelled",
       ],
       quote_state: ["estimate", "conditional", "bindable", "expired", "rejected", "selected"],
+      quote_validation_status: ["draft", "incomplete", "valid", "invalid", "superseded"],
       recommendation_status: [
         "draft",
         "awaiting_review",

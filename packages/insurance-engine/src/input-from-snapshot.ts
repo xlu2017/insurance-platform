@@ -46,7 +46,21 @@ function validateMandateAndSwitching(
   return null;
 }
 
+function quoteValidationErrorMessage(component: QuoteComponent): string {
+  if (!component.validationErrors || component.validationErrors.length === 0)
+    return "validation failed";
+  return component.validationErrors.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ");
+}
+
 function validateQuoteCoverage(component: QuoteComponent): SnapshotInputError | null {
+  if (component.validationStatus !== "valid") {
+    return {
+      code: "QUOTE_NOT_USABLE",
+      message: `Quote component is ${component.validationStatus}: ${quoteValidationErrorMessage(component)}`,
+      details: { componentId: component.id },
+    };
+  }
+
   if (component.productLine === "auto") {
     if (component.auto === null) {
       return {

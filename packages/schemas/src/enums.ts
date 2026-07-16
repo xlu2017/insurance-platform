@@ -48,6 +48,16 @@ export const quoteStates = [
 export const QuoteState = z.enum(quoteStates);
 export type QuoteState = z.infer<typeof QuoteState>;
 
+export const quoteValidationStatuses = [
+  "draft",
+  "incomplete",
+  "valid",
+  "invalid",
+  "superseded",
+] as const;
+export const QuoteValidationStatus = z.enum(quoteValidationStatuses);
+export type QuoteValidationStatus = z.infer<typeof QuoteValidationStatus>;
+
 export const switchStates = [
   "customer_approved",
   "replacement_pending",

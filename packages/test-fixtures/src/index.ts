@@ -132,6 +132,8 @@ export function autoComponent(
     annualPremiumCents,
     auto: { ...standardAutoCoverage, ...overrides },
     property: null,
+    validationStatus: "valid",
+    validationErrors: [],
   };
 }
 
@@ -145,6 +147,8 @@ export function propertyComponent(
     annualPremiumCents,
     auto: null,
     property: { ...standardPropertyCoverage, ...overrides },
+    validationStatus: "valid",
+    validationErrors: [],
   };
 }
 

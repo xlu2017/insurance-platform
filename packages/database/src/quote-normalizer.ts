@@ -32,7 +32,13 @@ export interface DbQuotePolicyComponent {
   product_line: "auto" | "property";
   annual_premium_cents: number;
   asset_id: string | null;
-  quote_coverages: { coverage: Record<string, unknown> }[];
+  quote_coverages: {
+    coverage: Record<string, unknown>;
+    validation_status?: string;
+    validation_errors?: { path: string[]; code: string; message: string }[];
+    coverage_schema_version?: number;
+    data_source?: string;
+  }[];
 }
 
 export interface QuoteCoverageError {
@@ -48,10 +54,10 @@ function first<T>(arr: T[] | undefined | null): T | undefined {
 }
 
 function toFinancialRating(value: string): EngineQuote["insurerFinancialRating"] {
-  const known = ["A_plus", "A", "A_minus", "B_plus", "B_or_lower", "any"] as const;
+  const known = ["A_plus", "A", "A_minus", "B_plus", "B_or_lower"] as const;
   return known.includes(value as (typeof known)[number])
-    ? (value as (typeof known)[number])
-    : "any";
+    ? (value as EngineQuote["insurerFinancialRating"])
+    : undefined;
 }
 
 function toPaymentFrequency(value: string): EngineQuote["paymentFrequency"] {
@@ -75,8 +81,26 @@ function formatZodIssues(
   return issues.map((issue) => `${basePath}.${issue.path.join(".")}: ${issue.message}`).join("; ");
 }
 
+function validationErrorMessage(
+  errors: { path?: string[]; code?: string; message: string }[],
+): string {
+  return errors.map((e) => `${e.path?.join(".") ?? ""}: ${e.message}`).join("; ");
+}
+
 function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageError {
-  const coverage = c.quote_coverages[0]?.coverage ?? {};
+  const row = c.quote_coverages[0] ?? { coverage: {} };
+  const coverage = row.coverage ?? {};
+  const validationStatus = row.validation_status ?? "valid";
+  const validationErrors = row.validation_errors ?? [];
+
+  if (validationStatus !== "valid") {
+    return {
+      quoteId: undefined,
+      componentId: c.id,
+      productLine: c.product_line,
+      message: `Quote component is ${validationStatus}: ${validationErrorMessage(validationErrors)}`,
+    };
+  }
 
   if (c.product_line === "auto") {
     const parsed = AutoCoverageDetails.safeParse(coverage);
@@ -95,6 +119,8 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
       annualPremiumCents: c.annual_premium_cents,
       auto: parsed.data,
       property: null,
+      validationStatus,
+      validationErrors,
     };
   }
 
@@ -114,6 +140,8 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
     annualPremiumCents: c.annual_premium_cents,
     auto: null,
     property: parsed.data,
+    validationStatus,
+    validationErrors,
   };
 }
 
@@ -135,7 +163,7 @@ export function toEngineQuote(q: DbQuote): EngineQuote | QuoteCoverageError {
       ? "broker"
       : insurer?.distribution === "direct"
         ? "direct"
-        : "indifferent";
+        : undefined;
 
   return {
     id: q.id,

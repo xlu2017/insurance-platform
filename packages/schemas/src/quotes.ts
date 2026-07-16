@@ -3,6 +3,7 @@ import { NonNegativeCents, Cents } from "./money";
 import {
   ProductLine,
   QuoteState,
+  QuoteValidationStatus,
   AutoCoverageForm,
   PropertyCoverageForm,
   PropertySettlement,
@@ -81,6 +82,16 @@ export const QuoteComponent = z.object({
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
   property: PropertyCoverageDetails.nullable(),
+  validationStatus: QuoteValidationStatus.default("valid"),
+  validationErrors: z
+    .array(
+      z.object({
+        path: z.array(z.string()),
+        code: z.string(),
+        message: z.string(),
+      }),
+    )
+    .default([]),
 });
 export type QuoteComponent = z.infer<typeof QuoteComponent>;
 
