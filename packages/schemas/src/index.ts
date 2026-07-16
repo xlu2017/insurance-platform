@@ -2,5 +2,7 @@ export * from "./enums";
 export * from "./state-machines";
 export * from "./money";
 export * from "./mandate";
+export * from "./mandate-v2";
+export * from "./mandate-adapters";
 export * from "./quotes";
 export * from "./entities";
