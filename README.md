@@ -23,10 +23,10 @@ packages/
   config/              Shared ESLint config
   test-fixtures/       Deterministic engine fixtures, incl. the bundle-loss scenario
 supabase/
-  migrations/          Schema, triggers, RLS
+  migrations/          Schema, triggers, RLS and remediation migrations
   functions/           Edge Functions (Stripe webhook, checkout, quote-request email, recommendation generator)
   seed.sql             Demo users, insurers, household and active case
-  tests/               pgTAP tests for RLS and state-machine guards
+  tests/               pgTAP tests for RLS, state-machine guards, security and workflow RPCs
 docs/                  Architecture, data model, security, demo, deployment, regulatory, roadmap
 ```
 
@@ -77,7 +77,9 @@ pnpm test                 # unit tests (schemas, engine incl. bundle-loss scenar
 pnpm typecheck            # strict TypeScript across the workspace
 pnpm lint
 pnpm format:check
-supabase test db          # pgTAP: RLS isolation, transition guards, audit immutability
+pnpm db:types             # regenerate packages/database/src/database.types.ts from local Supabase
+pnpm db:types:check       # fail if generated database types are out of sync
+supabase test db          # pgTAP: RLS isolation, transition guards, audit immutability, security and workflow RPCs
 pnpm --filter @autopilot/admin build
 pnpm --filter @autopilot/mobile expo:doctor
 ```

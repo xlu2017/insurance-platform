@@ -33,7 +33,8 @@ screen, the recommendation screen, and the admin console footer:
 
 - Customer approval is mandatory for every switch (`customer_approval_required` is constrained
   true in the schema).
-- Recommendations cannot be published without a reviewer approval row (`licensed_review` state).
+- Recommendations cannot be published to a customer without a licensed reviewer reviewing them in
+  the `licensed_review` state.
 - All recommendation metadata (quote versions, mandate version, disclosure version, approval
   timestamps) is retained for auditability.
 - Seed data uses only fictional insurer names.

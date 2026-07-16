@@ -13,11 +13,15 @@
 
 - One role per user (`customer`, `operations`, `reviewer`, `admin`) stored in `profiles` and read
   through a `security definer` helper (`app_role()`), never from client-editable claims.
+- New signups are always forced to `customer` in `handle_new_user()`; staff roles can only be assigned
+  by the service-role `assign_staff_role()` RPC invoked from a trusted backend context.
 - Customers: only their own household data (ownership or membership).
 - Operations: cases assigned to them (`case_assignments`); admins see everything.
 - Reviewers: cases in review states plus their approvals.
-- Customers can read quotes and published recommendations but can never write them; recommendation
-  publication requires a licensed reviewer approval row.
+- Customers can read quotes and published recommendations but can never write them; workflow
+  mutations (recommendation approval, decline, review, switch advancement and support questions) must
+  go through `security definer` RPCs. Direct `update` on `optimization_cases`, `recommendations`,
+  `switch_events` and related tables is blocked by RLS for non-staff callers.
 
 ## Sensitive data handling
 
@@ -32,7 +36,9 @@
 ## Auditability
 
 `audit_events` is append-only: update/delete are revoked and a trigger raises on any attempt.
-All state transitions write audit rows.
+`audit_events` insert is restricted to staff through RLS; all client-side audit inserts were removed
+and replaced with database triggers or transactional `security definer` RPCs.
+All state transitions and workflow actions write audit rows.
 
 ## Secrets
 
@@ -44,6 +50,13 @@ All state transitions write audit rows.
 
 Rotate the affected Supabase keys, revoke sessions via Auth admin, review `audit_events` and
 Postgres logs for the affected window, and notify affected users. A fuller runbook is roadmap work.
+
+## Type safety
+
+The `Database` type in `packages/database/src/database.types.ts` is generated from the local
+Supabase schema (`pnpm db:types`) and the `db:types:check` script runs in CI. Both mobile and admin
+apps use this type with `createClient<Database>` / `createBrowserClient<Database>` so column and
+enum mismatches are caught at compile time.
 
 ## Known MVP limitations
 

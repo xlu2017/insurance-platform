@@ -20,7 +20,9 @@
 
 4. **Do not run `supabase/seed.sql` in production** — it creates demo credentials. Seed insurers
    through the admin console instead.
-5. In Auth settings enable email confirmation and configure the mobile redirect URL.
+5. Staff accounts must be created through the `assign_staff_role` service-role RPC from a trusted
+   context; signup metadata cannot escalate a user to `operations`, `reviewer` or `admin`.
+6. In Auth settings enable email confirmation and configure the mobile redirect URL.
 
 ## Admin console
 

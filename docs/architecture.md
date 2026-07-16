@@ -30,8 +30,12 @@ flowchart LR
 
 - **State machines defined once, enforced twice.** Allowed transitions for cases, quote requests,
   quotes and switches live in `packages/schemas/src/state-machines.ts` and are re-implemented as
-  Postgres triggers. Clients cannot skip licensed review or cancel an incumbent policy before
-  replacement coverage is confirmed, even with direct API access.
+  `security definer` Postgres triggers. Clients cannot skip licensed review or cancel an incumbent
+  policy before replacement coverage is confirmed, even with direct API access.
+- **Workflow authorization is RPC-based.** Customer and staff workflow mutations (recommendation
+  approve/decline, licensed review, switch advancement, support questions) are exposed only as
+  `security definer` functions. Direct `update`/`insert` on workflow tables is denied to
+  `authenticated` by RLS; the RPCs verify household membership, role and state before changing data.
 - **Deterministic engine.** `packages/insurance-engine` is pure and side-effect free. It builds
   every bundled/split household configuration from usable quotes, always includes the incumbent,
   applies hard mandate constraints, computes total cost in integer cents (premiums + fees +
@@ -43,7 +47,13 @@ flowchart LR
 - **Money and time.** All money is integer Canadian cents. All timestamps are UTC; UIs render in
   `America/Edmonton`.
 - **Audit.** Every state transition and sensitive mutation writes an `audit_events` row; the table
-  is append-only via trigger and revoked privileges.
+  is append-only via trigger and revoked privileges. Audit rows are never created by client code.
+- **Type safety from generated schema.** `packages/database/src/database.types.ts` is generated
+  with `pnpm db:types` from the local Supabase schema and consumed by `createClient<Database>` in
+  both apps; `db:types:check` runs in CI to prevent drift.
+- **Payments idempotency.** The Stripe webhook endpoint verifies signatures and delegates
+  processing to the `process_stripe_event` RPC, which records every event, handles retries and
+  never double-applies a subscription update.
 
 ## Case flow
 
@@ -73,5 +83,5 @@ stateDiagram-v2
 | `apps/admin`                | Operations console: dashboard, case queue, case detail (11 tabs), quote entry, comparison, licensed review, switching |
 | `packages/schemas`          | Zod schemas, enums, transition maps                                                                                   |
 | `packages/insurance-engine` | Comparison and ranking engine + unit tests                                                                            |
-| `packages/database`         | Supabase client config and provider adapters                                                                          |
+| `packages/database`         | Supabase typed client (`Database`), generated types and provider adapters                                             |
 | `packages/test-fixtures`    | Deterministic fixtures including the mandatory bundle-loss scenario                                                   |

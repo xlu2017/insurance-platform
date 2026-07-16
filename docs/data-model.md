@@ -50,12 +50,15 @@ erDiagram
   disclosure version).
 - **Execution**: `switch_events` with `replacement_confirmed_at` / `incumbent_cancelled_at`;
   a trigger blocks cancellation states before replacement confirmation.
-- **Billing & comms**: `subscriptions`, `consents`, `notifications`, `email_outbox`,
-  `stripe_webhook_events` (idempotency).
+- **Billing & comms**: `subscriptions` (one per profile), `consents`, `notifications`,
+  `email_outbox`, `quote_request_sends` (DB-backed send audit/rate limit), `stripe_webhook_events`
+  (idempotency: `status`, `attempt_count`, `last_error`, `completed_at`).
 - **Audit**: `audit_events` — append-only (trigger + revoked update/delete).
 
 ## State machines
 
-Enforced by triggers `validate_case_transition`, `validate_quote_request_transition`,
-`validate_quote_transition`, `validate_switch_transition`; the same maps are exported from
-`@autopilot/schemas` for clients and tests. See `docs/architecture.md` for the case diagram.
+Enforced by `security definer` triggers `validate_case_transition`,
+`validate_quote_request_transition`, `validate_quote_transition`, `validate_switch_transition`;
+the same maps are exported from `@autopilot/schemas` for clients and tests. Workflow mutations are
+performed by `security definer` RPCs that validate the transition before applying it. See
+`docs/architecture.md` for the case diagram.
