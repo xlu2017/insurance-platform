@@ -922,23 +922,21 @@ function validateEngineInput(input: EngineInput): { code: ReasonCode; message: s
       }
     }
 
-    if (
-      input.assets.vehicles.length > 0 &&
-      ![...autoIds].some((id) => id && vehicleIdSet.has(id))
-    ) {
-      return {
-        code: "MISSING_INSURED_ASSET",
-        message: "No auto component matches the insured vehicle",
-      };
+    for (const vehicle of input.assets.vehicles) {
+      if (![...autoIds].some((id) => id === vehicle.id)) {
+        return {
+          code: "MISSING_INSURED_ASSET",
+          message: `No auto component matches the insured vehicle ${vehicle.id}`,
+        };
+      }
     }
-    if (
-      input.assets.properties.length > 0 &&
-      ![...propertyIds].some((id) => id && propertyIdSet.has(id))
-    ) {
-      return {
-        code: "MISSING_INSURED_ASSET",
-        message: "No property component matches the insured property",
-      };
+    for (const property of input.assets.properties) {
+      if (![...propertyIds].some((id) => id === property.id)) {
+        return {
+          code: "MISSING_INSURED_ASSET",
+          message: `No property component matches the insured property ${property.id}`,
+        };
+      }
     }
 
     for (const key of Object.keys(input.mandate.vehicleOverrides)) {
