@@ -51,12 +51,14 @@ erDiagram
   rules; `customer_approval_required` is constrained true and `material_coverage_reductions_allowed`
   is constrained false. The legacy `coverage_requirements` table is still readable for backward
   compatibility but new writes go through `save_household_mandate_v2`.
-- **Market**: `insurers` (8 fictional carriers), `insurer_channels`.
+- **Market**: `insurers` (8 fictional carriers, versioned with `version`/`versioned_at` so metadata changes invalidate prior recommendations), `insurer_channels`.
 - **Workflow**: `optimization_cases`, `case_assignments`, `quote_requests`, `quotes`,
-  `quote_policy_components`, `quote_coverages`. `quote_coverages` carries
+  `quote_policy_components`, `quote_coverages`. `quote_coverages` carries `raw_coverage` (operator
+  input), `normalized_coverage` (engine-ready, set only after successful validation),
   `validation_status`, `validation_errors`, `validated_at`, `validated_by`,
   `coverage_schema_version`, and `data_source`; only `validation_status = 'valid'` rows feed the
-  engine. `customer_questions`.
+  engine. `quote_readiness` is a read-only aggregate view that reports whether a quote is `ready`,
+  `incomplete`, `invalid`, `expired`, `no_components`, or `unusable`. `customer_questions`.
 - **Decision**: `recommendations` (versions, quote ids, mandate version, reason codes,
   comparison JSON, `input_snapshot_json`, `input_snapshot_digest`, `engine_output_json`,
   `engine_output_digest`, `rejected_options_json`), `recommendation_options`
