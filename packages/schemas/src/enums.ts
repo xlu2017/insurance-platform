@@ -189,7 +189,13 @@ export const propertyTypes = [
 export const PropertyType = z.enum(propertyTypes);
 export type PropertyType = z.infer<typeof PropertyType>;
 
-export const propertyCoverageForms = ["unknown", "comprehensive", "broad", "named_perils", "basic"] as const;
+export const propertyCoverageForms = [
+  "unknown",
+  "comprehensive",
+  "broad",
+  "named_perils",
+  "basic",
+] as const;
 export const PropertyCoverageForm = z.enum(propertyCoverageForms);
 export type PropertyCoverageForm = z.infer<typeof PropertyCoverageForm>;
 
@@ -203,7 +209,13 @@ export const propertySettlements = [
 export const PropertySettlement = z.enum(propertySettlements);
 export type PropertySettlement = z.infer<typeof PropertySettlement>;
 
-export const vehicleUseClasses = ["personal", "commercial", "classic", "modified", "unknown"] as const;
+export const vehicleUseClasses = [
+  "personal",
+  "commercial",
+  "classic",
+  "modified",
+  "unknown",
+] as const;
 export const VehicleUseClass = z.enum(vehicleUseClasses);
 export type VehicleUseClass = z.infer<typeof VehicleUseClass>;
 
@@ -223,13 +235,29 @@ export const brokerDirectPreferences = ["broker", "direct", "indifferent"] as co
 export const BrokerDirectPreference = z.enum(brokerDirectPreferences);
 export type BrokerDirectPreference = z.infer<typeof BrokerDirectPreference>;
 
-export const insurerFinancialRatings = ["unknown", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"] as const;
+export const insurerFinancialRatings = [
+  "unknown",
+  "A_plus",
+  "A",
+  "A_minus",
+  "B_plus",
+  "B_or_lower",
+] as const;
 export const InsurerFinancialRating = z.enum(insurerFinancialRatings);
 export type InsurerFinancialRating = z.infer<typeof InsurerFinancialRating>;
 
-export const customerMinimumInsurerFinancialRatings = ["any", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"] as const;
+export const customerMinimumInsurerFinancialRatings = [
+  "any",
+  "A_plus",
+  "A",
+  "A_minus",
+  "B_plus",
+  "B_or_lower",
+] as const;
 export const CustomerMinimumInsurerFinancialRating = z.enum(customerMinimumInsurerFinancialRatings);
-export type CustomerMinimumInsurerFinancialRating = z.infer<typeof CustomerMinimumInsurerFinancialRating>;
+export type CustomerMinimumInsurerFinancialRating = z.infer<
+  typeof CustomerMinimumInsurerFinancialRating
+>;
 
 /** @deprecated Use InsurerFinancialRating or CustomerMinimumInsurerFinancialRating. */
 export const FinancialRating = CustomerMinimumInsurerFinancialRating;

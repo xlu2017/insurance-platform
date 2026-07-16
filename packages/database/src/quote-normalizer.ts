@@ -181,7 +181,9 @@ export function toEngineQuote(q: DbQuote): EngineQuote | QuoteCoverageError {
     paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : undefined,
     billingMethod: billingMethod ? toBillingMethod(billingMethod) : undefined,
     distributionChannel,
-    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "unknown",
+    insurerFinancialRating: insurer
+      ? toFinancialRating(insurer.financial_strength_rating)
+      : "unknown",
   };
 }
 

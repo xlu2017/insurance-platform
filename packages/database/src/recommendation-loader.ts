@@ -112,6 +112,10 @@ export async function loadRecommendationInputSnapshot(
     switching: mandateResult.switching,
     assets,
     quotes: engineQuotes,
-    quoteSnapshot: dbQuotes.map((q) => ({ id: q.id, updated_at: q.updated_at, is_incumbent: q.is_incumbent })),
+    quoteSnapshot: dbQuotes.map((q) => ({
+      id: q.id,
+      updated_at: q.updated_at,
+      is_incumbent: q.is_incumbent,
+    })),
   };
 }

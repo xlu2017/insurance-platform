@@ -1,4 +1,7 @@
-import type { PersistedRecommendationOption, RecommendationInputSnapshot } from "@autopilot/schemas";
+import type {
+  PersistedRecommendationOption,
+  RecommendationInputSnapshot,
+} from "@autopilot/schemas";
 import type { EngineResult } from "./types.ts";
 
 interface CanonicalizableObject {
@@ -62,21 +65,28 @@ export function canonicalizeForDigest(value: unknown): unknown {
         return sortByKey(canonicalized, "id").map(canonicalizeForDigest);
       }
       if ("path" in first) {
-        return sortByPath(canonicalized as Array<{ path: unknown[] } & Record<string, unknown>>).map(
-          canonicalizeForDigest,
-        );
+        return sortByPath(
+          canonicalized as Array<{ path: unknown[] } & Record<string, unknown>>,
+        ).map(canonicalizeForDigest);
       }
       if ("scope" in first && "item" in first) {
-        return [...canonicalized].sort((a, b) => {
-          const scopeA = String(a.scope);
-          const scopeB = String(b.scope);
-          if (scopeA !== scopeB) return scopeA.localeCompare(scopeB);
-          return String(a.item).localeCompare(String(b.item));
-        }).map(canonicalizeForDigest);
+        return [...canonicalized]
+          .sort((a, b) => {
+            const scopeA = String(a.scope);
+            const scopeB = String(b.scope);
+            if (scopeA !== scopeB) return scopeA.localeCompare(scopeB);
+            return String(a.item).localeCompare(String(b.item));
+          })
+          .map(canonicalizeForDigest);
       }
     }
 
-    if (canonicalized.every((x) => typeof x === "string" || typeof x === "number" || typeof x === "boolean" || x === null)) {
+    if (
+      canonicalized.every(
+        (x) =>
+          typeof x === "string" || typeof x === "number" || typeof x === "boolean" || x === null,
+      )
+    ) {
       return [...canonicalized].sort(sortPrimitives);
     }
 
