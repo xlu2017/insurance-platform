@@ -1,11 +1,13 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
 // source-hash: 27a70541f2219a519586359e38abe699101057158a6237391e9e63d51164d802
 
+
 // ../../node_modules/zod/lib/index.mjs
 var util;
-(function (util2) {
+(function(util2) {
   util2.assertEqual = (val) => val;
-  function assertIs(_arg) {}
+  function assertIs(_arg) {
+  }
   util2.assertIs = assertIs;
   function assertNever(_x) {
     throw new Error();
@@ -27,34 +29,29 @@ var util;
     return util2.objectValues(filtered);
   };
   util2.objectValues = (obj) => {
-    return util2.objectKeys(obj).map(function (e) {
+    return util2.objectKeys(obj).map(function(e) {
       return obj[e];
     });
   };
-  util2.objectKeys =
-    typeof Object.keys === "function"
-      ? (obj) => Object.keys(obj)
-      : (object) => {
-          const keys = [];
-          for (const key in object) {
-            if (Object.prototype.hasOwnProperty.call(object, key)) {
-              keys.push(key);
-            }
-          }
-          return keys;
-        };
+  util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object) => {
+    const keys = [];
+    for (const key in object) {
+      if (Object.prototype.hasOwnProperty.call(object, key)) {
+        keys.push(key);
+      }
+    }
+    return keys;
+  };
   util2.find = (arr, checker) => {
     for (const item of arr) {
-      if (checker(item)) return item;
+      if (checker(item))
+        return item;
     }
     return void 0;
   };
-  util2.isInteger =
-    typeof Number.isInteger === "function"
-      ? (val) => Number.isInteger(val)
-      : (val) => typeof val === "number" && isFinite(val) && Math.floor(val) === val;
+  util2.isInteger = typeof Number.isInteger === "function" ? (val) => Number.isInteger(val) : (val) => typeof val === "number" && isFinite(val) && Math.floor(val) === val;
   function joinValues(array, separator = " | ") {
-    return array.map((val) => (typeof val === "string" ? `'${val}'` : val)).join(separator);
+    return array.map((val) => typeof val === "string" ? `'${val}'` : val).join(separator);
   }
   util2.joinValues = joinValues;
   util2.jsonStringifyReplacer = (_, value) => {
@@ -65,11 +62,11 @@ var util;
   };
 })(util || (util = {}));
 var objectUtil;
-(function (objectUtil2) {
+(function(objectUtil2) {
   objectUtil2.mergeShapes = (first2, second) => {
     return {
       ...first2,
-      ...second,
+      ...second
       // second overwrites first
     };
   };
@@ -94,7 +91,7 @@ var ZodParsedType = util.arrayToEnum([
   "void",
   "never",
   "map",
-  "set",
+  "set"
 ]);
 var getParsedType = (data) => {
   const t = typeof data;
@@ -120,12 +117,7 @@ var getParsedType = (data) => {
       if (data === null) {
         return ZodParsedType.null;
       }
-      if (
-        data.then &&
-        typeof data.then === "function" &&
-        data.catch &&
-        typeof data.catch === "function"
-      ) {
+      if (data.then && typeof data.then === "function" && data.catch && typeof data.catch === "function") {
         return ZodParsedType.promise;
       }
       if (typeof Map !== "undefined" && data instanceof Map) {
@@ -158,7 +150,7 @@ var ZodIssueCode = util.arrayToEnum([
   "too_big",
   "invalid_intersection_types",
   "not_multiple_of",
-  "not_finite",
+  "not_finite"
 ]);
 var quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
@@ -187,11 +179,9 @@ var ZodError = class _ZodError extends Error {
     this.issues = issues;
   }
   format(_mapper) {
-    const mapper =
-      _mapper ||
-      function (issue) {
-        return issue.message;
-      };
+    const mapper = _mapper || function(issue) {
+      return issue.message;
+    };
     const fieldErrors = { _errors: [] };
     const processError = (error) => {
       for (const issue of error.issues) {
@@ -322,7 +312,8 @@ var errorMap = (issue, _ctx) => {
         message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
       else if (issue.type === "date")
         message = `Date must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${new Date(Number(issue.minimum))}`;
-      else message = "Invalid input";
+      else
+        message = "Invalid input";
       break;
     case ZodIssueCode.too_big:
       if (issue.type === "array")
@@ -335,7 +326,8 @@ var errorMap = (issue, _ctx) => {
         message = `BigInt must be ${issue.exact ? `exactly` : issue.inclusive ? `less than or equal to` : `less than`} ${issue.maximum}`;
       else if (issue.type === "date")
         message = `Date must be ${issue.exact ? `exactly` : issue.inclusive ? `smaller than or equal to` : `smaller than`} ${new Date(Number(issue.maximum))}`;
-      else message = "Invalid input";
+      else
+        message = "Invalid input";
       break;
     case ZodIssueCode.custom:
       message = `Invalid input`;
@@ -364,30 +356,27 @@ function getErrorMap() {
 }
 var makeIssue = (params) => {
   const { data, path, errorMaps, issueData } = params;
-  const fullPath = [...path, ...(issueData.path || [])];
+  const fullPath = [...path, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
-    path: fullPath,
+    path: fullPath
   };
   if (issueData.message !== void 0) {
     return {
       ...issueData,
       path: fullPath,
-      message: issueData.message,
+      message: issueData.message
     };
   }
   let errorMessage = "";
-  const maps = errorMaps
-    .filter((m) => !!m)
-    .slice()
-    .reverse();
+  const maps = errorMaps.filter((m) => !!m).slice().reverse();
   for (const map of maps) {
     errorMessage = map(fullIssue, { data, defaultError: errorMessage }).message;
   }
   return {
     ...issueData,
     path: fullPath,
-    message: errorMessage,
+    message: errorMessage
   };
 };
 var EMPTY_PATH = [];
@@ -404,9 +393,9 @@ function addIssueToContext(ctx, issueData) {
       // then schema-bound map if available
       overrideMap,
       // then global override map
-      overrideMap === errorMap ? void 0 : errorMap,
+      overrideMap === errorMap ? void 0 : errorMap
       // then global default map
-    ].filter((x) => !!x),
+    ].filter((x) => !!x)
   });
   ctx.common.issues.push(issue);
 }
@@ -415,16 +404,20 @@ var ParseStatus = class _ParseStatus {
     this.value = "valid";
   }
   dirty() {
-    if (this.value === "valid") this.value = "dirty";
+    if (this.value === "valid")
+      this.value = "dirty";
   }
   abort() {
-    if (this.value !== "aborted") this.value = "aborted";
+    if (this.value !== "aborted")
+      this.value = "aborted";
   }
   static mergeArray(status, results) {
     const arrayValue = [];
     for (const s of results) {
-      if (s.status === "aborted") return INVALID;
-      if (s.status === "dirty") status.dirty();
+      if (s.status === "aborted")
+        return INVALID;
+      if (s.status === "dirty")
+        status.dirty();
       arrayValue.push(s.value);
     }
     return { status: status.value, value: arrayValue };
@@ -436,7 +429,7 @@ var ParseStatus = class _ParseStatus {
       const value = await pair.value;
       syncPairs.push({
         key,
-        value,
+        value
       });
     }
     return _ParseStatus.mergeObjectSync(status, syncPairs);
@@ -445,10 +438,14 @@ var ParseStatus = class _ParseStatus {
     const finalObject = {};
     for (const pair of pairs) {
       const { key, value } = pair;
-      if (key.status === "aborted") return INVALID;
-      if (value.status === "aborted") return INVALID;
-      if (key.status === "dirty") status.dirty();
-      if (value.status === "dirty") status.dirty();
+      if (key.status === "aborted")
+        return INVALID;
+      if (value.status === "aborted")
+        return INVALID;
+      if (key.status === "dirty")
+        status.dirty();
+      if (value.status === "dirty")
+        status.dirty();
       if (key.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
         finalObject[key.value] = value.value;
       }
@@ -457,7 +454,7 @@ var ParseStatus = class _ParseStatus {
   }
 };
 var INVALID = Object.freeze({
-  status: "aborted",
+  status: "aborted"
 });
 var DIRTY = (value) => ({ status: "dirty", value });
 var OK = (value) => ({ status: "valid", value });
@@ -467,29 +464,19 @@ var isValid = (x) => x.status === "valid";
 var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 function __classPrivateFieldGet(receiver, state, kind, f) {
   if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
-  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver))
-    throw new TypeError("Cannot read private member from an object whose class did not declare it");
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
   return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 }
 function __classPrivateFieldSet(receiver, state, value, kind, f) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
-  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver))
-    throw new TypeError("Cannot write private member to an object whose class did not declare it");
-  return (
-    kind === "a" ? f.call(receiver, value) : f ? (f.value = value) : state.set(receiver, value),
-    value
-  );
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+  return kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value), value;
 }
 var errorUtil;
-(function (errorUtil2) {
-  errorUtil2.errToObj = (message) => (typeof message === "string" ? { message } : message || {});
-  errorUtil2.toString = (message) =>
-    typeof message === "string"
-      ? message
-      : message === null || message === void 0
-        ? void 0
-        : message.message;
+(function(errorUtil2) {
+  errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
+  errorUtil2.toString = (message) => typeof message === "string" ? message : message === null || message === void 0 ? void 0 : message.message;
 })(errorUtil || (errorUtil = {}));
 var _ZodEnum_cache;
 var _ZodNativeEnum_cache;
@@ -522,23 +509,24 @@ var handleResult = (ctx, result) => {
     return {
       success: false,
       get error() {
-        if (this._error) return this._error;
+        if (this._error)
+          return this._error;
         const error = new ZodError(ctx.common.issues);
         this._error = error;
         return this._error;
-      },
+      }
     };
   }
 };
 function processCreateParams(params) {
-  if (!params) return {};
+  if (!params)
+    return {};
   const { errorMap: errorMap2, invalid_type_error, required_error, description } = params;
   if (errorMap2 && (invalid_type_error || required_error)) {
-    throw new Error(
-      `Can't use "invalid_type_error" or "required_error" in conjunction with custom error map.`,
-    );
+    throw new Error(`Can't use "invalid_type_error" or "required_error" in conjunction with custom error map.`);
   }
-  if (errorMap2) return { errorMap: errorMap2, description };
+  if (errorMap2)
+    return { errorMap: errorMap2, description };
   const customMap = (iss, ctx) => {
     var _a, _b;
     const { message } = params;
@@ -546,22 +534,11 @@ function processCreateParams(params) {
       return { message: message !== null && message !== void 0 ? message : ctx.defaultError };
     }
     if (typeof ctx.data === "undefined") {
-      return {
-        message:
-          (_a = message !== null && message !== void 0 ? message : required_error) !== null &&
-          _a !== void 0
-            ? _a
-            : ctx.defaultError,
-      };
+      return { message: (_a = message !== null && message !== void 0 ? message : required_error) !== null && _a !== void 0 ? _a : ctx.defaultError };
     }
-    if (iss.code !== "invalid_type") return { message: ctx.defaultError };
-    return {
-      message:
-        (_b = message !== null && message !== void 0 ? message : invalid_type_error) !== null &&
-        _b !== void 0
-          ? _b
-          : ctx.defaultError,
-    };
+    if (iss.code !== "invalid_type")
+      return { message: ctx.defaultError };
+    return { message: (_b = message !== null && message !== void 0 ? message : invalid_type_error) !== null && _b !== void 0 ? _b : ctx.defaultError };
   };
   return { errorMap: customMap, description };
 }
@@ -573,16 +550,14 @@ var ZodType = class {
     return getParsedType(input.data);
   }
   _getOrReturnCtx(input, ctx) {
-    return (
-      ctx || {
-        common: input.parent.common,
-        data: input.data,
-        parsedType: getParsedType(input.data),
-        schemaErrorMap: this._def.errorMap,
-        path: input.path,
-        parent: input.parent,
-      }
-    );
+    return ctx || {
+      common: input.parent.common,
+      data: input.data,
+      parsedType: getParsedType(input.data),
+      schemaErrorMap: this._def.errorMap,
+      path: input.path,
+      parent: input.parent
+    };
   }
   _processInputParams(input) {
     return {
@@ -593,8 +568,8 @@ var ZodType = class {
         parsedType: getParsedType(input.data),
         schemaErrorMap: this._def.errorMap,
         path: input.path,
-        parent: input.parent,
-      },
+        parent: input.parent
+      }
     };
   }
   _parseSync(input) {
@@ -610,7 +585,8 @@ var ZodType = class {
   }
   parse(data, params) {
     const result = this.safeParse(data, params);
-    if (result.success) return result.data;
+    if (result.success)
+      return result.data;
     throw result.error;
   }
   safeParse(data, params) {
@@ -618,18 +594,14 @@ var ZodType = class {
     const ctx = {
       common: {
         issues: [],
-        async:
-          (_a = params === null || params === void 0 ? void 0 : params.async) !== null &&
-          _a !== void 0
-            ? _a
-            : false,
-        contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap,
+        async: (_a = params === null || params === void 0 ? void 0 : params.async) !== null && _a !== void 0 ? _a : false,
+        contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap
       },
       path: (params === null || params === void 0 ? void 0 : params.path) || [],
       schemaErrorMap: this._def.errorMap,
       parent: null,
       data,
-      parsedType: getParsedType(data),
+      parsedType: getParsedType(data)
     };
     const result = this._parseSync({ data, path: ctx.path, parent: ctx });
     return handleResult(ctx, result);
@@ -639,54 +611,42 @@ var ZodType = class {
     const ctx = {
       common: {
         issues: [],
-        async: !!this["~standard"].async,
+        async: !!this["~standard"].async
       },
       path: [],
       schemaErrorMap: this._def.errorMap,
       parent: null,
       data,
-      parsedType: getParsedType(data),
+      parsedType: getParsedType(data)
     };
     if (!this["~standard"].async) {
       try {
         const result = this._parseSync({ data, path: [], parent: ctx });
-        return isValid(result)
-          ? {
-              value: result.value,
-            }
-          : {
-              issues: ctx.common.issues,
-            };
+        return isValid(result) ? {
+          value: result.value
+        } : {
+          issues: ctx.common.issues
+        };
       } catch (err) {
-        if (
-          (_b =
-            (_a = err === null || err === void 0 ? void 0 : err.message) === null || _a === void 0
-              ? void 0
-              : _a.toLowerCase()) === null || _b === void 0
-            ? void 0
-            : _b.includes("encountered")
-        ) {
+        if ((_b = (_a = err === null || err === void 0 ? void 0 : err.message) === null || _a === void 0 ? void 0 : _a.toLowerCase()) === null || _b === void 0 ? void 0 : _b.includes("encountered")) {
           this["~standard"].async = true;
         }
         ctx.common = {
           issues: [],
-          async: true,
+          async: true
         };
       }
     }
-    return this._parseAsync({ data, path: [], parent: ctx }).then((result) =>
-      isValid(result)
-        ? {
-            value: result.value,
-          }
-        : {
-            issues: ctx.common.issues,
-          },
-    );
+    return this._parseAsync({ data, path: [], parent: ctx }).then((result) => isValid(result) ? {
+      value: result.value
+    } : {
+      issues: ctx.common.issues
+    });
   }
   async parseAsync(data, params) {
     const result = await this.safeParseAsync(data, params);
-    if (result.success) return result.data;
+    if (result.success)
+      return result.data;
     throw result.error;
   }
   async safeParseAsync(data, params) {
@@ -694,18 +654,16 @@ var ZodType = class {
       common: {
         issues: [],
         contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap,
-        async: true,
+        async: true
       },
       path: (params === null || params === void 0 ? void 0 : params.path) || [],
       schemaErrorMap: this._def.errorMap,
       parent: null,
       data,
-      parsedType: getParsedType(data),
+      parsedType: getParsedType(data)
     };
     const maybeAsyncResult = this._parse({ data, path: ctx.path, parent: ctx });
-    const result = await (isAsync(maybeAsyncResult)
-      ? maybeAsyncResult
-      : Promise.resolve(maybeAsyncResult));
+    const result = await (isAsync(maybeAsyncResult) ? maybeAsyncResult : Promise.resolve(maybeAsyncResult));
     return handleResult(ctx, result);
   }
   refine(check, message) {
@@ -720,11 +678,10 @@ var ZodType = class {
     };
     return this._refinement((val, ctx) => {
       const result = check(val);
-      const setError = () =>
-        ctx.addIssue({
-          code: ZodIssueCode.custom,
-          ...getIssueProperties(val),
-        });
+      const setError = () => ctx.addIssue({
+        code: ZodIssueCode.custom,
+        ...getIssueProperties(val)
+      });
       if (typeof Promise !== "undefined" && result instanceof Promise) {
         return result.then((data) => {
           if (!data) {
@@ -746,9 +703,7 @@ var ZodType = class {
   refinement(check, refinementData) {
     return this._refinement((val, ctx) => {
       if (!check(val)) {
-        ctx.addIssue(
-          typeof refinementData === "function" ? refinementData(val, ctx) : refinementData,
-        );
+        ctx.addIssue(typeof refinementData === "function" ? refinementData(val, ctx) : refinementData);
         return false;
       } else {
         return true;
@@ -759,7 +714,7 @@ var ZodType = class {
     return new ZodEffects({
       schema: this,
       typeName: ZodFirstPartyTypeKind.ZodEffects,
-      effect: { type: "refinement", refinement },
+      effect: { type: "refinement", refinement }
     });
   }
   superRefine(refinement) {
@@ -795,7 +750,7 @@ var ZodType = class {
     this["~standard"] = {
       version: 1,
       vendor: "zod",
-      validate: (data) => this["~validate"](data),
+      validate: (data) => this["~validate"](data)
     };
   }
   optional() {
@@ -824,7 +779,7 @@ var ZodType = class {
       ...processCreateParams(this._def),
       schema: this,
       typeName: ZodFirstPartyTypeKind.ZodEffects,
-      effect: { type: "transform", transform },
+      effect: { type: "transform", transform }
     });
   }
   default(def) {
@@ -833,14 +788,14 @@ var ZodType = class {
       ...processCreateParams(this._def),
       innerType: this,
       defaultValue: defaultValueFunc,
-      typeName: ZodFirstPartyTypeKind.ZodDefault,
+      typeName: ZodFirstPartyTypeKind.ZodDefault
     });
   }
   brand() {
     return new ZodBranded({
       typeName: ZodFirstPartyTypeKind.ZodBranded,
       type: this,
-      ...processCreateParams(this._def),
+      ...processCreateParams(this._def)
     });
   }
   catch(def) {
@@ -849,14 +804,14 @@ var ZodType = class {
       ...processCreateParams(this._def),
       innerType: this,
       catchValue: catchValueFunc,
-      typeName: ZodFirstPartyTypeKind.ZodCatch,
+      typeName: ZodFirstPartyTypeKind.ZodCatch
     });
   }
   describe(description) {
     const This = this.constructor;
     return new This({
       ...this._def,
-      description,
+      description
     });
   }
   pipe(target) {
@@ -875,24 +830,17 @@ var ZodType = class {
 var cuidRegex = /^c[^\s-]{8,}$/i;
 var cuid2Regex = /^[0-9a-z]+$/;
 var ulidRegex = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
-var uuidRegex =
-  /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
+var uuidRegex = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
 var nanoidRegex = /^[a-z0-9_-]{21}$/i;
 var jwtRegex = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/;
-var durationRegex =
-  /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
-var emailRegex =
-  /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
+var durationRegex = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
+var emailRegex = /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
 var _emojiRegex = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
 var emojiRegex;
-var ipv4Regex =
-  /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/;
-var ipv4CidrRegex =
-  /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/;
-var ipv6Regex =
-  /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
-var ipv6CidrRegex =
-  /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
+var ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/;
+var ipv4CidrRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/;
+var ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+var ipv6CidrRegex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
 var base64Regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
 var base64urlRegex = /^([0-9a-zA-Z-_]{4})*(([0-9a-zA-Z-_]{2}(==)?)|([0-9a-zA-Z-_]{3}(=)?))?$/;
 var dateRegexSource = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
@@ -913,7 +861,8 @@ function datetimeRegex(args) {
   let regex = `${dateRegexSource}T${timeRegexSource(args)}`;
   const opts = [];
   opts.push(args.local ? `Z?` : `Z`);
-  if (args.offset) opts.push(`([+-]\\d{2}:?\\d{2})`);
+  if (args.offset)
+    opts.push(`([+-]\\d{2}:?\\d{2})`);
   regex = `${regex}(${opts.join("|")})`;
   return new RegExp(`^${regex}$`);
 }
@@ -927,17 +876,18 @@ function isValidIP(ip, version) {
   return false;
 }
 function isValidJWT(jwt, alg) {
-  if (!jwtRegex.test(jwt)) return false;
+  if (!jwtRegex.test(jwt))
+    return false;
   try {
     const [header] = jwt.split(".");
-    const base64 = header
-      .replace(/-/g, "+")
-      .replace(/_/g, "/")
-      .padEnd(header.length + ((4 - (header.length % 4)) % 4), "=");
+    const base64 = header.replace(/-/g, "+").replace(/_/g, "/").padEnd(header.length + (4 - header.length % 4) % 4, "=");
     const decoded = JSON.parse(atob(base64));
-    if (typeof decoded !== "object" || decoded === null) return false;
-    if (!decoded.typ || !decoded.alg) return false;
-    if (alg && decoded.alg !== alg) return false;
+    if (typeof decoded !== "object" || decoded === null)
+      return false;
+    if (!decoded.typ || !decoded.alg)
+      return false;
+    if (alg && decoded.alg !== alg)
+      return false;
     return true;
   } catch (_a) {
     return false;
@@ -963,7 +913,7 @@ var ZodString = class _ZodString extends ZodType {
       addIssueToContext(ctx2, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.string,
-        received: ctx2.parsedType,
+        received: ctx2.parsedType
       });
       return INVALID;
     }
@@ -979,7 +929,7 @@ var ZodString = class _ZodString extends ZodType {
             type: "string",
             inclusive: true,
             exact: false,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -992,7 +942,7 @@ var ZodString = class _ZodString extends ZodType {
             type: "string",
             inclusive: true,
             exact: false,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1008,7 +958,7 @@ var ZodString = class _ZodString extends ZodType {
               type: "string",
               inclusive: true,
               exact: true,
-              message: check.message,
+              message: check.message
             });
           } else if (tooSmall) {
             addIssueToContext(ctx, {
@@ -1017,7 +967,7 @@ var ZodString = class _ZodString extends ZodType {
               type: "string",
               inclusive: true,
               exact: true,
-              message: check.message,
+              message: check.message
             });
           }
           status.dirty();
@@ -1028,7 +978,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "email",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1041,7 +991,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "emoji",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1051,7 +1001,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "uuid",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1061,7 +1011,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "nanoid",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1071,7 +1021,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "cuid",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1081,7 +1031,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "cuid2",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1091,7 +1041,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "ulid",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1103,7 +1053,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "url",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1115,7 +1065,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "regex",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1127,7 +1077,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.invalid_string,
             validation: { includes: check.value, position: check.position },
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1141,7 +1091,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.invalid_string,
             validation: { startsWith: check.value },
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1151,7 +1101,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.invalid_string,
             validation: { endsWith: check.value },
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1162,7 +1112,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.invalid_string,
             validation: "datetime",
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1173,7 +1123,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.invalid_string,
             validation: "date",
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1184,7 +1134,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.invalid_string,
             validation: "time",
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1194,7 +1144,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "duration",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1204,7 +1154,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "ip",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1214,7 +1164,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "jwt",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1224,7 +1174,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "cidr",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1234,7 +1184,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "base64",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1244,7 +1194,7 @@ var ZodString = class _ZodString extends ZodType {
           addIssueToContext(ctx, {
             validation: "base64url",
             code: ZodIssueCode.invalid_string,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1258,13 +1208,13 @@ var ZodString = class _ZodString extends ZodType {
     return this.refinement((data) => regex.test(data), {
       validation,
       code: ZodIssueCode.invalid_string,
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   _addCheck(check) {
     return new _ZodString({
       ...this._def,
-      checks: [...this._def.checks, check],
+      checks: [...this._def.checks, check]
     });
   }
   email(message) {
@@ -1297,7 +1247,7 @@ var ZodString = class _ZodString extends ZodType {
   base64url(message) {
     return this._addCheck({
       kind: "base64url",
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   jwt(options) {
@@ -1317,28 +1267,15 @@ var ZodString = class _ZodString extends ZodType {
         precision: null,
         offset: false,
         local: false,
-        message: options,
+        message: options
       });
     }
     return this._addCheck({
       kind: "datetime",
-      precision:
-        typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined"
-          ? null
-          : options === null || options === void 0
-            ? void 0
-            : options.precision,
-      offset:
-        (_a = options === null || options === void 0 ? void 0 : options.offset) !== null &&
-        _a !== void 0
-          ? _a
-          : false,
-      local:
-        (_b = options === null || options === void 0 ? void 0 : options.local) !== null &&
-        _b !== void 0
-          ? _b
-          : false,
-      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message),
+      precision: typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined" ? null : options === null || options === void 0 ? void 0 : options.precision,
+      offset: (_a = options === null || options === void 0 ? void 0 : options.offset) !== null && _a !== void 0 ? _a : false,
+      local: (_b = options === null || options === void 0 ? void 0 : options.local) !== null && _b !== void 0 ? _b : false,
+      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
     });
   }
   date(message) {
@@ -1349,18 +1286,13 @@ var ZodString = class _ZodString extends ZodType {
       return this._addCheck({
         kind: "time",
         precision: null,
-        message: options,
+        message: options
       });
     }
     return this._addCheck({
       kind: "time",
-      precision:
-        typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined"
-          ? null
-          : options === null || options === void 0
-            ? void 0
-            : options.precision,
-      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message),
+      precision: typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined" ? null : options === null || options === void 0 ? void 0 : options.precision,
+      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
     });
   }
   duration(message) {
@@ -1370,7 +1302,7 @@ var ZodString = class _ZodString extends ZodType {
     return this._addCheck({
       kind: "regex",
       regex,
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   includes(value, options) {
@@ -1378,42 +1310,42 @@ var ZodString = class _ZodString extends ZodType {
       kind: "includes",
       value,
       position: options === null || options === void 0 ? void 0 : options.position,
-      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message),
+      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
     });
   }
   startsWith(value, message) {
     return this._addCheck({
       kind: "startsWith",
       value,
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   endsWith(value, message) {
     return this._addCheck({
       kind: "endsWith",
       value,
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   min(minLength, message) {
     return this._addCheck({
       kind: "min",
       value: minLength,
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   max(maxLength, message) {
     return this._addCheck({
       kind: "max",
       value: maxLength,
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   length(len, message) {
     return this._addCheck({
       kind: "length",
       value: len,
-      ...errorUtil.errToObj(message),
+      ...errorUtil.errToObj(message)
     });
   }
   /**
@@ -1425,19 +1357,19 @@ var ZodString = class _ZodString extends ZodType {
   trim() {
     return new _ZodString({
       ...this._def,
-      checks: [...this._def.checks, { kind: "trim" }],
+      checks: [...this._def.checks, { kind: "trim" }]
     });
   }
   toLowerCase() {
     return new _ZodString({
       ...this._def,
-      checks: [...this._def.checks, { kind: "toLowerCase" }],
+      checks: [...this._def.checks, { kind: "toLowerCase" }]
     });
   }
   toUpperCase() {
     return new _ZodString({
       ...this._def,
-      checks: [...this._def.checks, { kind: "toUpperCase" }],
+      checks: [...this._def.checks, { kind: "toUpperCase" }]
     });
   }
   get isDatetime() {
@@ -1492,7 +1424,8 @@ var ZodString = class _ZodString extends ZodType {
     let min = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "min") {
-        if (min === null || ch.value > min) min = ch.value;
+        if (min === null || ch.value > min)
+          min = ch.value;
       }
     }
     return min;
@@ -1501,7 +1434,8 @@ var ZodString = class _ZodString extends ZodType {
     let max = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "max") {
-        if (max === null || ch.value < max) max = ch.value;
+        if (max === null || ch.value < max)
+          max = ch.value;
       }
     }
     return max;
@@ -1512,11 +1446,8 @@ ZodString.create = (params) => {
   return new ZodString({
     checks: [],
     typeName: ZodFirstPartyTypeKind.ZodString,
-    coerce:
-      (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0
-        ? _a
-        : false,
-    ...processCreateParams(params),
+    coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+    ...processCreateParams(params)
   });
 };
 function floatSafeRemainder(val, step) {
@@ -1525,7 +1456,7 @@ function floatSafeRemainder(val, step) {
   const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
   const valInt = parseInt(val.toFixed(decCount).replace(".", ""));
   const stepInt = parseInt(step.toFixed(decCount).replace(".", ""));
-  return (valInt % stepInt) / Math.pow(10, decCount);
+  return valInt % stepInt / Math.pow(10, decCount);
 }
 var ZodNumber = class _ZodNumber extends ZodType {
   constructor() {
@@ -1544,7 +1475,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
       addIssueToContext(ctx2, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.number,
-        received: ctx2.parsedType,
+        received: ctx2.parsedType
       });
       return INVALID;
     }
@@ -1558,7 +1489,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
             code: ZodIssueCode.invalid_type,
             expected: "integer",
             received: "float",
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1572,7 +1503,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
             type: "number",
             inclusive: check.inclusive,
             exact: false,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1586,7 +1517,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
             type: "number",
             inclusive: check.inclusive,
             exact: false,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1596,7 +1527,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.not_multiple_of,
             multipleOf: check.value,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1605,7 +1536,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
           ctx = this._getOrReturnCtx(input, ctx);
           addIssueToContext(ctx, {
             code: ZodIssueCode.not_finite,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1636,21 +1567,21 @@ var ZodNumber = class _ZodNumber extends ZodType {
           kind,
           value,
           inclusive,
-          message: errorUtil.toString(message),
-        },
-      ],
+          message: errorUtil.toString(message)
+        }
+      ]
     });
   }
   _addCheck(check) {
     return new _ZodNumber({
       ...this._def,
-      checks: [...this._def.checks, check],
+      checks: [...this._def.checks, check]
     });
   }
   int(message) {
     return this._addCheck({
       kind: "int",
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   positive(message) {
@@ -1658,7 +1589,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
       kind: "min",
       value: 0,
       inclusive: false,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   negative(message) {
@@ -1666,7 +1597,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
       kind: "max",
       value: 0,
       inclusive: false,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   nonpositive(message) {
@@ -1674,7 +1605,7 @@ var ZodNumber = class _ZodNumber extends ZodType {
       kind: "max",
       value: 0,
       inclusive: true,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   nonnegative(message) {
@@ -1682,20 +1613,20 @@ var ZodNumber = class _ZodNumber extends ZodType {
       kind: "min",
       value: 0,
       inclusive: true,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   multipleOf(value, message) {
     return this._addCheck({
       kind: "multipleOf",
       value,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   finite(message) {
     return this._addCheck({
       kind: "finite",
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   safe(message) {
@@ -1703,19 +1634,20 @@ var ZodNumber = class _ZodNumber extends ZodType {
       kind: "min",
       inclusive: true,
       value: Number.MIN_SAFE_INTEGER,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     })._addCheck({
       kind: "max",
       inclusive: true,
       value: Number.MAX_SAFE_INTEGER,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   get minValue() {
     let min = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "min") {
-        if (min === null || ch.value > min) min = ch.value;
+        if (min === null || ch.value > min)
+          min = ch.value;
       }
     }
     return min;
@@ -1724,26 +1656,26 @@ var ZodNumber = class _ZodNumber extends ZodType {
     let max = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "max") {
-        if (max === null || ch.value < max) max = ch.value;
+        if (max === null || ch.value < max)
+          max = ch.value;
       }
     }
     return max;
   }
   get isInt() {
-    return !!this._def.checks.find(
-      (ch) => ch.kind === "int" || (ch.kind === "multipleOf" && util.isInteger(ch.value)),
-    );
+    return !!this._def.checks.find((ch) => ch.kind === "int" || ch.kind === "multipleOf" && util.isInteger(ch.value));
   }
   get isFinite() {
-    let max = null,
-      min = null;
+    let max = null, min = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "finite" || ch.kind === "int" || ch.kind === "multipleOf") {
         return true;
       } else if (ch.kind === "min") {
-        if (min === null || ch.value > min) min = ch.value;
+        if (min === null || ch.value > min)
+          min = ch.value;
       } else if (ch.kind === "max") {
-        if (max === null || ch.value < max) max = ch.value;
+        if (max === null || ch.value < max)
+          max = ch.value;
       }
     }
     return Number.isFinite(min) && Number.isFinite(max);
@@ -1754,7 +1686,7 @@ ZodNumber.create = (params) => {
     checks: [],
     typeName: ZodFirstPartyTypeKind.ZodNumber,
     coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodBigInt = class _ZodBigInt extends ZodType {
@@ -1787,7 +1719,7 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
             type: "bigint",
             minimum: check.value,
             inclusive: check.inclusive,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1800,7 +1732,7 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
             type: "bigint",
             maximum: check.value,
             inclusive: check.inclusive,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1810,7 +1742,7 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
           addIssueToContext(ctx, {
             code: ZodIssueCode.not_multiple_of,
             multipleOf: check.value,
-            message: check.message,
+            message: check.message
           });
           status.dirty();
         }
@@ -1825,7 +1757,7 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
     addIssueToContext(ctx, {
       code: ZodIssueCode.invalid_type,
       expected: ZodParsedType.bigint,
-      received: ctx.parsedType,
+      received: ctx.parsedType
     });
     return INVALID;
   }
@@ -1850,15 +1782,15 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
           kind,
           value,
           inclusive,
-          message: errorUtil.toString(message),
-        },
-      ],
+          message: errorUtil.toString(message)
+        }
+      ]
     });
   }
   _addCheck(check) {
     return new _ZodBigInt({
       ...this._def,
-      checks: [...this._def.checks, check],
+      checks: [...this._def.checks, check]
     });
   }
   positive(message) {
@@ -1866,7 +1798,7 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
       kind: "min",
       value: BigInt(0),
       inclusive: false,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   negative(message) {
@@ -1874,7 +1806,7 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
       kind: "max",
       value: BigInt(0),
       inclusive: false,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   nonpositive(message) {
@@ -1882,7 +1814,7 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
       kind: "max",
       value: BigInt(0),
       inclusive: true,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   nonnegative(message) {
@@ -1890,21 +1822,22 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
       kind: "min",
       value: BigInt(0),
       inclusive: true,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   multipleOf(value, message) {
     return this._addCheck({
       kind: "multipleOf",
       value,
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   get minValue() {
     let min = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "min") {
-        if (min === null || ch.value > min) min = ch.value;
+        if (min === null || ch.value > min)
+          min = ch.value;
       }
     }
     return min;
@@ -1913,7 +1846,8 @@ var ZodBigInt = class _ZodBigInt extends ZodType {
     let max = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "max") {
-        if (max === null || ch.value < max) max = ch.value;
+        if (max === null || ch.value < max)
+          max = ch.value;
       }
     }
     return max;
@@ -1924,11 +1858,8 @@ ZodBigInt.create = (params) => {
   return new ZodBigInt({
     checks: [],
     typeName: ZodFirstPartyTypeKind.ZodBigInt,
-    coerce:
-      (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0
-        ? _a
-        : false,
-    ...processCreateParams(params),
+    coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+    ...processCreateParams(params)
   });
 };
 var ZodBoolean = class extends ZodType {
@@ -1942,7 +1873,7 @@ var ZodBoolean = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.boolean,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -1953,7 +1884,7 @@ ZodBoolean.create = (params) => {
   return new ZodBoolean({
     typeName: ZodFirstPartyTypeKind.ZodBoolean,
     coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodDate = class _ZodDate extends ZodType {
@@ -1967,14 +1898,14 @@ var ZodDate = class _ZodDate extends ZodType {
       addIssueToContext(ctx2, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.date,
-        received: ctx2.parsedType,
+        received: ctx2.parsedType
       });
       return INVALID;
     }
     if (isNaN(input.data.getTime())) {
       const ctx2 = this._getOrReturnCtx(input);
       addIssueToContext(ctx2, {
-        code: ZodIssueCode.invalid_date,
+        code: ZodIssueCode.invalid_date
       });
       return INVALID;
     }
@@ -1990,7 +1921,7 @@ var ZodDate = class _ZodDate extends ZodType {
             inclusive: true,
             exact: false,
             minimum: check.value,
-            type: "date",
+            type: "date"
           });
           status.dirty();
         }
@@ -2003,7 +1934,7 @@ var ZodDate = class _ZodDate extends ZodType {
             inclusive: true,
             exact: false,
             maximum: check.value,
-            type: "date",
+            type: "date"
           });
           status.dirty();
         }
@@ -2013,34 +1944,35 @@ var ZodDate = class _ZodDate extends ZodType {
     }
     return {
       status: status.value,
-      value: new Date(input.data.getTime()),
+      value: new Date(input.data.getTime())
     };
   }
   _addCheck(check) {
     return new _ZodDate({
       ...this._def,
-      checks: [...this._def.checks, check],
+      checks: [...this._def.checks, check]
     });
   }
   min(minDate, message) {
     return this._addCheck({
       kind: "min",
       value: minDate.getTime(),
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   max(maxDate, message) {
     return this._addCheck({
       kind: "max",
       value: maxDate.getTime(),
-      message: errorUtil.toString(message),
+      message: errorUtil.toString(message)
     });
   }
   get minDate() {
     let min = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "min") {
-        if (min === null || ch.value > min) min = ch.value;
+        if (min === null || ch.value > min)
+          min = ch.value;
       }
     }
     return min != null ? new Date(min) : null;
@@ -2049,7 +1981,8 @@ var ZodDate = class _ZodDate extends ZodType {
     let max = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "max") {
-        if (max === null || ch.value < max) max = ch.value;
+        if (max === null || ch.value < max)
+          max = ch.value;
       }
     }
     return max != null ? new Date(max) : null;
@@ -2060,7 +1993,7 @@ ZodDate.create = (params) => {
     checks: [],
     coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
     typeName: ZodFirstPartyTypeKind.ZodDate,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodSymbol = class extends ZodType {
@@ -2071,7 +2004,7 @@ var ZodSymbol = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.symbol,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -2081,7 +2014,7 @@ var ZodSymbol = class extends ZodType {
 ZodSymbol.create = (params) => {
   return new ZodSymbol({
     typeName: ZodFirstPartyTypeKind.ZodSymbol,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodUndefined = class extends ZodType {
@@ -2092,7 +2025,7 @@ var ZodUndefined = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.undefined,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -2102,7 +2035,7 @@ var ZodUndefined = class extends ZodType {
 ZodUndefined.create = (params) => {
   return new ZodUndefined({
     typeName: ZodFirstPartyTypeKind.ZodUndefined,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodNull = class extends ZodType {
@@ -2113,7 +2046,7 @@ var ZodNull = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.null,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -2123,7 +2056,7 @@ var ZodNull = class extends ZodType {
 ZodNull.create = (params) => {
   return new ZodNull({
     typeName: ZodFirstPartyTypeKind.ZodNull,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodAny = class extends ZodType {
@@ -2138,7 +2071,7 @@ var ZodAny = class extends ZodType {
 ZodAny.create = (params) => {
   return new ZodAny({
     typeName: ZodFirstPartyTypeKind.ZodAny,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodUnknown = class extends ZodType {
@@ -2153,7 +2086,7 @@ var ZodUnknown = class extends ZodType {
 ZodUnknown.create = (params) => {
   return new ZodUnknown({
     typeName: ZodFirstPartyTypeKind.ZodUnknown,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodNever = class extends ZodType {
@@ -2162,7 +2095,7 @@ var ZodNever = class extends ZodType {
     addIssueToContext(ctx, {
       code: ZodIssueCode.invalid_type,
       expected: ZodParsedType.never,
-      received: ctx.parsedType,
+      received: ctx.parsedType
     });
     return INVALID;
   }
@@ -2170,7 +2103,7 @@ var ZodNever = class extends ZodType {
 ZodNever.create = (params) => {
   return new ZodNever({
     typeName: ZodFirstPartyTypeKind.ZodNever,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodVoid = class extends ZodType {
@@ -2181,7 +2114,7 @@ var ZodVoid = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.void,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -2191,7 +2124,7 @@ var ZodVoid = class extends ZodType {
 ZodVoid.create = (params) => {
   return new ZodVoid({
     typeName: ZodFirstPartyTypeKind.ZodVoid,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodArray = class _ZodArray extends ZodType {
@@ -2202,7 +2135,7 @@ var ZodArray = class _ZodArray extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.array,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -2217,7 +2150,7 @@ var ZodArray = class _ZodArray extends ZodType {
           type: "array",
           inclusive: true,
           exact: true,
-          message: def.exactLength.message,
+          message: def.exactLength.message
         });
         status.dirty();
       }
@@ -2230,7 +2163,7 @@ var ZodArray = class _ZodArray extends ZodType {
           type: "array",
           inclusive: true,
           exact: false,
-          message: def.minLength.message,
+          message: def.minLength.message
         });
         status.dirty();
       }
@@ -2243,17 +2176,15 @@ var ZodArray = class _ZodArray extends ZodType {
           type: "array",
           inclusive: true,
           exact: false,
-          message: def.maxLength.message,
+          message: def.maxLength.message
         });
         status.dirty();
       }
     }
     if (ctx.common.async) {
-      return Promise.all(
-        [...ctx.data].map((item, i) => {
-          return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
-        }),
-      ).then((result2) => {
+      return Promise.all([...ctx.data].map((item, i) => {
+        return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+      })).then((result2) => {
         return ParseStatus.mergeArray(status, result2);
       });
     }
@@ -2268,19 +2199,19 @@ var ZodArray = class _ZodArray extends ZodType {
   min(minLength, message) {
     return new _ZodArray({
       ...this._def,
-      minLength: { value: minLength, message: errorUtil.toString(message) },
+      minLength: { value: minLength, message: errorUtil.toString(message) }
     });
   }
   max(maxLength, message) {
     return new _ZodArray({
       ...this._def,
-      maxLength: { value: maxLength, message: errorUtil.toString(message) },
+      maxLength: { value: maxLength, message: errorUtil.toString(message) }
     });
   }
   length(len, message) {
     return new _ZodArray({
       ...this._def,
-      exactLength: { value: len, message: errorUtil.toString(message) },
+      exactLength: { value: len, message: errorUtil.toString(message) }
     });
   }
   nonempty(message) {
@@ -2294,7 +2225,7 @@ ZodArray.create = (schema, params) => {
     maxLength: null,
     exactLength: null,
     typeName: ZodFirstPartyTypeKind.ZodArray,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 function deepPartialify(schema) {
@@ -2306,12 +2237,12 @@ function deepPartialify(schema) {
     }
     return new ZodObject({
       ...schema._def,
-      shape: () => newShape,
+      shape: () => newShape
     });
   } else if (schema instanceof ZodArray) {
     return new ZodArray({
       ...schema._def,
-      type: deepPartialify(schema.element),
+      type: deepPartialify(schema.element)
     });
   } else if (schema instanceof ZodOptional) {
     return ZodOptional.create(deepPartialify(schema.unwrap()));
@@ -2331,10 +2262,11 @@ var ZodObject = class _ZodObject extends ZodType {
     this.augment = this.extend;
   }
   _getCached() {
-    if (this._cached !== null) return this._cached;
+    if (this._cached !== null)
+      return this._cached;
     const shape = this._def.shape();
     const keys = util.objectKeys(shape);
-    return (this._cached = { shape, keys });
+    return this._cached = { shape, keys };
   }
   _parse(input) {
     const parsedType = this._getType(input);
@@ -2343,7 +2275,7 @@ var ZodObject = class _ZodObject extends ZodType {
       addIssueToContext(ctx2, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.object,
-        received: ctx2.parsedType,
+        received: ctx2.parsedType
       });
       return INVALID;
     }
@@ -2364,7 +2296,7 @@ var ZodObject = class _ZodObject extends ZodType {
       pairs.push({
         key: { status: "valid", value: key },
         value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key)),
-        alwaysSet: key in ctx.data,
+        alwaysSet: key in ctx.data
       });
     }
     if (this._def.catchall instanceof ZodNever) {
@@ -2373,18 +2305,18 @@ var ZodObject = class _ZodObject extends ZodType {
         for (const key of extraKeys) {
           pairs.push({
             key: { status: "valid", value: key },
-            value: { status: "valid", value: ctx.data[key] },
+            value: { status: "valid", value: ctx.data[key] }
           });
         }
       } else if (unknownKeys === "strict") {
         if (extraKeys.length > 0) {
           addIssueToContext(ctx, {
             code: ZodIssueCode.unrecognized_keys,
-            keys: extraKeys,
+            keys: extraKeys
           });
           status.dirty();
         }
-      } else if (unknownKeys === "strip");
+      } else if (unknownKeys === "strip") ;
       else {
         throw new Error(`Internal ZodObject error: invalid unknownKeys value.`);
       }
@@ -2395,31 +2327,29 @@ var ZodObject = class _ZodObject extends ZodType {
         pairs.push({
           key: { status: "valid", value: key },
           value: catchall._parse(
-            new ParseInputLazyPath(ctx, value, ctx.path, key),
+            new ParseInputLazyPath(ctx, value, ctx.path, key)
             //, ctx.child(key), value, getParsedType(value)
           ),
-          alwaysSet: key in ctx.data,
+          alwaysSet: key in ctx.data
         });
       }
     }
     if (ctx.common.async) {
-      return Promise.resolve()
-        .then(async () => {
-          const syncPairs = [];
-          for (const pair of pairs) {
-            const key = await pair.key;
-            const value = await pair.value;
-            syncPairs.push({
-              key,
-              value,
-              alwaysSet: pair.alwaysSet,
-            });
-          }
-          return syncPairs;
-        })
-        .then((syncPairs) => {
-          return ParseStatus.mergeObjectSync(status, syncPairs);
-        });
+      return Promise.resolve().then(async () => {
+        const syncPairs = [];
+        for (const pair of pairs) {
+          const key = await pair.key;
+          const value = await pair.value;
+          syncPairs.push({
+            key,
+            value,
+            alwaysSet: pair.alwaysSet
+          });
+        }
+        return syncPairs;
+      }).then((syncPairs) => {
+        return ParseStatus.mergeObjectSync(status, syncPairs);
+      });
     } else {
       return ParseStatus.mergeObjectSync(status, pairs);
     }
@@ -2432,42 +2362,31 @@ var ZodObject = class _ZodObject extends ZodType {
     return new _ZodObject({
       ...this._def,
       unknownKeys: "strict",
-      ...(message !== void 0
-        ? {
-            errorMap: (issue, ctx) => {
-              var _a, _b, _c, _d;
-              const defaultError =
-                (_c =
-                  (_b = (_a = this._def).errorMap) === null || _b === void 0
-                    ? void 0
-                    : _b.call(_a, issue, ctx).message) !== null && _c !== void 0
-                  ? _c
-                  : ctx.defaultError;
-              if (issue.code === "unrecognized_keys")
-                return {
-                  message:
-                    (_d = errorUtil.errToObj(message).message) !== null && _d !== void 0
-                      ? _d
-                      : defaultError,
-                };
-              return {
-                message: defaultError,
-              };
-            },
-          }
-        : {}),
+      ...message !== void 0 ? {
+        errorMap: (issue, ctx) => {
+          var _a, _b, _c, _d;
+          const defaultError = (_c = (_b = (_a = this._def).errorMap) === null || _b === void 0 ? void 0 : _b.call(_a, issue, ctx).message) !== null && _c !== void 0 ? _c : ctx.defaultError;
+          if (issue.code === "unrecognized_keys")
+            return {
+              message: (_d = errorUtil.errToObj(message).message) !== null && _d !== void 0 ? _d : defaultError
+            };
+          return {
+            message: defaultError
+          };
+        }
+      } : {}
     });
   }
   strip() {
     return new _ZodObject({
       ...this._def,
-      unknownKeys: "strip",
+      unknownKeys: "strip"
     });
   }
   passthrough() {
     return new _ZodObject({
       ...this._def,
-      unknownKeys: "passthrough",
+      unknownKeys: "passthrough"
     });
   }
   // const AugmentFactory =
@@ -2492,8 +2411,8 @@ var ZodObject = class _ZodObject extends ZodType {
       ...this._def,
       shape: () => ({
         ...this._def.shape(),
-        ...augmentation,
-      }),
+        ...augmentation
+      })
     });
   }
   /**
@@ -2507,9 +2426,9 @@ var ZodObject = class _ZodObject extends ZodType {
       catchall: merging._def.catchall,
       shape: () => ({
         ...this._def.shape(),
-        ...merging._def.shape(),
+        ...merging._def.shape()
       }),
-      typeName: ZodFirstPartyTypeKind.ZodObject,
+      typeName: ZodFirstPartyTypeKind.ZodObject
     });
     return merged;
   }
@@ -2575,7 +2494,7 @@ var ZodObject = class _ZodObject extends ZodType {
   catchall(index) {
     return new _ZodObject({
       ...this._def,
-      catchall: index,
+      catchall: index
     });
   }
   pick(mask) {
@@ -2587,7 +2506,7 @@ var ZodObject = class _ZodObject extends ZodType {
     });
     return new _ZodObject({
       ...this._def,
-      shape: () => shape,
+      shape: () => shape
     });
   }
   omit(mask) {
@@ -2599,7 +2518,7 @@ var ZodObject = class _ZodObject extends ZodType {
     });
     return new _ZodObject({
       ...this._def,
-      shape: () => shape,
+      shape: () => shape
     });
   }
   /**
@@ -2620,7 +2539,7 @@ var ZodObject = class _ZodObject extends ZodType {
     });
     return new _ZodObject({
       ...this._def,
-      shape: () => newShape,
+      shape: () => newShape
     });
   }
   required(mask) {
@@ -2639,7 +2558,7 @@ var ZodObject = class _ZodObject extends ZodType {
     });
     return new _ZodObject({
       ...this._def,
-      shape: () => newShape,
+      shape: () => newShape
     });
   }
   keyof() {
@@ -2652,7 +2571,7 @@ ZodObject.create = (shape, params) => {
     unknownKeys: "strip",
     catchall: ZodNever.create(),
     typeName: ZodFirstPartyTypeKind.ZodObject,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 ZodObject.strictCreate = (shape, params) => {
@@ -2661,7 +2580,7 @@ ZodObject.strictCreate = (shape, params) => {
     unknownKeys: "strict",
     catchall: ZodNever.create(),
     typeName: ZodFirstPartyTypeKind.ZodObject,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 ZodObject.lazycreate = (shape, params) => {
@@ -2670,7 +2589,7 @@ ZodObject.lazycreate = (shape, params) => {
     unknownKeys: "strip",
     catchall: ZodNever.create(),
     typeName: ZodFirstPartyTypeKind.ZodObject,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodUnion = class extends ZodType {
@@ -2692,31 +2611,29 @@ var ZodUnion = class extends ZodType {
       const unionErrors = results.map((result) => new ZodError(result.ctx.common.issues));
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_union,
-        unionErrors,
+        unionErrors
       });
       return INVALID;
     }
     if (ctx.common.async) {
-      return Promise.all(
-        options.map(async (option) => {
-          const childCtx = {
-            ...ctx,
-            common: {
-              ...ctx.common,
-              issues: [],
-            },
-            parent: null,
-          };
-          return {
-            result: await option._parseAsync({
-              data: ctx.data,
-              path: ctx.path,
-              parent: childCtx,
-            }),
-            ctx: childCtx,
-          };
-        }),
-      ).then(handleResults);
+      return Promise.all(options.map(async (option) => {
+        const childCtx = {
+          ...ctx,
+          common: {
+            ...ctx.common,
+            issues: []
+          },
+          parent: null
+        };
+        return {
+          result: await option._parseAsync({
+            data: ctx.data,
+            path: ctx.path,
+            parent: childCtx
+          }),
+          ctx: childCtx
+        };
+      })).then(handleResults);
     } else {
       let dirty = void 0;
       const issues = [];
@@ -2725,14 +2642,14 @@ var ZodUnion = class extends ZodType {
           ...ctx,
           common: {
             ...ctx.common,
-            issues: [],
+            issues: []
           },
-          parent: null,
+          parent: null
         };
         const result = option._parseSync({
           data: ctx.data,
           path: ctx.path,
-          parent: childCtx,
+          parent: childCtx
         });
         if (result.status === "valid") {
           return result;
@@ -2750,7 +2667,7 @@ var ZodUnion = class extends ZodType {
       const unionErrors = issues.map((issues2) => new ZodError(issues2));
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_union,
-        unionErrors,
+        unionErrors
       });
       return INVALID;
     }
@@ -2763,7 +2680,7 @@ ZodUnion.create = (types, params) => {
   return new ZodUnion({
     options: types,
     typeName: ZodFirstPartyTypeKind.ZodUnion,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var getDiscriminator = (type) => {
@@ -2804,7 +2721,7 @@ var ZodDiscriminatedUnion = class _ZodDiscriminatedUnion extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.object,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -2815,7 +2732,7 @@ var ZodDiscriminatedUnion = class _ZodDiscriminatedUnion extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_union_discriminator,
         options: Array.from(this.optionsMap.keys()),
-        path: [discriminator],
+        path: [discriminator]
       });
       return INVALID;
     }
@@ -2823,13 +2740,13 @@ var ZodDiscriminatedUnion = class _ZodDiscriminatedUnion extends ZodType {
       return option._parseAsync({
         data: ctx.data,
         path: ctx.path,
-        parent: ctx,
+        parent: ctx
       });
     } else {
       return option._parseSync({
         data: ctx.data,
         path: ctx.path,
-        parent: ctx,
+        parent: ctx
       });
     }
   }
@@ -2855,15 +2772,11 @@ var ZodDiscriminatedUnion = class _ZodDiscriminatedUnion extends ZodType {
     for (const type of options) {
       const discriminatorValues = getDiscriminator(type.shape[discriminator]);
       if (!discriminatorValues.length) {
-        throw new Error(
-          `A discriminator value for key \`${discriminator}\` could not be extracted from all schema options`,
-        );
+        throw new Error(`A discriminator value for key \`${discriminator}\` could not be extracted from all schema options`);
       }
       for (const value of discriminatorValues) {
         if (optionsMap.has(value)) {
-          throw new Error(
-            `Discriminator property ${String(discriminator)} has duplicate value ${String(value)}`,
-          );
+          throw new Error(`Discriminator property ${String(discriminator)} has duplicate value ${String(value)}`);
         }
         optionsMap.set(value, type);
       }
@@ -2873,7 +2786,7 @@ var ZodDiscriminatedUnion = class _ZodDiscriminatedUnion extends ZodType {
       discriminator,
       options,
       optionsMap,
-      ...processCreateParams(params),
+      ...processCreateParams(params)
     });
   }
 };
@@ -2925,7 +2838,7 @@ var ZodIntersection = class extends ZodType {
       const merged = mergeValues(parsedLeft.value, parsedRight.value);
       if (!merged.valid) {
         addIssueToContext(ctx, {
-          code: ZodIssueCode.invalid_intersection_types,
+          code: ZodIssueCode.invalid_intersection_types
         });
         return INVALID;
       }
@@ -2939,27 +2852,24 @@ var ZodIntersection = class extends ZodType {
         this._def.left._parseAsync({
           data: ctx.data,
           path: ctx.path,
-          parent: ctx,
+          parent: ctx
         }),
         this._def.right._parseAsync({
           data: ctx.data,
           path: ctx.path,
-          parent: ctx,
-        }),
+          parent: ctx
+        })
       ]).then(([left, right]) => handleParsed(left, right));
     } else {
-      return handleParsed(
-        this._def.left._parseSync({
-          data: ctx.data,
-          path: ctx.path,
-          parent: ctx,
-        }),
-        this._def.right._parseSync({
-          data: ctx.data,
-          path: ctx.path,
-          parent: ctx,
-        }),
-      );
+      return handleParsed(this._def.left._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      }), this._def.right._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      }));
     }
   }
 };
@@ -2968,7 +2878,7 @@ ZodIntersection.create = (left, right, params) => {
     left,
     right,
     typeName: ZodFirstPartyTypeKind.ZodIntersection,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodTuple = class _ZodTuple extends ZodType {
@@ -2978,7 +2888,7 @@ var ZodTuple = class _ZodTuple extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.array,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -2988,7 +2898,7 @@ var ZodTuple = class _ZodTuple extends ZodType {
         minimum: this._def.items.length,
         inclusive: true,
         exact: false,
-        type: "array",
+        type: "array"
       });
       return INVALID;
     }
@@ -2999,17 +2909,16 @@ var ZodTuple = class _ZodTuple extends ZodType {
         maximum: this._def.items.length,
         inclusive: true,
         exact: false,
-        type: "array",
+        type: "array"
       });
       status.dirty();
     }
-    const items = [...ctx.data]
-      .map((item, itemIndex) => {
-        const schema = this._def.items[itemIndex] || this._def.rest;
-        if (!schema) return null;
-        return schema._parse(new ParseInputLazyPath(ctx, item, ctx.path, itemIndex));
-      })
-      .filter((x) => !!x);
+    const items = [...ctx.data].map((item, itemIndex) => {
+      const schema = this._def.items[itemIndex] || this._def.rest;
+      if (!schema)
+        return null;
+      return schema._parse(new ParseInputLazyPath(ctx, item, ctx.path, itemIndex));
+    }).filter((x) => !!x);
     if (ctx.common.async) {
       return Promise.all(items).then((results) => {
         return ParseStatus.mergeArray(status, results);
@@ -3024,7 +2933,7 @@ var ZodTuple = class _ZodTuple extends ZodType {
   rest(rest) {
     return new _ZodTuple({
       ...this._def,
-      rest,
+      rest
     });
   }
 };
@@ -3036,7 +2945,7 @@ ZodTuple.create = (schemas, params) => {
     items: schemas,
     typeName: ZodFirstPartyTypeKind.ZodTuple,
     rest: null,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodRecord = class _ZodRecord extends ZodType {
@@ -3052,7 +2961,7 @@ var ZodRecord = class _ZodRecord extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.object,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -3063,7 +2972,7 @@ var ZodRecord = class _ZodRecord extends ZodType {
       pairs.push({
         key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, key)),
         value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key], ctx.path, key)),
-        alwaysSet: key in ctx.data,
+        alwaysSet: key in ctx.data
       });
     }
     if (ctx.common.async) {
@@ -3081,14 +2990,14 @@ var ZodRecord = class _ZodRecord extends ZodType {
         keyType: first2,
         valueType: second,
         typeName: ZodFirstPartyTypeKind.ZodRecord,
-        ...processCreateParams(third),
+        ...processCreateParams(third)
       });
     }
     return new _ZodRecord({
       keyType: ZodString.create(),
       valueType: first2,
       typeName: ZodFirstPartyTypeKind.ZodRecord,
-      ...processCreateParams(second),
+      ...processCreateParams(second)
     });
   }
 };
@@ -3105,7 +3014,7 @@ var ZodMap = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.map,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -3114,7 +3023,7 @@ var ZodMap = class extends ZodType {
     const pairs = [...ctx.data.entries()].map(([key, value], index) => {
       return {
         key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, [index, "key"])),
-        value: valueType._parse(new ParseInputLazyPath(ctx, value, ctx.path, [index, "value"])),
+        value: valueType._parse(new ParseInputLazyPath(ctx, value, ctx.path, [index, "value"]))
       };
     });
     if (ctx.common.async) {
@@ -3155,7 +3064,7 @@ ZodMap.create = (keyType, valueType, params) => {
     valueType,
     keyType,
     typeName: ZodFirstPartyTypeKind.ZodMap,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodSet = class _ZodSet extends ZodType {
@@ -3165,7 +3074,7 @@ var ZodSet = class _ZodSet extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.set,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -3178,7 +3087,7 @@ var ZodSet = class _ZodSet extends ZodType {
           type: "set",
           inclusive: true,
           exact: false,
-          message: def.minSize.message,
+          message: def.minSize.message
         });
         status.dirty();
       }
@@ -3191,7 +3100,7 @@ var ZodSet = class _ZodSet extends ZodType {
           type: "set",
           inclusive: true,
           exact: false,
-          message: def.maxSize.message,
+          message: def.maxSize.message
         });
         status.dirty();
       }
@@ -3200,15 +3109,15 @@ var ZodSet = class _ZodSet extends ZodType {
     function finalizeSet(elements2) {
       const parsedSet = /* @__PURE__ */ new Set();
       for (const element of elements2) {
-        if (element.status === "aborted") return INVALID;
-        if (element.status === "dirty") status.dirty();
+        if (element.status === "aborted")
+          return INVALID;
+        if (element.status === "dirty")
+          status.dirty();
         parsedSet.add(element.value);
       }
       return { status: status.value, value: parsedSet };
     }
-    const elements = [...ctx.data.values()].map((item, i) =>
-      valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i)),
-    );
+    const elements = [...ctx.data.values()].map((item, i) => valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i)));
     if (ctx.common.async) {
       return Promise.all(elements).then((elements2) => finalizeSet(elements2));
     } else {
@@ -3218,13 +3127,13 @@ var ZodSet = class _ZodSet extends ZodType {
   min(minSize, message) {
     return new _ZodSet({
       ...this._def,
-      minSize: { value: minSize, message: errorUtil.toString(message) },
+      minSize: { value: minSize, message: errorUtil.toString(message) }
     });
   }
   max(maxSize, message) {
     return new _ZodSet({
       ...this._def,
-      maxSize: { value: maxSize, message: errorUtil.toString(message) },
+      maxSize: { value: maxSize, message: errorUtil.toString(message) }
     });
   }
   size(size, message) {
@@ -3240,7 +3149,7 @@ ZodSet.create = (valueType, params) => {
     minSize: null,
     maxSize: null,
     typeName: ZodFirstPartyTypeKind.ZodSet,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodFunction = class _ZodFunction extends ZodType {
@@ -3254,7 +3163,7 @@ var ZodFunction = class _ZodFunction extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.function,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -3266,12 +3175,12 @@ var ZodFunction = class _ZodFunction extends ZodType {
           ctx.common.contextualErrorMap,
           ctx.schemaErrorMap,
           getErrorMap(),
-          errorMap,
+          errorMap
         ].filter((x) => !!x),
         issueData: {
           code: ZodIssueCode.invalid_arguments,
-          argumentsError: error,
-        },
+          argumentsError: error
+        }
       });
     }
     function makeReturnsIssue(returns, error) {
@@ -3282,36 +3191,34 @@ var ZodFunction = class _ZodFunction extends ZodType {
           ctx.common.contextualErrorMap,
           ctx.schemaErrorMap,
           getErrorMap(),
-          errorMap,
+          errorMap
         ].filter((x) => !!x),
         issueData: {
           code: ZodIssueCode.invalid_return_type,
-          returnTypeError: error,
-        },
+          returnTypeError: error
+        }
       });
     }
     const params = { errorMap: ctx.common.contextualErrorMap };
     const fn = ctx.data;
     if (this._def.returns instanceof ZodPromise) {
       const me = this;
-      return OK(async function (...args) {
+      return OK(async function(...args) {
         const error = new ZodError([]);
         const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
           error.addIssue(makeArgsIssue(args, e));
           throw error;
         });
         const result = await Reflect.apply(fn, this, parsedArgs);
-        const parsedReturns = await me._def.returns._def.type
-          .parseAsync(result, params)
-          .catch((e) => {
-            error.addIssue(makeReturnsIssue(result, e));
-            throw error;
-          });
+        const parsedReturns = await me._def.returns._def.type.parseAsync(result, params).catch((e) => {
+          error.addIssue(makeReturnsIssue(result, e));
+          throw error;
+        });
         return parsedReturns;
       });
     } else {
       const me = this;
-      return OK(function (...args) {
+      return OK(function(...args) {
         const parsedArgs = me._def.args.safeParse(args, params);
         if (!parsedArgs.success) {
           throw new ZodError([makeArgsIssue(args, parsedArgs.error)]);
@@ -3334,13 +3241,13 @@ var ZodFunction = class _ZodFunction extends ZodType {
   args(...items) {
     return new _ZodFunction({
       ...this._def,
-      args: ZodTuple.create(items).rest(ZodUnknown.create()),
+      args: ZodTuple.create(items).rest(ZodUnknown.create())
     });
   }
   returns(returnType) {
     return new _ZodFunction({
       ...this._def,
-      returns: returnType,
+      returns: returnType
     });
   }
   implement(func) {
@@ -3356,7 +3263,7 @@ var ZodFunction = class _ZodFunction extends ZodType {
       args: args ? args : ZodTuple.create([]).rest(ZodUnknown.create()),
       returns: returns || ZodUnknown.create(),
       typeName: ZodFirstPartyTypeKind.ZodFunction,
-      ...processCreateParams(params),
+      ...processCreateParams(params)
     });
   }
 };
@@ -3374,7 +3281,7 @@ ZodLazy.create = (getter, params) => {
   return new ZodLazy({
     getter,
     typeName: ZodFirstPartyTypeKind.ZodLazy,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodLiteral = class extends ZodType {
@@ -3384,7 +3291,7 @@ var ZodLiteral = class extends ZodType {
       addIssueToContext(ctx, {
         received: ctx.data,
         code: ZodIssueCode.invalid_literal,
-        expected: this._def.value,
+        expected: this._def.value
       });
       return INVALID;
     }
@@ -3398,14 +3305,14 @@ ZodLiteral.create = (value, params) => {
   return new ZodLiteral({
     value,
     typeName: ZodFirstPartyTypeKind.ZodLiteral,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 function createZodEnum(values, params) {
   return new ZodEnum({
     values,
     typeName: ZodFirstPartyTypeKind.ZodEnum,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 }
 var ZodEnum = class _ZodEnum extends ZodType {
@@ -3420,7 +3327,7 @@ var ZodEnum = class _ZodEnum extends ZodType {
       addIssueToContext(ctx, {
         expected: util.joinValues(expectedValues),
         received: ctx.parsedType,
-        code: ZodIssueCode.invalid_type,
+        code: ZodIssueCode.invalid_type
       });
       return INVALID;
     }
@@ -3433,7 +3340,7 @@ var ZodEnum = class _ZodEnum extends ZodType {
       addIssueToContext(ctx, {
         received: ctx.data,
         code: ZodIssueCode.invalid_enum_value,
-        options: expectedValues,
+        options: expectedValues
       });
       return INVALID;
     }
@@ -3466,17 +3373,14 @@ var ZodEnum = class _ZodEnum extends ZodType {
   extract(values, newDef = this._def) {
     return _ZodEnum.create(values, {
       ...this._def,
-      ...newDef,
+      ...newDef
     });
   }
   exclude(values, newDef = this._def) {
-    return _ZodEnum.create(
-      this.options.filter((opt) => !values.includes(opt)),
-      {
-        ...this._def,
-        ...newDef,
-      },
-    );
+    return _ZodEnum.create(this.options.filter((opt) => !values.includes(opt)), {
+      ...this._def,
+      ...newDef
+    });
   }
 };
 _ZodEnum_cache = /* @__PURE__ */ new WeakMap();
@@ -3494,24 +3398,19 @@ var ZodNativeEnum = class extends ZodType {
       addIssueToContext(ctx, {
         expected: util.joinValues(expectedValues),
         received: ctx.parsedType,
-        code: ZodIssueCode.invalid_type,
+        code: ZodIssueCode.invalid_type
       });
       return INVALID;
     }
     if (!__classPrivateFieldGet(this, _ZodNativeEnum_cache, "f")) {
-      __classPrivateFieldSet(
-        this,
-        _ZodNativeEnum_cache,
-        new Set(util.getValidEnumValues(this._def.values)),
-        "f",
-      );
+      __classPrivateFieldSet(this, _ZodNativeEnum_cache, new Set(util.getValidEnumValues(this._def.values)), "f");
     }
     if (!__classPrivateFieldGet(this, _ZodNativeEnum_cache, "f").has(input.data)) {
       const expectedValues = util.objectValues(nativeEnumValues);
       addIssueToContext(ctx, {
         received: ctx.data,
         code: ZodIssueCode.invalid_enum_value,
-        options: expectedValues,
+        options: expectedValues
       });
       return INVALID;
     }
@@ -3526,7 +3425,7 @@ ZodNativeEnum.create = (values, params) => {
   return new ZodNativeEnum({
     values,
     typeName: ZodFirstPartyTypeKind.ZodNativeEnum,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodPromise = class extends ZodType {
@@ -3539,27 +3438,24 @@ var ZodPromise = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.promise,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
-    const promisified =
-      ctx.parsedType === ZodParsedType.promise ? ctx.data : Promise.resolve(ctx.data);
-    return OK(
-      promisified.then((data) => {
-        return this._def.type.parseAsync(data, {
-          path: ctx.path,
-          errorMap: ctx.common.contextualErrorMap,
-        });
-      }),
-    );
+    const promisified = ctx.parsedType === ZodParsedType.promise ? ctx.data : Promise.resolve(ctx.data);
+    return OK(promisified.then((data) => {
+      return this._def.type.parseAsync(data, {
+        path: ctx.path,
+        errorMap: ctx.common.contextualErrorMap
+      });
+    }));
   }
 };
 ZodPromise.create = (schema, params) => {
   return new ZodPromise({
     type: schema,
     typeName: ZodFirstPartyTypeKind.ZodPromise,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodEffects = class extends ZodType {
@@ -3567,9 +3463,7 @@ var ZodEffects = class extends ZodType {
     return this._def.schema;
   }
   sourceType() {
-    return this._def.schema._def.typeName === ZodFirstPartyTypeKind.ZodEffects
-      ? this._def.schema.sourceType()
-      : this._def.schema;
+    return this._def.schema._def.typeName === ZodFirstPartyTypeKind.ZodEffects ? this._def.schema.sourceType() : this._def.schema;
   }
   _parse(input) {
     const { status, ctx } = this._processInputParams(input);
@@ -3585,34 +3479,42 @@ var ZodEffects = class extends ZodType {
       },
       get path() {
         return ctx.path;
-      },
+      }
     };
     checkCtx.addIssue = checkCtx.addIssue.bind(checkCtx);
     if (effect.type === "preprocess") {
       const processed = effect.transform(ctx.data, checkCtx);
       if (ctx.common.async) {
         return Promise.resolve(processed).then(async (processed2) => {
-          if (status.value === "aborted") return INVALID;
+          if (status.value === "aborted")
+            return INVALID;
           const result = await this._def.schema._parseAsync({
             data: processed2,
             path: ctx.path,
-            parent: ctx,
+            parent: ctx
           });
-          if (result.status === "aborted") return INVALID;
-          if (result.status === "dirty") return DIRTY(result.value);
-          if (status.value === "dirty") return DIRTY(result.value);
+          if (result.status === "aborted")
+            return INVALID;
+          if (result.status === "dirty")
+            return DIRTY(result.value);
+          if (status.value === "dirty")
+            return DIRTY(result.value);
           return result;
         });
       } else {
-        if (status.value === "aborted") return INVALID;
+        if (status.value === "aborted")
+          return INVALID;
         const result = this._def.schema._parseSync({
           data: processed,
           path: ctx.path,
-          parent: ctx,
+          parent: ctx
         });
-        if (result.status === "aborted") return INVALID;
-        if (result.status === "dirty") return DIRTY(result.value);
-        if (status.value === "dirty") return DIRTY(result.value);
+        if (result.status === "aborted")
+          return INVALID;
+        if (result.status === "dirty")
+          return DIRTY(result.value);
+        if (status.value === "dirty")
+          return DIRTY(result.value);
         return result;
       }
     }
@@ -3623,9 +3525,7 @@ var ZodEffects = class extends ZodType {
           return Promise.resolve(result);
         }
         if (result instanceof Promise) {
-          throw new Error(
-            "Async refinement encountered during synchronous parse operation. Use .parseAsync instead.",
-          );
+          throw new Error("Async refinement encountered during synchronous parse operation. Use .parseAsync instead.");
         }
         return acc;
       };
@@ -3633,22 +3533,24 @@ var ZodEffects = class extends ZodType {
         const inner = this._def.schema._parseSync({
           data: ctx.data,
           path: ctx.path,
-          parent: ctx,
+          parent: ctx
         });
-        if (inner.status === "aborted") return INVALID;
-        if (inner.status === "dirty") status.dirty();
+        if (inner.status === "aborted")
+          return INVALID;
+        if (inner.status === "dirty")
+          status.dirty();
         executeRefinement(inner.value);
         return { status: status.value, value: inner.value };
       } else {
-        return this._def.schema
-          ._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx })
-          .then((inner) => {
-            if (inner.status === "aborted") return INVALID;
-            if (inner.status === "dirty") status.dirty();
-            return executeRefinement(inner.value).then(() => {
-              return { status: status.value, value: inner.value };
-            });
+        return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
+          if (inner.status === "aborted")
+            return INVALID;
+          if (inner.status === "dirty")
+            status.dirty();
+          return executeRefinement(inner.value).then(() => {
+            return { status: status.value, value: inner.value };
           });
+        });
       }
     }
     if (effect.type === "transform") {
@@ -3656,26 +3558,21 @@ var ZodEffects = class extends ZodType {
         const base = this._def.schema._parseSync({
           data: ctx.data,
           path: ctx.path,
-          parent: ctx,
+          parent: ctx
         });
-        if (!isValid(base)) return base;
+        if (!isValid(base))
+          return base;
         const result = effect.transform(base.value, checkCtx);
         if (result instanceof Promise) {
-          throw new Error(
-            `Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`,
-          );
+          throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
         }
         return { status: status.value, value: result };
       } else {
-        return this._def.schema
-          ._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx })
-          .then((base) => {
-            if (!isValid(base)) return base;
-            return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
-              status: status.value,
-              value: result,
-            }));
-          });
+        return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
+          if (!isValid(base))
+            return base;
+          return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({ status: status.value, value: result }));
+        });
       }
     }
     util.assertNever(effect);
@@ -3686,7 +3583,7 @@ ZodEffects.create = (schema, effect, params) => {
     schema,
     typeName: ZodFirstPartyTypeKind.ZodEffects,
     effect,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 ZodEffects.createWithPreprocess = (preprocess, schema, params) => {
@@ -3694,7 +3591,7 @@ ZodEffects.createWithPreprocess = (preprocess, schema, params) => {
     schema,
     effect: { type: "preprocess", transform: preprocess },
     typeName: ZodFirstPartyTypeKind.ZodEffects,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodOptional = class extends ZodType {
@@ -3713,7 +3610,7 @@ ZodOptional.create = (type, params) => {
   return new ZodOptional({
     innerType: type,
     typeName: ZodFirstPartyTypeKind.ZodOptional,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodNullable = class extends ZodType {
@@ -3732,7 +3629,7 @@ ZodNullable.create = (type, params) => {
   return new ZodNullable({
     innerType: type,
     typeName: ZodFirstPartyTypeKind.ZodNullable,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodDefault = class extends ZodType {
@@ -3745,7 +3642,7 @@ var ZodDefault = class extends ZodType {
     return this._def.innerType._parse({
       data,
       path: ctx.path,
-      parent: ctx,
+      parent: ctx
     });
   }
   removeDefault() {
@@ -3757,7 +3654,7 @@ ZodDefault.create = (type, params) => {
     innerType: type,
     typeName: ZodFirstPartyTypeKind.ZodDefault,
     defaultValue: typeof params.default === "function" ? params.default : () => params.default,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodCatch = class extends ZodType {
@@ -3767,43 +3664,37 @@ var ZodCatch = class extends ZodType {
       ...ctx,
       common: {
         ...ctx.common,
-        issues: [],
-      },
+        issues: []
+      }
     };
     const result = this._def.innerType._parse({
       data: newCtx.data,
       path: newCtx.path,
       parent: {
-        ...newCtx,
-      },
+        ...newCtx
+      }
     });
     if (isAsync(result)) {
       return result.then((result2) => {
         return {
           status: "valid",
-          value:
-            result2.status === "valid"
-              ? result2.value
-              : this._def.catchValue({
-                  get error() {
-                    return new ZodError(newCtx.common.issues);
-                  },
-                  input: newCtx.data,
-                }),
+          value: result2.status === "valid" ? result2.value : this._def.catchValue({
+            get error() {
+              return new ZodError(newCtx.common.issues);
+            },
+            input: newCtx.data
+          })
         };
       });
     } else {
       return {
         status: "valid",
-        value:
-          result.status === "valid"
-            ? result.value
-            : this._def.catchValue({
-                get error() {
-                  return new ZodError(newCtx.common.issues);
-                },
-                input: newCtx.data,
-              }),
+        value: result.status === "valid" ? result.value : this._def.catchValue({
+          get error() {
+            return new ZodError(newCtx.common.issues);
+          },
+          input: newCtx.data
+        })
       };
     }
   }
@@ -3816,7 +3707,7 @@ ZodCatch.create = (type, params) => {
     innerType: type,
     typeName: ZodFirstPartyTypeKind.ZodCatch,
     catchValue: typeof params.catch === "function" ? params.catch : () => params.catch,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var ZodNaN = class extends ZodType {
@@ -3827,7 +3718,7 @@ var ZodNaN = class extends ZodType {
       addIssueToContext(ctx, {
         code: ZodIssueCode.invalid_type,
         expected: ZodParsedType.nan,
-        received: ctx.parsedType,
+        received: ctx.parsedType
       });
       return INVALID;
     }
@@ -3837,7 +3728,7 @@ var ZodNaN = class extends ZodType {
 ZodNaN.create = (params) => {
   return new ZodNaN({
     typeName: ZodFirstPartyTypeKind.ZodNaN,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 var BRAND = /* @__PURE__ */ Symbol("zod_brand");
@@ -3848,7 +3739,7 @@ var ZodBranded = class extends ZodType {
     return this._def.type._parse({
       data,
       path: ctx.path,
-      parent: ctx,
+      parent: ctx
     });
   }
   unwrap() {
@@ -3863,9 +3754,10 @@ var ZodPipeline = class _ZodPipeline extends ZodType {
         const inResult = await this._def.in._parseAsync({
           data: ctx.data,
           path: ctx.path,
-          parent: ctx,
+          parent: ctx
         });
-        if (inResult.status === "aborted") return INVALID;
+        if (inResult.status === "aborted")
+          return INVALID;
         if (inResult.status === "dirty") {
           status.dirty();
           return DIRTY(inResult.value);
@@ -3873,7 +3765,7 @@ var ZodPipeline = class _ZodPipeline extends ZodType {
           return this._def.out._parseAsync({
             data: inResult.value,
             path: ctx.path,
-            parent: ctx,
+            parent: ctx
           });
         }
       };
@@ -3882,20 +3774,21 @@ var ZodPipeline = class _ZodPipeline extends ZodType {
       const inResult = this._def.in._parseSync({
         data: ctx.data,
         path: ctx.path,
-        parent: ctx,
+        parent: ctx
       });
-      if (inResult.status === "aborted") return INVALID;
+      if (inResult.status === "aborted")
+        return INVALID;
       if (inResult.status === "dirty") {
         status.dirty();
         return {
           status: "dirty",
-          value: inResult.value,
+          value: inResult.value
         };
       } else {
         return this._def.out._parseSync({
           data: inResult.value,
           path: ctx.path,
-          parent: ctx,
+          parent: ctx
         });
       }
     }
@@ -3904,7 +3797,7 @@ var ZodPipeline = class _ZodPipeline extends ZodType {
     return new _ZodPipeline({
       in: a,
       out: b,
-      typeName: ZodFirstPartyTypeKind.ZodPipeline,
+      typeName: ZodFirstPartyTypeKind.ZodPipeline
     });
   }
 };
@@ -3927,7 +3820,7 @@ ZodReadonly.create = (type, params) => {
   return new ZodReadonly({
     innerType: type,
     typeName: ZodFirstPartyTypeKind.ZodReadonly,
-    ...processCreateParams(params),
+    ...processCreateParams(params)
   });
 };
 function custom(check, params = {}, fatal) {
@@ -3935,16 +3828,8 @@ function custom(check, params = {}, fatal) {
     return ZodAny.create().superRefine((data, ctx) => {
       var _a, _b;
       if (!check(data)) {
-        const p =
-          typeof params === "function"
-            ? params(data)
-            : typeof params === "string"
-              ? { message: params }
-              : params;
-        const _fatal =
-          (_b = (_a = p.fatal) !== null && _a !== void 0 ? _a : fatal) !== null && _b !== void 0
-            ? _b
-            : true;
+        const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
+        const _fatal = (_b = (_a = p.fatal) !== null && _a !== void 0 ? _a : fatal) !== null && _b !== void 0 ? _b : true;
         const p2 = typeof p === "string" ? { message: p } : p;
         ctx.addIssue({ code: "custom", ...p2, fatal: _fatal });
       }
@@ -3952,10 +3837,10 @@ function custom(check, params = {}, fatal) {
   return ZodAny.create();
 }
 var late = {
-  object: ZodObject.lazycreate,
+  object: ZodObject.lazycreate
 };
 var ZodFirstPartyTypeKind;
-(function (ZodFirstPartyTypeKind2) {
+(function(ZodFirstPartyTypeKind2) {
   ZodFirstPartyTypeKind2["ZodString"] = "ZodString";
   ZodFirstPartyTypeKind2["ZodNumber"] = "ZodNumber";
   ZodFirstPartyTypeKind2["ZodNaN"] = "ZodNaN";
@@ -3993,12 +3878,9 @@ var ZodFirstPartyTypeKind;
   ZodFirstPartyTypeKind2["ZodPipeline"] = "ZodPipeline";
   ZodFirstPartyTypeKind2["ZodReadonly"] = "ZodReadonly";
 })(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
-var instanceOfType = (
-  cls,
-  params = {
-    message: `Input not instance of ${cls.name}`,
-  },
-) => custom((data) => data instanceof cls, params);
+var instanceOfType = (cls, params = {
+  message: `Input not instance of ${cls.name}`
+}) => custom((data) => data instanceof cls, params);
 var stringType = ZodString.create;
 var numberType = ZodNumber.create;
 var nanType = ZodNaN.create;
@@ -4037,15 +3919,14 @@ var ostring = () => stringType().optional();
 var onumber = () => numberType().optional();
 var oboolean = () => booleanType().optional();
 var coerce = {
-  string: (arg) => ZodString.create({ ...arg, coerce: true }),
-  number: (arg) => ZodNumber.create({ ...arg, coerce: true }),
-  boolean: (arg) =>
-    ZodBoolean.create({
-      ...arg,
-      coerce: true,
-    }),
-  bigint: (arg) => ZodBigInt.create({ ...arg, coerce: true }),
-  date: (arg) => ZodDate.create({ ...arg, coerce: true }),
+  string: ((arg) => ZodString.create({ ...arg, coerce: true })),
+  number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
+  boolean: ((arg) => ZodBoolean.create({
+    ...arg,
+    coerce: true
+  })),
+  bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
+  date: ((arg) => ZodDate.create({ ...arg, coerce: true }))
 };
 var NEVER = INVALID;
 var z = /* @__PURE__ */ Object.freeze({
@@ -4127,9 +4008,9 @@ var z = /* @__PURE__ */ Object.freeze({
   date: dateType,
   discriminatedUnion: discriminatedUnionType,
   effect: effectsType,
-  enum: enumType,
-  function: functionType,
-  instanceof: instanceOfType,
+  "enum": enumType,
+  "function": functionType,
+  "instanceof": instanceOfType,
   intersection: intersectionType,
   lazy: lazyType,
   literal: literalType,
@@ -4137,7 +4018,7 @@ var z = /* @__PURE__ */ Object.freeze({
   nan: nanType,
   nativeEnum: nativeEnumType,
   never: neverType,
-  null: nullType,
+  "null": nullType,
   nullable: nullableType,
   number: numberType,
   object: objectType,
@@ -4155,14 +4036,14 @@ var z = /* @__PURE__ */ Object.freeze({
   symbol: symbolType,
   transformer: effectsType,
   tuple: tupleType,
-  undefined: undefinedType,
+  "undefined": undefinedType,
   union: unionType,
   unknown: unknownType,
-  void: voidType,
+  "void": voidType,
   NEVER,
   ZodIssueCode,
   quotelessJson,
-  ZodError,
+  ZodError
 });
 
 // ../schemas/src/enums.ts
@@ -4183,7 +4064,7 @@ var caseStates = [
   "switching",
   "completed",
   "retained_incumbent",
-  "cancelled",
+  "cancelled"
 ];
 var CaseState = z.enum(caseStates);
 var quoteRequestStates = [
@@ -4194,10 +4075,17 @@ var quoteRequestStates = [
   "response_received",
   "declined",
   "no_response",
-  "cancelled",
+  "cancelled"
 ];
 var QuoteRequestState = z.enum(quoteRequestStates);
-var quoteStates = ["estimate", "conditional", "bindable", "expired", "rejected", "selected"];
+var quoteStates = [
+  "estimate",
+  "conditional",
+  "bindable",
+  "expired",
+  "rejected",
+  "selected"
+];
 var QuoteState = z.enum(quoteStates);
 var switchStates = [
   "customer_approved",
@@ -4206,7 +4094,7 @@ var switchStates = [
   "incumbent_cancellation_pending",
   "incumbent_cancelled",
   "completed",
-  "failed",
+  "failed"
 ];
 var SwitchState = z.enum(switchStates);
 var productLines = ["auto", "property"];
@@ -4219,12 +4107,19 @@ var documentCategories = [
   "proof_of_insurance",
   "signed_authorization",
   "cancellation_confirmation",
-  "other",
+  "other"
 ];
 var DocumentCategory = z.enum(documentCategories);
 var documentStatuses = ["uploaded", "in_review", "extracted", "rejected"];
 var DocumentStatus = z.enum(documentStatuses);
-var questionTypes = ["yes_no", "single_choice", "multiple_choice", "number", "date", "short_text"];
+var questionTypes = [
+  "yes_no",
+  "single_choice",
+  "multiple_choice",
+  "number",
+  "date",
+  "short_text"
+];
 var QuestionType = z.enum(questionTypes);
 var questionStatuses = ["pending", "answered", "cancelled"];
 var QuestionStatus = z.enum(questionStatuses);
@@ -4232,10 +4127,16 @@ var consentTypes = [
   "store_documents",
   "share_for_quotation",
   "generate_recommendations",
-  "electronic_communications",
+  "electronic_communications"
 ];
 var ConsentType = z.enum(consentTypes);
-var subscriptionStatuses = ["inactive", "pending", "active", "past_due", "cancelled"];
+var subscriptionStatuses = [
+  "inactive",
+  "pending",
+  "active",
+  "past_due",
+  "cancelled"
+];
 var SubscriptionStatus = z.enum(subscriptionStatuses);
 var recommendationStatuses = [
   "draft",
@@ -4245,26 +4146,45 @@ var recommendationStatuses = [
   "published",
   "customer_approved",
   "customer_declined",
-  "superseded",
+  "superseded"
 ];
 var RecommendationStatus = z.enum(recommendationStatuses);
 var notificationChannels = ["push", "email", "local_log"];
 var NotificationChannel = z.enum(notificationChannels);
 var coveragePreferences = ["required", "preferred", "indifferent", "prohibited"];
 var CoveragePreference = z.enum(coveragePreferences);
-var limitRules = ["minimum", "maximum", "exact", "match_current_or_better", "any"];
+var limitRules = [
+  "minimum",
+  "maximum",
+  "exact",
+  "match_current_or_better",
+  "any"
+];
 var LimitRule = z.enum(limitRules);
-var deductibleRules = ["minimum", "maximum", "exact", "match_current_or_better", "any"];
+var deductibleRules = [
+  "minimum",
+  "maximum",
+  "exact",
+  "match_current_or_better",
+  "any"
+];
 var DeductibleRule = z.enum(deductibleRules);
 var autoCoverageForms = [
   "liability_only",
   "collision",
   "comprehensive",
   "specified_perils",
-  "all_perils",
+  "all_perils"
 ];
 var AutoCoverageForm = z.enum(autoCoverageForms);
-var propertyTypes = ["homeowner", "condo", "tenant", "landlord", "seasonal", "secondary_residence"];
+var propertyTypes = [
+  "homeowner",
+  "condo",
+  "tenant",
+  "landlord",
+  "seasonal",
+  "secondary_residence"
+];
 var PropertyType = z.enum(propertyTypes);
 var propertyCoverageForms = ["comprehensive", "broad", "named_perils", "basic"];
 var PropertyCoverageForm = z.enum(propertyCoverageForms);
@@ -4272,7 +4192,7 @@ var propertySettlements = [
   "replacement_cost",
   "guaranteed_replacement_cost",
   "extended_replacement_cost",
-  "actual_cash_value",
+  "actual_cash_value"
 ];
 var PropertySettlement = z.enum(propertySettlements);
 var vehicleUseClasses = ["personal", "commercial", "classic", "modified"];
@@ -4295,23 +4215,23 @@ var NonNegativeCents = Cents.nonnegative();
 // ../schemas/src/mandate.ts
 var LimitRequirement = z.object({
   rule: LimitRule,
-  cents: NonNegativeCents.default(0),
+  cents: NonNegativeCents.default(0)
 });
 var DeductibleRequirement = z.object({
   rule: DeductibleRule,
-  cents: NonNegativeCents.default(0),
+  cents: NonNegativeCents.default(0)
 });
 var AutoCoverageFormRequirement = z.object({
   preference: CoveragePreference,
-  value: AutoCoverageForm.default("comprehensive"),
+  value: AutoCoverageForm.default("comprehensive")
 });
 var PropertyCoverageFormRequirement = z.object({
   preference: CoveragePreference,
-  value: PropertyCoverageForm.default("comprehensive"),
+  value: PropertyCoverageForm.default("comprehensive")
 });
 var PropertySettlementRequirement = z.object({
   preference: CoveragePreference,
-  value: PropertySettlement.default("replacement_cost"),
+  value: PropertySettlement.default("replacement_cost")
 });
 var autoEndorsementKeys = [
   "accident_forgiveness",
@@ -4323,20 +4243,20 @@ var autoEndorsementKeys = [
   "roadside_assistance",
   "disappearing_deductible",
   "glass_coverage",
-  "telematics",
+  "telematics"
 ];
 var AutoEndorsementKey = z.enum(autoEndorsementKeys);
 var autoEndorsementDefaults = Object.fromEntries(
-  autoEndorsementKeys.map((k) => [k, CoveragePreference.default("indifferent")]),
+  autoEndorsementKeys.map((k) => [k, CoveragePreference.default("indifferent")])
 );
 var AutoEndorsementPreferences = z.object(autoEndorsementDefaults);
 var defaultAutoEndorsements = Object.fromEntries(
-  autoEndorsementKeys.map((k) => [k, "indifferent"]),
+  autoEndorsementKeys.map((k) => [k, "indifferent"])
 );
 var AutoRequirements = z.object({
   coverageForm: AutoCoverageFormRequirement.default({
     preference: "required",
-    value: "comprehensive",
+    value: "comprehensive"
   }),
   liability: LimitRequirement.default({ rule: "minimum", cents: 2e8 }),
   collisionDeductible: DeductibleRequirement.default({ rule: "maximum", cents: 1e5 }),
@@ -4344,7 +4264,7 @@ var AutoRequirements = z.object({
   glassDeductible: DeductibleRequirement.default({ rule: "any", cents: 0 }),
   endorsements: AutoEndorsementPreferences.default(defaultAutoEndorsements),
   vehicleClass: VehicleUseClass.optional(),
-  financingStatus: FinancingStatus.optional(),
+  financingStatus: FinancingStatus.optional()
 });
 var propertyOptionalCoverageKeys = [
   "equipment_breakdown",
@@ -4358,30 +4278,30 @@ var propertyOptionalCoverageKeys = [
   "claims_forgiveness",
   "groundwater_seepage",
   "ice_dam",
-  "earthquake",
+  "earthquake"
 ];
 var PropertyOptionalCoverageKey = z.enum(propertyOptionalCoverageKeys);
 var propertyOptionalCoverageDefaults = Object.fromEntries(
-  propertyOptionalCoverageKeys.map((k) => [k, CoveragePreference.default("indifferent")]),
+  propertyOptionalCoverageKeys.map((k) => [k, CoveragePreference.default("indifferent")])
 );
 var PropertyOptionalCoveragePreferences = z.object(propertyOptionalCoverageDefaults);
 var defaultPropertyOptionalCoverages = Object.fromEntries(
-  propertyOptionalCoverageKeys.map((k) => [k, "indifferent"]),
+  propertyOptionalCoverageKeys.map((k) => [k, "indifferent"])
 );
 var WaterCoverageRequirement = z.object({
   preference: CoveragePreference,
   limit: LimitRequirement.default({ rule: "any", cents: 0 }),
-  deductible: DeductibleRequirement.default({ rule: "any", cents: 0 }),
+  deductible: DeductibleRequirement.default({ rule: "any", cents: 0 })
 });
 var PropertyRequirements = z.object({
   propertyType: PropertyType.optional(),
   coverageForm: PropertyCoverageFormRequirement.default({
     preference: "required",
-    value: "comprehensive",
+    value: "comprehensive"
   }),
   settlementBasis: PropertySettlementRequirement.default({
     preference: "required",
-    value: "replacement_cost",
+    value: "replacement_cost"
   }),
   dwellingLimit: LimitRequirement.default({ rule: "minimum", cents: 45e6 }),
   contentsLimit: LimitRequirement.default({ rule: "any", cents: 0 }),
@@ -4394,7 +4314,7 @@ var PropertyRequirements = z.object({
   earthquakeDeductible: DeductibleRequirement.default({ rule: "any", cents: 0 }),
   sewerBackup: WaterCoverageRequirement.default({ preference: "indifferent" }),
   overlandWater: WaterCoverageRequirement.default({ preference: "indifferent" }),
-  optionalCoverages: PropertyOptionalCoveragePreferences.default(defaultPropertyOptionalCoverages),
+  optionalCoverages: PropertyOptionalCoveragePreferences.default(defaultPropertyOptionalCoverages)
 });
 var SwitchingPreferences = z.object({
   minNetAnnualSavingsCents: NonNegativeCents.default(2e4),
@@ -4412,7 +4332,7 @@ var SwitchingPreferences = z.object({
   preferredPaymentFrequency: PaymentFrequency.default("annual"),
   preferredBillingMethod: BillingMethod.default("automatic_bank"),
   brokerDirectPreference: BrokerDirectPreference.default("indifferent"),
-  minimumInsurerFinancialRating: FinancialRating.default("any"),
+  minimumInsurerFinancialRating: FinancialRating.default("any")
 });
 var AssetAutoOverride = AutoRequirements.partial();
 var AssetPropertyOverride = PropertyRequirements.partial();
@@ -4421,7 +4341,7 @@ var HouseholdMandate = z.object({
   property: PropertyRequirements,
   switching: SwitchingPreferences,
   vehicleOverrides: z.record(z.string().uuid(), AssetAutoOverride).default({}),
-  propertyOverrides: z.record(z.string().uuid(), AssetPropertyOverride).default({}),
+  propertyOverrides: z.record(z.string().uuid(), AssetPropertyOverride).default({})
 });
 
 // ../schemas/src/mandate-v2.ts
@@ -4430,115 +4350,101 @@ var MonetaryRule = z.discriminatedUnion("rule", [
   z.object({ rule: z.literal("maximum"), amountCents: NonNegativeCents }).strict(),
   z.object({ rule: z.literal("exact"), amountCents: NonNegativeCents }).strict(),
   z.object({ rule: z.literal("match_current_or_better") }).strict(),
-  z.object({ rule: z.literal("any") }).strict(),
+  z.object({ rule: z.literal("any") }).strict()
 ]);
 var autoEndorsementKeys2 = AutoEndorsementKey.options;
 var propertyOptionalCoverageKeys2 = PropertyOptionalCoverageKey.options;
 var AutoEndorsementPreferencesV2 = z.object(
-  Object.fromEntries(autoEndorsementKeys2.map((key) => [key, CoveragePreference])),
+  Object.fromEntries(autoEndorsementKeys2.map((key) => [key, CoveragePreference]))
 );
 var PropertyOptionalCoveragePreferencesV2 = z.object(
-  Object.fromEntries(propertyOptionalCoverageKeys2.map((key) => [key, CoveragePreference])),
+  Object.fromEntries(
+    propertyOptionalCoverageKeys2.map((key) => [key, CoveragePreference])
+  )
 );
-var WaterCoverageRequirementV2 = z
-  .object({
-    preference: CoveragePreference,
-    limit: MonetaryRule,
-    deductible: MonetaryRule,
-  })
-  .strict();
+var WaterCoverageRequirementV2 = z.object({
+  preference: CoveragePreference,
+  limit: MonetaryRule,
+  deductible: MonetaryRule
+}).strict();
 var AutoCoverageFormRequirementV2 = z.object({
   preference: CoveragePreference,
-  value: AutoCoverageForm,
+  value: AutoCoverageForm
 });
-var AutoMandateV2 = z
-  .object({
-    coverageForm: AutoCoverageFormRequirementV2,
-    liability: MonetaryRule,
-    collisionDeductible: MonetaryRule,
-    comprehensiveDeductible: MonetaryRule,
-    glassDeductible: MonetaryRule,
-    endorsements: AutoEndorsementPreferencesV2,
-  })
-  .strict();
+var AutoMandateV2 = z.object({
+  coverageForm: AutoCoverageFormRequirementV2,
+  liability: MonetaryRule,
+  collisionDeductible: MonetaryRule,
+  comprehensiveDeductible: MonetaryRule,
+  glassDeductible: MonetaryRule,
+  endorsements: AutoEndorsementPreferencesV2
+}).strict();
 var PropertyCoverageFormRequirementV2 = z.object({
   preference: CoveragePreference,
-  value: PropertyCoverageForm,
+  value: PropertyCoverageForm
 });
 var PropertySettlementRequirementV2 = z.object({
   preference: CoveragePreference,
-  value: PropertySettlement,
+  value: PropertySettlement
 });
-var PropertyMandateV2 = z
-  .object({
-    coverageForm: PropertyCoverageFormRequirementV2,
-    settlementBasis: PropertySettlementRequirementV2,
-    dwellingLimit: MonetaryRule,
-    contentsLimit: MonetaryRule,
-    detachedStructuresLimit: MonetaryRule,
-    personalLiabilityLimit: MonetaryRule,
-    additionalLivingExpenseLimit: MonetaryRule,
-    baseDeductible: MonetaryRule,
-    waterDeductible: MonetaryRule,
-    windHailDeductible: MonetaryRule,
-    earthquakeDeductible: MonetaryRule,
-    sewerBackup: WaterCoverageRequirementV2,
-    overlandWater: WaterCoverageRequirementV2,
-    optionalCoverages: PropertyOptionalCoveragePreferencesV2,
-  })
-  .strict();
-var AutoMandateOverrideValuesV2 = z
-  .object({
-    coverageForm: AutoCoverageFormRequirementV2.optional(),
-    liability: MonetaryRule.optional(),
-    collisionDeductible: MonetaryRule.optional(),
-    comprehensiveDeductible: MonetaryRule.optional(),
-    glassDeductible: MonetaryRule.optional(),
-    endorsements: AutoEndorsementPreferencesV2.partial().optional(),
-  })
-  .strict();
-var VehicleMandateOverrideV2 = z
-  .object({
-    vehicleId: z.string().uuid(),
-    values: AutoMandateOverrideValuesV2,
-  })
-  .strict();
-var PropertyMandateOverrideValuesV2 = z
-  .object({
-    coverageForm: PropertyCoverageFormRequirementV2.optional(),
-    settlementBasis: PropertySettlementRequirementV2.optional(),
-    dwellingLimit: MonetaryRule.optional(),
-    contentsLimit: MonetaryRule.optional(),
-    detachedStructuresLimit: MonetaryRule.optional(),
-    personalLiabilityLimit: MonetaryRule.optional(),
-    additionalLivingExpenseLimit: MonetaryRule.optional(),
-    baseDeductible: MonetaryRule.optional(),
-    waterDeductible: MonetaryRule.optional(),
-    windHailDeductible: MonetaryRule.optional(),
-    earthquakeDeductible: MonetaryRule.optional(),
-    sewerBackup: WaterCoverageRequirementV2.partial().optional(),
-    overlandWater: WaterCoverageRequirementV2.partial().optional(),
-    optionalCoverages: PropertyOptionalCoveragePreferencesV2.partial().optional(),
-  })
-  .strict();
-var PropertyMandateOverrideV2 = z
-  .object({
-    propertyId: z.string().uuid(),
-    values: PropertyMandateOverrideValuesV2,
-  })
-  .strict();
-var HouseholdCoverageMandateV2 = z
-  .object({
-    schemaVersion: z.literal(2),
-    jurisdiction: z.literal("AB"),
-    version: z.number().int().positive(),
-    effectiveFrom: z.string().datetime(),
-    householdAutoDefaults: AutoMandateV2,
-    householdPropertyDefaults: PropertyMandateV2,
-    vehicleOverrides: z.array(VehicleMandateOverrideV2).default([]),
-    propertyOverrides: z.array(PropertyMandateOverrideV2).default([]),
-  })
-  .strict();
+var PropertyMandateV2 = z.object({
+  coverageForm: PropertyCoverageFormRequirementV2,
+  settlementBasis: PropertySettlementRequirementV2,
+  dwellingLimit: MonetaryRule,
+  contentsLimit: MonetaryRule,
+  detachedStructuresLimit: MonetaryRule,
+  personalLiabilityLimit: MonetaryRule,
+  additionalLivingExpenseLimit: MonetaryRule,
+  baseDeductible: MonetaryRule,
+  waterDeductible: MonetaryRule,
+  windHailDeductible: MonetaryRule,
+  earthquakeDeductible: MonetaryRule,
+  sewerBackup: WaterCoverageRequirementV2,
+  overlandWater: WaterCoverageRequirementV2,
+  optionalCoverages: PropertyOptionalCoveragePreferencesV2
+}).strict();
+var AutoMandateOverrideValuesV2 = z.object({
+  coverageForm: AutoCoverageFormRequirementV2.optional(),
+  liability: MonetaryRule.optional(),
+  collisionDeductible: MonetaryRule.optional(),
+  comprehensiveDeductible: MonetaryRule.optional(),
+  glassDeductible: MonetaryRule.optional(),
+  endorsements: AutoEndorsementPreferencesV2.partial().optional()
+}).strict();
+var VehicleMandateOverrideV2 = z.object({
+  vehicleId: z.string().uuid(),
+  values: AutoMandateOverrideValuesV2
+}).strict();
+var PropertyMandateOverrideValuesV2 = z.object({
+  coverageForm: PropertyCoverageFormRequirementV2.optional(),
+  settlementBasis: PropertySettlementRequirementV2.optional(),
+  dwellingLimit: MonetaryRule.optional(),
+  contentsLimit: MonetaryRule.optional(),
+  detachedStructuresLimit: MonetaryRule.optional(),
+  personalLiabilityLimit: MonetaryRule.optional(),
+  additionalLivingExpenseLimit: MonetaryRule.optional(),
+  baseDeductible: MonetaryRule.optional(),
+  waterDeductible: MonetaryRule.optional(),
+  windHailDeductible: MonetaryRule.optional(),
+  earthquakeDeductible: MonetaryRule.optional(),
+  sewerBackup: WaterCoverageRequirementV2.partial().optional(),
+  overlandWater: WaterCoverageRequirementV2.partial().optional(),
+  optionalCoverages: PropertyOptionalCoveragePreferencesV2.partial().optional()
+}).strict();
+var PropertyMandateOverrideV2 = z.object({
+  propertyId: z.string().uuid(),
+  values: PropertyMandateOverrideValuesV2
+}).strict();
+var HouseholdCoverageMandateV2 = z.object({
+  schemaVersion: z.literal(2),
+  jurisdiction: z.literal("AB"),
+  version: z.number().int().positive(),
+  effectiveFrom: z.string().datetime(),
+  householdAutoDefaults: AutoMandateV2,
+  householdPropertyDefaults: PropertyMandateV2,
+  vehicleOverrides: z.array(VehicleMandateOverrideV2).default([]),
+  propertyOverrides: z.array(PropertyMandateOverrideV2).default([])
+}).strict();
 var SwitchingPreferencesV2 = z.object({
   minNetAnnualSavingsCents: NonNegativeCents.default(2e4),
   maxPremiumIncreaseCents: NonNegativeCents.default(0),
@@ -4555,7 +4461,7 @@ var SwitchingPreferencesV2 = z.object({
   preferredPaymentFrequency: PaymentFrequency.default("annual"),
   preferredBillingMethod: BillingMethod.default("automatic_bank"),
   brokerDirectPreference: BrokerDirectPreference.default("indifferent"),
-  minimumInsurerFinancialRating: FinancialRating.default("any"),
+  minimumInsurerFinancialRating: FinancialRating.default("any")
 });
 function createDefaultSwitchingPreferencesV2() {
   return SwitchingPreferencesV2.parse({});
@@ -4564,47 +4470,32 @@ function resolveVehicleMandateV2(defaults, override) {
   if (!override) return defaults;
   const v = override.values;
   return AutoMandateV2.parse({
-    coverageForm: v.coverageForm
-      ? { ...defaults.coverageForm, ...v.coverageForm }
-      : defaults.coverageForm,
+    coverageForm: v.coverageForm ? { ...defaults.coverageForm, ...v.coverageForm } : defaults.coverageForm,
     liability: v.liability ?? defaults.liability,
     collisionDeductible: v.collisionDeductible ?? defaults.collisionDeductible,
     comprehensiveDeductible: v.comprehensiveDeductible ?? defaults.comprehensiveDeductible,
     glassDeductible: v.glassDeductible ?? defaults.glassDeductible,
-    endorsements: v.endorsements
-      ? { ...defaults.endorsements, ...v.endorsements }
-      : defaults.endorsements,
+    endorsements: v.endorsements ? { ...defaults.endorsements, ...v.endorsements } : defaults.endorsements
   });
 }
 function resolvePropertyMandateV2(defaults, override) {
   if (!override) return defaults;
   const v = override.values;
   return PropertyMandateV2.parse({
-    coverageForm: v.coverageForm
-      ? { ...defaults.coverageForm, ...v.coverageForm }
-      : defaults.coverageForm,
-    settlementBasis: v.settlementBasis
-      ? { ...defaults.settlementBasis, ...v.settlementBasis }
-      : defaults.settlementBasis,
+    coverageForm: v.coverageForm ? { ...defaults.coverageForm, ...v.coverageForm } : defaults.coverageForm,
+    settlementBasis: v.settlementBasis ? { ...defaults.settlementBasis, ...v.settlementBasis } : defaults.settlementBasis,
     dwellingLimit: v.dwellingLimit ?? defaults.dwellingLimit,
     contentsLimit: v.contentsLimit ?? defaults.contentsLimit,
     detachedStructuresLimit: v.detachedStructuresLimit ?? defaults.detachedStructuresLimit,
     personalLiabilityLimit: v.personalLiabilityLimit ?? defaults.personalLiabilityLimit,
-    additionalLivingExpenseLimit:
-      v.additionalLivingExpenseLimit ?? defaults.additionalLivingExpenseLimit,
+    additionalLivingExpenseLimit: v.additionalLivingExpenseLimit ?? defaults.additionalLivingExpenseLimit,
     baseDeductible: v.baseDeductible ?? defaults.baseDeductible,
     waterDeductible: v.waterDeductible ?? defaults.waterDeductible,
     windHailDeductible: v.windHailDeductible ?? defaults.windHailDeductible,
     earthquakeDeductible: v.earthquakeDeductible ?? defaults.earthquakeDeductible,
-    sewerBackup: v.sewerBackup
-      ? { ...defaults.sewerBackup, ...v.sewerBackup }
-      : defaults.sewerBackup,
-    overlandWater: v.overlandWater
-      ? { ...defaults.overlandWater, ...v.overlandWater }
-      : defaults.overlandWater,
-    optionalCoverages: v.optionalCoverages
-      ? { ...defaults.optionalCoverages, ...v.optionalCoverages }
-      : defaults.optionalCoverages,
+    sewerBackup: v.sewerBackup ? { ...defaults.sewerBackup, ...v.sewerBackup } : defaults.sewerBackup,
+    overlandWater: v.overlandWater ? { ...defaults.overlandWater, ...v.overlandWater } : defaults.overlandWater,
+    optionalCoverages: v.optionalCoverages ? { ...defaults.optionalCoverages, ...v.optionalCoverages } : defaults.optionalCoverages
   });
 }
 
@@ -4623,7 +4514,7 @@ function v2WaterToLegacy(water) {
   return {
     preference: water.preference,
     limit: monetaryRuleV2ToLegacyLimit(water.limit),
-    deductible: monetaryRuleV2ToLegacyDeductible(water.deductible),
+    deductible: monetaryRuleV2ToLegacyDeductible(water.deductible)
   };
 }
 function v2AutoMandateToLegacy(auto) {
@@ -4633,7 +4524,7 @@ function v2AutoMandateToLegacy(auto) {
     collisionDeductible: monetaryRuleV2ToLegacyDeductible(auto.collisionDeductible),
     comprehensiveDeductible: monetaryRuleV2ToLegacyDeductible(auto.comprehensiveDeductible),
     glassDeductible: monetaryRuleV2ToLegacyDeductible(auto.glassDeductible),
-    endorsements: AutoEndorsementPreferences.parse(auto.endorsements),
+    endorsements: AutoEndorsementPreferences.parse(auto.endorsements)
   };
 }
 function v2PropertyMandateToLegacy(property) {
@@ -4645,7 +4536,7 @@ function v2PropertyMandateToLegacy(property) {
     detachedStructuresLimit: monetaryRuleV2ToLegacyLimit(property.detachedStructuresLimit),
     personalLiabilityLimit: monetaryRuleV2ToLegacyLimit(property.personalLiabilityLimit),
     additionalLivingExpenseLimit: monetaryRuleV2ToLegacyLimit(
-      property.additionalLivingExpenseLimit,
+      property.additionalLivingExpenseLimit
     ),
     baseDeductible: monetaryRuleV2ToLegacyDeductible(property.baseDeductible),
     waterDeductible: monetaryRuleV2ToLegacyDeductible(property.waterDeductible),
@@ -4653,7 +4544,7 @@ function v2PropertyMandateToLegacy(property) {
     earthquakeDeductible: monetaryRuleV2ToLegacyDeductible(property.earthquakeDeductible),
     sewerBackup: v2WaterToLegacy(property.sewerBackup),
     overlandWater: v2WaterToLegacy(property.overlandWater),
-    optionalCoverages: PropertyOptionalCoveragePreferences.parse(property.optionalCoverages),
+    optionalCoverages: PropertyOptionalCoveragePreferences.parse(property.optionalCoverages)
   };
 }
 function v2ResolvedAutoMandateToLegacy(resolved) {
@@ -4673,7 +4564,7 @@ function mandateV2ToEngineMandate(v2, switching) {
   for (const vehicleId of collectVehicleIds(v2)) {
     const resolved = resolveVehicleMandateV2(
       v2.householdAutoDefaults,
-      v2.vehicleOverrides.find((o) => o.vehicleId === vehicleId),
+      v2.vehicleOverrides.find((o) => o.vehicleId === vehicleId)
     );
     vehicleOverrides[vehicleId] = v2ResolvedAutoMandateToLegacy(resolved);
   }
@@ -4681,7 +4572,7 @@ function mandateV2ToEngineMandate(v2, switching) {
   for (const propertyId of collectPropertyIds(v2)) {
     const resolved = resolvePropertyMandateV2(
       v2.householdPropertyDefaults,
-      v2.propertyOverrides.find((o) => o.propertyId === propertyId),
+      v2.propertyOverrides.find((o) => o.propertyId === propertyId)
     );
     propertyOverrides[propertyId] = v2ResolvedPropertyMandateToLegacy(resolved);
   }
@@ -4690,7 +4581,7 @@ function mandateV2ToEngineMandate(v2, switching) {
     property: v2PropertyMandateToLegacy(v2.householdPropertyDefaults),
     switching: switching ?? createDefaultSwitchingPreferencesV2(),
     vehicleOverrides,
-    propertyOverrides,
+    propertyOverrides
   };
 }
 function switchingRowToDomain(row) {
@@ -4710,7 +4601,7 @@ function switchingRowToDomain(row) {
     preferredPaymentFrequency: row.preferred_payment_frequency,
     preferredBillingMethod: row.preferred_billing_method,
     brokerDirectPreference: row.broker_direct_preference,
-    minimumInsurerFinancialRating: row.minimum_insurer_financial_rating,
+    minimumInsurerFinancialRating: row.minimum_insurer_financial_rating
   });
 }
 
@@ -4734,7 +4625,7 @@ var AutoCoverageDetails = z.object({
   glassCoverageIncluded: z.boolean(),
   telematicsRequired: z.boolean(),
   vehicleClass: VehicleUseClass.default("personal"),
-  financingStatus: FinancingStatus.default("owned"),
+  financingStatus: FinancingStatus.default("owned")
 });
 var PropertyCoverageDetails = z.object({
   propertyType: PropertyType.default("homeowner"),
@@ -4767,7 +4658,7 @@ var PropertyCoverageDetails = z.object({
   scheduledValuablesIncluded: z.boolean(),
   homeBusinessIncluded: z.boolean(),
   shortTermRentalPermissionIncluded: z.boolean(),
-  claimsForgivenessIncluded: z.boolean(),
+  claimsForgivenessIncluded: z.boolean()
 });
 var QuoteComponent = z.object({
   id: z.string().uuid().optional(),
@@ -4776,7 +4667,7 @@ var QuoteComponent = z.object({
   assetLabel: z.string().optional(),
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
-  property: PropertyCoverageDetails.nullable(),
+  property: PropertyCoverageDetails.nullable()
 });
 var EngineQuote = z.object({
   id: z.string(),
@@ -4796,7 +4687,7 @@ var EngineQuote = z.object({
   paymentFrequency: PaymentFrequency.optional(),
   billingMethod: BillingMethod.optional(),
   distributionChannel: BrokerDirectPreference.optional(),
-  insurerFinancialRating: FinancialRating.optional(),
+  insurerFinancialRating: FinancialRating.optional()
 });
 
 // ../schemas/src/entities.ts
@@ -4808,7 +4699,7 @@ var Profile = z.object({
   full_name: z.string(),
   email: z.string().email(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Household = z.object({
   id: uuid,
@@ -4818,7 +4709,7 @@ var Household = z.object({
   timezone: z.string().default("America/Edmonton"),
   autopilot_active: z.boolean(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Driver = z.object({
   id: uuid,
@@ -4828,7 +4719,7 @@ var Driver = z.object({
   licence_class: z.string(),
   years_licensed: z.number().int().nonnegative(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Vehicle = z.object({
   id: uuid,
@@ -4840,7 +4731,7 @@ var Vehicle = z.object({
   annual_km: z.number().int().nonnegative().nullable(),
   primary_use: z.string(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Property = z.object({
   id: uuid,
@@ -4853,7 +4744,7 @@ var Property = z.object({
   dwelling_type: z.string(),
   owner_occupied: z.boolean(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Policy = z.object({
   id: uuid,
@@ -4867,7 +4758,7 @@ var Policy = z.object({
   renewal_date: z.string(),
   is_current: z.boolean(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var PolicyDocument = z.object({
   id: uuid,
@@ -4881,7 +4772,7 @@ var PolicyDocument = z.object({
   size_bytes: z.number().int().nonnegative(),
   uploaded_by: uuid,
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var OptimizationCase = z.object({
   id: uuid,
@@ -4889,7 +4780,7 @@ var OptimizationCase = z.object({
   state: CaseState,
   renewal_date: z.string().nullable(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var QuoteRequest = z.object({
   id: uuid,
@@ -4899,7 +4790,7 @@ var QuoteRequest = z.object({
   product_lines: z.array(ProductLine),
   inclusion_reason: z.string(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Quote = z.object({
   id: uuid,
@@ -4915,7 +4806,7 @@ var Quote = z.object({
   underwriting_conditions: z.array(z.string()),
   expires_at: timestamptz.nullable(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var CustomerQuestion = z.object({
   id: uuid,
@@ -4928,7 +4819,7 @@ var CustomerQuestion = z.object({
   answered_by: uuid.nullable(),
   answered_at: timestamptz.nullable(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Recommendation = z.object({
   id: uuid,
@@ -4942,14 +4833,14 @@ var Recommendation = z.object({
   reason_codes: z.array(z.string()),
   disclosure_version: z.string(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var SwitchEvent = z.object({
   id: uuid,
   case_id: uuid,
   state: SwitchState,
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 var Consent = z.object({
   id: uuid,
@@ -4957,7 +4848,7 @@ var Consent = z.object({
   consent_type: ConsentType,
   granted: z.boolean(),
   granted_at: timestamptz,
-  created_at: timestamptz,
+  created_at: timestamptz
 });
 var Subscription = z.object({
   id: uuid,
@@ -4967,34 +4858,29 @@ var Subscription = z.object({
   stripe_subscription_id: z.string().nullable(),
   current_period_end: timestamptz.nullable(),
   created_at: timestamptz,
-  updated_at: timestamptz,
+  updated_at: timestamptz
 });
 
 // src/engine.ts
-var USABLE_QUOTE_STATES = /* @__PURE__ */ new Set([
-  "estimate",
-  "conditional",
-  "bindable",
-  "selected",
-]);
+var USABLE_QUOTE_STATES = /* @__PURE__ */ new Set(["estimate", "conditional", "bindable", "selected"]);
 var autoCoverageFormRank = {
   liability_only: 1,
   collision: 2,
   comprehensive: 3,
   specified_perils: 4,
-  all_perils: 5,
+  all_perils: 5
 };
 var propertyCoverageFormRank = {
   basic: 1,
   named_perils: 2,
   broad: 3,
-  comprehensive: 4,
+  comprehensive: 4
 };
 var propertySettlementRank = {
   actual_cash_value: 1,
   replacement_cost: 2,
   extended_replacement_cost: 3,
-  guaranteed_replacement_cost: 4,
+  guaranteed_replacement_cost: 4
 };
 var financialRatingRank = {
   B_or_lower: 1,
@@ -5002,7 +4888,7 @@ var financialRatingRank = {
   A_minus: 3,
   A: 4,
   A_plus: 5,
-  any: 0,
+  any: 0
 };
 var autoEndorsementMap = {
   accident_forgiveness: "accidentForgivenessIncluded",
@@ -5014,7 +4900,7 @@ var autoEndorsementMap = {
   roadside_assistance: "roadsideAssistanceIncluded",
   disappearing_deductible: "disappearingDeductibleIncluded",
   glass_coverage: "glassCoverageIncluded",
-  telematics: "telematicsRequired",
+  telematics: "telematicsRequired"
 };
 var propertyOptionalMap = {
   equipment_breakdown: "equipmentBreakdownIncluded",
@@ -5028,7 +4914,7 @@ var propertyOptionalMap = {
   claims_forgiveness: "claimsForgivenessIncluded",
   groundwater_seepage: "groundwaterIncluded",
   ice_dam: "iceDamIncluded",
-  earthquake: "earthquakeIncluded",
+  earthquake: "earthquakeIncluded"
 };
 var autoEndorsementReasonKey = {
   accident_forgiveness: "accident_forgiveness",
@@ -5040,7 +4926,7 @@ var autoEndorsementReasonKey = {
   roadside_assistance: "roadside_assistance",
   disappearing_deductible: "disappearing_deductible",
   glass_coverage: "glass_coverage",
-  telematics: "telematics",
+  telematics: "telematics"
 };
 function componentsFor(quote, line) {
   return quote.components.filter((c) => c.productLine === line);
@@ -5051,7 +4937,7 @@ function selection(quote, component) {
     insurerId: quote.insurerId,
     insurerName: quote.insurerName,
     component,
-    isIncumbent: quote.isIncumbent,
+    isIncumbent: quote.isIncumbent
   };
 }
 function buildConfigurations(input) {
@@ -5066,7 +4952,7 @@ function buildConfigurations(input) {
   autoOptions.push({ quote: input.incumbentAuto.quote, component: input.incumbentAuto.component });
   propertyOptions.push({
     quote: input.incumbentProperty.quote,
-    component: input.incumbentProperty.component,
+    component: input.incumbentProperty.component
   });
   const configurations = [];
   const seen = /* @__PURE__ */ new Set();
@@ -5080,7 +4966,7 @@ function buildConfigurations(input) {
         auto: selection(auto.quote, auto.component),
         property: selection(property.quote, property.component),
         bundled: auto.quote.insurerId === property.quote.insurerId,
-        isIncumbentConfiguration: auto.quote.isIncumbent && property.quote.isIncumbent,
+        isIncumbentConfiguration: auto.quote.isIncumbent && property.quote.isIncumbent
       });
     }
   }
@@ -5098,22 +4984,12 @@ function mergeAutoMandate(base, override) {
   return {
     ...base,
     ...override,
-    coverageForm: override.coverageForm
-      ? { ...base.coverageForm, ...override.coverageForm }
-      : base.coverageForm,
+    coverageForm: override.coverageForm ? { ...base.coverageForm, ...override.coverageForm } : base.coverageForm,
     liability: override.liability ? { ...base.liability, ...override.liability } : base.liability,
-    collisionDeductible: override.collisionDeductible
-      ? { ...base.collisionDeductible, ...override.collisionDeductible }
-      : base.collisionDeductible,
-    comprehensiveDeductible: override.comprehensiveDeductible
-      ? { ...base.comprehensiveDeductible, ...override.comprehensiveDeductible }
-      : base.comprehensiveDeductible,
-    glassDeductible: override.glassDeductible
-      ? { ...base.glassDeductible, ...override.glassDeductible }
-      : base.glassDeductible,
-    endorsements: override.endorsements
-      ? { ...base.endorsements, ...override.endorsements }
-      : base.endorsements,
+    collisionDeductible: override.collisionDeductible ? { ...base.collisionDeductible, ...override.collisionDeductible } : base.collisionDeductible,
+    comprehensiveDeductible: override.comprehensiveDeductible ? { ...base.comprehensiveDeductible, ...override.comprehensiveDeductible } : base.comprehensiveDeductible,
+    glassDeductible: override.glassDeductible ? { ...base.glassDeductible, ...override.glassDeductible } : base.glassDeductible,
+    endorsements: override.endorsements ? { ...base.endorsements, ...override.endorsements } : base.endorsements
   };
 }
 function mergePropertyMandate(base, override) {
@@ -5121,48 +4997,20 @@ function mergePropertyMandate(base, override) {
   return {
     ...base,
     ...override,
-    coverageForm: override.coverageForm
-      ? { ...base.coverageForm, ...override.coverageForm }
-      : base.coverageForm,
-    settlementBasis: override.settlementBasis
-      ? { ...base.settlementBasis, ...override.settlementBasis }
-      : base.settlementBasis,
-    dwellingLimit: override.dwellingLimit
-      ? { ...base.dwellingLimit, ...override.dwellingLimit }
-      : base.dwellingLimit,
-    contentsLimit: override.contentsLimit
-      ? { ...base.contentsLimit, ...override.contentsLimit }
-      : base.contentsLimit,
-    detachedStructuresLimit: override.detachedStructuresLimit
-      ? { ...base.detachedStructuresLimit, ...override.detachedStructuresLimit }
-      : base.detachedStructuresLimit,
-    personalLiabilityLimit: override.personalLiabilityLimit
-      ? { ...base.personalLiabilityLimit, ...override.personalLiabilityLimit }
-      : base.personalLiabilityLimit,
-    additionalLivingExpenseLimit: override.additionalLivingExpenseLimit
-      ? { ...base.additionalLivingExpenseLimit, ...override.additionalLivingExpenseLimit }
-      : base.additionalLivingExpenseLimit,
-    baseDeductible: override.baseDeductible
-      ? { ...base.baseDeductible, ...override.baseDeductible }
-      : base.baseDeductible,
-    waterDeductible: override.waterDeductible
-      ? { ...base.waterDeductible, ...override.waterDeductible }
-      : base.waterDeductible,
-    windHailDeductible: override.windHailDeductible
-      ? { ...base.windHailDeductible, ...override.windHailDeductible }
-      : base.windHailDeductible,
-    earthquakeDeductible: override.earthquakeDeductible
-      ? { ...base.earthquakeDeductible, ...override.earthquakeDeductible }
-      : base.earthquakeDeductible,
-    sewerBackup: override.sewerBackup
-      ? { ...base.sewerBackup, ...override.sewerBackup }
-      : base.sewerBackup,
-    overlandWater: override.overlandWater
-      ? { ...base.overlandWater, ...override.overlandWater }
-      : base.overlandWater,
-    optionalCoverages: override.optionalCoverages
-      ? { ...base.optionalCoverages, ...override.optionalCoverages }
-      : base.optionalCoverages,
+    coverageForm: override.coverageForm ? { ...base.coverageForm, ...override.coverageForm } : base.coverageForm,
+    settlementBasis: override.settlementBasis ? { ...base.settlementBasis, ...override.settlementBasis } : base.settlementBasis,
+    dwellingLimit: override.dwellingLimit ? { ...base.dwellingLimit, ...override.dwellingLimit } : base.dwellingLimit,
+    contentsLimit: override.contentsLimit ? { ...base.contentsLimit, ...override.contentsLimit } : base.contentsLimit,
+    detachedStructuresLimit: override.detachedStructuresLimit ? { ...base.detachedStructuresLimit, ...override.detachedStructuresLimit } : base.detachedStructuresLimit,
+    personalLiabilityLimit: override.personalLiabilityLimit ? { ...base.personalLiabilityLimit, ...override.personalLiabilityLimit } : base.personalLiabilityLimit,
+    additionalLivingExpenseLimit: override.additionalLivingExpenseLimit ? { ...base.additionalLivingExpenseLimit, ...override.additionalLivingExpenseLimit } : base.additionalLivingExpenseLimit,
+    baseDeductible: override.baseDeductible ? { ...base.baseDeductible, ...override.baseDeductible } : base.baseDeductible,
+    waterDeductible: override.waterDeductible ? { ...base.waterDeductible, ...override.waterDeductible } : base.waterDeductible,
+    windHailDeductible: override.windHailDeductible ? { ...base.windHailDeductible, ...override.windHailDeductible } : base.windHailDeductible,
+    earthquakeDeductible: override.earthquakeDeductible ? { ...base.earthquakeDeductible, ...override.earthquakeDeductible } : base.earthquakeDeductible,
+    sewerBackup: override.sewerBackup ? { ...base.sewerBackup, ...override.sewerBackup } : base.sewerBackup,
+    overlandWater: override.overlandWater ? { ...base.overlandWater, ...override.overlandWater } : base.overlandWater,
+    optionalCoverages: override.optionalCoverages ? { ...base.optionalCoverages, ...override.optionalCoverages } : base.optionalCoverages
   };
 }
 function effectiveAutoMandate(mandate, component) {
@@ -5178,8 +5026,7 @@ function computeCost(input, config) {
   const propertyQuote = quoteById(input, config.property.quoteId);
   const autoPremiumCents = config.auto.component.annualPremiumCents;
   const propertyPremiumCents = config.property.component.annualPremiumCents;
-  const distinctQuotes =
-    autoQuote.id === propertyQuote.id ? [autoQuote] : [autoQuote, propertyQuote];
+  const distinctQuotes = autoQuote.id === propertyQuote.id ? [autoQuote] : [autoQuote, propertyQuote];
   let policyFeesCents = 0;
   let paymentFeesCents = 0;
   let cancellationChargesCents = 0;
@@ -5192,13 +5039,7 @@ function computeCost(input, config) {
   if (config.bundled) {
     bundleDiscountCents = Math.max(...distinctQuotes.map((q) => q.bundleDiscountCents));
   }
-  const totalCents =
-    autoPremiumCents +
-    propertyPremiumCents +
-    policyFeesCents +
-    paymentFeesCents +
-    cancellationChargesCents -
-    bundleDiscountCents;
+  const totalCents = autoPremiumCents + propertyPremiumCents + policyFeesCents + paymentFeesCents + cancellationChargesCents - bundleDiscountCents;
   return {
     autoPremiumCents,
     propertyPremiumCents,
@@ -5206,7 +5047,7 @@ function computeCost(input, config) {
     paymentFeesCents,
     bundleDiscountCents,
     cancellationChargesCents,
-    totalCents,
+    totalCents
   };
 }
 function limitTarget(rule, required, incumbent) {
@@ -5277,22 +5118,18 @@ function checkAutoHardRequirements(mandate, auto, incumbent) {
     mandate.liability.rule,
     mandate.liability.cents,
     auto.thirdPartyLiabilityCents,
-    incumbentLiability,
+    incumbentLiability
   );
   if (liability.below) violations.push("AUTO_LIABILITY_BELOW_MINIMUM");
   if (liability.above) violations.push("AUTO_LIABILITY_EXCEEDS_MAXIMUM");
   if (liability.notExact) violations.push("AUTO_LIABILITY_NOT_EXACT");
-  if (
-    !autoFormSatisfies(
-      mandate.coverageForm.preference,
-      mandate.coverageForm.value,
-      auto.coverageForm,
-    )
-  )
+  if (!autoFormSatisfies(
+    mandate.coverageForm.preference,
+    mandate.coverageForm.value,
+    auto.coverageForm
+  ))
     violations.push(
-      mandate.coverageForm.preference === "prohibited"
-        ? "AUTO_COVERAGE_FORM_PROHIBITED"
-        : "AUTO_COVERAGE_FORM_INSUFFICIENT",
+      mandate.coverageForm.preference === "prohibited" ? "AUTO_COVERAGE_FORM_PROHIBITED" : "AUTO_COVERAGE_FORM_INSUFFICIENT"
     );
   if (mandate.vehicleClass && auto.vehicleClass !== mandate.vehicleClass)
     violations.push("AUTO_VEHICLE_CLASS_MISMATCH");
@@ -5302,7 +5139,7 @@ function checkAutoHardRequirements(mandate, auto, incumbent) {
     mandate.collisionDeductible.rule,
     mandate.collisionDeductible.cents,
     auto.collisionDeductibleCents ?? 0,
-    incumbent?.collisionDeductibleCents ?? void 0,
+    incumbent?.collisionDeductibleCents ?? void 0
   );
   if (auto.collisionIncluded) {
     if (collisionDed.above) violations.push("AUTO_COLLISION_DEDUCTIBLE_TOO_HIGH");
@@ -5312,7 +5149,7 @@ function checkAutoHardRequirements(mandate, auto, incumbent) {
     mandate.comprehensiveDeductible.rule,
     mandate.comprehensiveDeductible.cents,
     auto.comprehensiveDeductibleCents ?? 0,
-    incumbent?.comprehensiveDeductibleCents ?? void 0,
+    incumbent?.comprehensiveDeductibleCents ?? void 0
   );
   if (auto.comprehensiveIncluded) {
     if (comprehensiveDed.above) violations.push("AUTO_COMPREHENSIVE_DEDUCTIBLE_TOO_HIGH");
@@ -5322,7 +5159,7 @@ function checkAutoHardRequirements(mandate, auto, incumbent) {
     mandate.glassDeductible.rule,
     mandate.glassDeductible.cents,
     auto.glassDeductibleCents ?? 0,
-    void 0,
+    void 0
   );
   if (glassDed.above) violations.push("AUTO_GLASS_DEDUCTIBLE_TOO_HIGH");
   const telematicsPreference = mandate.endorsements.telematics;
@@ -5345,37 +5182,22 @@ function checkWaterCoverage(name, requirement, actual, incumbent) {
   const isSewer = name === "sewerBackup";
   const included = isSewer ? actual.sewerBackupIncluded : actual.overlandWaterIncluded;
   const limit = isSewer ? actual.sewerBackupLimitCents : actual.overlandWaterLimitCents;
-  const deductible = isSewer
-    ? actual.sewerBackupDeductibleCents
-    : actual.overlandWaterDeductibleCents;
-  const incumbentLimit = isSewer
-    ? incumbent?.sewerBackupLimitCents
-    : incumbent?.overlandWaterLimitCents;
-  const incumbentDeductible = isSewer
-    ? incumbent?.sewerBackupDeductibleCents
-    : incumbent?.overlandWaterDeductibleCents;
+  const deductible = isSewer ? actual.sewerBackupDeductibleCents : actual.overlandWaterDeductibleCents;
+  const incumbentLimit = isSewer ? incumbent?.sewerBackupLimitCents : incumbent?.overlandWaterLimitCents;
+  const incumbentDeductible = isSewer ? incumbent?.sewerBackupDeductibleCents : incumbent?.overlandWaterDeductibleCents;
   const missingCode = isSewer ? "PROPERTY_SEWER_BACKUP_MISSING" : "PROPERTY_OVERLAND_WATER_MISSING";
-  const prohibitedCode = isSewer
-    ? "PROPERTY_SEWER_BACKUP_PROHIBITED"
-    : "PROPERTY_OVERLAND_WATER_PROHIBITED";
-  const limitCode = isSewer
-    ? "PROPERTY_SEWER_BACKUP_LIMIT_TOO_LOW"
-    : "PROPERTY_OVERLAND_WATER_LIMIT_TOO_LOW";
-  const deductibleCode = isSewer
-    ? "PROPERTY_SEWER_BACKUP_DEDUCTIBLE_TOO_HIGH"
-    : "PROPERTY_OVERLAND_WATER_DEDUCTIBLE_TOO_HIGH";
+  const prohibitedCode = isSewer ? "PROPERTY_SEWER_BACKUP_PROHIBITED" : "PROPERTY_OVERLAND_WATER_PROHIBITED";
+  const limitCode = isSewer ? "PROPERTY_SEWER_BACKUP_LIMIT_TOO_LOW" : "PROPERTY_OVERLAND_WATER_LIMIT_TOO_LOW";
+  const deductibleCode = isSewer ? "PROPERTY_SEWER_BACKUP_DEDUCTIBLE_TOO_HIGH" : "PROPERTY_OVERLAND_WATER_DEDUCTIBLE_TOO_HIGH";
   if (requirement.preference === "prohibited" && included) violations.push(prohibitedCode);
   if (requirement.preference === "required" && !included) violations.push(missingCode);
-  if (
-    (requirement.preference === "required" || requirement.preference === "preferred") &&
-    included
-  ) {
+  if ((requirement.preference === "required" || requirement.preference === "preferred") && included) {
     if (limit !== null) {
       const limitCheck = limitSatisfies(
         requirement.limit.rule,
         requirement.limit.cents,
         limit,
-        incumbentLimit ?? void 0,
+        incumbentLimit ?? void 0
       );
       if (limitCheck.below) violations.push(limitCode);
     }
@@ -5384,7 +5206,7 @@ function checkWaterCoverage(name, requirement, actual, incumbent) {
         requirement.deductible.rule,
         requirement.deductible.cents,
         deductible,
-        incumbentDeductible ?? void 0,
+        incumbentDeductible ?? void 0
       );
       if (dedCheck.above) violations.push(deductibleCode);
     }
@@ -5395,35 +5217,27 @@ function checkPropertyHardRequirements(mandate, property, incumbent) {
   const violations = [];
   if (mandate.propertyType && mandate.propertyType !== property.propertyType)
     violations.push("PROPERTY_TYPE_MISMATCH");
-  if (
-    !propertyFormSatisfies(
-      mandate.coverageForm.preference,
-      mandate.coverageForm.value,
-      property.coverageForm,
-    )
-  )
+  if (!propertyFormSatisfies(
+    mandate.coverageForm.preference,
+    mandate.coverageForm.value,
+    property.coverageForm
+  ))
     violations.push(
-      mandate.coverageForm.preference === "prohibited"
-        ? "PROPERTY_COVERAGE_FORM_PROHIBITED"
-        : "PROPERTY_COVERAGE_FORM_INSUFFICIENT",
+      mandate.coverageForm.preference === "prohibited" ? "PROPERTY_COVERAGE_FORM_PROHIBITED" : "PROPERTY_COVERAGE_FORM_INSUFFICIENT"
     );
-  if (
-    !settlementSatisfies(
-      mandate.settlementBasis.preference,
-      mandate.settlementBasis.value,
-      property.settlementBasis,
-    )
-  )
+  if (!settlementSatisfies(
+    mandate.settlementBasis.preference,
+    mandate.settlementBasis.value,
+    property.settlementBasis
+  ))
     violations.push(
-      mandate.settlementBasis.preference === "prohibited"
-        ? "PROPERTY_SETTLEMENT_PROHIBITED"
-        : "PROPERTY_SETTLEMENT_BELOW_REQUIRED",
+      mandate.settlementBasis.preference === "prohibited" ? "PROPERTY_SETTLEMENT_PROHIBITED" : "PROPERTY_SETTLEMENT_BELOW_REQUIRED"
     );
   const dwelling = limitSatisfies(
     mandate.dwellingLimit.rule,
     mandate.dwellingLimit.cents,
     property.dwellingLimitCents,
-    incumbent?.dwellingLimitCents,
+    incumbent?.dwellingLimitCents
   );
   if (dwelling.below) violations.push("PROPERTY_DWELLING_LIMIT_BELOW_MINIMUM");
   if (dwelling.above) violations.push("PROPERTY_DWELLING_LIMIT_EXCEEDS_MAXIMUM");
@@ -5432,35 +5246,35 @@ function checkPropertyHardRequirements(mandate, property, incumbent) {
     mandate.contentsLimit.rule,
     mandate.contentsLimit.cents,
     property.contentsLimitCents,
-    incumbent?.contentsLimitCents,
+    incumbent?.contentsLimitCents
   );
   if (contents.below) violations.push("PROPERTY_CONTENTS_LIMIT_TOO_LOW");
   const detached = limitSatisfies(
     mandate.detachedStructuresLimit.rule,
     mandate.detachedStructuresLimit.cents,
     property.detachedStructuresLimitCents,
-    incumbent?.detachedStructuresLimitCents,
+    incumbent?.detachedStructuresLimitCents
   );
   if (detached.below) violations.push("PROPERTY_DETACHED_STRUCTURES_LIMIT_TOO_LOW");
   const liability = limitSatisfies(
     mandate.personalLiabilityLimit.rule,
     mandate.personalLiabilityLimit.cents,
     property.personalLiabilityLimitCents,
-    incumbent?.personalLiabilityLimitCents,
+    incumbent?.personalLiabilityLimitCents
   );
   if (liability.below) violations.push("PROPERTY_PERSONAL_LIABILITY_LIMIT_TOO_LOW");
   const ale = limitSatisfies(
     mandate.additionalLivingExpenseLimit.rule,
     mandate.additionalLivingExpenseLimit.cents,
     property.additionalLivingExpenseLimitCents,
-    incumbent?.additionalLivingExpenseLimitCents,
+    incumbent?.additionalLivingExpenseLimitCents
   );
   if (ale.below) violations.push("PROPERTY_ADDITIONAL_LIVING_EXPENSE_LIMIT_TOO_LOW");
   const baseDed = deductibleSatisfies(
     mandate.baseDeductible.rule,
     mandate.baseDeductible.cents,
     property.baseDeductibleCents,
-    incumbent?.baseDeductibleCents,
+    incumbent?.baseDeductibleCents
   );
   if (baseDed.above) violations.push("PROPERTY_BASE_DEDUCTIBLE_TOO_HIGH");
   if (baseDed.notExact) violations.push("PROPERTY_BASE_DEDUCTIBLE_NOT_EXACT");
@@ -5468,26 +5282,26 @@ function checkPropertyHardRequirements(mandate, property, incumbent) {
     mandate.waterDeductible.rule,
     mandate.waterDeductible.cents,
     property.waterDeductibleCents ?? 0,
-    incumbent?.waterDeductibleCents ?? void 0,
+    incumbent?.waterDeductibleCents ?? void 0
   );
   if (waterDed.above) violations.push("PROPERTY_WATER_DEDUCTIBLE_TOO_HIGH");
   const windHailDed = deductibleSatisfies(
     mandate.windHailDeductible.rule,
     mandate.windHailDeductible.cents,
     property.windHailDeductibleCents ?? 0,
-    incumbent?.windHailDeductibleCents ?? void 0,
+    incumbent?.windHailDeductibleCents ?? void 0
   );
   if (windHailDed.above) violations.push("PROPERTY_WIND_HAIL_DEDUCTIBLE_TOO_HIGH");
   const earthquakeDed = deductibleSatisfies(
     mandate.earthquakeDeductible.rule,
     mandate.earthquakeDeductible.cents,
     property.earthquakeDeductibleCents ?? 0,
-    incumbent?.earthquakeDeductibleCents ?? void 0,
+    incumbent?.earthquakeDeductibleCents ?? void 0
   );
   if (earthquakeDed.above) violations.push("PROPERTY_EARTHQUAKE_DEDUCTIBLE_TOO_HIGH");
   violations.push(...checkWaterCoverage("sewerBackup", mandate.sewerBackup, property, incumbent));
   violations.push(
-    ...checkWaterCoverage("overlandWater", mandate.overlandWater, property, incumbent),
+    ...checkWaterCoverage("overlandWater", mandate.overlandWater, property, incumbent)
   );
   for (const [key, field] of Object.entries(propertyOptionalMap)) {
     const preference = mandate.optionalCoverages[key];
@@ -5509,7 +5323,7 @@ function checkHardRequirements(input, config) {
   const incumbentProperty = input.incumbentProperty.component.property;
   return [
     ...checkAutoHardRequirements(autoMandate, auto, incumbentAuto),
-    ...checkPropertyHardRequirements(propertyMandate, property, incumbentProperty),
+    ...checkPropertyHardRequirements(propertyMandate, property, incumbentProperty)
   ];
 }
 function isCoverageReduced(actual, incumbent) {
@@ -5543,15 +5357,9 @@ function coverageReductionsVsIncumbent(input, config) {
   }
   if (property.dwellingLimitCents < incumbentProperty.dwellingLimitCents)
     reductions.push("property_dwelling_limit_reduced");
-  if (
-    propertyCoverageFormRank[property.coverageForm] <
-    propertyCoverageFormRank[incumbentProperty.coverageForm]
-  )
+  if (propertyCoverageFormRank[property.coverageForm] < propertyCoverageFormRank[incumbentProperty.coverageForm])
     reductions.push("property_coverage_form_reduced");
-  if (
-    propertySettlementRank[property.settlementBasis] <
-    propertySettlementRank[incumbentProperty.settlementBasis]
-  )
+  if (propertySettlementRank[property.settlementBasis] < propertySettlementRank[incumbentProperty.settlementBasis])
     reductions.push("property_settlement_reduced");
   if (property.contentsLimitCents < incumbentProperty.contentsLimitCents)
     reductions.push("property_contents_limit_reduced");
@@ -5559,25 +5367,15 @@ function coverageReductionsVsIncumbent(input, config) {
     reductions.push("property_detached_structures_limit_reduced");
   if (property.personalLiabilityLimitCents < incumbentProperty.personalLiabilityLimitCents)
     reductions.push("property_personal_liability_limit_reduced");
-  if (
-    property.additionalLivingExpenseLimitCents < incumbentProperty.additionalLivingExpenseLimitCents
-  )
+  if (property.additionalLivingExpenseLimitCents < incumbentProperty.additionalLivingExpenseLimitCents)
     reductions.push("property_ale_limit_reduced");
   if (isCoverageReduced(property.sewerBackupIncluded, incumbentProperty.sewerBackupIncluded))
     reductions.push("property_sewer_backup_removed");
-  if (
-    property.sewerBackupLimitCents !== null &&
-    incumbentProperty.sewerBackupLimitCents !== null &&
-    property.sewerBackupLimitCents < incumbentProperty.sewerBackupLimitCents
-  )
+  if (property.sewerBackupLimitCents !== null && incumbentProperty.sewerBackupLimitCents !== null && property.sewerBackupLimitCents < incumbentProperty.sewerBackupLimitCents)
     reductions.push("property_sewer_backup_limit_reduced");
   if (isCoverageReduced(property.overlandWaterIncluded, incumbentProperty.overlandWaterIncluded))
     reductions.push("property_overland_water_removed");
-  if (
-    property.overlandWaterLimitCents !== null &&
-    incumbentProperty.overlandWaterLimitCents !== null &&
-    property.overlandWaterLimitCents < incumbentProperty.overlandWaterLimitCents
-  )
+  if (property.overlandWaterLimitCents !== null && incumbentProperty.overlandWaterLimitCents !== null && property.overlandWaterLimitCents < incumbentProperty.overlandWaterLimitCents)
     reductions.push("property_overland_water_limit_reduced");
   for (const [key, field] of Object.entries(propertyOptionalMap)) {
     if (isCoverageReduced(property[field], incumbentProperty[field])) {
@@ -5597,34 +5395,25 @@ function deductibleIncreasedVsIncumbent(input, config) {
   if (!auto || !property) return { increased: false, increaseCents: 0 };
   let increaseCents = 0;
   if (auto.collisionIncluded && incumbentAuto.collisionIncluded) {
-    const diff =
-      numOr(auto.collisionDeductibleCents, 0) - numOr(incumbentAuto.collisionDeductibleCents, 0);
+    const diff = numOr(auto.collisionDeductibleCents, 0) - numOr(incumbentAuto.collisionDeductibleCents, 0);
     if (diff > 0) increaseCents += diff;
   }
   if (auto.comprehensiveIncluded && incumbentAuto.comprehensiveIncluded) {
-    const diff =
-      numOr(auto.comprehensiveDeductibleCents, 0) -
-      numOr(incumbentAuto.comprehensiveDeductibleCents, 0);
+    const diff = numOr(auto.comprehensiveDeductibleCents, 0) - numOr(incumbentAuto.comprehensiveDeductibleCents, 0);
     if (diff > 0) increaseCents += diff;
   }
   if (numOr(auto.glassDeductibleCents, 0) > numOr(incumbentAuto.glassDeductibleCents, 0))
-    increaseCents +=
-      numOr(auto.glassDeductibleCents, 0) - numOr(incumbentAuto.glassDeductibleCents, 0);
+    increaseCents += numOr(auto.glassDeductibleCents, 0) - numOr(incumbentAuto.glassDeductibleCents, 0);
   if (property.baseDeductibleCents > incumbentProperty.baseDeductibleCents)
     increaseCents += property.baseDeductibleCents - incumbentProperty.baseDeductibleCents;
   if (numOr(property.waterDeductibleCents, 0) > numOr(incumbentProperty.waterDeductibleCents, 0))
-    increaseCents +=
-      numOr(property.waterDeductibleCents, 0) - numOr(incumbentProperty.waterDeductibleCents, 0);
+    increaseCents += numOr(property.waterDeductibleCents, 0) - numOr(incumbentProperty.waterDeductibleCents, 0);
   if (property.windHailIncluded && incumbentProperty.windHailIncluded) {
-    const diff =
-      numOr(property.windHailDeductibleCents, 0) -
-      numOr(incumbentProperty.windHailDeductibleCents, 0);
+    const diff = numOr(property.windHailDeductibleCents, 0) - numOr(incumbentProperty.windHailDeductibleCents, 0);
     if (diff > 0) increaseCents += diff;
   }
   if (property.earthquakeIncluded && incumbentProperty.earthquakeIncluded) {
-    const diff =
-      numOr(property.earthquakeDeductibleCents, 0) -
-      numOr(incumbentProperty.earthquakeDeductibleCents, 0);
+    const diff = numOr(property.earthquakeDeductibleCents, 0) - numOr(incumbentProperty.earthquakeDeductibleCents, 0);
     if (diff > 0) increaseCents += diff;
   }
   return { increased: increaseCents > 0, increaseCents };
@@ -5634,15 +5423,15 @@ function totalDeductibles(config) {
   const property = config.property.component.property;
   let total = 0;
   if (auto) {
-    total += auto.collisionIncluded ? (auto.collisionDeductibleCents ?? 0) : 0;
-    total += auto.comprehensiveIncluded ? (auto.comprehensiveDeductibleCents ?? 0) : 0;
+    total += auto.collisionIncluded ? auto.collisionDeductibleCents ?? 0 : 0;
+    total += auto.comprehensiveIncluded ? auto.comprehensiveDeductibleCents ?? 0 : 0;
     total += auto.glassDeductibleCents ?? 0;
   }
   if (property) {
     total += property.baseDeductibleCents;
     total += property.waterDeductibleCents ?? 0;
-    total += property.windHailIncluded ? (property.windHailDeductibleCents ?? 0) : 0;
-    total += property.earthquakeIncluded ? (property.earthquakeDeductibleCents ?? 0) : 0;
+    total += property.windHailIncluded ? property.windHailDeductibleCents ?? 0 : 0;
+    total += property.earthquakeIncluded ? property.earthquakeDeductibleCents ?? 0 : 0;
   }
   return total;
 }
@@ -5664,7 +5453,7 @@ function validateEngineInput(input) {
         if (autoSeen) {
           return {
             code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
-            message: "Multi-asset optimization is not enabled in this release.",
+            message: "Multi-asset optimization is not enabled in this release."
           };
         }
         autoSeen = true;
@@ -5674,7 +5463,7 @@ function validateEngineInput(input) {
         if (propertySeen) {
           return {
             code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
-            message: "Multi-asset optimization is not enabled in this release.",
+            message: "Multi-asset optimization is not enabled in this release."
           };
         }
         propertySeen = true;
@@ -5685,13 +5474,13 @@ function validateEngineInput(input) {
   if (autoIds.size > 1) {
     return {
       code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
-      message: "Multi-asset optimization is not enabled in this release.",
+      message: "Multi-asset optimization is not enabled in this release."
     };
   }
   if (propertyIds.size > 1) {
     return {
       code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
-      message: "Multi-asset optimization is not enabled in this release.",
+      message: "Multi-asset optimization is not enabled in this release."
     };
   }
   if (input.assets) {
@@ -5701,7 +5490,7 @@ function validateEngineInput(input) {
       if (id && !vehicleIdSet.has(id)) {
         return {
           code: "MISSING_INSURED_ASSET",
-          message: `Auto component references unknown vehicle ${id}`,
+          message: `Auto component references unknown vehicle ${id}`
         };
       }
     }
@@ -5709,7 +5498,7 @@ function validateEngineInput(input) {
       if (id && !propertyIdSet.has(id)) {
         return {
           code: "MISSING_INSURED_ASSET",
-          message: `Property component references unknown property ${id}`,
+          message: `Property component references unknown property ${id}`
         };
       }
     }
@@ -5717,7 +5506,7 @@ function validateEngineInput(input) {
       if (![...autoIds].some((id) => id === vehicle.id)) {
         return {
           code: "MISSING_INSURED_ASSET",
-          message: `No auto component matches the insured vehicle ${vehicle.id}`,
+          message: `No auto component matches the insured vehicle ${vehicle.id}`
         };
       }
     }
@@ -5725,7 +5514,7 @@ function validateEngineInput(input) {
       if (![...propertyIds].some((id) => id === property.id)) {
         return {
           code: "MISSING_INSURED_ASSET",
-          message: `No property component matches the insured property ${property.id}`,
+          message: `No property component matches the insured property ${property.id}`
         };
       }
     }
@@ -5733,7 +5522,7 @@ function validateEngineInput(input) {
       if (!vehicleIdSet.has(key)) {
         return {
           code: "MISSING_INSURED_ASSET",
-          message: `Vehicle override without matching asset ${key}`,
+          message: `Vehicle override without matching asset ${key}`
         };
       }
     }
@@ -5741,7 +5530,7 @@ function validateEngineInput(input) {
       if (!propertyIdSet.has(key)) {
         return {
           code: "MISSING_INSURED_ASSET",
-          message: `Property override without matching property ${key}`,
+          message: `Property override without matching property ${key}`
         };
       }
     }
@@ -5756,7 +5545,7 @@ function evaluateHousehold(input) {
       evaluated: [],
       eligible: [],
       recommended: null,
-      rejection: validation,
+      rejection: validation
     };
   }
   const mandate = input.mandate;
@@ -5770,41 +5559,25 @@ function evaluateHousehold(input) {
     const reasonCodes = [];
     let eligible = true;
     reasonCodes.push(
-      config.isIncumbentConfiguration
-        ? "INCUMBENT_CONFIGURATION"
-        : config.bundled
-          ? "BUNDLED_CONFIGURATION"
-          : "SPLIT_CONFIGURATION",
+      config.isIncumbentConfiguration ? "INCUMBENT_CONFIGURATION" : config.bundled ? "BUNDLED_CONFIGURATION" : "SPLIT_CONFIGURATION"
     );
     if (!config.bundled && !mandate.switching.splitInsurersAllowed) {
       eligible = false;
       reasonCodes.push("SPLIT_INSURERS_PROHIBITED");
     }
-    const incumbentBundled =
-      input.incumbentAuto.quote.insurerId === input.incumbentProperty.quote.insurerId;
-    if (
-      !config.isIncumbentConfiguration &&
-      !mandate.switching.allowBundleBreakup &&
-      incumbentBundled &&
-      !config.bundled
-    ) {
+    const incumbentBundled = input.incumbentAuto.quote.insurerId === input.incumbentProperty.quote.insurerId;
+    if (!config.isIncumbentConfiguration && !mandate.switching.allowBundleBreakup && incumbentBundled && !config.bundled) {
       eligible = false;
       reasonCodes.push("BUNDLE_BREAKUP_PROHIBITED");
     }
     const excluded = new Set(mandate.switching.excludedInsurerIds);
-    if (
-      !config.isIncumbentConfiguration &&
-      (excluded.has(config.auto.insurerId) || excluded.has(config.property.insurerId))
-    ) {
+    if (!config.isIncumbentConfiguration && (excluded.has(config.auto.insurerId) || excluded.has(config.property.insurerId))) {
       eligible = false;
       reasonCodes.push("EXCLUDED_INSURER");
     }
     const autoQuote = quoteById(input, config.auto.quoteId);
     const propertyQuote = quoteById(input, config.property.quoteId);
-    if (
-      mandate.switching.minimumInsurerFinancialRating !== "any" &&
-      mandate.switching.minimumInsurerFinancialRating !== void 0
-    ) {
+    if (mandate.switching.minimumInsurerFinancialRating !== "any" && mandate.switching.minimumInsurerFinancialRating !== void 0) {
       const requiredRank = financialRatingRank[mandate.switching.minimumInsurerFinancialRating];
       for (const q of [autoQuote, propertyQuote]) {
         const quoteRating = q.insurerFinancialRating ?? "any";
@@ -5822,20 +5595,14 @@ function evaluateHousehold(input) {
     } else {
       reasonCodes.push("MEETS_ALL_HARD_REQUIREMENTS");
     }
-    const coverageReductions = config.isIncumbentConfiguration
-      ? []
-      : coverageReductionsVsIncumbent(input, config);
+    const coverageReductions = config.isIncumbentConfiguration ? [] : coverageReductionsVsIncumbent(input, config);
     if (!config.isIncumbentConfiguration && coverageReductions.length > 0) {
       eligible = false;
       reasonCodes.push("COVERAGE_REDUCTION_VS_INCUMBENT");
     }
-    const deductibleIncreaseCents = config.isIncumbentConfiguration
-      ? 0
-      : deductibleIncreasedVsIncumbent(input, config).increaseCents;
+    const deductibleIncreaseCents = config.isIncumbentConfiguration ? 0 : deductibleIncreasedVsIncumbent(input, config).increaseCents;
     if (!config.isIncumbentConfiguration) {
-      const allowedDeductibleIncreaseCents = mandate.switching.deductibleIncreasesAllowed
-        ? (mandate.switching.maxDeductibleIncreaseCents ?? Number.MAX_SAFE_INTEGER)
-        : 0;
+      const allowedDeductibleIncreaseCents = mandate.switching.deductibleIncreasesAllowed ? mandate.switching.maxDeductibleIncreaseCents ?? Number.MAX_SAFE_INTEGER : 0;
       if (deductibleIncreaseCents > allowedDeductibleIncreaseCents) {
         eligible = false;
         reasonCodes.push("DEDUCTIBLE_INCREASE_PROHIBITED");
@@ -5865,17 +5632,15 @@ function evaluateHousehold(input) {
       reasonCodes,
       coverageReductions,
       deductibleTotalCents: totalDeductibles(config),
-      underwritingConditionCount: underwritingConditionCount(input, config),
+      underwritingConditionCount: underwritingConditionCount(input, config)
     };
   });
-  const eligibleConfigs = evaluated
-    .filter((e) => e.eligible && !e.configuration.isIncumbentConfiguration)
-    .sort(rankConfigurations);
+  const eligibleConfigs = evaluated.filter((e) => e.eligible && !e.configuration.isIncumbentConfiguration).sort(rankConfigurations);
   return {
     incumbentTotalCents,
     evaluated,
     eligible: eligibleConfigs,
-    recommended: eligibleConfigs[0] ?? null,
+    recommended: eligibleConfigs[0] ?? null
   };
 }
 function rankConfigurations(a, b) {
@@ -5898,14 +5663,14 @@ function validateMandateAndSwitching(mandate, switching) {
   if (!mandateResult.success) {
     return {
       code: "INVALID_MANDATE",
-      message: `Mandate validation failed: ${collectValidationIssues("mandate", mandateResult.error.issues)}`,
+      message: `Mandate validation failed: ${collectValidationIssues("mandate", mandateResult.error.issues)}`
     };
   }
   const switchingResult = SwitchingPreferencesV2.safeParse(switching);
   if (!switchingResult.success) {
     return {
       code: "INVALID_SWITCHING_PREFERENCES",
-      message: `Switching preferences validation failed: ${collectValidationIssues("switching", switchingResult.error.issues)}`,
+      message: `Switching preferences validation failed: ${collectValidationIssues("switching", switchingResult.error.issues)}`
     };
   }
   return null;
@@ -5916,7 +5681,7 @@ function validateQuoteCoverage(component) {
       return {
         code: "QUOTE_NOT_USABLE",
         message: "Auto component is missing auto coverage",
-        details: { componentId: component.id },
+        details: { componentId: component.id }
       };
     }
     const result = AutoCoverageDetails.safeParse(component.auto);
@@ -5924,7 +5689,7 @@ function validateQuoteCoverage(component) {
       return {
         code: "QUOTE_NOT_USABLE",
         message: `Auto coverage validation failed: ${collectValidationIssues("auto", result.error.issues)}`,
-        details: { componentId: component.id },
+        details: { componentId: component.id }
       };
     }
     return null;
@@ -5934,7 +5699,7 @@ function validateQuoteCoverage(component) {
       return {
         code: "QUOTE_NOT_USABLE",
         message: "Property component is missing property coverage",
-        details: { componentId: component.id },
+        details: { componentId: component.id }
       };
     }
     const result = PropertyCoverageDetails.safeParse(component.property);
@@ -5942,7 +5707,7 @@ function validateQuoteCoverage(component) {
       return {
         code: "QUOTE_NOT_USABLE",
         message: `Property coverage validation failed: ${collectValidationIssues("property", result.error.issues)}`,
-        details: { componentId: component.id },
+        details: { componentId: component.id }
       };
     }
     return null;
@@ -5950,7 +5715,7 @@ function validateQuoteCoverage(component) {
   return {
     code: "QUOTE_NOT_USABLE",
     message: `Unknown product line: ${component.productLine}`,
-    details: { componentId: component.id },
+    details: { componentId: component.id }
   };
 }
 function buildEngineInputFromSnapshot(snapshot) {
@@ -5962,12 +5727,11 @@ function buildEngineInputFromSnapshot(snapshot) {
   for (const raw of snapshot.quotes) {
     const quoteResult = EngineQuote.safeParse(raw);
     if (!quoteResult.success) {
-      const quoteId =
-        typeof raw === "object" && raw !== null && "id" in raw ? String(raw.id) : void 0;
+      const quoteId = typeof raw === "object" && raw !== null && "id" in raw ? String(raw.id) : void 0;
       return {
         code: "QUOTE_NOT_USABLE",
         message: `Quote validation failed: ${collectValidationIssues("quote", quoteResult.error.issues)}`,
-        details: { quoteId },
+        details: { quoteId }
       };
     }
     const quote = quoteResult.data;
@@ -5982,23 +5746,23 @@ function buildEngineInputFromSnapshot(snapshot) {
     return { code: "QUOTE_NOT_USABLE", message: "No incumbent quote found in the case" };
   }
   const incumbentAutoComponent = incumbentQuote.components.find(
-    (c) => c.productLine === "auto" && c.auto !== null,
+    (c) => c.productLine === "auto" && c.auto !== null
   );
   const incumbentPropertyComponent = incumbentQuote.components.find(
-    (c) => c.productLine === "property" && c.property !== null,
+    (c) => c.productLine === "property" && c.property !== null
   );
   if (!incumbentAutoComponent) {
     return {
       code: "QUOTE_NOT_USABLE",
       message: "Incumbent quote is missing an auto component",
-      details: { quoteId: incumbentQuote.id },
+      details: { quoteId: incumbentQuote.id }
     };
   }
   if (!incumbentPropertyComponent) {
     return {
       code: "QUOTE_NOT_USABLE",
       message: "Incumbent quote is missing a property component",
-      details: { quoteId: incumbentQuote.id },
+      details: { quoteId: incumbentQuote.id }
     };
   }
   const engineMandate = mandateV2ToEngineMandate(validatedMandate, validatedSwitching);
@@ -6007,13 +5771,13 @@ function buildEngineInputFromSnapshot(snapshot) {
     quotes: validatedQuotes,
     incumbentAuto: { quote: incumbentQuote, component: incumbentAutoComponent },
     incumbentProperty: { quote: incumbentQuote, component: incumbentPropertyComponent },
-    assets: snapshot.assets,
+    assets: snapshot.assets
   };
   const engineValidation = validateEngineInput(input);
   if (engineValidation) {
     return {
       code: engineValidation.code,
-      message: engineValidation.message,
+      message: engineValidation.message
     };
   }
   return input;
@@ -6049,7 +5813,7 @@ function throwIfError(error, operation, resource) {
     `Database error during ${operation} on ${resource}: ${error.message}`,
     operation,
     resource,
-    error.code ?? "UNKNOWN",
+    error.code ?? "UNKNOWN"
   );
 }
 function canonicalizeStoredMonetaryRules(value) {
@@ -6083,21 +5847,14 @@ function validateMandate(mandate) {
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => ({
       path: issue.path,
-      message: issue.message,
+      message: issue.message
     }));
     throw new MandateValidationError("Stored mandate is invalid", issues);
   }
   return parsed.data;
 }
 async function loadSwitching(supabase, householdId) {
-  const { data, error } = await supabase
-    .from("switching_preferences")
-    .select("*")
-    .eq("household_id", householdId)
-    .eq("is_current", true)
-    .order("version", { ascending: false })
-    .limit(1)
-    .single();
+  const { data, error } = await supabase.from("switching_preferences").select("*").eq("household_id", householdId).eq("is_current", true).order("version", { ascending: false }).limit(1).single();
   if (error) {
     if (isNoRowsError(error)) {
       return { id: null, switching: createDefaultSwitchingPreferencesV2(), version: 0 };
@@ -6110,16 +5867,11 @@ async function loadSwitching(supabase, householdId) {
   return {
     id: data.id,
     switching: switchingRowToDomain(data),
-    version: data.version,
+    version: data.version
   };
 }
 async function loadV2Mandate(supabase, householdId) {
-  const { data, error } = await supabase
-    .from("household_coverage_mandates")
-    .select("*")
-    .eq("household_id", householdId)
-    .eq("is_current", true)
-    .single();
+  const { data, error } = await supabase.from("household_coverage_mandates").select("*").eq("household_id", householdId).eq("is_current", true).single();
   if (error) {
     if (isNoRowsError(error)) return null;
     throwIfError(error, "loadV2Mandate", "household_coverage_mandates");
@@ -6127,17 +5879,17 @@ async function loadV2Mandate(supabase, householdId) {
   if (!data) return null;
   const [vehicleOverridesResult, propertyOverridesResult] = await Promise.all([
     supabase.from("vehicle_mandate_overrides").select("*").eq("mandate_id", data.id),
-    supabase.from("property_mandate_overrides").select("*").eq("mandate_id", data.id),
+    supabase.from("property_mandate_overrides").select("*").eq("mandate_id", data.id)
   ]);
   throwIfError(vehicleOverridesResult.error, "loadV2Mandate", "vehicle_mandate_overrides");
   throwIfError(propertyOverridesResult.error, "loadV2Mandate", "property_mandate_overrides");
   const vehicleOverrides = (vehicleOverridesResult.data ?? []).map((row) => ({
     vehicleId: row.vehicle_id,
-    values: canonicalizeStoredMonetaryRules(row.override_values),
+    values: canonicalizeStoredMonetaryRules(row.override_values)
   }));
   const propertyOverrides = (propertyOverridesResult.data ?? []).map((row) => ({
     propertyId: row.property_id,
-    values: canonicalizeStoredMonetaryRules(row.override_values),
+    values: canonicalizeStoredMonetaryRules(row.override_values)
   }));
   const mandate = validateMandate({
     schemaVersion: 2,
@@ -6145,16 +5897,18 @@ async function loadV2Mandate(supabase, householdId) {
     version: data.version,
     effectiveFrom: new Date(data.effective_from).toISOString(),
     householdAutoDefaults: canonicalizeStoredMonetaryRules(data.household_auto_defaults),
-    householdPropertyDefaults: canonicalizeStoredMonetaryRules(data.household_property_defaults),
+    householdPropertyDefaults: canonicalizeStoredMonetaryRules(
+      data.household_property_defaults
+    ),
     vehicleOverrides,
-    propertyOverrides,
+    propertyOverrides
   });
   return { id: data.id, version: data.version, mandate };
 }
 async function loadCurrentV2Mandate(supabase, householdId) {
   const [mandateResult, switching] = await Promise.all([
     loadV2Mandate(supabase, householdId),
-    loadSwitching(supabase, householdId),
+    loadSwitching(supabase, householdId)
   ]);
   if (!mandateResult) return null;
   if (!switching.id) {
@@ -6162,7 +5916,7 @@ async function loadCurrentV2Mandate(supabase, householdId) {
       "Current mandate exists but switching preferences are missing",
       "loadCurrentV2Mandate",
       "switching_preferences",
-      "MISSING_SWITCHING",
+      "MISSING_SWITCHING"
     );
   }
   return {
@@ -6171,7 +5925,7 @@ async function loadCurrentV2Mandate(supabase, householdId) {
     mandate: mandateResult.mandate,
     switchingPreferencesId: switching.id,
     switchingVersion: switching.version,
-    switching: switching.switching,
+    switching: switching.switching
   };
 }
 
@@ -6203,7 +5957,7 @@ function toComponent(c) {
         quoteId: void 0,
         componentId: c.id,
         productLine: c.product_line,
-        message: `Auto coverage validation failed: ${formatZodIssues("auto", parsed2.error.issues)}`,
+        message: `Auto coverage validation failed: ${formatZodIssues("auto", parsed2.error.issues)}`
       };
     }
     return {
@@ -6212,7 +5966,7 @@ function toComponent(c) {
       assetId: c.asset_id ?? void 0,
       annualPremiumCents: c.annual_premium_cents,
       auto: parsed2.data,
-      property: null,
+      property: null
     };
   }
   const parsed = PropertyCoverageDetails.safeParse(coverage);
@@ -6221,7 +5975,7 @@ function toComponent(c) {
       quoteId: void 0,
       componentId: c.id,
       productLine: c.product_line,
-      message: `Property coverage validation failed: ${formatZodIssues("property", parsed.error.issues)}`,
+      message: `Property coverage validation failed: ${formatZodIssues("property", parsed.error.issues)}`
     };
   }
   return {
@@ -6230,7 +5984,7 @@ function toComponent(c) {
     assetId: c.asset_id ?? void 0,
     annualPremiumCents: c.annual_premium_cents,
     auto: null,
-    property: parsed.data,
+    property: parsed.data
   };
 }
 function toEngineQuote(q) {
@@ -6245,12 +5999,7 @@ function toEngineQuote(q) {
   const insurer = q.insurers;
   const paymentFrequency = first(insurer?.payment_frequencies);
   const billingMethod = first(insurer?.billing_methods);
-  const distributionChannel =
-    insurer?.distribution === "broker"
-      ? "broker"
-      : insurer?.distribution === "direct"
-        ? "direct"
-        : "indifferent";
+  const distributionChannel = insurer?.distribution === "broker" ? "broker" : insurer?.distribution === "direct" ? "direct" : "indifferent";
   return {
     id: q.id,
     insurerId: q.insurer_id,
@@ -6267,22 +6016,18 @@ function toEngineQuote(q) {
     paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : void 0,
     billingMethod: billingMethod ? toBillingMethod(billingMethod) : void 0,
     distributionChannel,
-    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "any",
+    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "any"
   };
 }
 
 // ../database/src/recommendation-loader.ts
 async function loadRecommendationInputSnapshot(supabase, caseId) {
-  const { data: caseRow, error: caseError } = await supabase
-    .from("optimization_cases")
-    .select("household_id, state")
-    .eq("id", caseId)
-    .single();
+  const { data: caseRow, error: caseError } = await supabase.from("optimization_cases").select("household_id, state").eq("id", caseId).single();
   if (caseError || !caseRow) {
     return {
       code: "CASE_NOT_FOUND",
       message: caseError?.message ?? "Case not found",
-      details: { resource: "optimization_cases", operation: "select" },
+      details: { resource: "optimization_cases", operation: "select" }
     };
   }
   const householdId = caseRow.household_id;
@@ -6291,46 +6036,43 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
       if (err && typeof err === "object" && "code" in err) {
         return {
           code: err.code,
-          message: err instanceof Error ? err.message : String(err),
+          message: err instanceof Error ? err.message : String(err)
         };
       }
       return { code: "MANDATE_LOAD_FAILED", message: String(err) };
     }),
     supabase.from("vehicles").select("id").eq("household_id", householdId),
     supabase.from("properties").select("id").eq("household_id", householdId),
-    supabase
-      .from("quotes")
-      .select(
-        "id, updated_at, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage))",
-      )
-      .eq("case_id", caseId),
+    supabase.from("quotes").select(
+      "id, updated_at, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage))"
+    ).eq("case_id", caseId)
   ]);
   if (!mandateResult || "code" in mandateResult) {
     return {
       code: mandateResult ? "MANDATE_LOAD_FAILED" : "MANDATE_NOT_FOUND",
       message: mandateResult?.message ?? "No current V2 mandate exists for this household",
-      details: { operation: "loadCurrentV2Mandate" },
+      details: { operation: "loadCurrentV2Mandate" }
     };
   }
   if (vehiclesRes.error) {
     return {
       code: "ASSET_LOAD_FAILED",
       message: vehiclesRes.error.message,
-      details: { resource: "vehicles", operation: "select" },
+      details: { resource: "vehicles", operation: "select" }
     };
   }
   if (propertiesRes.error) {
     return {
       code: "ASSET_LOAD_FAILED",
       message: propertiesRes.error.message,
-      details: { resource: "properties", operation: "select" },
+      details: { resource: "properties", operation: "select" }
     };
   }
   if (quotesRes.error) {
     return {
       code: "QUOTE_LOAD_FAILED",
       message: quotesRes.error.message,
-      details: { resource: "quotes", operation: "select" },
+      details: { resource: "quotes", operation: "select" }
     };
   }
   const dbQuotes = quotesRes.data ?? [];
@@ -6341,14 +6083,14 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
       return {
         code: "QUOTE_VALIDATION_FAILED",
         message: result.message,
-        details: result,
+        details: result
       };
     }
     engineQuotes.push(result);
   }
   const assets = {
     vehicles: (vehiclesRes.data ?? []).map((v) => ({ id: v.id })),
-    properties: (propertiesRes.data ?? []).map((p) => ({ id: p.id })),
+    properties: (propertiesRes.data ?? []).map((p) => ({ id: p.id }))
   };
   return {
     mandateId: mandateResult.mandateId,
@@ -6361,7 +6103,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     switching: mandateResult.switching,
     assets,
     quotes: engineQuotes,
-    quoteSnapshot: dbQuotes.map((q) => ({ id: q.id, updated_at: q.updated_at })),
+    quoteSnapshot: dbQuotes.map((q) => ({ id: q.id, updated_at: q.updated_at }))
   };
 }
 export {
@@ -6369,6 +6111,7 @@ export {
   SwitchingPreferencesV2,
   buildEngineInputFromSnapshot,
   evaluateHousehold,
-  loadRecommendationInputSnapshot,
+  loadRecommendationInputSnapshot
 };
 // autopilot-edge-bundle end
+
