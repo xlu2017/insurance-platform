@@ -3,13 +3,32 @@ import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
+const memoryStore = new Map<string, string>();
+
+const withFallback = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+  try {
+    return await fn();
+  } catch {
+    return fallback;
+  }
+};
+
 const secureStoreAdapter = {
   getItem: (key: string) =>
-    Platform.OS === "web" ? Promise.resolve(null) : SecureStore.getItemAsync(key),
+    Platform.OS === "web"
+      ? Promise.resolve(null)
+      : withFallback(() => SecureStore.getItemAsync(key), memoryStore.get(key) ?? null),
   setItem: (key: string, value: string) =>
-    Platform.OS === "web" ? Promise.resolve() : SecureStore.setItemAsync(key, value),
+    Platform.OS === "web"
+      ? Promise.resolve()
+      : withFallback(
+          () => SecureStore.setItemAsync(key, value),
+          (memoryStore.set(key, value), undefined),
+        ),
   removeItem: (key: string) =>
-    Platform.OS === "web" ? Promise.resolve() : SecureStore.deleteItemAsync(key),
+    Platform.OS === "web"
+      ? Promise.resolve()
+      : withFallback(() => SecureStore.deleteItemAsync(key), (memoryStore.delete(key), undefined)),
 };
 
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
