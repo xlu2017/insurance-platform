@@ -65,14 +65,7 @@ end $$;
 
 create or replace function start_recommendation_generation_attempt(
   p_case_id uuid,
-  p_actor_profile_id uuid,
-  p_mandate_id uuid,
-  p_mandate_version int,
-  p_switching_preferences_id uuid,
-  p_switching_preferences_version int,
-  p_engine_version text,
-  p_engine_source_hash text,
-  p_input_snapshot_digest text
+  p_actor_profile_id uuid
 )
 returns uuid
 language plpgsql
@@ -96,13 +89,9 @@ begin
   end if;
 
   insert into recommendation_generation_attempts (
-    id, case_id, actor_profile_id, started_at, status,
-    mandate_id, mandate_version, switching_preferences_id, switching_preferences_version,
-    engine_version, engine_source_hash, input_snapshot_digest
+    id, case_id, actor_profile_id, started_at, status
   ) values (
-    v_attempt_id, p_case_id, p_actor_profile_id, now(), 'started',
-    p_mandate_id, p_mandate_version, p_switching_preferences_id, p_switching_preferences_version,
-    p_engine_version, p_engine_source_hash, p_input_snapshot_digest
+    v_attempt_id, p_case_id, p_actor_profile_id, now(), 'started'
   );
 
   return v_attempt_id;
@@ -112,8 +101,15 @@ $$;
 create or replace function complete_recommendation_generation_attempt(
   p_attempt_id uuid,
   p_status text,
-  p_recommendation_id uuid default null,
+  p_mandate_id uuid default null,
+  p_mandate_version int default null,
+  p_switching_preferences_id uuid default null,
+  p_switching_preferences_version int default null,
+  p_engine_version text default null,
+  p_engine_source_hash text default null,
+  p_input_snapshot_digest text default null,
   p_engine_output_digest text default null,
+  p_recommendation_id uuid default null,
   p_error_code text default null,
   p_safe_error_message text default null
 )
@@ -136,8 +132,15 @@ begin
   set
     status = p_status,
     completed_at = now(),
-    recommendation_id = p_recommendation_id,
+    mandate_id = p_mandate_id,
+    mandate_version = p_mandate_version,
+    switching_preferences_id = p_switching_preferences_id,
+    switching_preferences_version = p_switching_preferences_version,
+    engine_version = p_engine_version,
+    engine_source_hash = p_engine_source_hash,
+    input_snapshot_digest = p_input_snapshot_digest,
     engine_output_digest = p_engine_output_digest,
+    recommendation_id = p_recommendation_id,
     error_code = p_error_code,
     safe_error_message = left(p_safe_error_message, 4000)
   where id = p_attempt_id;

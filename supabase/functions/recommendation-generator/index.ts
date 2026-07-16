@@ -83,45 +83,47 @@ async function startAttempt(
   client: ReturnType<typeof createClient>,
   actorProfileId: string,
   caseId: string,
-  snapshot: {
-    mandateId: string;
-    mandateVersion: number;
-    switchingPreferencesId: string;
-    switchingPreferencesVersion: string | number;
-  },
-  inputSnapshotDigest: string,
 ): Promise<string> {
   const { data, error } = await client.rpc("start_recommendation_generation_attempt", {
     p_case_id: caseId,
     p_actor_profile_id: actorProfileId,
-    p_mandate_id: snapshot.mandateId,
-    p_mandate_version: snapshot.mandateVersion,
-    p_switching_preferences_id: snapshot.switchingPreferencesId,
-    p_switching_preferences_version: snapshot.switchingPreferencesVersion,
-    p_engine_version: ENGINE_VERSION,
-    p_engine_source_hash: __AUTOPILOT_SOURCE_HASH__,
-    p_input_snapshot_digest: inputSnapshotDigest,
   });
   if (error) throw new Error(`start_recommendation_generation_attempt failed: ${error.message}`);
   return (data as string | null) ?? "";
 }
 
+interface CompleteAttemptParams {
+  status: "input_rejected" | "no_eligible_option" | "persistence_conflict" | "completed";
+  mandateId?: string;
+  mandateVersion?: number;
+  switchingPreferencesId?: string;
+  switchingPreferencesVersion?: number;
+  inputSnapshotDigest?: string;
+  engineOutputDigest?: string;
+  recommendationId?: string;
+  errorCode?: string;
+  safeErrorMessage?: string;
+}
+
 async function completeAttempt(
   client: ReturnType<typeof createClient>,
   attemptId: string,
-  status: "input_rejected" | "no_eligible_option" | "persistence_conflict" | "completed",
-  recommendationId?: string,
-  engineOutputDigest?: string,
-  errorCode?: string,
-  safeErrorMessage?: string,
+  params: CompleteAttemptParams,
 ) {
   const { error } = await client.rpc("complete_recommendation_generation_attempt", {
     p_attempt_id: attemptId,
-    p_status: status,
-    p_recommendation_id: recommendationId ?? null,
-    p_engine_output_digest: engineOutputDigest ?? null,
-    p_error_code: errorCode ?? null,
-    p_safe_error_message: safeErrorMessage ?? null,
+    p_status: params.status,
+    p_mandate_id: params.mandateId ?? null,
+    p_mandate_version: params.mandateVersion ?? null,
+    p_switching_preferences_id: params.switchingPreferencesId ?? null,
+    p_switching_preferences_version: params.switchingPreferencesVersion ?? null,
+    p_engine_version: ENGINE_VERSION,
+    p_engine_source_hash: __AUTOPILOT_SOURCE_HASH__,
+    p_input_snapshot_digest: params.inputSnapshotDigest ?? null,
+    p_engine_output_digest: params.engineOutputDigest ?? null,
+    p_recommendation_id: params.recommendationId ?? null,
+    p_error_code: params.errorCode ?? null,
+    p_safe_error_message: params.safeErrorMessage ?? null,
   });
   if (error) console.error("complete_recommendation_generation_attempt failed:", error.message);
 }
@@ -169,6 +171,18 @@ Deno.serve(async (req) => {
     );
   }
 
+  const serviceRoleKey =
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+    Deno.env.get("SERVICE_ROLE_KEY") ??
+    Deno.env.get("EDGE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    return jsonResponse(
+      { code: "SERVICE_ROLE_KEY_MISSING", message: "Server cannot persist recommendations" },
+      500,
+    );
+  }
+  const serviceClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
+
   let body: { caseId?: string };
   try {
     body = await req.json();
@@ -202,44 +216,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Pre-compute an input digest placeholder for the attempt record. The final
-  // canonical digest is computed once the snapshot is loaded and validated.
-  const { canonicalJson: placeholderInputCanonical } = canonicalSerializeRecommendationInput(
-    {
-      caseId,
-      householdId: caseRow.household_id,
-      mandateId: "",
-      mandateVersion: 0,
-      mandateSchemaVersion: 2,
-      jurisdiction: "AB",
-      switchingPreferencesId: "",
-      switchingPreferencesVersion: 0,
-      mandate: {} as unknown,
-      switching: {} as unknown,
-      assets: { vehicles: [], properties: [] },
-      quotes: [],
-      quoteSnapshot: [],
-    },
-    ENGINE_VERSION,
-    __AUTOPILOT_SOURCE_HASH__,
-  );
-  const placeholderInputDigest = await sha256Hex(placeholderInputCanonical);
-
   // Start a durable generation attempt before any validation or engine work.
   let attemptId: string;
   try {
-    attemptId = await startAttempt(
-      supabase,
-      user.id,
-      caseId,
-      {
-        mandateId: "",
-        mandateVersion: 0,
-        switchingPreferencesId: "",
-        switchingPreferencesVersion: 0,
-      },
-      placeholderInputDigest,
-    );
+    attemptId = await startAttempt(serviceClient, user.id, caseId);
   } catch (err) {
     return jsonResponse(
       { code: "ATTEMPT_START_FAILED", message: err instanceof Error ? err.message : String(err) },
@@ -249,15 +229,11 @@ Deno.serve(async (req) => {
 
   const snapshot = await loadRecommendationInputSnapshot(supabase, caseId);
   if ("code" in snapshot) {
-    await completeAttempt(
-      supabase,
-      attemptId,
-      "input_rejected",
-      undefined,
-      undefined,
-      snapshot.code,
-      snapshot.message,
-    );
+    await completeAttempt(serviceClient, attemptId, {
+      status: "input_rejected",
+      errorCode: snapshot.code,
+      safeErrorMessage: snapshot.message,
+    });
     return jsonResponse(
       { code: snapshot.code, message: snapshot.message, details: snapshot.details },
       snapshot.code === "MANDATE_NOT_FOUND" || snapshot.code === "QUOTE_NOT_USABLE" ? 400 : 422,
@@ -266,15 +242,15 @@ Deno.serve(async (req) => {
 
   const engineInput = buildEngineInputFromSnapshot(snapshot);
   if ("code" in engineInput) {
-    await completeAttempt(
-      supabase,
-      attemptId,
-      "input_rejected",
-      undefined,
-      undefined,
-      engineInput.code,
-      engineInput.message,
-    );
+    await completeAttempt(serviceClient, attemptId, {
+      status: "input_rejected",
+      mandateId: snapshot.mandateId,
+      mandateVersion: snapshot.mandateVersion,
+      switchingPreferencesId: snapshot.switchingPreferencesId,
+      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+      errorCode: engineInput.code,
+      safeErrorMessage: engineInput.message,
+    });
     return jsonResponse(
       { code: engineInput.code, message: engineInput.message, details: engineInput.details },
       400,
@@ -284,28 +260,28 @@ Deno.serve(async (req) => {
   const result: EngineResult = evaluateHousehold(engineInput);
 
   if (result.rejection) {
-    await completeAttempt(
-      supabase,
-      attemptId,
-      "input_rejected",
-      undefined,
-      undefined,
-      result.rejection.code,
-      result.rejection.message,
-    );
+    await completeAttempt(serviceClient, attemptId, {
+      status: "input_rejected",
+      mandateId: snapshot.mandateId,
+      mandateVersion: snapshot.mandateVersion,
+      switchingPreferencesId: snapshot.switchingPreferencesId,
+      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+      errorCode: result.rejection.code,
+      safeErrorMessage: result.rejection.message,
+    });
     return jsonResponse({ code: result.rejection.code, message: result.rejection.message }, 422);
   }
 
   if (!result.recommended) {
-    await completeAttempt(
-      supabase,
-      attemptId,
-      "no_eligible_option",
-      undefined,
-      undefined,
-      "NO_ELIGIBLE_RECOMMENDATION",
-      "No economically eligible recommendation was found",
-    );
+    await completeAttempt(serviceClient, attemptId, {
+      status: "no_eligible_option",
+      mandateId: snapshot.mandateId,
+      mandateVersion: snapshot.mandateVersion,
+      switchingPreferencesId: snapshot.switchingPreferencesId,
+      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+      errorCode: "NO_ELIGIBLE_RECOMMENDATION",
+      safeErrorMessage: "No economically eligible recommendation was found",
+    });
     return jsonResponse({
       code: "NO_ELIGIBLE_RECOMMENDATION",
       message: "No economically eligible recommendation was found",
@@ -374,38 +350,21 @@ Deno.serve(async (req) => {
 
   const parsed = EngineRecommendationPersistencePayloadSchema.safeParse(payload);
   if (!parsed.success) {
-    await completeAttempt(
-      supabase,
-      attemptId,
-      "input_rejected",
-      undefined,
-      undefined,
-      "PERSISTENCE_PAYLOAD_INVALID",
-      parsed.error.message,
-    );
+    await completeAttempt(serviceClient, attemptId, {
+      status: "input_rejected",
+      mandateId: snapshot.mandateId,
+      mandateVersion: snapshot.mandateVersion,
+      switchingPreferencesId: snapshot.switchingPreferencesId,
+      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+      inputSnapshotDigest,
+      errorCode: "PERSISTENCE_PAYLOAD_INVALID",
+      safeErrorMessage: parsed.error.message,
+    });
     return jsonResponse(
       { code: "PERSISTENCE_PAYLOAD_INVALID", message: parsed.error.message },
       500,
     );
   }
-
-  const serviceRoleKey =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-    Deno.env.get("SERVICE_ROLE_KEY") ??
-    Deno.env.get("EDGE_SERVICE_ROLE_KEY");
-  if (!serviceRoleKey) {
-    await failAttempt(
-      supabase,
-      attemptId,
-      "SERVICE_ROLE_KEY_MISSING",
-      "Server cannot persist recommendations",
-    );
-    return jsonResponse(
-      { code: "SERVICE_ROLE_KEY_MISSING", message: "Server cannot persist recommendations" },
-      500,
-    );
-  }
-  const serviceClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
 
   const { data: persistData, error: persistError } = await serviceClient.rpc(
     "persist_engine_recommendation_v2",
@@ -439,15 +398,17 @@ Deno.serve(async (req) => {
   );
 
   if (persistError) {
-    await completeAttempt(
-      supabase,
-      attemptId,
-      "persistence_conflict",
-      undefined,
-      undefined,
-      "PERSIST_FAILED",
-      persistError.message,
-    );
+    await completeAttempt(serviceClient, attemptId, {
+      status: "persistence_conflict",
+      mandateId: snapshot.mandateId,
+      mandateVersion: snapshot.mandateVersion,
+      switchingPreferencesId: snapshot.switchingPreferencesId,
+      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+      inputSnapshotDigest,
+      engineOutputDigest,
+      errorCode: "PERSIST_FAILED",
+      safeErrorMessage: persistError.message,
+    });
     return jsonResponse({ code: "PERSIST_FAILED", message: persistError.message }, 409);
   }
 
@@ -456,13 +417,16 @@ Deno.serve(async (req) => {
     version?: number;
   } | null;
 
-  await completeAttempt(
-    supabase,
-    attemptId,
-    "completed",
-    persisted?.recommendationId,
+  await completeAttempt(serviceClient, attemptId, {
+    status: "completed",
+    mandateId: snapshot.mandateId,
+    mandateVersion: snapshot.mandateVersion,
+    switchingPreferencesId: snapshot.switchingPreferencesId,
+    switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
+    inputSnapshotDigest,
     engineOutputDigest,
-  );
+    recommendationId: persisted?.recommendationId,
+  });
 
   return jsonResponse({
     recommendationId: persisted?.recommendationId,
