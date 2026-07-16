@@ -1,20 +1,17 @@
-import { formatCad, HouseholdMandate, SwitchingPreferences } from "@autopilot/schemas";
+import { formatCad } from "@autopilot/schemas";
 import type {
   AutoCoverageForm,
   AutoEndorsementKey,
-  AutoRequirements,
   BillingMethod,
   BrokerDirectPreference,
   CoveragePreference,
   DeductibleRule,
   FinancialRating,
   FinancingStatus,
-  HouseholdMandate as HouseholdMandateType,
   LimitRule,
   PaymentFrequency,
   PropertyCoverageForm,
   PropertyOptionalCoverageKey,
-  PropertyRequirements,
   PropertySettlement,
   PropertyType,
   VehicleUseClass,
@@ -155,58 +152,3 @@ export const propertyOptionalCoverageLabels: Record<PropertyOptionalCoverageKey,
   ice_dam: "Roof ice dam",
   earthquake: "Earthquake",
 };
-
-export function defaultHouseholdMandate(): HouseholdMandateType {
-  return HouseholdMandate.parse({}) as HouseholdMandateType;
-}
-
-export function parseHouseholdMandate(
-  coverage: Record<string, unknown> | null | undefined,
-  switching: Record<string, unknown> | null | undefined,
-): HouseholdMandateType {
-  const raw = {
-    auto: coverage?.auto_requirements,
-    property: coverage?.property_requirements,
-    switching: switching,
-    vehicleOverrides: coverage?.vehicle_mandates ?? {},
-    propertyOverrides: coverage?.property_mandates ?? {},
-  };
-  try {
-    return HouseholdMandate.parse(raw) as HouseholdMandateType;
-  } catch {
-    return defaultHouseholdMandate();
-  }
-}
-
-export function parseSwitchingPreferences(
-  row: Record<string, unknown> | null | undefined,
-): NonNullable<HouseholdMandateType["switching"]> {
-  if (!row) return defaultHouseholdMandate().switching;
-  try {
-    return SwitchingPreferences.parse(row);
-  } catch {
-    return defaultHouseholdMandate().switching;
-  }
-}
-
-export function switchingRowFromMandate(
-  switching: HouseholdMandateType["switching"],
-): Record<string, unknown> {
-  return switching;
-}
-
-export function mergeAutoRequirements(
-  base: AutoRequirements,
-  override: Partial<AutoRequirements> | undefined,
-): AutoRequirements {
-  if (!override) return base;
-  return { ...base, ...override };
-}
-
-export function mergePropertyRequirements(
-  base: PropertyRequirements,
-  override: Partial<PropertyRequirements> | undefined,
-): PropertyRequirements {
-  if (!override) return base;
-  return { ...base, ...override };
-}

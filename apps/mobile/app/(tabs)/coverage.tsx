@@ -14,23 +14,28 @@ import {
   deductibleRuleOptions,
   financialRatingOptions,
   financingStatusOptions,
+  formatCad,
   limitRuleOptions,
-  parseHouseholdMandate,
   paymentFrequencyOptions,
   propertyCoverageFormOptions,
   propertyOptionalCoverageLabels,
   propertySettlementOptions,
   propertyTypeOptions,
   vehicleUseClassOptions,
-  formatCad,
 } from "@/lib/mandate";
+import {
+  loadHouseholdMandateV2,
+  resolveEffectivePropertyMandateV2,
+  resolveEffectiveVehicleMandateV2,
+} from "@autopilot/database";
 import type {
-  AutoRequirements,
-  PropertyRequirements,
-  SwitchingPreferences,
-  VehicleUseClass,
+  AutoMandateV2,
   FinancingStatus,
+  MonetaryRule,
+  PropertyMandateV2,
   PropertyType,
+  SwitchingPreferencesV2,
+  VehicleUseClass,
 } from "@autopilot/schemas";
 
 function labelForValue<T extends string>(
@@ -41,28 +46,28 @@ function labelForValue<T extends string>(
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-function displayRuleAndCents(rule: string | undefined, cents: number | undefined): string {
-  if (!rule) return "—";
-  const ruleLabel = limitRuleOptions.find((o) => o.value === rule)?.label ?? rule;
-  if (rule === "any") return "Any";
-  return `${ruleLabel} ${formatCad(cents ?? 0)}`;
-}
-
-function displayDeductibleRuleAndCents(
-  rule: string | undefined,
-  cents: number | undefined,
-): string {
-  if (!rule) return "—";
-  const ruleLabel = deductibleRuleOptions.find((o) => o.value === rule)?.label ?? rule;
-  if (rule === "any") return "Any";
-  return `${ruleLabel} ${formatCad(cents ?? 0)}`;
-}
-
 function displayPreference(value: string | undefined): string {
   return coveragePreferenceOptions.find((o) => o.value === value)?.label ?? "—";
 }
 
-function AutoMandateRows({ auto }: { auto: AutoRequirements }) {
+function displayMonetaryRule(rule?: MonetaryRule): string {
+  if (!rule) return "—";
+  if (rule.rule === "any") return "Any";
+  if (rule.rule === "match_current_or_better") return "Match current or better";
+  const options = limitRuleOptions;
+  const label = options.find((o) => o.value === rule.rule)?.label ?? rule.rule;
+  return `${label} ${formatCad(rule.amountCents)}`;
+}
+
+function displayDeductibleRule(rule?: MonetaryRule): string {
+  if (!rule) return "—";
+  if (rule.rule === "any") return "Any";
+  if (rule.rule === "match_current_or_better") return "Match current or better";
+  const label = deductibleRuleOptions.find((o) => o.value === rule.rule)?.label ?? rule.rule;
+  return `${label} ${formatCad(rule.amountCents)}`;
+}
+
+function AutoMandateRows({ auto }: { auto: AutoMandateV2 }) {
   return (
     <>
       <Row
@@ -73,41 +78,18 @@ function AutoMandateRows({ auto }: { auto: AutoRequirements }) {
         label="Coverage form preference"
         value={displayPreference(auto.coverageForm.preference)}
       />
-      <Row
-        label="Liability"
-        value={displayRuleAndCents(auto.liability.rule, auto.liability.cents)}
-      />
-      <Row
-        label="Collision deductible"
-        value={displayDeductibleRuleAndCents(
-          auto.collisionDeductible.rule,
-          auto.collisionDeductible.cents,
-        )}
-      />
+      <Row label="Liability" value={displayMonetaryRule(auto.liability)} />
+      <Row label="Collision deductible" value={displayDeductibleRule(auto.collisionDeductible)} />
       <Row
         label="Comprehensive deductible"
-        value={displayDeductibleRuleAndCents(
-          auto.comprehensiveDeductible.rule,
-          auto.comprehensiveDeductible.cents,
-        )}
+        value={displayDeductibleRule(auto.comprehensiveDeductible)}
       />
-      <Row
-        label="Glass deductible"
-        value={displayDeductibleRuleAndCents(auto.glassDeductible.rule, auto.glassDeductible.cents)}
-      />
+      <Row label="Glass deductible" value={displayDeductibleRule(auto.glassDeductible)} />
       {(
-        Object.entries(autoEndorsementLabels) as [keyof typeof autoEndorsementLabels, string][]
+        Object.entries(autoEndorsementLabels) as [keyof AutoMandateV2["endorsements"], string][]
       ).map(([key, label]) => (
         <Row key={key} label={label} value={displayPreference(auto.endorsements[key])} />
       ))}
-      <Row
-        label="Vehicle use class"
-        value={labelForValue(vehicleUseClassOptions, auto.vehicleClass)}
-      />
-      <Row
-        label="Financing status"
-        value={labelForValue(financingStatusOptions, auto.financingStatus)}
-      />
     </>
   );
 }
@@ -117,34 +99,20 @@ function WaterRows({
   water,
 }: {
   name: string;
-  water: {
-    preference: string;
-    limit: { rule: string; cents: number };
-    deductible: { rule: string; cents: number };
-  };
+  water: { preference: string; limit?: MonetaryRule; deductible?: MonetaryRule };
 }) {
   return (
     <>
       <Row label={`${name} preference`} value={displayPreference(water.preference)} />
-      <Row
-        label={`${name} limit`}
-        value={displayRuleAndCents(water.limit.rule, water.limit.cents)}
-      />
-      <Row
-        label={`${name} deductible`}
-        value={displayDeductibleRuleAndCents(water.deductible.rule, water.deductible.cents)}
-      />
+      <Row label={`${name} limit`} value={displayMonetaryRule(water.limit)} />
+      <Row label={`${name} deductible`} value={displayDeductibleRule(water.deductible)} />
     </>
   );
 }
 
-function PropertyMandateRows({ property }: { property: PropertyRequirements }) {
+function PropertyMandateRows({ property }: { property: PropertyMandateV2 }) {
   return (
     <>
-      <Row
-        label="Property type"
-        value={labelForValue(propertyTypeOptions, property.propertyType)}
-      />
       <Row
         label="Coverage form"
         value={labelForValue(propertyCoverageFormOptions, property.coverageForm.value)}
@@ -161,62 +129,29 @@ function PropertyMandateRows({ property }: { property: PropertyRequirements }) {
         label="Settlement preference"
         value={displayPreference(property.settlementBasis.preference)}
       />
-      <Row
-        label="Dwelling limit"
-        value={displayRuleAndCents(property.dwellingLimit.rule, property.dwellingLimit.cents)}
-      />
-      <Row
-        label="Contents limit"
-        value={displayRuleAndCents(property.contentsLimit.rule, property.contentsLimit.cents)}
-      />
+      <Row label="Dwelling limit" value={displayMonetaryRule(property.dwellingLimit)} />
+      <Row label="Contents limit" value={displayMonetaryRule(property.contentsLimit)} />
       <Row
         label="Detached structures limit"
-        value={displayRuleAndCents(
-          property.detachedStructuresLimit.rule,
-          property.detachedStructuresLimit.cents,
-        )}
+        value={displayMonetaryRule(property.detachedStructuresLimit)}
       />
       <Row
         label="Personal liability limit"
-        value={displayRuleAndCents(
-          property.personalLiabilityLimit.rule,
-          property.personalLiabilityLimit.cents,
-        )}
+        value={displayMonetaryRule(property.personalLiabilityLimit)}
       />
       <Row
         label="Additional living expense limit"
-        value={displayRuleAndCents(
-          property.additionalLivingExpenseLimit.rule,
-          property.additionalLivingExpenseLimit.cents,
-        )}
+        value={displayMonetaryRule(property.additionalLivingExpenseLimit)}
       />
-      <Row
-        label="Base deductible"
-        value={displayDeductibleRuleAndCents(
-          property.baseDeductible.rule,
-          property.baseDeductible.cents,
-        )}
-      />
-      <Row
-        label="Water deductible"
-        value={displayDeductibleRuleAndCents(
-          property.waterDeductible.rule,
-          property.waterDeductible.cents,
-        )}
-      />
+      <Row label="Base deductible" value={displayDeductibleRule(property.baseDeductible)} />
+      <Row label="Water deductible" value={displayDeductibleRule(property.waterDeductible)} />
       <Row
         label="Wind/hail deductible"
-        value={displayDeductibleRuleAndCents(
-          property.windHailDeductible.rule,
-          property.windHailDeductible.cents,
-        )}
+        value={displayDeductibleRule(property.windHailDeductible)}
       />
       <Row
         label="Earthquake deductible"
-        value={displayDeductibleRuleAndCents(
-          property.earthquakeDeductible.rule,
-          property.earthquakeDeductible.cents,
-        )}
+        value={displayDeductibleRule(property.earthquakeDeductible)}
       />
       <WaterRows name="Sewer backup" water={property.sewerBackup} />
       <WaterRows name="Overland water" water={property.overlandWater} />
@@ -227,7 +162,7 @@ function PropertyMandateRows({ property }: { property: PropertyRequirements }) {
       <Row label="Roof ice dam" value={displayPreference(property.optionalCoverages.ice_dam)} />
       {(
         Object.entries(propertyOptionalCoverageLabels) as [
-          keyof typeof propertyOptionalCoverageLabels,
+          keyof PropertyMandateV2["optionalCoverages"],
           string,
         ][]
       ).map(([key, label]) => (
@@ -237,11 +172,10 @@ function PropertyMandateRows({ property }: { property: PropertyRequirements }) {
   );
 }
 
-function SwitchingRows({ prefs }: { prefs: SwitchingPreferences }) {
+function SwitchingRows({ prefs }: { prefs: SwitchingPreferencesV2 }) {
   return (
     <>
       <Row label="Minimum net annual savings" value={formatCad(prefs.minNetAnnualSavingsCents)} />
-      <Row label="Maximum premium increase" value={formatCad(prefs.maxPremiumIncreaseCents)} />
       <Row
         label="Maximum deductible increase"
         value={formatCad(prefs.maxDeductibleIncreaseCents)}
@@ -258,16 +192,8 @@ function SwitchingRows({ prefs }: { prefs: SwitchingPreferences }) {
         value={prefs.deductibleIncreasesAllowed ? "Yes" : "No"}
       />
       <Row
-        label="Material coverage reductions allowed"
-        value={prefs.materialCoverageReductionsAllowed ? "Yes" : "No"}
-      />
-      <Row
         label="Customer approval required"
         value={prefs.customerApprovalRequired ? "Yes" : "No"}
-      />
-      <Row
-        label="Switch only after customer approval"
-        value={prefs.switchOnlyAfterCustomerApproval ? "Yes" : "No"}
       />
       <Row
         label="Preferred payment frequency"
@@ -296,47 +222,33 @@ export default function Coverage() {
     queryKey: ["coverage", household?.id],
     enabled: !!household,
     queryFn: async () => {
-      const [drivers, vehicles, properties, requirements, preferences, insurers] =
-        await Promise.all([
-          supabase.from("drivers").select("id, full_name").eq("household_id", household!.id),
-          supabase
-            .from("vehicles")
-            .select(
-              "id, year, make, model, financing_status, vehicle_use_class, is_classic, is_modified",
-            )
-            .eq("household_id", household!.id),
-          supabase
-            .from("properties")
-            .select("id, address_line1, city, property_type")
-            .eq("household_id", household!.id),
-          supabase
-            .from("coverage_requirements")
-            .select("auto_requirements, property_requirements, vehicle_mandates, property_mandates")
-            .eq("household_id", household!.id)
-            .eq("is_current", true)
-            .maybeSingle(),
-          supabase
-            .from("switching_preferences")
-            .select("*")
-            .eq("household_id", household!.id)
-            .eq("is_current", true)
-            .maybeSingle(),
-          supabase.from("insurers").select("id, name"),
-        ]);
-      const mandate = parseHouseholdMandate(requirements.data, preferences.data);
-      const excludedNames =
-        preferences.data?.excluded_insurer_ids
-          ?.map((id: string) => (insurers.data ?? []).find((i) => i.id === id)?.name)
-          .filter(Boolean) ?? [];
+      if (!household) throw new Error("No household");
+      const [drivers, vehicles, properties, insurers, mandateResult] = await Promise.all([
+        supabase.from("drivers").select("id, full_name").eq("household_id", household.id),
+        supabase
+          .from("vehicles")
+          .select(
+            "id, year, make, model, financing_status, vehicle_use_class, is_classic, is_modified",
+          )
+          .eq("household_id", household.id),
+        supabase
+          .from("properties")
+          .select("id, address_line1, city, property_type")
+          .eq("household_id", household.id),
+        supabase.from("insurers").select("id, name").eq("active", true),
+        loadHouseholdMandateV2(supabase, household.id),
+      ]);
+      const insurerMap = new Map((insurers.data ?? []).map((i) => [i.id, i.name]));
+      const excludedNames = mandateResult.switching.excludedInsurerIds
+        .map((id) => insurerMap.get(id))
+        .filter(Boolean);
       return {
         drivers: drivers.data ?? [],
         vehicles: vehicles.data ?? [],
         properties: properties.data ?? [],
-        requirements: requirements.data,
-        preferences: preferences.data,
-        mandate,
+        mandate: mandateResult.mandate,
+        switching: mandateResult.switching,
         excludedNames,
-        insurerMap: new Map((insurers.data ?? []).map((i) => [i.id, i.name])),
       };
     },
   });
@@ -394,12 +306,18 @@ export default function Coverage() {
 
           <Card>
             <Subtitle>Auto — household defaults</Subtitle>
-            {mandate ? <AutoMandateRows auto={mandate.auto} /> : <Body muted>Loading…</Body>}
+            {mandate ? (
+              <AutoMandateRows auto={mandate.householdAutoDefaults} />
+            ) : (
+              <Body muted>Loading…</Body>
+            )}
           </Card>
 
           {(data?.vehicles ?? []).map((vehicle) => {
-            const override = mandate?.vehicleOverrides?.[vehicle.id];
-            const effective = override ? { ...mandate!.auto, ...override } : mandate?.auto;
+            const effective = mandate
+              ? resolveEffectiveVehicleMandateV2(mandate, vehicle.id)
+              : undefined;
+            const override = mandate?.vehicleOverrides.find((o) => o.vehicleId === vehicle.id);
             return (
               <Card key={vehicle.id}>
                 <Subtitle>
@@ -431,15 +349,17 @@ export default function Coverage() {
           <Card>
             <Subtitle>Property — household defaults</Subtitle>
             {mandate ? (
-              <PropertyMandateRows property={mandate.property} />
+              <PropertyMandateRows property={mandate.householdPropertyDefaults} />
             ) : (
               <Body muted>Loading…</Body>
             )}
           </Card>
 
           {(data?.properties ?? []).map((property) => {
-            const override = mandate?.propertyOverrides?.[property.id];
-            const effective = override ? { ...mandate!.property, ...override } : mandate?.property;
+            const effective = mandate
+              ? resolveEffectivePropertyMandateV2(mandate, property.id)
+              : undefined;
+            const override = mandate?.propertyOverrides.find((o) => o.propertyId === property.id);
             return (
               <Card key={property.id}>
                 <Subtitle>
@@ -460,7 +380,11 @@ export default function Coverage() {
 
           <Card>
             <Subtitle>Switching rules</Subtitle>
-            {mandate ? <SwitchingRows prefs={mandate.switching} /> : <Body muted>Loading…</Body>}
+            {data?.switching ? (
+              <SwitchingRows prefs={data.switching} />
+            ) : (
+              <Body muted>Loading…</Body>
+            )}
             <Row
               label="Excluded insurers"
               value={data?.excludedNames.length ? data.excludedNames.join(", ") : "None"}
