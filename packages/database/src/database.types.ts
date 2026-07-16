@@ -1133,7 +1133,7 @@ export type Database = {
       quote_policy_components: {
         Row: {
           annual_premium_cents: number;
-          asset_id: string | null;
+          asset_id: string;
           created_at: string;
           id: string;
           product_line: Database["public"]["Enums"]["product_line"];
@@ -1142,7 +1142,7 @@ export type Database = {
         };
         Insert: {
           annual_premium_cents: number;
-          asset_id?: string | null;
+          asset_id: string;
           created_at?: string;
           id?: string;
           product_line: Database["public"]["Enums"]["product_line"];
@@ -1151,7 +1151,7 @@ export type Database = {
         };
         Update: {
           annual_premium_cents?: number;
-          asset_id?: string | null;
+          asset_id?: string;
           created_at?: string;
           id?: string;
           product_line?: Database["public"]["Enums"]["product_line"];
@@ -1527,6 +1527,9 @@ export type Database = {
           effective_date: string | null;
           engine_version: string;
           id: string;
+          mandate_id: string | null;
+          mandate_jurisdiction: string | null;
+          mandate_schema_version: number | null;
           mandate_version: number;
           net_savings_cents: number;
           proposed_total_cents: number;
@@ -1534,6 +1537,7 @@ export type Database = {
           quote_snapshot: Json;
           reason_codes: string[];
           status: Database["public"]["Enums"]["recommendation_status"];
+          switching_preferences_id: string | null;
           switching_preferences_version: number;
           updated_at: string;
           updated_by: string | null;
@@ -1549,6 +1553,9 @@ export type Database = {
           effective_date?: string | null;
           engine_version?: string;
           id?: string;
+          mandate_id?: string | null;
+          mandate_jurisdiction?: string | null;
+          mandate_schema_version?: number | null;
           mandate_version?: number;
           net_savings_cents: number;
           proposed_total_cents: number;
@@ -1556,6 +1563,7 @@ export type Database = {
           quote_snapshot?: Json;
           reason_codes?: string[];
           status?: Database["public"]["Enums"]["recommendation_status"];
+          switching_preferences_id?: string | null;
           switching_preferences_version?: number;
           updated_at?: string;
           updated_by?: string | null;
@@ -1571,6 +1579,9 @@ export type Database = {
           effective_date?: string | null;
           engine_version?: string;
           id?: string;
+          mandate_id?: string | null;
+          mandate_jurisdiction?: string | null;
+          mandate_schema_version?: number | null;
           mandate_version?: number;
           net_savings_cents?: number;
           proposed_total_cents?: number;
@@ -1578,6 +1589,7 @@ export type Database = {
           quote_snapshot?: Json;
           reason_codes?: string[];
           status?: Database["public"]["Enums"]["recommendation_status"];
+          switching_preferences_id?: string | null;
           switching_preferences_version?: number;
           updated_at?: string;
           updated_by?: string | null;
@@ -1596,6 +1608,20 @@ export type Database = {
             columns: ["created_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recommendations_mandate_id_fkey";
+            columns: ["mandate_id"];
+            isOneToOne: false;
+            referencedRelation: "household_coverage_mandates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recommendations_switching_preferences_id_fkey";
+            columns: ["switching_preferences_id"];
+            isOneToOne: false;
+            referencedRelation: "switching_preferences";
             referencedColumns: ["id"];
           },
           {
@@ -2042,12 +2068,7 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"];
       };
       approve_customer_recommendation: {
-        Args: {
-          p_expected_mandate_version: number;
-          p_expected_rec_version: number;
-          p_expected_switching_version: number;
-          p_recommendation_id: string;
-        };
+        Args: { p_expected_rec_version: number; p_recommendation_id: string };
         Returns: Json;
       };
       assign_staff_role: {
@@ -2068,17 +2089,18 @@ export type Database = {
       backfill_coverage_mandate_v2: { Args: never; Returns: undefined };
       can_access_case: { Args: { cid: string }; Returns: boolean };
       can_access_household: { Args: { hid: string }; Returns: boolean };
+      canonicalize_quote_auto_coverage: { Args: { input: Json }; Returns: Json };
+      canonicalize_quote_property_coverage: {
+        Args: { input: Json };
+        Returns: Json;
+      };
+      canonicalize_v2_monetary_rules: { Args: { input: Json }; Returns: Json };
       create_customer_support_question: {
         Args: { p_case_id: string; p_prompt: string };
         Returns: Json;
       };
       decline_customer_recommendation: {
-        Args: {
-          p_expected_mandate_version: number;
-          p_expected_rec_version: number;
-          p_expected_switching_version: number;
-          p_recommendation_id: string;
-        };
+        Args: { p_expected_rec_version: number; p_recommendation_id: string };
         Returns: Json;
       };
       is_admin: { Args: never; Returns: boolean };
@@ -2096,6 +2118,21 @@ export type Database = {
         };
         Returns: undefined;
       };
+      persist_household_mandate_v2: {
+        Args: {
+          p_created_by?: string;
+          p_expected_mandate_version: number;
+          p_expected_switching_version: number;
+          p_household_auto_defaults: Json;
+          p_household_id: string;
+          p_household_property_defaults: Json;
+          p_jurisdiction: string;
+          p_property_overrides: Json;
+          p_switching_preferences: Json;
+          p_vehicle_overrides: Json;
+        };
+        Returns: Json;
+      };
       persist_recommendation: {
         Args: {
           p_case_id: string;
@@ -2103,6 +2140,9 @@ export type Database = {
           p_current_total_cents: number;
           p_disclosure_version?: string;
           p_engine_version: string;
+          p_mandate_id: string;
+          p_mandate_jurisdiction: string;
+          p_mandate_schema_version: number;
           p_mandate_version: number;
           p_net_savings_cents: number;
           p_options: Json;
@@ -2110,7 +2150,8 @@ export type Database = {
           p_quote_snapshot: Json;
           p_reason_codes: string[];
           p_recommended: Json;
-          p_switching_version: number;
+          p_switching_preferences_id: string;
+          p_switching_preferences_version: number;
         };
         Returns: Json;
       };
@@ -2135,21 +2176,6 @@ export type Database = {
           p_approved: boolean;
           p_notes?: string;
           p_recommendation_id: string;
-        };
-        Returns: Json;
-      };
-      save_household_mandate_v2: {
-        Args: {
-          p_effective_from: string;
-          p_expected_mandate_version: number;
-          p_expected_switching_version: number;
-          p_household_auto_defaults: Json;
-          p_household_id: string;
-          p_household_property_defaults: Json;
-          p_jurisdiction: string;
-          p_property_overrides: Json;
-          p_switching_preferences: Json;
-          p_vehicle_overrides: Json;
         };
         Returns: Json;
       };

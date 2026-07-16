@@ -5,4 +5,5 @@ export * from "./mandate";
 export * from "./mandate-v2";
 export * from "./mandate-adapters";
 export * from "./quotes";
+export * from "./recommendation";
 export * from "./entities";

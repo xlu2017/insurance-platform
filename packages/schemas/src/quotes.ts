@@ -74,6 +74,7 @@ export const PropertyCoverageDetails = z.object({
 export type PropertyCoverageDetails = z.infer<typeof PropertyCoverageDetails>;
 
 export const QuoteComponent = z.object({
+  id: z.string().uuid().optional(),
   productLine: ProductLine,
   assetId: z.string().uuid().optional(),
   assetLabel: z.string().optional(),

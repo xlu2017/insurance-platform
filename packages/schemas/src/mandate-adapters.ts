@@ -1,18 +1,19 @@
 import {
-  type AutoMandateOverrideValuesV2,
   type AutoMandateV2,
   type HouseholdCoverageMandateV2,
   type MonetaryRule,
-  type PropertyMandateOverrideValuesV2,
   type PropertyMandateV2,
   type VehicleMandateOverrideV2,
   type PropertyMandateOverrideV2,
-  type SwitchingPreferencesV2,
+  type AutoMandateOverrideValuesV2,
+  type PropertyMandateOverrideValuesV2,
+  type WaterCoverageRequirementV2,
+  SwitchingPreferencesV2,
   createDefaultSwitchingPreferencesV2,
+  resolveVehicleMandateV2,
+  resolvePropertyMandateV2,
 } from "./mandate-v2";
 import {
-  type AssetAutoOverride,
-  type AssetPropertyOverride,
   type AutoRequirements,
   type HouseholdMandate,
   type PropertyRequirements,
@@ -30,6 +31,8 @@ import {
   PropertyOptionalCoveragePreferences,
   AutoEndorsementKey,
   PropertyOptionalCoverageKey,
+  AssetAutoOverride,
+  AssetPropertyOverride,
 } from "./mandate";
 
 // =============================================================================
@@ -118,70 +121,20 @@ function v2PropertyMandateToLegacy(property: PropertyMandateV2): PropertyRequire
   };
 }
 
-function v2AutoOverrideValuesToLegacy(values: AutoMandateOverrideValuesV2): AssetAutoOverride {
-  const out: AssetAutoOverride = {};
-  if (values.coverageForm) {
-    out.coverageForm = AutoCoverageFormRequirement.parse(values.coverageForm);
-  }
-  if (values.liability) out.liability = monetaryRuleV2ToLegacyLimit(values.liability);
-  if (values.collisionDeductible)
-    out.collisionDeductible = monetaryRuleV2ToLegacyDeductible(values.collisionDeductible);
-  if (values.comprehensiveDeductible)
-    out.comprehensiveDeductible = monetaryRuleV2ToLegacyDeductible(values.comprehensiveDeductible);
-  if (values.glassDeductible)
-    out.glassDeductible = monetaryRuleV2ToLegacyDeductible(values.glassDeductible);
-  if (values.endorsements) {
-    out.endorsements = AutoEndorsementPreferences.parse(values.endorsements);
-  }
-  return out;
+function v2ResolvedAutoMandateToLegacy(resolved: AutoMandateV2): AutoRequirements {
+  return v2AutoMandateToLegacy(resolved);
 }
 
-function v2PropertyOverrideValuesToLegacy(
-  values: PropertyMandateOverrideValuesV2,
-): AssetPropertyOverride {
-  const out: AssetPropertyOverride = {};
-  if (values.coverageForm) {
-    out.coverageForm = PropertyCoverageFormRequirement.parse(values.coverageForm);
-  }
-  if (values.settlementBasis) {
-    out.settlementBasis = PropertySettlementRequirement.parse(values.settlementBasis);
-  }
-  if (values.dwellingLimit) out.dwellingLimit = monetaryRuleV2ToLegacyLimit(values.dwellingLimit);
-  if (values.contentsLimit) out.contentsLimit = monetaryRuleV2ToLegacyLimit(values.contentsLimit);
-  if (values.detachedStructuresLimit)
-    out.detachedStructuresLimit = monetaryRuleV2ToLegacyLimit(values.detachedStructuresLimit);
-  if (values.personalLiabilityLimit)
-    out.personalLiabilityLimit = monetaryRuleV2ToLegacyLimit(values.personalLiabilityLimit);
-  if (values.additionalLivingExpenseLimit)
-    out.additionalLivingExpenseLimit = monetaryRuleV2ToLegacyLimit(
-      values.additionalLivingExpenseLimit,
-    );
-  if (values.baseDeductible)
-    out.baseDeductible = monetaryRuleV2ToLegacyDeductible(values.baseDeductible);
-  if (values.waterDeductible)
-    out.waterDeductible = monetaryRuleV2ToLegacyDeductible(values.waterDeductible);
-  if (values.windHailDeductible)
-    out.windHailDeductible = monetaryRuleV2ToLegacyDeductible(values.windHailDeductible);
-  if (values.earthquakeDeductible)
-    out.earthquakeDeductible = monetaryRuleV2ToLegacyDeductible(values.earthquakeDeductible);
-  if (values.sewerBackup) {
-    out.sewerBackup = v2WaterToLegacy({
-      preference: CoveragePreference.parse(values.sewerBackup.preference),
-      limit: values.sewerBackup.limit as MonetaryRule,
-      deductible: values.sewerBackup.deductible as MonetaryRule,
-    });
-  }
-  if (values.overlandWater) {
-    out.overlandWater = v2WaterToLegacy({
-      preference: CoveragePreference.parse(values.overlandWater.preference),
-      limit: values.overlandWater.limit as MonetaryRule,
-      deductible: values.overlandWater.deductible as MonetaryRule,
-    });
-  }
-  if (values.optionalCoverages) {
-    out.optionalCoverages = PropertyOptionalCoveragePreferences.parse(values.optionalCoverages);
-  }
-  return out;
+function v2ResolvedPropertyMandateToLegacy(resolved: PropertyMandateV2): PropertyRequirements {
+  return v2PropertyMandateToLegacy(resolved);
+}
+
+function collectVehicleIds(v2: HouseholdCoverageMandateV2): Set<string> {
+  return new Set(v2.vehicleOverrides.map((o) => o.vehicleId));
+}
+
+function collectPropertyIds(v2: HouseholdCoverageMandateV2): Set<string> {
+  return new Set(v2.propertyOverrides.map((o) => o.propertyId));
 }
 
 export function mandateV2ToEngineMandate(
@@ -189,12 +142,20 @@ export function mandateV2ToEngineMandate(
   switching?: SwitchingPreferencesV2,
 ): HouseholdMandate {
   const vehicleOverrides: Record<string, AssetAutoOverride> = {};
-  for (const o of v2.vehicleOverrides) {
-    vehicleOverrides[o.vehicleId] = v2AutoOverrideValuesToLegacy(o.values);
+  for (const vehicleId of collectVehicleIds(v2)) {
+    const resolved = resolveVehicleMandateV2(
+      v2.householdAutoDefaults,
+      v2.vehicleOverrides.find((o) => o.vehicleId === vehicleId),
+    );
+    vehicleOverrides[vehicleId] = v2ResolvedAutoMandateToLegacy(resolved);
   }
   const propertyOverrides: Record<string, AssetPropertyOverride> = {};
-  for (const o of v2.propertyOverrides) {
-    propertyOverrides[o.propertyId] = v2PropertyOverrideValuesToLegacy(o.values);
+  for (const propertyId of collectPropertyIds(v2)) {
+    const resolved = resolvePropertyMandateV2(
+      v2.householdPropertyDefaults,
+      v2.propertyOverrides.find((o) => o.propertyId === propertyId),
+    );
+    propertyOverrides[propertyId] = v2ResolvedPropertyMandateToLegacy(resolved);
   }
   return {
     auto: v2AutoMandateToLegacy(v2.householdAutoDefaults),
@@ -489,6 +450,91 @@ export function expandedUnversionedMandateToV2(
   return legacyMandateToV2(coverage, version, effectiveFrom);
 }
 
+function v2PartialWaterToLegacy(
+  water: Partial<WaterCoverageRequirementV2>,
+): WaterCoverageRequirement | undefined {
+  if (water.preference == null || water.limit == null || water.deductible == null) {
+    return undefined;
+  }
+  return v2WaterToLegacy(water as WaterCoverageRequirementV2);
+}
+
+function v2AutoOverrideValuesToLegacy(values: AutoMandateOverrideValuesV2): AssetAutoOverride {
+  const out: Partial<AutoRequirements> = {};
+  if (values.coverageForm) {
+    out.coverageForm = AutoCoverageFormRequirement.parse(values.coverageForm);
+  }
+  if (values.liability) {
+    out.liability = monetaryRuleV2ToLegacyLimit(values.liability);
+  }
+  if (values.collisionDeductible) {
+    out.collisionDeductible = monetaryRuleV2ToLegacyDeductible(values.collisionDeductible);
+  }
+  if (values.comprehensiveDeductible) {
+    out.comprehensiveDeductible = monetaryRuleV2ToLegacyDeductible(values.comprehensiveDeductible);
+  }
+  if (values.glassDeductible) {
+    out.glassDeductible = monetaryRuleV2ToLegacyDeductible(values.glassDeductible);
+  }
+  if (values.endorsements) {
+    out.endorsements = AutoEndorsementPreferences.parse(values.endorsements);
+  }
+  return AssetAutoOverride.parse(out) as AssetAutoOverride;
+}
+
+function v2PropertyOverrideValuesToLegacy(
+  values: PropertyMandateOverrideValuesV2,
+): AssetPropertyOverride {
+  const out: Partial<PropertyRequirements> = {};
+  if (values.coverageForm) {
+    out.coverageForm = PropertyCoverageFormRequirement.parse(values.coverageForm);
+  }
+  if (values.settlementBasis) {
+    out.settlementBasis = PropertySettlementRequirement.parse(values.settlementBasis);
+  }
+  if (values.dwellingLimit) {
+    out.dwellingLimit = monetaryRuleV2ToLegacyLimit(values.dwellingLimit);
+  }
+  if (values.contentsLimit) {
+    out.contentsLimit = monetaryRuleV2ToLegacyLimit(values.contentsLimit);
+  }
+  if (values.detachedStructuresLimit) {
+    out.detachedStructuresLimit = monetaryRuleV2ToLegacyLimit(values.detachedStructuresLimit);
+  }
+  if (values.personalLiabilityLimit) {
+    out.personalLiabilityLimit = monetaryRuleV2ToLegacyLimit(values.personalLiabilityLimit);
+  }
+  if (values.additionalLivingExpenseLimit) {
+    out.additionalLivingExpenseLimit = monetaryRuleV2ToLegacyLimit(
+      values.additionalLivingExpenseLimit,
+    );
+  }
+  if (values.baseDeductible) {
+    out.baseDeductible = monetaryRuleV2ToLegacyDeductible(values.baseDeductible);
+  }
+  if (values.waterDeductible) {
+    out.waterDeductible = monetaryRuleV2ToLegacyDeductible(values.waterDeductible);
+  }
+  if (values.windHailDeductible) {
+    out.windHailDeductible = monetaryRuleV2ToLegacyDeductible(values.windHailDeductible);
+  }
+  if (values.earthquakeDeductible) {
+    out.earthquakeDeductible = monetaryRuleV2ToLegacyDeductible(values.earthquakeDeductible);
+  }
+  if (values.sewerBackup) {
+    const w = v2PartialWaterToLegacy(values.sewerBackup);
+    if (w) out.sewerBackup = w;
+  }
+  if (values.overlandWater) {
+    const w = v2PartialWaterToLegacy(values.overlandWater);
+    if (w) out.overlandWater = w;
+  }
+  if (values.optionalCoverages) {
+    out.optionalCoverages = PropertyOptionalCoveragePreferences.parse(values.optionalCoverages);
+  }
+  return AssetPropertyOverride.parse(out) as AssetPropertyOverride;
+}
+
 export function mandateV2ToLegacyRow(v2: HouseholdCoverageMandateV2): Record<string, unknown> {
   const vehicleOverrides: Record<string, AssetAutoOverride> = {};
   for (const o of v2.vehicleOverrides) {
@@ -538,7 +584,7 @@ export interface SwitchingPreferencesRow {
 }
 
 export function switchingRowToDomain(row: SwitchingPreferencesRow): SwitchingPreferencesV2 {
-  return {
+  return SwitchingPreferencesV2.parse({
     minNetAnnualSavingsCents: row.min_net_annual_savings_cents,
     maxPremiumIncreaseCents: row.max_premium_increase_cents,
     maxDeductibleIncreaseCents: row.max_deductible_increase_cents,
@@ -549,17 +595,13 @@ export function switchingRowToDomain(row: SwitchingPreferencesRow): SwitchingPre
     excludedInsurerIds: row.excluded_insurer_ids ?? [],
     deductibleIncreasesAllowed: row.deductible_increases_allowed,
     materialCoverageReductionsAllowed: row.material_coverage_reductions_allowed,
-    customerApprovalRequired: row.customer_approval_required ? true : true,
+    customerApprovalRequired: !!row.customer_approval_required,
     switchOnlyAfterCustomerApproval: row.switch_only_after_customer_approval,
-    preferredPaymentFrequency:
-      row.preferred_payment_frequency as SwitchingPreferencesV2["preferredPaymentFrequency"],
-    preferredBillingMethod:
-      row.preferred_billing_method as SwitchingPreferencesV2["preferredBillingMethod"],
-    brokerDirectPreference:
-      row.broker_direct_preference as SwitchingPreferencesV2["brokerDirectPreference"],
-    minimumInsurerFinancialRating:
-      row.minimum_insurer_financial_rating as SwitchingPreferencesV2["minimumInsurerFinancialRating"],
-  };
+    preferredPaymentFrequency: row.preferred_payment_frequency,
+    preferredBillingMethod: row.preferred_billing_method,
+    brokerDirectPreference: row.broker_direct_preference,
+    minimumInsurerFinancialRating: row.minimum_insurer_financial_rating,
+  });
 }
 
 export function switchingDomainToRow(domain: SwitchingPreferencesV2): SwitchingPreferencesRow {
