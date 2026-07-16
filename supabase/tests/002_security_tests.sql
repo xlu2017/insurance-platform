@@ -27,25 +27,80 @@ values
   ('10000000-0000-0000-0000-00000000b001', '10000000-0000-0000-0000-00000000a001', 'owner'),
   ('10000000-0000-0000-0000-00000000b002', '10000000-0000-0000-0000-00000000a002', 'owner');
 
-insert into coverage_requirements (id, household_id, is_current, version, auto_requirements, property_requirements, created_by)
+-- Legacy coverage rows used by the idempotent V2 backfill.
+insert into coverage_requirements (id, household_id, is_current, version, auto_requirements, property_requirements, vehicle_mandates, property_mandates, created_by)
 values
-  ('10000000-0000-0000-0000-00000000c001', '10000000-0000-0000-0000-00000000b001', true, 1, '{}', '{}', '10000000-0000-0000-0000-00000000a001'),
-  ('10000000-0000-0000-0000-00000000c002', '10000000-0000-0000-0000-00000000b002', true, 1, '{}', '{}', '10000000-0000-0000-0000-00000000a002');
+  ('10000000-0000-0000-0000-00000000c001', '10000000-0000-0000-0000-00000000b001', true, 1, '{}', '{}', '{}', '{}', '10000000-0000-0000-0000-00000000a001'),
+  ('10000000-0000-0000-0000-00000000c002', '10000000-0000-0000-0000-00000000b002', true, 1, '{}', '{}', '{}', '{}', '10000000-0000-0000-0000-00000000a002');
 
 insert into switching_preferences (id, household_id, is_current, version, created_by)
 values
   ('10000000-0000-0000-0000-00000000a0a1', '10000000-0000-0000-0000-00000000b001', true, 1, '10000000-0000-0000-0000-00000000a001'),
   ('10000000-0000-0000-0000-00000000a0a2', '10000000-0000-0000-0000-00000000b002', true, 1, '10000000-0000-0000-0000-00000000a002');
 
+-- Materialize V2 mandates.
+select backfill_coverage_mandate_v2();
+
 insert into optimization_cases (id, household_id, state, created_by)
 values
   ('10000000-0000-0000-0000-00000000d001', '10000000-0000-0000-0000-00000000b001', 'customer_decision', '10000000-0000-0000-0000-00000000a001'),
   ('10000000-0000-0000-0000-00000000d002', '10000000-0000-0000-0000-00000000b002', 'customer_decision', '10000000-0000-0000-0000-00000000a002');
 
-insert into recommendations (id, case_id, status, version, mandate_version, switching_preferences_version, quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by)
-values
-  ('10000000-0000-0000-0000-00000000e001', '10000000-0000-0000-0000-00000000d001', 'published', 1, 1, 1, '{}', 100000, 90000, 10000, '{}', '{}', '10000000-0000-0000-0000-00000000a001'),
-  ('10000000-0000-0000-0000-00000000e002', '10000000-0000-0000-0000-00000000d002', 'published', 1, 1, 1, '{}', 100000, 90000, 10000, '{}', '{}', '10000000-0000-0000-0000-00000000a002');
+insert into recommendations (
+  id, case_id, status, version,
+  mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version,
+  quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by
+)
+select
+  '10000000-0000-0000-0000-00000000e001',
+  '10000000-0000-0000-0000-00000000d001',
+  'published',
+  1,
+  hcm.id,
+  hcm.version,
+  hcm.schema_version,
+  hcm.jurisdiction,
+  sp.id,
+  sp.version,
+  '{}',
+  100000,
+  90000,
+  10000,
+  '{}',
+  '{}',
+  '10000000-0000-0000-0000-00000000a001'
+from household_coverage_mandates hcm
+join switching_preferences sp on sp.household_id = hcm.household_id and sp.is_current = true
+where hcm.household_id = '10000000-0000-0000-0000-00000000b001' and hcm.is_current = true;
+
+insert into recommendations (
+  id, case_id, status, version,
+  mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version,
+  quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by
+)
+select
+  '10000000-0000-0000-0000-00000000e002',
+  '10000000-0000-0000-0000-00000000d002',
+  'published',
+  1,
+  hcm.id,
+  hcm.version,
+  hcm.schema_version,
+  hcm.jurisdiction,
+  sp.id,
+  sp.version,
+  '{}',
+  100000,
+  90000,
+  10000,
+  '{}',
+  '{}',
+  '10000000-0000-0000-0000-00000000a002'
+from household_coverage_mandates hcm
+join switching_preferences sp on sp.household_id = hcm.household_id and sp.is_current = true
+where hcm.household_id = '10000000-0000-0000-0000-00000000b002' and hcm.is_current = true;
 
 insert into customer_questions (id, case_id, question_type, status, prompt, created_by)
 values
@@ -140,13 +195,13 @@ select lives_ok(
 
 -- 11. Customer can approve their own published recommendation.
 select lives_ok(
-  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e001', 1, 1, 1)$$,
+  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e001', 1)$$,
   'customer can approve their own published recommendation'
 );
 
 -- 12. Customer cannot approve another household's recommendation.
 select throws_like(
-  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e002', 1, 1, 1)$$,
+  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e002', 1)$$,
   '%does not belong to caller household%',
   'customer cannot approve another household recommendation'
 );
@@ -172,8 +227,33 @@ set local role none;
 set local request.jwt.claims to '';
 insert into optimization_cases (id, household_id, state, created_by)
 values ('10000000-0000-0000-0000-00000000d003', '10000000-0000-0000-0000-00000000b001', 'switching', '10000000-0000-0000-0000-00000000a001');
-insert into recommendations (id, case_id, status, version, mandate_version, switching_preferences_version, quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by)
-values ('10000000-0000-0000-0000-00000000e003', '10000000-0000-0000-0000-00000000d003', 'customer_approved', 1, 1, 1, '{}', 100000, 90000, 10000, '{}', '{}', '10000000-0000-0000-0000-00000000a001');
+insert into recommendations (
+  id, case_id, status, version,
+  mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version,
+  quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by
+)
+select
+  '10000000-0000-0000-0000-00000000e003',
+  '10000000-0000-0000-0000-00000000d003',
+  'customer_approved',
+  1,
+  hcm.id,
+  hcm.version,
+  hcm.schema_version,
+  hcm.jurisdiction,
+  sp.id,
+  sp.version,
+  '{}',
+  100000,
+  90000,
+  10000,
+  '{}',
+  '{}',
+  '10000000-0000-0000-0000-00000000a001'
+from household_coverage_mandates hcm
+join switching_preferences sp on sp.household_id = hcm.household_id and sp.is_current = true
+where hcm.household_id = '10000000-0000-0000-0000-00000000b001' and hcm.is_current = true;
 insert into switch_events (id, case_id, recommendation_id, state)
 values ('70000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-00000000d003', '10000000-0000-0000-0000-00000000e003', 'customer_approved');
 insert into case_assignments (case_id, assignee_profile_id, assignment_role)
@@ -188,7 +268,7 @@ select lives_ok(
 -- 16. Repeated customer approval is rejected (e001 was already approved in test 11).
 set local request.jwt.claims to '{"sub":"10000000-0000-0000-0000-00000000a001","role":"authenticated"}';
 select throws_like(
-  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e001', 1, 1, 1)$$,
+  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e001', 1)$$,
   '%customer decision already recorded%',
   'repeated customer approval is rejected'
 );
@@ -198,20 +278,53 @@ set local role none;
 set local request.jwt.claims to '';
 insert into optimization_cases (id, household_id, state, created_by)
 values ('10000000-0000-0000-0000-00000000d004', '10000000-0000-0000-0000-00000000b001', 'customer_decision', '10000000-0000-0000-0000-00000000a001');
-insert into recommendations (id, case_id, status, version, mandate_version, switching_preferences_version, quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by)
-values ('10000000-0000-0000-0000-00000000e004', '10000000-0000-0000-0000-00000000d004', 'published', 2, 1, 1, '{}', 100000, 90000, 10000, '{}', '{}', '10000000-0000-0000-0000-00000000a001');
+insert into recommendations (
+  id, case_id, status, version,
+  mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version,
+  quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by
+)
+select
+  '10000000-0000-0000-0000-00000000e004',
+  '10000000-0000-0000-0000-00000000d004',
+  'published',
+  2,
+  hcm.id,
+  hcm.version,
+  hcm.schema_version,
+  hcm.jurisdiction,
+  sp.id,
+  sp.version,
+  '{}',
+  100000,
+  90000,
+  10000,
+  '{}',
+  '{}',
+  '10000000-0000-0000-0000-00000000a001'
+from household_coverage_mandates hcm
+join switching_preferences sp on sp.household_id = hcm.household_id and sp.is_current = true
+where hcm.household_id = '10000000-0000-0000-0000-00000000b001' and hcm.is_current = true;
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"10000000-0000-0000-0000-00000000a001","role":"authenticated"}';
 select throws_like(
-  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e004', 99, 1, 1)$$,
+  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e004', 99)$$,
   '%stale recommendation version%',
   'stale recommendation version is rejected'
 );
 
 -- 18. Stale switching preferences version is rejected.
+set local role none;
+set local request.jwt.claims to '';
+-- Mutate the current switching row version so it no longer matches the recommendation snapshot.
+update switching_preferences
+set version = 99
+where household_id = '10000000-0000-0000-0000-00000000b001' and is_current = true;
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"10000000-0000-0000-0000-00000000a001","role":"authenticated"}';
 select throws_like(
-  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e004', 2, 1, 99)$$,
-  '%stale switching preferences version%',
+  $$select approve_customer_recommendation('10000000-0000-0000-0000-00000000e004', 2)$$,
+  '%switching preferences have changed since this recommendation was generated%',
   'stale switching preferences version is rejected'
 );
 

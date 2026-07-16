@@ -3,7 +3,7 @@ create extension if not exists pgtap with schema extensions;
 
 select plan(18);
 
--- Setup: a household, case, quote, and recommendation ready for licensed review.
+-- Test users and households.
 insert into auth.users (id, email, raw_user_meta_data)
 values
   ('20000000-0000-0000-0000-00000000a001', 'wf-customer@example.com', '{"full_name":"WF Customer","role":"customer"}'),
@@ -18,17 +18,56 @@ values ('20000000-0000-0000-0000-00000000b001', '20000000-0000-0000-0000-0000000
 insert into household_members (household_id, profile_id, member_role)
 values ('20000000-0000-0000-0000-00000000b001', '20000000-0000-0000-0000-00000000a001', 'owner');
 
-insert into coverage_requirements (id, household_id, is_current, version, auto_requirements, property_requirements, created_by)
-values ('20000000-0000-0000-0000-00000000c001', '20000000-0000-0000-0000-00000000b001', true, 1, '{}', '{}', '20000000-0000-0000-0000-00000000a001');
+-- Legacy coverage row used to create the V2 mandate via the idempotent backfill.
+insert into coverage_requirements (id, household_id, is_current, version, auto_requirements, property_requirements, vehicle_mandates, property_mandates, created_by)
+values (
+  '20000000-0000-0000-0000-00000000c001',
+  '20000000-0000-0000-0000-00000000b001',
+  true,
+  1,
+  '{"coverageForm":{"preference":"required","value":"comprehensive"},"liability":{"rule":"minimum","amountCents":200000000},"collisionDeductible":{"rule":"any"},"comprehensiveDeductible":{"rule":"any"},"glassDeductible":{"rule":"any"},"endorsements":{"accident_forgiveness":"indifferent","rental_vehicle_coverage":"indifferent","non_owned_automobile":"indifferent","family_protection":"indifferent","depreciation_waiver":"indifferent","oem_parts":"indifferent","roadside_assistance":"indifferent","disappearing_deductible":"indifferent","glass_coverage":"indifferent","telematics":"indifferent"}}',
+  '{"coverageForm":{"preference":"required","value":"comprehensive"},"settlementBasis":{"preference":"required","value":"replacement_cost"},"dwellingLimit":{"rule":"any"},"contentsLimit":{"rule":"any"},"detachedStructuresLimit":{"rule":"any"},"personalLiabilityLimit":{"rule":"any"},"additionalLivingExpenseLimit":{"rule":"any"},"baseDeductible":{"rule":"any"},"waterDeductible":{"rule":"any"},"windHailDeductible":{"rule":"any"},"earthquakeDeductible":{"rule":"any"},"sewerBackup":{"preference":"indifferent","limit":{"rule":"any"},"deductible":{"rule":"any"}},"overlandWater":{"preference":"indifferent","limit":{"rule":"any"},"deductible":{"rule":"any"}},"optionalCoverages":{"equipment_breakdown":"indifferent","service_line":"indifferent","bylaw_coverage":"indifferent","home_systems":"indifferent","cyber":"indifferent","scheduled_valuables":"indifferent","home_business":"indifferent","short_term_rental_permission":"indifferent","claims_forgiveness":"indifferent","groundwater_seepage":"indifferent","ice_dam":"indifferent","earthquake":"indifferent"}}',
+  '{}',
+  '{}',
+  '20000000-0000-0000-0000-00000000a001'
+);
 
 insert into switching_preferences (id, household_id, is_current, version, created_by)
 values ('20000000-0000-0000-0000-00000000a0a1', '20000000-0000-0000-0000-00000000b001', true, 1, '20000000-0000-0000-0000-00000000a001');
 
+-- Materialize the V2 mandate for this household.
+select backfill_coverage_mandate_v2();
+
 insert into optimization_cases (id, household_id, state, created_by)
 values ('20000000-0000-0000-0000-00000000d001', '20000000-0000-0000-0000-00000000b001', 'licensed_review', '20000000-0000-0000-0000-00000000a001');
 
-insert into recommendations (id, case_id, status, version, mandate_version, switching_preferences_version, quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by)
-values ('20000000-0000-0000-0000-00000000e001', '20000000-0000-0000-0000-00000000d001', 'awaiting_review', 1, 1, 1, '{}', 100000, 90000, 10000, '{}', '{}', '20000000-0000-0000-0000-00000000a001');
+insert into recommendations (
+  id, case_id, status, version,
+  mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version,
+  quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by
+)
+select
+  '20000000-0000-0000-0000-00000000e001',
+  '20000000-0000-0000-0000-00000000d001',
+  'awaiting_review',
+  1,
+  hcm.id,
+  hcm.version,
+  hcm.schema_version,
+  hcm.jurisdiction,
+  sp.id,
+  sp.version,
+  '{}',
+  100000,
+  90000,
+  10000,
+  '{}',
+  '{}',
+  '20000000-0000-0000-0000-00000000a001'
+from household_coverage_mandates hcm
+join switching_preferences sp on sp.household_id = hcm.household_id and sp.is_current = true
+where hcm.household_id = '20000000-0000-0000-0000-00000000b001' and hcm.is_current = true;
 
 -- 1. Reviewer can approve a recommendation in licensed_review.
 set local role authenticated;
@@ -68,7 +107,7 @@ select is(
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"20000000-0000-0000-0000-00000000a001","role":"authenticated"}';
 select lives_ok(
-  $$select decline_customer_recommendation('20000000-0000-0000-0000-00000000e001', 1, 1, 1)$$,
+  $$select decline_customer_recommendation('20000000-0000-0000-0000-00000000e001', 1)$$,
   'customer can decline a published recommendation'
 );
 set local role none;
@@ -81,8 +120,34 @@ select is(
 -- 5. A fresh case for reviewer rejection flow.
 insert into optimization_cases (id, household_id, state, created_by)
 values ('20000000-0000-0000-0000-00000000d002', '20000000-0000-0000-0000-00000000b001', 'licensed_review', '20000000-0000-0000-0000-00000000a001');
-insert into recommendations (id, case_id, status, version, mandate_version, switching_preferences_version, quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by)
-values ('20000000-0000-0000-0000-00000000e002', '20000000-0000-0000-0000-00000000d002', 'awaiting_review', 1, 1, 1, '{}', 100000, 90000, 10000, '{}', '{}', '20000000-0000-0000-0000-00000000a001');
+
+insert into recommendations (
+  id, case_id, status, version,
+  mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version,
+  quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by
+)
+select
+  '20000000-0000-0000-0000-00000000e002',
+  '20000000-0000-0000-0000-00000000d002',
+  'awaiting_review',
+  1,
+  hcm.id,
+  hcm.version,
+  hcm.schema_version,
+  hcm.jurisdiction,
+  sp.id,
+  sp.version,
+  '{}',
+  100000,
+  90000,
+  10000,
+  '{}',
+  '{}',
+  '20000000-0000-0000-0000-00000000a001'
+from household_coverage_mandates hcm
+join switching_preferences sp on sp.household_id = hcm.household_id and sp.is_current = true
+where hcm.household_id = '20000000-0000-0000-0000-00000000b001' and hcm.is_current = true;
 
 -- 6. Reviewer rejection returns the case to comparing_quotes and records a decision row.
 set local role authenticated;
@@ -92,6 +157,7 @@ select lives_ok(
   'reviewer can reject a recommendation'
 );
 set local role none;
+set local request.jwt.claims to '';
 select is(
   (select state from optimization_cases where id = '20000000-0000-0000-0000-00000000d002'),
   'comparing_quotes',
@@ -117,8 +183,35 @@ set local role none;
 set local request.jwt.claims to '';
 insert into optimization_cases (id, household_id, state, created_by)
 values ('20000000-0000-0000-0000-00000000d003', '20000000-0000-0000-0000-00000000b001', 'switching', '20000000-0000-0000-0000-00000000a001');
-insert into recommendations (id, case_id, status, version, mandate_version, switching_preferences_version, quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by)
-values ('20000000-0000-0000-0000-00000000e003', '20000000-0000-0000-0000-00000000d003', 'customer_approved', 1, 1, 1, '{}', 100000, 90000, 10000, '{}', '{}', '20000000-0000-0000-0000-00000000a001');
+
+insert into recommendations (
+  id, case_id, status, version,
+  mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version,
+  quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, reason_codes, comparison, created_by
+)
+select
+  '20000000-0000-0000-0000-00000000e003',
+  '20000000-0000-0000-0000-00000000d003',
+  'customer_approved',
+  1,
+  hcm.id,
+  hcm.version,
+  hcm.schema_version,
+  hcm.jurisdiction,
+  sp.id,
+  sp.version,
+  '{}',
+  100000,
+  90000,
+  10000,
+  '{}',
+  '{}',
+  '20000000-0000-0000-0000-00000000a001'
+from household_coverage_mandates hcm
+join switching_preferences sp on sp.household_id = hcm.household_id and sp.is_current = true
+where hcm.household_id = '20000000-0000-0000-0000-00000000b001' and hcm.is_current = true;
+
 insert into switch_events (id, case_id, recommendation_id, state)
 values ('20000000-0000-0000-0000-00000000f001', '20000000-0000-0000-0000-00000000d003', '20000000-0000-0000-0000-00000000e003', 'customer_approved');
 insert into case_assignments (case_id, assignee_profile_id, assignment_role)

@@ -137,31 +137,31 @@ insert into quote_requests (id, case_id, insurer_id, state, product_lines, inclu
 insert into quotes (id, case_id, quote_request_id, insurer_id, state, is_incumbent, bundle_discount_cents) values
   ('32000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'bindable', true, 25000);
 
-insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents) values
-  ('33000000-0000-0000-0000-000000000001', '32000000-0000-0000-0000-000000000001', 'auto', 200000),
-  ('33000000-0000-0000-0000-000000000002', '32000000-0000-0000-0000-000000000001', 'property', 120000);
+insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents, asset_id) values
+  ('33000000-0000-0000-0000-000000000001', '32000000-0000-0000-0000-000000000001', 'auto', 200000, '22000000-0000-0000-0000-000000000001'),
+  ('33000000-0000-0000-0000-000000000002', '32000000-0000-0000-0000-000000000001', 'property', 120000, '23000000-0000-0000-0000-000000000001');
 
 -- Alternative A: North Anchor auto-only at 1,700 (would break the incumbent bundle).
 insert into quotes (id, case_id, quote_request_id, insurer_id, state, is_incumbent) values
   ('32000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'bindable', false);
 
-insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents) values
-  ('33000000-0000-0000-0000-000000000003', '32000000-0000-0000-0000-000000000002', 'auto', 170000);
+insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents, asset_id) values
+  ('33000000-0000-0000-0000-000000000003', '32000000-0000-0000-0000-000000000002', 'auto', 170000, '22000000-0000-0000-0000-000000000001');
 
 -- Incumbent property re-priced without bundle: 1,350.
 insert into quotes (id, case_id, quote_request_id, insurer_id, state, is_incumbent) values
   ('32000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'bindable', false);
 
-insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents) values
-  ('33000000-0000-0000-0000-000000000004', '32000000-0000-0000-0000-000000000003', 'property', 135000);
+insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents, asset_id) values
+  ('33000000-0000-0000-0000-000000000004', '32000000-0000-0000-0000-000000000003', 'property', 135000, '23000000-0000-0000-0000-000000000001');
 
 -- Alternative B: Bow River bundled auto+property at 2,700 all-in.
 insert into quotes (id, case_id, quote_request_id, insurer_id, state, is_incumbent) values
   ('32000000-0000-0000-0000-000000000004', '30000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000003', 'bindable', false);
 
-insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents) values
-  ('33000000-0000-0000-0000-000000000005', '32000000-0000-0000-0000-000000000004', 'auto', 160000),
-  ('33000000-0000-0000-0000-000000000006', '32000000-0000-0000-0000-000000000004', 'property', 110000);
+insert into quote_policy_components (id, quote_id, product_line, annual_premium_cents, asset_id) values
+  ('33000000-0000-0000-0000-000000000005', '32000000-0000-0000-0000-000000000004', 'auto', 160000, '22000000-0000-0000-0000-000000000001'),
+  ('33000000-0000-0000-0000-000000000006', '32000000-0000-0000-0000-000000000004', 'property', 110000, '23000000-0000-0000-0000-000000000001');
 
 -- Standard coverage payloads for each component.
 insert into quote_coverages (quote_component_id, coverage)

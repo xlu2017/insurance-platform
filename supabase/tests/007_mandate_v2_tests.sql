@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(10);
+select plan(11);
 
 -- Fixtures: one customer with a household, vehicle and property.
 insert into auth.users (id, email, raw_user_meta_data)
@@ -57,14 +57,13 @@ values (
   'commute'
 );
 
--- Authenticated as the customer.
-set local role authenticated;
-set local request.jwt.claims to '{"sub":"e1000000-0000-0000-0000-000000000001","role":"authenticated"}';
+set local role service_role;
+set local request.jwt.claims to '{"role":"service_role"}';
 
--- 1. Save a V2 mandate successfully.
+-- 1. Persist a V2 mandate successfully through the internal RPC.
 select is(
   (
-    select save_household_mandate_v2(
+    select persist_household_mandate_v2(
       'e1000000-0000-0000-0000-000000000002'::uuid,
       0,
       0,
@@ -73,12 +72,11 @@ select is(
       ('[' || jsonb_build_object('vehicleId','e1000000-0000-0000-0000-000000000003','values',jsonb_build_object('liability',jsonb_build_object('rule','minimum','amountCents',250000000)))::text || ']')::jsonb,
       '[]'::jsonb,
       '{"minNetAnnualSavingsCents":20000,"maxDeductibleIncreaseCents":0,"renewalOnlySwitching":true,"householdOptimizationEnabled":true,"splitInsurersAllowed":true,"allowBundleBreakup":false,"deductibleIncreasesAllowed":false,"excludedInsurerIds":[],"minimumInsurerFinancialRating":"any","preferredPaymentFrequency":"annual","preferredBillingMethod":"automatic_bank","brokerDirectPreference":"indifferent"}'::jsonb,
-      'AB',
-      now()
+      'AB'
     ) ->> 'success'
   )::boolean,
   true,
-  'save_household_mandate_v2 succeeds for valid V2 mandate'
+  'persist_household_mandate_v2 succeeds for valid V2 mandate'
 );
 
 -- 2. One current mandate row exists.
@@ -105,6 +103,8 @@ select is(
 );
 
 -- 5. Customer can read their own V2 mandate.
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"e1000000-0000-0000-0000-000000000001","role":"authenticated"}';
 select is(
   (select count(*)::int from household_coverage_mandates where household_id = 'e1000000-0000-0000-0000-000000000002'),
   1,
@@ -131,9 +131,11 @@ select throws_ok(
 );
 
 -- 8. Stale mandate version is rejected.
+set local role service_role;
+set local request.jwt.claims to '{"role":"service_role"}';
 select is(
   (
-    select save_household_mandate_v2(
+    select persist_household_mandate_v2(
       'e1000000-0000-0000-0000-000000000002'::uuid,
       0,
       1,
@@ -142,21 +144,38 @@ select is(
       '[]'::jsonb,
       '[]'::jsonb,
       '{}'::jsonb,
-      'AB',
-      now()
+      'AB'
     ) ->> 'code'
   ),
   'STALE_VERSION',
   'save with stale mandate version returns STALE_VERSION'
 );
 
--- 9. Cross-household vehicle override is rejected by the trigger.
-reset role;
+-- 9. Authenticated customer cannot invoke the internal persistence RPC.
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"e2000000-0000-0000-0000-000000000001","role":"authenticated"}';
+set local request.jwt.claims to '{"sub":"e1000000-0000-0000-0000-000000000001","role":"authenticated"}';
+select throws_ok(
+  $$select persist_household_mandate_v2(
+    'e1000000-0000-0000-0000-000000000002'::uuid,
+    1,
+    1,
+    '{}'::jsonb,
+    '{}'::jsonb,
+    '[]'::jsonb,
+    '[]'::jsonb,
+    '{}'::jsonb,
+    'AB'
+  )$$,
+  '42501',
+  'permission denied for function persist_household_mandate_v2',
+  'authenticated customer cannot call persist_household_mandate_v2'
+);
 
+-- 10. Cross-household vehicle override is rejected by the trigger.
+set local role service_role;
+set local request.jwt.claims to '{"role":"service_role"}';
 select throws_like(
-  $$select save_household_mandate_v2(
+  $$select persist_household_mandate_v2(
     'e2000000-0000-0000-0000-000000000002'::uuid,
     0,
     0,
@@ -165,18 +184,15 @@ select throws_like(
     '[{"vehicleId":"e1000000-0000-0000-0000-000000000003","values":{}}]'::jsonb,
     '[]'::jsonb,
     '{}'::jsonb,
-    'AB',
-    now()
+    'AB'
   )$$,
   '%Override asset does not belong to mandate household%',
   'cross-household vehicle override is rejected'
 );
 
-reset role;
+-- 11. A different customer cannot see the first household's mandate.
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"e2000000-0000-0000-0000-000000000001","role":"authenticated"}';
-
--- 10. A different customer cannot see the first household's mandate.
 select is(
   (select count(*)::int from household_coverage_mandates where household_id = 'e1000000-0000-0000-0000-000000000002'),
   0,
