@@ -53,10 +53,20 @@ erDiagram
   compatibility but new writes go through `save_household_mandate_v2`.
 - **Market**: `insurers` (8 fictional carriers), `insurer_channels`.
 - **Workflow**: `optimization_cases`, `case_assignments`, `quote_requests`, `quotes`,
-  `quote_policy_components`, `quote_coverages`, `customer_questions`.
+  `quote_policy_components`, `quote_coverages`. `quote_coverages` carries
+  `validation_status`, `validation_errors`, `validated_at`, `validated_by`,
+  `coverage_schema_version`, and `data_source`; only `validation_status = 'valid'` rows feed the
+  engine. `customer_questions`.
 - **Decision**: `recommendations` (versions, quote ids, mandate version, reason codes,
-  comparison JSON), `recommendation_options`, `recommendation_approvals` (role, metadata incl.
+  comparison JSON, `input_snapshot_json`, `input_snapshot_digest`, `engine_output_json`,
+  `engine_output_digest`, `rejected_options_json`), `recommendation_options`
+  (`ranking_factors`, `preference_alignment`, `deductible_total_cents`,
+  `underwriting_condition_count`), `recommendation_approvals` (role, metadata incl.
   disclosure version). `comparison.materialDifferences` records human-readable coverage reductions.
+- **Recommendation audit**: `recommendation_generation_attempts` records every generation attempt
+  with `status` (`started`, `input_rejected`, `no_eligible_option`, `persistence_conflict`,
+  `completed`, `failed`), engine version/source hash, input/output digests, safe error message, and
+  the resulting `recommendation_id`.
 - **Execution**: `switch_events` with `replacement_confirmed_at` / `incumbent_cancelled_at`;
   a trigger blocks cancellation states before replacement confirmation.
 - **Billing & comms**: `subscriptions` (one per profile), `consents`, `notifications`,

@@ -11,13 +11,25 @@
 - Recommendation engine fail-closed on multi-asset and missing-asset cases.
 - pgTAP, unit and integration tests for schema, mapping, persistence, RLS and fail-closed guards.
 
+## Corrective Phase 1D (completed)
+
+- Reusable monetary-rule evaluator with typed statuses and unknown-value handling.
+- Auto coverage-form compatibility model and preferred-requirement scoring.
+- Corrected property rule outcomes and stronger, field-specific reason codes.
+- Quote `validation_status` / `validation_errors` / `coverage_schema_version` / `data_source` states.
+- Engine input filtered to `valid` quote components; unknown insurer metadata fails closed.
+- Internal `persist_engine_recommendation_v2` RPC, canonical input/output snapshot digests, and
+  `recommendation_generation_attempts` audit table.
+- Deterministic Edge bundle parity (`check:edge`) and V2 E2E pipeline passing locally.
+
 ## Now (hardening the MVP)
 
-1. Password reauthentication fallback for switch approval on devices without biometrics.
-2. Distributed rate limiting for Edge Functions and staff 2FA.
-3. Expand pgTAP coverage: per-role matrices for every table, storage policies.
-4. CI device farm runs for the Maestro flow; Playwright against a seeded ephemeral database.
-5. Push notification delivery via Expo with per-category preferences.
+1. Validated quote-write Edge Function for admin quote entry.
+2. Password reauthentication fallback for switch approval on devices without biometrics.
+3. Distributed rate limiting for Edge Functions and staff 2FA.
+4. Expand pgTAP coverage: per-role matrices for every table, storage policies.
+5. CI device farm runs for the Maestro flow; Playwright against a seeded ephemeral database.
+6. Push notification delivery via Expo with per-category preferences.
 
 ## Next
 
@@ -37,11 +49,9 @@
 
 ## Deferred until after foundation review
 
-The following items are intentionally not part of Corrective Phase 1B and require a reviewed
-foundation before implementation:
+The following items require a reviewed foundation before implementation:
 
 - Multiple-vehicle and multiple-property configuration generation.
-- Preferred-coverage scoring and a new auto coverage hierarchy.
 - Carrier APIs and automated policy extraction.
 - Additional coverage fields, visual redesign and new insurer-ranking logic.
 - Silent or automatic switching.

@@ -180,3 +180,67 @@ Engine tests live in `packages/insurance-engine/test/engine.test.ts` and cover c
 bundle-loss detection, hard constraints, exclusions, split-insurer handling, ranking,
 asset-specific inheritance, coverage reductions vs incumbent, quote normalization, switching
 filters and the fail-closed multi-asset guard.
+
+## Corrective Phase 1D additions
+
+### Monetary-rule evaluator
+
+`packages/insurance-engine/src/rule-evaluator.ts` exposes a single reusable `evaluateMonetaryRule`
+function used for every limit and deductible field. It returns typed status values
+(`satisfied`, `below_minimum`, `above_maximum`, `not_exact`, `below_incumbent`,
+`above_incumbent_deductible`, `unknown_actual`, `unknown_incumbent`) and produces field-specific
+reason codes from the engine. Unknown actual or incumbent values fail closed with explicit
+`UNKNOWN` codes instead of being coerced to zero.
+
+### Auto coverage-form compatibility
+
+The engine no longer ranks auto coverage forms by a single numeric total order. Instead,
+`packages/insurance-engine/src/preference-evaluator.ts` defines capability maps for each form
+(`liability_only`, `collision`, `comprehensive`, `specified_perils`, `all_perils`) and checks
+whether the proposed form provides the capabilities required by the mandate. Forms that are not
+comparable or that require licensed review are explicitly flagged.
+
+### Preferred-requirement scoring
+
+Preferred items remain non-blocking but affect deterministic ranking. The engine computes a
+`PreferenceAlignment` result (`satisfied_count`, `missed_count`, `not_evaluable_count`, and per-item
+details) for auto endorsements, property optional coverages, water coverages, coverage form,
+settlement basis, payment frequency, billing method, and broker/direct preference. The canonical
+ranking order is:
+
+1. Hard eligibility
+2. Total annual cost
+3. Fewer missed preferred requirements
+4. Fewer unknown preferred requirements
+5. Lower deductible exposure
+6. Fewer underwriting conditions
+7. Stable deterministic identifier
+
+### Quote validation status
+
+`QuoteComponent` carries `validationStatus` (`draft`, `incomplete`, `valid`, `invalid`,
+`superseded`) and `validationErrors`. The `recommendation-loader` and engine snapshot loader only
+pass `valid` components to the engine; non-valid components are surfaced as `QUOTE_NOT_USABLE`.
+`quote_coverages` stores `validation_status`, `validation_errors`, `validated_at`, `validated_by`,
+`coverage_schema_version`, and `data_source`. The `quote_coverages_coverage_changed` trigger resets
+validation to `draft` when the coverage payload changes, so a modified component must be
+re-validated before it can be evaluated.
+
+### Unknown-value semantics
+
+Unknown insurer metadata fails closed. `quote-normalizer` maps an unrecognized insurer financial
+rating, payment frequency, billing method, or distribution channel to `undefined` rather than a
+customer-preference sentinel such as `any` or `indifferent`. When the mandate requires a minimum
+insurer rating, an unknown rating produces `INSURER_RATING_UNKNOWN`; a known but weaker rating
+produces `INSURER_RATING_BELOW_MINIMUM`.
+
+### Recommendation persistence trust boundary
+
+The Edge Function `recommendation-generator` authenticates the operations/admin user, verifies case
+access, loads and validates the canonical `RecommendationInputSnapshot`, runs the deterministic
+engine, and calls the internal `persist_engine_recommendation_v2` RPC with the authenticated actor
+profile ID. The RPC is `SECURITY DEFINER`, granted only to `service_role`, and verifies the actor
+role from `profiles`. It stores `input_snapshot_json`, `input_snapshot_digest`,
+`engine_output_json`, `engine_output_digest`, and writes a row to
+`recommendation_generation_attempts` for auditability. Direct authenticated calls to the
+persistence RPC are denied.

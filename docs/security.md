@@ -39,50 +39,51 @@ Every `SECURITY DEFINER` function is classified by who may invoke it directly ov
 Internal helpers and triggers have no direct grants; workflow RPCs are granted to `authenticated`
 and service-only functions to `service_role`.
 
-| Function                                               | Classification        | Allowed direct grant |
-| ------------------------------------------------------ | --------------------- | -------------------- |
-| `app_role()`                                           | RLS helper            | `authenticated`      |
-| `is_staff()`                                           | RLS helper            | `authenticated`      |
-| `is_admin()`                                           | RLS helper            | `authenticated`      |
-| `is_household_member(uuid)`                            | RLS helper            | `authenticated`      |
-| `staff_can_access_household(uuid)`                     | RLS helper            | `authenticated`      |
-| `can_access_household(uuid)`                           | RLS helper            | `authenticated`      |
-| `can_access_case(uuid)`                                | RLS helper            | `authenticated`      |
-| `activate_autopilot(uuid)`                             | Customer workflow RPC | `authenticated`      |
-| `answer_customer_question(uuid, text)`                 | Customer workflow RPC | `authenticated`      |
-| `create_customer_support_question(uuid, text)`         | Customer workflow RPC | `authenticated`      |
-| `approve_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC | `authenticated`      |
-| `decline_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC | `authenticated`      |
-| `persist_recommendation(...)`                          | Staff workflow RPC    | `authenticated`      |
-| `review_recommendation(uuid, boolean, text)`           | Staff workflow RPC    | `authenticated`      |
-| `advance_switch_event(uuid, switch_state)`             | Staff workflow RPC    | `authenticated`      |
-| `update_case_state(uuid, case_state)`                  | Staff workflow RPC    | `authenticated`      |
-| `send_quote_request_email(uuid, text, boolean)`        | Staff workflow RPC    | `authenticated`      |
-| `process_stripe_event(...)`                            | Service-only RPC      | `service_role`       |
-| `assign_staff_role(uuid, uuid, user_role)`             | Service-only RPC      | `service_role`       |
-| `handle_new_user()`                                    | Auth trigger          | none                 |
-| `set_updated_at()`                                     | Trigger               | none                 |
-| `set_household_updated_by()`                           | Trigger               | none                 |
-| `set_coverage_requirements_updated_by()`               | Trigger               | none                 |
-| `set_switching_preferences_updated_by()`               | Trigger               | none                 |
-| `set_policy_document_uploaded_by()`                    | Trigger               | none                 |
-| `set_customer_questions_created_by()`                  | Trigger               | none                 |
-| `set_coverage_requirements_ownership()`                | Trigger               | none                 |
-| `set_switching_preferences_ownership()`                | Trigger               | none                 |
-| `audit_context()`                                      | Audit helper          | none                 |
-| `log_audit(...)`                                       | Audit helper          | none                 |
-| `audit_policy_document_insert()`                       | Audit trigger         | none                 |
-| `audit_household_changes()`                            | Audit trigger         | none                 |
-| `audit_coverage_requirements_change()`                 | Audit trigger         | none                 |
-| `audit_switching_preferences_change()`                 | Audit trigger         | none                 |
-| `audit_customer_question_insert()`                     | Audit trigger         | none                 |
-| `reject_audit_mutation()`                              | Audit trigger         | none                 |
-| `validate_case_transition()`                           | State-machine trigger | none                 |
-| `validate_quote_request_transition()`                  | State-machine trigger | none                 |
-| `validate_quote_transition()`                          | State-machine trigger | none                 |
-| `validate_switch_transition()`                         | State-machine trigger | none                 |
-| `require_household_member_for_recommendation(uuid)`    | Internal helper       | none                 |
-| `supersede_prior_recommendations(uuid)`                | Internal helper       | none                 |
+| Function                                               | Classification            | Allowed direct grant |
+| ------------------------------------------------------ | ------------------------- | -------------------- |
+| `app_role()`                                           | RLS helper                | `authenticated`      |
+| `is_staff()`                                           | RLS helper                | `authenticated`      |
+| `is_admin()`                                           | RLS helper                | `authenticated`      |
+| `is_household_member(uuid)`                            | RLS helper                | `authenticated`      |
+| `staff_can_access_household(uuid)`                     | RLS helper                | `authenticated`      |
+| `can_access_household(uuid)`                           | RLS helper                | `authenticated`      |
+| `can_access_case(uuid)`                                | RLS helper                | `authenticated`      |
+| `activate_autopilot(uuid)`                             | Customer workflow RPC     | `authenticated`      |
+| `answer_customer_question(uuid, text)`                 | Customer workflow RPC     | `authenticated`      |
+| `create_customer_support_question(uuid, text)`         | Customer workflow RPC     | `authenticated`      |
+| `approve_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC     | `authenticated`      |
+| `decline_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC     | `authenticated`      |
+| `persist_engine_recommendation_v2(...)`                | Internal service-only RPC | `service_role`       |
+| `persist_recommendation(...)` (legacy)                 | Revoked / replaced        | none                 |
+| `review_recommendation(uuid, boolean, text)`           | Staff workflow RPC        | `authenticated`      |
+| `advance_switch_event(uuid, switch_state)`             | Staff workflow RPC        | `authenticated`      |
+| `update_case_state(uuid, case_state)`                  | Staff workflow RPC        | `authenticated`      |
+| `send_quote_request_email(uuid, text, boolean)`        | Staff workflow RPC        | `authenticated`      |
+| `process_stripe_event(...)`                            | Service-only RPC          | `service_role`       |
+| `assign_staff_role(uuid, uuid, user_role)`             | Service-only RPC          | `service_role`       |
+| `handle_new_user()`                                    | Auth trigger              | none                 |
+| `set_updated_at()`                                     | Trigger                   | none                 |
+| `set_household_updated_by()`                           | Trigger                   | none                 |
+| `set_coverage_requirements_updated_by()`               | Trigger                   | none                 |
+| `set_switching_preferences_updated_by()`               | Trigger                   | none                 |
+| `set_policy_document_uploaded_by()`                    | Trigger                   | none                 |
+| `set_customer_questions_created_by()`                  | Trigger                   | none                 |
+| `set_coverage_requirements_ownership()`                | Trigger                   | none                 |
+| `set_switching_preferences_ownership()`                | Trigger                   | none                 |
+| `audit_context()`                                      | Audit helper              | none                 |
+| `log_audit(...)`                                       | Audit helper              | none                 |
+| `audit_policy_document_insert()`                       | Audit trigger             | none                 |
+| `audit_household_changes()`                            | Audit trigger             | none                 |
+| `audit_coverage_requirements_change()`                 | Audit trigger             | none                 |
+| `audit_switching_preferences_change()`                 | Audit trigger             | none                 |
+| `audit_customer_question_insert()`                     | Audit trigger             | none                 |
+| `reject_audit_mutation()`                              | Audit trigger             | none                 |
+| `validate_case_transition()`                           | State-machine trigger     | none                 |
+| `validate_quote_request_transition()`                  | State-machine trigger     | none                 |
+| `validate_quote_transition()`                          | State-machine trigger     | none                 |
+| `validate_switch_transition()`                         | State-machine trigger     | none                 |
+| `require_household_member_for_recommendation(uuid)`    | Internal helper           | none                 |
+| `supersede_prior_recommendations(uuid)`                | Internal helper           | none                 |
 
 ## Auditability
 
@@ -109,9 +110,22 @@ Supabase schema (`pnpm db:types`) and the `db:types:check` script runs in CI. Bo
 apps use this type with `createClient<Database>` / `createBrowserClient<Database>` so column and
 enum mismatches are caught at compile time.
 
+## Corrective Phase 1D security notes
+
+- Recommendation persistence is internal-only: `persist_engine_recommendation_v2` is `SECURITY DEFINER`,
+  granted only to `service_role`, and verifies the actor profile from `profiles`. Direct
+  authenticated RPC calls are denied by revoked grants. The Edge Function supplies the
+  authenticated user ID as the human actor and is the only trusted caller.
+- Quote data quality is enforced at the schema and loader boundary: `quote_coverages` stores
+  `validation_status`, `validation_errors`, and `data_source`; only `valid` components are fed to the
+  engine. Unknown insurer metadata (rating, payment frequency, billing method, distribution channel)
+  is mapped to `undefined` and fails closed against customer requirements.
+
 ## Known MVP limitations
 
 - Rate limiting on Edge Functions is in-memory per instance (not distributed).
 - No 2FA for staff accounts yet.
 - Signed URL lifetime is fixed rather than per-category.
 - No field-level encryption beyond Postgres/storage encryption at rest.
+- The validated quote-write Edge Function is planned; current quote writes through the admin UI still
+  require separate validation of `validation_status` before engine evaluation.

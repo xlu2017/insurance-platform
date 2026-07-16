@@ -189,6 +189,7 @@ the engine-facing `HouseholdMandate` with `mandateV2ToEngineMandate(v2, switchin
   savings threshold.
 - `materialCoverageReductionsAllowed` is fixed to `false` and `customerApprovalRequired` is fixed to
   `true`.
-- Multiple-vehicle, multiple-property, preferred-coverage scoring, a new auto coverage hierarchy,
-  carrier APIs, automated extraction, additional coverage fields, visual redesign, new ranking logic,
-  silent/automatic switching and other feature work are deferred until the foundation is reviewed.
+- Multiple-vehicle, multiple-property, carrier APIs, automated extraction, additional coverage
+  fields, visual redesign, new ranking logic, silent/automatic switching and other feature work are
+  deferred until the foundation is reviewed. Preferred-coverage scoring and the auto coverage-form
+  compatibility model are implemented in Corrective Phase 1D.

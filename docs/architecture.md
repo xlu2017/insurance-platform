@@ -44,21 +44,30 @@ flowchart LR
   tests; it validates every row as V2 before the engine runs and never falls back to legacy values.
 - **Public mandate validation, internal persistence.** Mobile saves mandates through the authenticated
   `save-household-mandate` Edge Function, which validates the full V2 schema and every asset association
-  before invoking the service-role-only `persist_household_mandate_v2` RPC. The raw RPC is revoked from
-  authenticated users.
+  before invoking the service-role-only `persist_household_mandate_v2` RPC. The recommendation
+  `recommendation-generator` Edge Function similarly validates the input snapshot, runs the engine, and
+  calls the internal `persist_engine_recommendation_v2` RPC with the authenticated actor profile ID.
+  Both raw RPCs are revoked from authenticated users.
 - **One engine, two runtimes.** `packages/insurance-engine/src/engine.ts` is the only engine source.
   `pnpm --filter @autopilot/insurance-engine build:edge` bundles it into
   `supabase/functions/recommendation-generator/_shared/autopilot.js` for the Supabase Edge Function;
   the bundle header contains a SHA-256 source hash and CI enforces parity with `check:edge`.
 - **Deterministic engine.** `packages/insurance-engine` is pure and side-effect free. It builds
   every bundled/split household configuration from usable quotes, always includes the incumbent,
-  applies hard mandate constraints, handles asset-specific mandate inheritance (vehicle/property
-  overrides), detects coverage reductions vs the incumbent, computes total cost in integer cents
-  (premiums + fees + cancellation charges − bundle discounts) and ranks with explicit reason codes.
-  The engine is currently fail-closed on multi-asset optimization (more than one vehicle or more
-  than one property). No AI decides coverage equivalence. Legacy `coverage_requirements` rows remain
-  only for historical migration, diagnostics and rollback analysis; no active recommendation or
-  approval path reads them.
+  applies hard mandate constraints through a reusable monetary-rule evaluator, handles asset-specific
+  mandate inheritance (vehicle/property overrides), detects coverage reductions vs the incumbent,
+  computes total cost in integer cents (premiums + fees + cancellation charges − bundle discounts)
+  and ranks deterministically with explicit reason codes. The canonical ranking order is hard
+  eligibility, total cost, missed preferred requirements, unknown preferred requirements, deductible
+  exposure, underwriting conditions, and a stable identifier. The engine is currently fail-closed on
+  multi-asset optimization (more than one vehicle or more than one property). No AI decides coverage
+  equivalence. Legacy `coverage_requirements` rows remain only for historical migration, diagnostics
+  and rollback analysis; no active recommendation or approval path reads them.
+- **Quote validation boundary.** Only `quote_coverages` rows with `validation_status = 'valid'` are
+  passed to the engine. `validation_status`, `validation_errors`, `validated_at`, `validated_by`,
+  `coverage_schema_version` and `data_source` track data quality. The `quote_coverages_coverage_changed`
+  trigger resets validation to `draft` when coverage changes, requiring re-validation before
+  evaluation.
 - **Provider adapters.** Email (Resend → `email_outbox` fallback), push (Expo → local log) and
   document extraction (`manual` default, `mock` for demos) are interfaces in
   `packages/database/src/providers`, so the demo runs with zero external services.
