@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AutoCoverageDetails, PropertyCoverageDetails, QuoteComponent } from "@autopilot/schemas";
 import {
   TEST_PROPERTY_ID,
   TEST_VEHICLE_ID,
@@ -379,5 +380,115 @@ describe("quote normalization and switching filters", () => {
     )!;
     expect(cfg.eligible).toBe(false);
     expect(cfg.reasonCodes).toContain("DEDUCTIBLE_INCREASE_PROHIBITED");
+  });
+});
+
+describe("fail-closed multi-asset guard", () => {
+  it("rejects two auto components in the same quote", () => {
+    const badQuote = makeQuote({
+      id: "q-multi-auto",
+      insurerId: "insurer-multi",
+      insurerName: "Multi Auto Co",
+      components: [
+        { ...autoComponent(150_000), assetId: "vehicle-1" },
+        { ...autoComponent(100_000), assetId: "vehicle-2" },
+      ],
+    });
+    const result = evaluateHousehold(scenarioInput({ quotes: [badQuote] }));
+    expect(result.rejection?.code).toBe("MULTI_ASSET_OPTIMIZATION_NOT_ENABLED");
+  });
+
+  it("rejects two distinct vehicle asset ids across quotes", () => {
+    const quoteA = makeQuote({
+      id: "q-vehicle-a",
+      insurerId: "insurer-a",
+      insurerName: "A Co",
+      components: [{ ...autoComponent(150_000), assetId: "vehicle-a" }],
+    });
+    const quoteB = makeQuote({
+      id: "q-vehicle-b",
+      insurerId: "insurer-b",
+      insurerName: "B Co",
+      components: [{ ...autoComponent(150_000), assetId: "vehicle-b" }],
+    });
+    const s = bundleLossScenario();
+    const result = evaluateHousehold(
+      scenarioInput({ quotes: [quoteA, quoteB, s.altBBundle, s.incumbentPropertyUnbundled] }),
+    );
+    expect(result.rejection?.code).toBe("MULTI_ASSET_OPTIMIZATION_NOT_ENABLED");
+  });
+
+  it("rejects two distinct property asset ids across quotes", () => {
+    const quoteA = makeQuote({
+      id: "q-property-a",
+      insurerId: "insurer-a",
+      insurerName: "A Co",
+      components: [{ ...propertyComponent(100_000), assetId: "property-a" }],
+    });
+    const quoteB = makeQuote({
+      id: "q-property-b",
+      insurerId: "insurer-b",
+      insurerName: "B Co",
+      components: [{ ...propertyComponent(100_000), assetId: "property-b" }],
+    });
+    const s = bundleLossScenario();
+    const result = evaluateHousehold(
+      scenarioInput({ quotes: [s.altAAuto, quoteA, quoteB, s.altBBundle] }),
+    );
+    expect(result.rejection?.code).toBe("MULTI_ASSET_OPTIMIZATION_NOT_ENABLED");
+  });
+
+  it("rejects an auto component referencing an unknown vehicle when assets are supplied", () => {
+    const badAuto = { ...autoComponent(150_000), assetId: "unknown-vehicle" };
+    const badQuote = makeQuote({
+      id: "q-unknown-vehicle",
+      insurerId: "insurer-unknown",
+      insurerName: "Unknown Vehicle Co",
+      components: [badAuto, propertyComponent(100_000)],
+    });
+    const result = evaluateHousehold({
+      mandate: demoMandate,
+      quotes: [badQuote],
+      incumbentAuto: {
+        quote: badQuote,
+        component: badAuto as QuoteComponent & { auto: AutoCoverageDetails },
+      },
+      incumbentProperty: {
+        quote: badQuote,
+        component: propertyComponent(100_000) as QuoteComponent & { property: PropertyCoverageDetails },
+      },
+      assets: { vehicles: [{ id: TEST_VEHICLE_ID }], properties: [{ id: TEST_PROPERTY_ID }] },
+    });
+    expect(result.rejection?.code).toBe("MISSING_INSURED_ASSET");
+  });
+
+  it("rejects a missing auto component when household has vehicles", () => {
+    const s = bundleLossScenario();
+    const result = evaluateHousehold(
+      scenarioInput({
+        quotes: [s.altBBundle],
+        assets: {
+          vehicles: [{ id: TEST_VEHICLE_ID }, { id: "vehicle-2" }],
+          properties: [{ id: TEST_PROPERTY_ID }],
+        },
+      }),
+    );
+    expect(result.rejection?.code).toBe("MISSING_INSURED_ASSET");
+  });
+
+  it("rejects a vehicle override that does not match a supplied asset", () => {
+    const mandate = structuredClone(demoMandate);
+    mandate.vehicleOverrides = {
+      "unknown-vehicle": {
+        liability: { rule: "minimum", cents: 500_000_000 },
+      },
+    };
+    const result = evaluateHousehold(
+      scenarioInput({
+        mandate,
+        assets: { vehicles: [{ id: TEST_VEHICLE_ID }], properties: [{ id: TEST_PROPERTY_ID }] },
+      }),
+    );
+    expect(result.rejection?.code).toBe("MISSING_INSURED_ASSET");
   });
 });
