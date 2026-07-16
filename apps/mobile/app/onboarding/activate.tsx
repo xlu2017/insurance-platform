@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,6 +32,7 @@ export default function Activate() {
 
   return (
     <Screen style={{ justifyContent: "center" }}>
+      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Activate" }} />
       <Title>Ready to activate</Title>
       <Body muted>
         Autopilot will monitor your renewals, gather quotes and only ever propose a switch that

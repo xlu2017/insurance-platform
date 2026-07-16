@@ -1,7 +1,7 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, Switch, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as LocalAuthentication from "expo-local-authentication";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MVP_DISCLAIMER } from "@autopilot/design-tokens";
@@ -22,7 +22,13 @@ import {
 
 export default function Profile() {
   const { data: household, isLoading } = useHousehold();
+  const queryClient = useQueryClient();
   const [biometrics, setBiometrics] = useState(false);
+  const [autopilot, setAutopilot] = useState(household?.autopilot_active ?? false);
+
+  useEffect(() => {
+    if (household) setAutopilot(household.autopilot_active);
+  }, [household?.autopilot_active]);
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
@@ -78,6 +84,27 @@ export default function Profile() {
     setBiometrics(value);
   };
 
+  const toggleAutopilot = async (value: boolean) => {
+    if (!household) return;
+    setAutopilot(value);
+    const { error } = await supabase
+      .from("households")
+      .update({ autopilot_active: value })
+      .eq("id", household.id);
+    if (error) {
+      setAutopilot(!value);
+      return;
+    }
+    await supabase.from("audit_events").insert({
+      action: value ? "autopilot_resumed" : "autopilot_paused",
+      entity_type: "household",
+      entity_id: household.id,
+      household_id: household.id,
+      after_summary: { autopilot_active: value },
+    });
+    queryClient.invalidateQueries({ queryKey: ["household"] });
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     router.replace("/welcome");
@@ -93,6 +120,20 @@ export default function Profile() {
             <Row label="Name" value={profile?.full_name ?? "—"} />
             <Row label="Email" value={profile?.email ?? "—"} />
             <Row label="Household" value={household?.name ?? "—"} />
+          </Card>
+          <Card>
+            <Subtitle>Autopilot</Subtitle>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Body>Monitor renewals and switch automatically</Body>
+              <Switch value={autopilot} onValueChange={toggleAutopilot} />
+            </View>
+            <Caption>When paused, Autopilot will not open new renewal cases.</Caption>
           </Card>
           <Card>
             <Subtitle>Security</Subtitle>

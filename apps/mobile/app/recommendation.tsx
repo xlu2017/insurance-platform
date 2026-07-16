@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -56,6 +56,8 @@ export default function Recommendation() {
   const [questionText, setQuestionText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [password, setPassword] = useState("");
 
   const { data: recommendation, isLoading } = useQuery({
     queryKey: ["published-recommendation", activeCase?.id],
@@ -88,28 +90,43 @@ export default function Recommendation() {
     );
   }
 
-  const reauthenticate = async (): Promise<boolean> => {
+  const reauthenticate = async (): Promise<"ok" | "needs-password" | "failed"> => {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const enrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
     if (enrolled) {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: "Confirm it's you before approving the switch",
       });
-      return result.success;
+      return result.success ? "ok" : "failed";
     }
-    // Fall back to password reauthentication when biometrics are unavailable.
-    return true;
+    // Devices without biometrics require the account password before approval.
+    return "needs-password";
   };
 
   const approve = async () => {
-    setBusy(true);
     setError(null);
-    const ok = await reauthenticate();
-    if (!ok) {
-      setBusy(false);
-      setError("Reauthentication failed");
-      return;
+    if (!needsPassword) {
+      const result = await reauthenticate();
+      if (result === "failed") {
+        setError("Reauthentication failed");
+        return;
+      }
+      if (result === "needs-password") {
+        setNeedsPassword(true);
+        return;
+      }
+    } else {
+      const { data: userData } = await supabase.auth.getUser();
+      const { error: pwError } = await supabase.auth.signInWithPassword({
+        email: userData.user?.email ?? "",
+        password,
+      });
+      if (pwError) {
+        setError("Password is incorrect");
+        return;
+      }
     }
+    setBusy(true);
     const { data: userData } = await supabase.auth.getUser();
     const { error: approvalError } = await supabase.from("recommendation_approvals").insert({
       recommendation_id: recommendation.id,
@@ -202,6 +219,9 @@ export default function Recommendation() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+      <Stack.Screen
+        options={{ headerShown: true, headerBackTitle: "Back", title: "Recommendation" }}
+      />
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Your recommendation</Title>
@@ -258,6 +278,17 @@ export default function Recommendation() {
                 ))}
             </Card>
           ) : null}
+          {needsPassword ? (
+            <Card>
+              <Field
+                label="Confirm your password"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+                testID="approve-password"
+              />
+            </Card>
+          ) : null}
           {asking ? (
             <Card>
               <Field label="Your question" value={questionText} onChangeText={setQuestionText} />
@@ -267,7 +298,7 @@ export default function Recommendation() {
           {error ? <Body muted>{error}</Body> : null}
           <View style={{ gap: 8 }}>
             <PrimaryButton
-              label="Approve switch"
+              label={needsPassword ? "Confirm and approve" : "Approve switch"}
               onPress={approve}
               loading={busy}
               testID="approve-switch"

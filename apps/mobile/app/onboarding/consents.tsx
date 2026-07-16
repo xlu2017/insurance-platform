@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { ScrollView, Switch, View } from "react-native";
 import { supabase } from "@/lib/supabase";
@@ -49,6 +49,7 @@ export default function Consents() {
 
   return (
     <Screen>
+      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Consent" }} />
       <ScrollView showsVerticalScrollIndicator={false}>
         <Title>Your consent</Title>
         <Body muted>

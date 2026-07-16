@@ -1,10 +1,11 @@
-import { ScrollView } from "react-native";
+import { router } from "expo-router";
+import { ScrollView, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { formatCad } from "@/lib/format";
-import { Body, Card, Loading, Row, Screen, Subtitle, Title } from "@/components/ui";
+import { Body, Card, Loading, PrimaryButton, Row, Screen, Subtitle, Title } from "@/components/ui";
 
 export default function Coverage() {
   const { data: household, isLoading } = useHousehold();
@@ -61,6 +62,12 @@ export default function Coverage() {
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Coverage mandate</Title>
           <Body muted>Your standing instructions. Every comparison is bound by these rules.</Body>
+          <PrimaryButton
+            label="Edit mandate"
+            onPress={() => router.push("/edit-mandate")}
+            testID="edit-mandate"
+          />
+          <View style={{ height: 12 }} />
           <Card>
             <Subtitle>Household</Subtitle>
             <Row

@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -71,6 +71,9 @@ export default function OnboardingDocuments() {
 
   return (
     <Screen>
+      <Stack.Screen
+        options={{ headerShown: true, headerBackTitle: "Back", title: "Upload policies" }}
+      />
       <Title>Upload your current policies</Title>
       <Body muted>
         Add your auto and property policy documents. Our operations team extracts the details — no

@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { ScrollView, Switch, View } from "react-native";
 import { supabase } from "@/lib/supabase";
@@ -102,6 +102,9 @@ export default function Mandate() {
 
   return (
     <Screen>
+      <Stack.Screen
+        options={{ headerShown: true, headerBackTitle: "Back", title: "Coverage mandate" }}
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
         <Title>Your coverage mandate</Title>
         <Body muted>These requirements are enforced on every future comparison.</Body>

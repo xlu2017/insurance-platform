@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
@@ -43,6 +43,7 @@ export default function Membership() {
 
   return (
     <Screen style={{ justifyContent: "center" }}>
+      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Membership" }} />
       <Title>Annual membership</Title>
       <Card>
         <Body>Insurance Autopilot Membership</Body>

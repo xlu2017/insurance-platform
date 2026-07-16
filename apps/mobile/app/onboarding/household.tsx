@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 import { supabase } from "@/lib/supabase";
@@ -52,6 +52,7 @@ export default function CreateHousehold() {
 
   return (
     <Screen style={{ justifyContent: "center" }}>
+      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Household" }} />
       <Title>Set up your household</Title>
       <Body muted>The Alberta demo defaults to province AB. Progress saves at every step.</Body>
       <View style={{ height: 16 }} />

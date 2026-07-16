@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { ScrollView, Switch, View } from "react-native";
 import { supabase } from "@/lib/supabase";
@@ -68,6 +68,9 @@ export default function Preferences() {
 
   return (
     <Screen>
+      <Stack.Screen
+        options={{ headerShown: true, headerBackTitle: "Back", title: "Switching preferences" }}
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
         <Title>Switching preferences</Title>
         <Body muted>We only ever propose a switch that satisfies these rules.</Body>
