@@ -1,12 +1,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
 }
 
-export function createSupabaseClient(config: SupabaseConfig): SupabaseClient {
-  return createClient(config.url, config.anonKey);
+export function createSupabaseClient(config: SupabaseConfig): SupabaseClient<Database> {
+  return createClient<Database>(config.url, config.anonKey);
 }
 
 /** Default local development endpoints (supabase start). */

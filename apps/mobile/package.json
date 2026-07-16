@@ -13,6 +13,7 @@
     "expo:doctor": "expo config --type public"
   },
   "dependencies": {
+    "@autopilot/database": "workspace:*",
     "@autopilot/design-tokens": "workspace:*",
     "@autopilot/schemas": "workspace:*",
     "@hookform/resolvers": "3.9.1",
