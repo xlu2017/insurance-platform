@@ -15,6 +15,7 @@ interface DbComponent {
 
 interface DbQuote {
   id: string;
+  updated_at: string;
   insurer_id: string;
   state: string;
   is_incumbent: boolean;
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!profile || !["operations", "admin", "reviewer"].includes(profile.role)) {
+  if (!profile || !["operations", "admin"].includes(profile.role)) {
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -141,7 +142,7 @@ Deno.serve(async (req) => {
     supabase
       .from("quotes")
       .select(
-        "id, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, quote_coverages(coverage))",
+        "id, updated_at, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, quote_coverages(coverage))",
       )
       .eq("case_id", caseId),
     supabase
@@ -235,40 +236,17 @@ Deno.serve(async (req) => {
     );
   }
 
-  const rec = result.recommended;
-  const { data: recommendation, error: recError } = await supabase
-    .from("recommendations")
-    .insert({
-      case_id: caseId,
-      status: "awaiting_review",
-      version: 1,
-      mandate_version: reqRes.data.version ?? 1,
-      quote_ids: [rec.configuration.auto.quoteId, rec.configuration.property.quoteId],
-      current_total_cents: result.incumbentTotalCents,
-      proposed_total_cents: rec.cost.totalCents,
-      net_savings_cents: rec.netSavingsCents,
-      effective_date: caseRow.renewal_date,
-      reason_codes: rec.reasonCodes,
-      comparison: {
-        proposedInsurer: rec.configuration.auto.insurerName,
-        bundled: rec.configuration.bundled,
-        materialDifferences: rec.coverageReductions,
-        deductibleDifferences: [],
-      },
-      disclosure_version: "v1",
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
-  if (recError) return new Response(recError.message, { status: 500 });
+  const ENGINE_VERSION = "1.0.0";
 
+  const rec = result.recommended;
   const ranked = result.evaluated
     .slice()
     .sort((a: any, b: any) => a.cost.totalCents - b.cost.totalCents)
     .slice(0, 10);
 
-  const options = ranked.map((e: any, i: number) => ({
-    recommendation_id: recommendation.id,
+  const quoteSnapshot = dbQuotes.map((q) => ({ id: q.id, updated_at: q.updated_at }));
+
+  const optionsPayload = ranked.map((e: any, i: number) => ({
     rank: i + 1,
     auto_quote_id: e.configuration.auto.quoteId,
     property_quote_id: e.configuration.property.quoteId,
@@ -279,29 +257,40 @@ Deno.serve(async (req) => {
     reason_codes: e.reasonCodes,
   }));
 
-  const { error: optError } = await supabase.from("recommendation_options").insert(options);
-  if (optError) return new Response(optError.message, { status: 500 });
-
-  const { error: caseError } = await supabase
-    .from("optimization_cases")
-    .update({ state: "licensed_review" })
-    .eq("id", caseId);
-  if (caseError) return new Response(caseError.message, { status: 500 });
-
-  await supabase.from("audit_events").insert({
-    actor_profile_id: user.id,
-    actor_role: profile.role,
-    action: "recommendation_generated",
-    entity_type: "recommendation",
-    entity_id: recommendation.id,
-    household_id: caseRow.household_id,
-    case_id: caseId,
-    after_summary: { net_savings_cents: rec.netSavingsCents, total_cents: rec.cost.totalCents },
+  const { data: persistData, error: persistError } = await supabase.rpc("persist_recommendation", {
+    p_case_id: caseId,
+    p_mandate_version: reqRes.data.version ?? 1,
+    p_switching_version: (prefs.version as number) ?? 1,
+    p_quote_snapshot: quoteSnapshot,
+    p_engine_version: ENGINE_VERSION,
+    p_current_total_cents: result.incumbentTotalCents,
+    p_proposed_total_cents: rec.cost.totalCents,
+    p_net_savings_cents: rec.netSavingsCents,
+    p_reason_codes: rec.reasonCodes,
+    p_comparison: {
+      proposedInsurer: rec.configuration.auto.insurerName,
+      bundled: rec.configuration.bundled,
+      materialDifferences: rec.coverageReductions,
+      deductibleDifferences: [],
+    },
+    p_recommended: {
+      auto_quote_id: rec.configuration.auto.quoteId,
+      property_quote_id: rec.configuration.property.quoteId,
+      bundled: rec.configuration.bundled,
+      insurer_name: rec.configuration.auto.insurerName,
+    },
+    p_options: optionsPayload,
+    p_disclosure_version: "v1",
   });
+
+  if (persistError) {
+    return new Response(JSON.stringify({ error: persistError.message }), { status: 409 });
+  }
 
   return new Response(
     JSON.stringify({
-      recommendationId: recommendation.id,
+      recommendationId: (persistData as any).recommendation_id,
+      version: (persistData as any).version,
       recommended: {
         totalCents: rec.cost.totalCents,
         netSavingsCents: rec.netSavingsCents,
@@ -309,8 +298,13 @@ Deno.serve(async (req) => {
         propertyInsurer: rec.configuration.property.insurerName,
         bundled: rec.configuration.bundled,
       },
-      optionsCount: options.length,
+      optionsCount: optionsPayload.length,
     }),
-    { headers: { "Content-Type": "application/json" } },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    },
   );
 });

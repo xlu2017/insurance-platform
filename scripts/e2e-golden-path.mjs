@@ -99,7 +99,13 @@ async function main() {
   // 3. Operations generates a recommendation server-side.
   const recResult = await (async () => {
     const { data, error } = await ops.functions.invoke("recommendation-generator", { body: { caseId } });
-    if (error) throw new Error(`recommendation-generator failed: ${error.message}`);
+    if (error) {
+      let body = "no response body";
+      try {
+        if (error.context && typeof error.context.text === "function") body = await error.context.text();
+      } catch {}
+      throw new Error(`recommendation-generator failed: ${body}`);
+    }
     if (data.error) throw new Error(`recommendation-generator returned error: ${data.error}`);
     assert(data && data.recommendationId, "recommendation-generator did not return a recommendationId");
     return data;

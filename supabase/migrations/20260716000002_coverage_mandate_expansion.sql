@@ -77,6 +77,10 @@ alter table insurers
   add column if not exists payment_frequencies payment_frequency[] not null default '{}',
   add column if not exists billing_methods billing_method[] not null default '{}';
 
+-- Allow authenticated users to read the recommendation-relevant insurer metadata
+-- (internal_notes remains staff-only via the original column grant).
+grant select (id, name, active, provinces, products, distribution, bundle_supported, financial_strength_rating, payment_frequencies, billing_methods) on insurers to authenticated;
+
 -- Helper: migrate an old auto requirements JSONB document to the expanded shape.
 create or replace function migrate_auto_requirements(old jsonb)
 returns jsonb as $$
