@@ -54,6 +54,9 @@ and service-only functions to `service_role`.
 | `approve_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC     | `authenticated`      |
 | `decline_customer_recommendation(uuid, int, int, int)` | Customer workflow RPC     | `authenticated`      |
 | `persist_engine_recommendation_v2(...)`                | Internal service-only RPC | `service_role`       |
+| `start_recommendation_generation_attempt(...)`         | Internal service-only RPC | `service_role`       |
+| `complete_recommendation_generation_attempt(...)`      | Internal service-only RPC | `service_role`       |
+| `fail_recommendation_generation_attempt(...)`          | Internal service-only RPC | `service_role`       |
 | `persist_recommendation(...)` (legacy)                 | Revoked / replaced        | none                 |
 | `review_recommendation(uuid, boolean, text)`           | Staff workflow RPC        | `authenticated`      |
 | `advance_switch_event(uuid, switch_state)`             | Staff workflow RPC        | `authenticated`      |

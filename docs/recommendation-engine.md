@@ -179,7 +179,9 @@ V2 snapshot is still current, so a stale mandate blocks approval.
 Engine tests live in `packages/insurance-engine/test/engine.test.ts` and cover cost calculation,
 bundle-loss detection, hard constraints, exclusions, split-insurer handling, ranking,
 asset-specific inheritance, coverage reductions vs incumbent, quote normalization, switching
-filters and the fail-closed multi-asset guard.
+filters and the fail-closed multi-asset guard. `packages/insurance-engine/test/digest-and-persistence.test.ts`
+adds canonicalization stability, deterministic key ordering, payload schema strictness, and
+missing component/asset identity rejection.
 
 ## Corrective Phase 1D additions
 
@@ -244,3 +246,25 @@ role from `profiles`. It stores `input_snapshot_json`, `input_snapshot_digest`,
 `engine_output_json`, `engine_output_digest`, and writes a row to
 `recommendation_generation_attempts` for auditability. Direct authenticated calls to the
 persistence RPC are denied.
+
+### Validated quote-write boundary
+
+The `validate-quote` Edge Function is the only path that promotes a `quote_coverages` row from
+`draft` to `valid`, `incomplete`, or `invalid`. It authenticates the operations/admin user, checks
+case access, validates the submitted coverage JSON against `AutoCoverageDetails` or
+`PropertyCoverageDetails`, confirms the component belongs to the case and targets the correct
+household asset, and ensures exactly one active coverage row exists per component. It records
+structured `validation_errors`, `coverage_schema_version`, `data_source`, `validated_at`, and
+`validated_by`, then writes an audit event. The admin Quotes tab displays this status and can
+re-run the boundary for any existing component.
+
+### Canonical digests and generation attempts
+
+`packages/insurance-engine/src/canonical.ts` sorts object keys and arrays deterministically,
+excludes `generatedAt` from the digest, and returns both the canonical object and the JSON string
+used for SHA-256. The Edge Function computes `input_snapshot_digest` and `engine_output_digest`
+before calling `persist_engine_recommendation_v2`; the Postgres RPC recomputes both digests with
+`extensions.digest` and rejects mismatches. Every generation is recorded in
+`recommendation_generation_attempts` with `started_at`, `completed_at`, `status` (`started`,
+`input_rejected`, `no_eligible_option`, `persistence_conflict`, `completed`, `failed`), engine
+version/source hash, digests, and a safe error message.
