@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -99,6 +99,7 @@ export default function AnswerQuestion() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Question" }} />
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Question from your insurer</Title>
