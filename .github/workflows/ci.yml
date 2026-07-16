@@ -41,6 +41,9 @@ jobs:
       - name: Validate Expo config
         run: pnpm --filter @autopilot/mobile expo:doctor
 
+      - name: Engine source / Edge Function bundle parity
+        run: pnpm --filter @autopilot/insurance-engine check:edge
+
   database:
     runs-on: ubuntu-latest
     steps:
@@ -95,6 +98,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build Edge Function bundle
+        run: pnpm --filter @autopilot/insurance-engine build:edge
+
       - uses: supabase/setup-cli@v1
         with:
           version: latest
@@ -128,7 +134,9 @@ jobs:
       - name: Run Playwright tests
         run: pnpm --filter @autopilot/admin exec playwright test
 
-      - name: Reset database and run end-to-end golden path
+      - name: Reset database and run V2 mandate end-to-end lifecycle
         run: |
           supabase db reset
-          node scripts/e2e-golden-path.mjs
+          node -e "const s=JSON.parse(require('fs').readFileSync('/tmp/supabase-status.json','utf8')); console.log('SUPABASE_URL=' + s.API_URL); console.log('SUPABASE_ANON_KEY=' + s.ANON_KEY); console.log('SUPABASE_SERVICE_ROLE_KEY=' + s.SERVICE_ROLE_KEY); console.log('SUPABASE_JWT_SECRET=' + s.JWT_SECRET);" > /tmp/e2e.env
+          set -a && source /tmp/e2e.env && set +a
+          node scripts/e2e-v2-mandate-lifecycle.mjs
