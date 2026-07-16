@@ -1103,7 +1103,7 @@ export type Database = {
           coverage: Json;
           coverage_schema_version: number;
           created_at: string;
-          data_source: string | null;
+          data_source: Database["public"]["Enums"]["quote_data_source"] | null;
           id: string;
           quote_component_id: string;
           updated_at: string;
@@ -1116,7 +1116,7 @@ export type Database = {
           coverage: Json;
           coverage_schema_version?: number;
           created_at?: string;
-          data_source?: string | null;
+          data_source?: Database["public"]["Enums"]["quote_data_source"] | null;
           id?: string;
           quote_component_id: string;
           updated_at?: string;
@@ -1129,7 +1129,7 @@ export type Database = {
           coverage?: Json;
           coverage_schema_version?: number;
           created_at?: string;
-          data_source?: string | null;
+          data_source?: Database["public"]["Enums"]["quote_data_source"] | null;
           id?: string;
           quote_component_id?: string;
           updated_at?: string;
@@ -1332,6 +1332,7 @@ export type Database = {
           underwriting_conditions: string[];
           updated_at: string;
           updated_by: string | null;
+          version: number;
         };
         Insert: {
           bundle_discount_cents?: number;
@@ -1351,6 +1352,7 @@ export type Database = {
           underwriting_conditions?: string[];
           updated_at?: string;
           updated_by?: string | null;
+          version?: number;
         };
         Update: {
           bundle_discount_cents?: number;
@@ -1370,6 +1372,7 @@ export type Database = {
           underwriting_conditions?: string[];
           updated_at?: string;
           updated_by?: string | null;
+          version?: number;
         };
         Relationships: [
           {
@@ -2297,6 +2300,26 @@ export type Database = {
         };
         Returns: undefined;
       };
+      persist_case_quote_v2: {
+        Args: {
+          p_actor_profile_id: string;
+          p_bundle_discount_cents?: number;
+          p_cancellation_charge_cents?: number;
+          p_case_id: string;
+          p_components: Json;
+          p_data_source: Database["public"]["Enums"]["quote_data_source"];
+          p_expected_version?: number;
+          p_expires_at?: string;
+          p_insurer_id: string;
+          p_is_incumbent: boolean;
+          p_payment_fees_cents?: number;
+          p_policy_fees_cents?: number;
+          p_quote_id?: string;
+          p_state: Database["public"]["Enums"]["quote_state"];
+          p_underwriting_conditions?: string[];
+        };
+        Returns: Json;
+      };
       persist_engine_recommendation_v2: {
         Args: {
           p_actor_profile_id: string;
@@ -2460,6 +2483,13 @@ export type Database = {
         | "number"
         | "date"
         | "short_text";
+      quote_data_source:
+        | "manual_entry"
+        | "insurer_document"
+        | "insurer_portal"
+        | "api"
+        | "customer_confirmed"
+        | "migration_unknown";
       quote_request_state:
         | "draft"
         | "queued"
@@ -2684,6 +2714,14 @@ export const Constants = {
       ],
       question_status: ["pending", "answered", "cancelled"],
       question_type: ["yes_no", "single_choice", "multiple_choice", "number", "date", "short_text"],
+      quote_data_source: [
+        "manual_entry",
+        "insurer_document",
+        "insurer_portal",
+        "api",
+        "customer_confirmed",
+        "migration_unknown",
+      ],
       quote_request_state: [
         "draft",
         "queued",

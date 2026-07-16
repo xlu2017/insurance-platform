@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 6452482aa031c07aeec336ee68d9e15082fc0da8be495bce922dcee109502ae3
+// source-hash: 16263236150319eef57083603a09a54710ad9dda1b142ae24f69f37c076c288c
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -4178,13 +4178,7 @@ var limitRules = [
   "any"
 ];
 var LimitRule = z.enum(limitRules);
-var deductibleRules = [
-  "minimum",
-  "maximum",
-  "exact",
-  "match_current_or_better",
-  "any"
-];
+var deductibleRules = ["maximum", "exact", "match_current_or_better", "any"];
 var DeductibleRule = z.enum(deductibleRules);
 var autoCoverageForms = [
   "unknown",
@@ -4746,8 +4740,79 @@ var EngineQuote = z.object({
   distributionChannel: BrokerDirectPreference.optional(),
   insurerFinancialRating: InsurerFinancialRating.optional()
 });
+var QuoteValidationIssue = z.object({
+  path: z.array(z.string()),
+  code: z.string(),
+  expected: z.string().optional(),
+  received: z.unknown(),
+  message: z.string()
+});
+var AutoCoverageDetailsDraft = AutoCoverageDetails;
+var PropertyCoverageDetailsDraft = PropertyCoverageDetails;
+var QuoteComponentDraft = z.discriminatedUnion("productLine", [
+  z.object({
+    componentId: z.string().uuid().optional(),
+    productLine: z.literal("auto"),
+    assetId: z.string().uuid(),
+    annualPremiumCents: NonNegativeCents,
+    coverage: AutoCoverageDetailsDraft
+  }),
+  z.object({
+    componentId: z.string().uuid().optional(),
+    productLine: z.literal("property"),
+    assetId: z.string().uuid(),
+    annualPremiumCents: NonNegativeCents,
+    coverage: PropertyCoverageDetailsDraft
+  })
+]);
+var SaveCaseQuoteRequest = z.object({
+  caseId: z.string().uuid(),
+  quoteId: z.string().uuid().optional(),
+  expectedVersion: z.number().int().nonnegative().optional(),
+  insurerId: z.string().uuid(),
+  state: QuoteState,
+  isIncumbent: z.boolean(),
+  expiresAt: z.string().datetime().nullable().optional(),
+  policyFeesCents: NonNegativeCents.default(0),
+  paymentFeesCents: NonNegativeCents.default(0),
+  bundleDiscountCents: NonNegativeCents.default(0),
+  cancellationChargeCents: NonNegativeCents.default(0),
+  underwritingConditions: z.array(z.string()).default([]),
+  dataSource: QuoteDataSource,
+  components: z.array(QuoteComponentDraft).min(1)
+}).strict();
 
 // ../schemas/src/recommendation.ts
+var QuoteSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  updated_at: z.string().datetime({ offset: true }),
+  version: z.number().int().nonnegative(),
+  is_incumbent: z.boolean()
+}).strict();
+var CanonicalComponentSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  productLine: z.enum(["auto", "property"]),
+  assetId: z.string().uuid(),
+  annualPremiumCents: z.number().int().nonnegative()
+}).strict();
+var CanonicalInsurerMetadataSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  financialStrengthRating: z.string(),
+  paymentFrequencies: z.array(z.string()),
+  billingMethods: z.array(z.string()),
+  distribution: z.string()
+}).strict();
+var CanonicalReasonDetailSchema = z.object({
+  scope: z.string(),
+  quoteId: z.string().uuid().optional(),
+  componentId: z.string().uuid().optional(),
+  assetId: z.string().uuid().optional(),
+  field: z.string(),
+  expectedRule: z.string().optional(),
+  actualValue: z.unknown().optional(),
+  reasonCode: z.string()
+}).strict();
 var HexDigest = z.string().regex(/^[0-9a-f]{64}$/, "Expected a 64-character lowercase hex SHA-256 digest");
 var RankingFactorsSchema = z.object({
   total_cents: z.number().int().nonnegative(),
@@ -4787,6 +4852,33 @@ var PersistedRecommendationOptionSchema = z.object({
   deductible_total_cents: z.number().int().nonnegative(),
   underwriting_condition_count: z.number().int().nonnegative()
 }).strict();
+var CanonicalQuoteSnapshot = EngineQuote.strict();
+var CanonicalRecommendationInputSnapshotSchema = z.object({
+  caseId: z.string().uuid(),
+  householdId: z.string().uuid(),
+  mandateId: z.string().uuid(),
+  mandateVersion: z.number().int().positive(),
+  mandateSchemaVersion: z.literal(2),
+  jurisdiction: z.literal("AB"),
+  switchingPreferencesId: z.string().uuid(),
+  switchingPreferencesVersion: z.number().int().positive(),
+  assets: z.object({
+    vehicles: z.array(z.object({ id: z.string().uuid() }).strict()),
+    properties: z.array(z.object({ id: z.string().uuid() }).strict())
+  }).strict(),
+  quotes: z.array(CanonicalQuoteSnapshot).min(1),
+  quoteSnapshot: z.array(QuoteSnapshotSchema).min(1),
+  mandate: HouseholdCoverageMandateV2,
+  switching: SwitchingPreferencesV2,
+  engineVersion: z.string(),
+  engineSourceHash: HexDigest
+}).strict();
+var CanonicalEngineOutputSchema = z.object({
+  incumbentTotalCents: z.number().int().nonnegative(),
+  recommendedOption: PersistedRecommendationOptionSchema,
+  rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
+  rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([])
+}).strict();
 var EngineRecommendationPersistencePayloadSchema = z.object({
   caseId: z.string().uuid(),
   actorProfileId: z.string().uuid(),
@@ -4804,13 +4896,13 @@ var EngineRecommendationPersistencePayloadSchema = z.object({
     version: z.string().min(1),
     sourceHash: HexDigest
   }).strict(),
-  inputSnapshotJson: z.record(z.unknown()),
+  inputSnapshotJson: CanonicalRecommendationInputSnapshotSchema,
   inputSnapshotDigest: HexDigest,
   inputSnapshotCanonical: z.string().min(1),
   recommendedOption: PersistedRecommendationOptionSchema,
   rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
   rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
-  engineOutputJson: z.record(z.unknown()),
+  engineOutputJson: CanonicalEngineOutputSchema,
   engineOutputDigest: HexDigest,
   engineOutputCanonical: z.string().min(1),
   currentTotalCents: z.number().int().nonnegative(),
@@ -5028,12 +5120,12 @@ function evaluateMonetaryRule({
   return { satisfied: false, status: "unknown_actual" };
 }
 
-// src/preference-evaluator.ts
+// src/coverage-capabilities.ts
 var autoFormCapabilities = {
   unknown: [],
   liability_only: ["third_party_liability"],
   collision: ["third_party_liability", "collision_damage"],
-  comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
+  comprehensive: ["third_party_liability", "comprehensive_perils"],
   specified_perils: ["third_party_liability", "specified_perils"],
   all_perils: [
     "third_party_liability",
@@ -5047,8 +5139,20 @@ var propertyFormCapabilities = {
   basic: ["fire_lightning"],
   named_perils: ["fire_lightning", "named_perils"],
   broad: ["fire_lightning", "named_perils", "broad_perils"],
-  comprehensive: ["all_risks"]
+  comprehensive: ["fire_lightning", "named_perils", "broad_perils", "all_risks"]
 };
+function hasAllCapabilities(actual, required) {
+  const set = new Set(actual);
+  return required.every((c) => set.has(c));
+}
+function autoFormMeetsOrExceeds(actual, required) {
+  return hasAllCapabilities(autoFormCapabilities[actual], autoFormCapabilities[required]);
+}
+function propertyFormMeetsOrExceeds(actual, required) {
+  return hasAllCapabilities(propertyFormCapabilities[actual], propertyFormCapabilities[required]);
+}
+
+// src/preference-evaluator.ts
 var settlementRank = {
   unknown: 0,
   actual_cash_value: 1,
@@ -5056,16 +5160,6 @@ var settlementRank = {
   extended_replacement_cost: 3,
   guaranteed_replacement_cost: 4
 };
-function hasAllCapabilities(actual, required) {
-  const set = new Set(actual);
-  return required.every((c) => set.has(c));
-}
-function autoFormMeetsOrExceeds(actual, preferred) {
-  return hasAllCapabilities(autoFormCapabilities[actual], autoFormCapabilities[preferred]);
-}
-function propertyFormMeetsOrExceeds(actual, preferred) {
-  return hasAllCapabilities(propertyFormCapabilities[actual], propertyFormCapabilities[preferred]);
-}
 function settlementMeetsOrExceeds(actual, preferred) {
   return settlementRank[actual] >= settlementRank[preferred];
 }
@@ -5426,26 +5520,6 @@ function pushWaterLimitViolations(result, reasonCodes, belowMinimum, exceedsMaxi
 function pushWaterDeductibleViolations(result, reasonCodes, tooHigh, notExact, unknown) {
   pushDeductibleViolations(result, reasonCodes, tooHigh, notExact, unknown);
 }
-var autoFormCapabilities2 = {
-  unknown: [],
-  liability_only: ["third_party_liability"],
-  collision: ["third_party_liability", "collision_damage"],
-  comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
-  specified_perils: ["third_party_liability", "specified_perils"],
-  all_perils: [
-    "third_party_liability",
-    "collision_damage",
-    "comprehensive_perils",
-    "all_perils_extensions"
-  ]
-};
-var propertyFormCapabilities2 = {
-  unknown: [],
-  basic: ["fire_lightning"],
-  named_perils: ["fire_lightning", "named_perils"],
-  broad: ["fire_lightning", "named_perils", "broad_perils"],
-  comprehensive: ["all_risks"]
-};
 var settlementRank2 = {
   unknown: 0,
   actual_cash_value: 1,
@@ -5453,29 +5527,19 @@ var settlementRank2 = {
   extended_replacement_cost: 3,
   guaranteed_replacement_cost: 4
 };
-function hasAllCapabilities2(actual, required) {
-  const set = new Set(actual);
-  return required.every((c) => set.has(c));
-}
-function autoFormMeetsOrExceeds2(actual, required) {
-  return hasAllCapabilities2(autoFormCapabilities2[actual], autoFormCapabilities2[required]);
-}
-function propertyFormMeetsOrExceeds2(actual, required) {
-  return hasAllCapabilities2(propertyFormCapabilities2[actual], propertyFormCapabilities2[required]);
-}
 function settlementMeetsOrExceeds2(actual, required) {
   return settlementRank2[actual] >= settlementRank2[required];
 }
 function autoFormSatisfies(preference, requiredForm, actualForm) {
   if (preference === "indifferent" || preference === "preferred") return true;
   if (preference === "prohibited") return actualForm !== requiredForm;
-  if (preference === "required") return autoFormMeetsOrExceeds2(actualForm, requiredForm);
+  if (preference === "required") return autoFormMeetsOrExceeds(actualForm, requiredForm);
   return true;
 }
 function propertyFormSatisfies(preference, requiredForm, actualForm) {
   if (preference === "indifferent" || preference === "preferred") return true;
   if (preference === "prohibited") return actualForm !== requiredForm;
-  if (preference === "required") return propertyFormMeetsOrExceeds2(actualForm, requiredForm);
+  if (preference === "required") return propertyFormMeetsOrExceeds(actualForm, requiredForm);
   return true;
 }
 function settlementSatisfies(preference, requiredSettlement, actualSettlement) {
@@ -5831,7 +5895,7 @@ function coverageReductionsVsIncumbent(input, config) {
   if (!auto || !property) return ["missing_coverage_details"];
   if (auto.thirdPartyLiabilityCents < incumbentAuto.thirdPartyLiabilityCents)
     reductions.push("auto_liability_reduced");
-  if (!autoFormMeetsOrExceeds2(auto.coverageForm, incumbentAuto.coverageForm))
+  if (!autoFormMeetsOrExceeds(auto.coverageForm, incumbentAuto.coverageForm))
     reductions.push("auto_coverage_form_reduced");
   if (incumbentAuto.collisionIncluded && !auto.collisionIncluded)
     reductions.push("auto_collision_removed");
@@ -5844,7 +5908,7 @@ function coverageReductionsVsIncumbent(input, config) {
   }
   if (property.dwellingLimitCents < incumbentProperty.dwellingLimitCents)
     reductions.push("property_dwelling_limit_reduced");
-  if (!propertyFormMeetsOrExceeds2(property.coverageForm, incumbentProperty.coverageForm))
+  if (!propertyFormMeetsOrExceeds(property.coverageForm, incumbentProperty.coverageForm))
     reductions.push("property_coverage_form_reduced");
   if (!settlementMeetsOrExceeds2(property.settlementBasis, incumbentProperty.settlementBasis))
     reductions.push("property_settlement_reduced");
@@ -6552,9 +6616,17 @@ function validationErrorMessage(errors) {
   return errors.map((e) => `${e.path?.join(".") ?? ""}: ${e.message}`).join("; ");
 }
 function toComponent(c) {
-  const row = c.quote_coverages[0] ?? { coverage: {} };
-  const coverage = row.coverage ?? {};
-  const validationStatus = row.validation_status ?? "valid";
+  const row = c.quote_coverages.find((r) => r.validation_status !== "superseded");
+  if (!row) {
+    return {
+      quoteId: void 0,
+      componentId: c.id,
+      productLine: c.product_line,
+      message: "Quote component has no active coverage row"
+    };
+  }
+  const coverage = row.coverage;
+  const validationStatus = row.validation_status;
   const validationErrors = row.validation_errors ?? [];
   if (validationStatus !== "valid") {
     return {
@@ -6662,7 +6734,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     supabase.from("vehicles").select("id").eq("household_id", householdId),
     supabase.from("properties").select("id").eq("household_id", householdId),
     supabase.from("quotes").select(
-      "id, updated_at, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
+      "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
     ).eq("case_id", caseId)
   ]);
   if (!mandateResult || "code" in mandateResult) {
@@ -6726,6 +6798,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     quoteSnapshot: dbQuotes.map((q) => ({
       id: q.id,
       updated_at: q.updated_at,
+      version: q.version,
       is_incumbent: q.is_incumbent
     }))
   };
@@ -6736,7 +6809,10 @@ export {
   HouseholdCoverageMandateV2,
   PropertyCoverageDetails,
   QuoteComponent,
+  QuoteComponentDraft,
   QuoteDataSource,
+  QuoteValidationIssue,
+  SaveCaseQuoteRequest,
   SwitchingPreferencesV2,
   buildEngineInputFromSnapshot,
   canonicalSerializeRecommendationInput,
@@ -6748,4 +6824,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "6452482aa031c07aeec336ee68d9e15082fc0da8be495bce922dcee109502ae3";
+export const __AUTOPILOT_SOURCE_HASH__ = "16263236150319eef57083603a09a54710ad9dda1b142ae24f69f37c076c288c";
