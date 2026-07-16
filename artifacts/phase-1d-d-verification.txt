@@ -1,0 +1,366 @@
+
+> insurance-autopilot@0.1.0 ci:local /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-all.sh
+
+
+> insurance-autopilot@0.1.0 ci:static /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-static.sh
+
+
+> insurance-autopilot@0.1.0 format:check /home/ubuntu/repos/insurance-platform
+> prettier --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
+
+Checking formatting...
+All matched files use Prettier code style!
+
+> insurance-autopilot@0.1.0 lint /home/ubuntu/repos/insurance-platform
+> turbo run lint
+
+• Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
+• Running lint in 8 packages
+• Remote caching disabled
+@autopilot/schemas:lint: cache miss, executing 30983cd00c1ef48f
+@autopilot/design-tokens:lint: cache hit, replaying logs 97188c87325023ce
+@autopilot/design-tokens:lint: 
+@autopilot/design-tokens:lint: > @autopilot/design-tokens@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/design-tokens
+@autopilot/design-tokens:lint: > eslint src
+@autopilot/design-tokens:lint: 
+@autopilot/test-fixtures:lint: cache miss, executing 3b3265692621fe56
+@autopilot/database:lint: cache miss, executing cb662dbbc61bb5b0
+@autopilot/mobile:lint: cache miss, executing 499faeaaab496f1d
+@autopilot/insurance-engine:lint: cache miss, executing 52eb39a39fe647a1
+@autopilot/admin:lint: cache miss, executing fd8453bf1b8715e8
+@autopilot/schemas:lint: 
+@autopilot/schemas:lint: > @autopilot/schemas@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:lint: > eslint src
+@autopilot/schemas:lint: 
+@autopilot/database:lint: 
+@autopilot/database:lint: > @autopilot/database@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:lint: > eslint src
+@autopilot/database:lint: 
+@autopilot/test-fixtures:lint: 
+@autopilot/test-fixtures:lint: > @autopilot/test-fixtures@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/test-fixtures
+@autopilot/test-fixtures:lint: > eslint src
+@autopilot/test-fixtures:lint: 
+@autopilot/mobile:lint: 
+@autopilot/mobile:lint: > @autopilot/mobile@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:lint: > eslint app lib components
+@autopilot/mobile:lint: 
+@autopilot/insurance-engine:lint: 
+@autopilot/insurance-engine:lint: > @autopilot/insurance-engine@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:lint: > eslint src test scripts
+@autopilot/insurance-engine:lint: 
+@autopilot/admin:lint: 
+@autopilot/admin:lint: > @autopilot/admin@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/admin
+@autopilot/admin:lint: > eslint .
+@autopilot/admin:lint: 
+
+ Tasks:    7 successful, 7 total
+Cached:    1 cached, 7 total
+  Time:    1.548s 
+
+
+> insurance-autopilot@0.1.0 typecheck /home/ubuntu/repos/insurance-platform
+> turbo run typecheck
+
+• Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
+• Running typecheck in 8 packages
+• Remote caching disabled
+@autopilot/schemas:typecheck: cache hit, replaying logs 1c3e9d1179b21558
+@autopilot/schemas:typecheck: 
+@autopilot/schemas:typecheck: > @autopilot/schemas@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:typecheck: > tsc --noEmit
+@autopilot/schemas:typecheck: 
+@autopilot/design-tokens:typecheck: cache hit, replaying logs 7981a3c0f31d4728
+@autopilot/design-tokens:typecheck: 
+@autopilot/design-tokens:typecheck: > @autopilot/design-tokens@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/design-tokens
+@autopilot/design-tokens:typecheck: > tsc --noEmit
+@autopilot/design-tokens:typecheck: 
+@autopilot/database:typecheck: cache hit, replaying logs 625dd85f2490acbc
+@autopilot/database:typecheck: 
+@autopilot/database:typecheck: > @autopilot/database@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:typecheck: > tsc --noEmit
+@autopilot/database:typecheck: 
+@autopilot/test-fixtures:typecheck: cache hit, replaying logs d4731108c68cea2b
+@autopilot/test-fixtures:typecheck: 
+@autopilot/test-fixtures:typecheck: > @autopilot/test-fixtures@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/test-fixtures
+@autopilot/test-fixtures:typecheck: > tsc --noEmit
+@autopilot/test-fixtures:typecheck: 
+@autopilot/mobile:typecheck: cache hit, replaying logs 917017eda446b79c
+@autopilot/mobile:typecheck: 
+@autopilot/mobile:typecheck: > @autopilot/mobile@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:typecheck: > tsc --noEmit
+@autopilot/mobile:typecheck: 
+@autopilot/insurance-engine:typecheck: cache hit, replaying logs d79d235519533d63
+@autopilot/insurance-engine:typecheck: 
+@autopilot/insurance-engine:typecheck: > @autopilot/insurance-engine@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:typecheck: > tsc --noEmit
+@autopilot/insurance-engine:typecheck: 
+@autopilot/admin:typecheck: cache miss, executing 83dc9d2605f8376a
+@autopilot/admin:typecheck: 
+@autopilot/admin:typecheck: > @autopilot/admin@0.1.0 typecheck /home/ubuntu/repos/insurance-platform/apps/admin
+@autopilot/admin:typecheck: > mkdir -p .next/types && tsc --noEmit
+@autopilot/admin:typecheck: 
+
+ Tasks:    7 successful, 7 total
+Cached:    6 cached, 7 total
+  Time:    2.786s 
+
+
+> insurance-autopilot@0.1.0 test /home/ubuntu/repos/insurance-platform
+> turbo run test
+
+• Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
+• Running test in 8 packages
+• Remote caching disabled
+@autopilot/schemas:test: cache miss, executing bb78c80e72d9fd0a
+@autopilot/database:test: cache miss, executing 495ae79f09ae7985
+@autopilot/mobile:test: cache miss, executing 26c760323b47a92b
+@autopilot/insurance-engine:test: cache miss, executing 18565619c27139a9
+@autopilot/schemas:test: 
+@autopilot/schemas:test: > @autopilot/schemas@0.1.0 test /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:test: > vitest run
+@autopilot/schemas:test: 
+@autopilot/mobile:test: 
+@autopilot/mobile:test: > @autopilot/mobile@0.1.0 test /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:test: > jest
+@autopilot/mobile:test: 
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test: > @autopilot/insurance-engine@0.1.0 test /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:test: > vitest run
+@autopilot/insurance-engine:test: 
+@autopilot/database:test: 
+@autopilot/database:test: > @autopilot/database@0.1.0 test /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:test: > vitest run --exclude '**/*.integration.test.ts'
+@autopilot/database:test: 
+@autopilot/schemas:test: 
+@autopilot/schemas:test:  RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:test: 
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test:  RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+@autopilot/insurance-engine:test: 
+@autopilot/database:test: 
+@autopilot/database:test:  RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/database
+@autopilot/database:test: 
+@autopilot/database:test:  ✓ test/providers.test.ts (2 tests) 2ms
+@autopilot/database:test: 
+@autopilot/database:test:  Test Files  1 passed (1)
+@autopilot/database:test:       Tests  2 passed (2)
+@autopilot/database:test:    Start at  18:45:59
+@autopilot/database:test:    Duration  317ms (transform 38ms, setup 0ms, collect 25ms, tests 2ms, environment 0ms, prepare 46ms)
+@autopilot/database:test: 
+@autopilot/insurance-engine:test:  ✓ test/rule-evaluator.test.ts (8 tests) 2ms
+@autopilot/schemas:test:  ✓ test/mandate-v2.test.ts (22 tests) 23ms
+@autopilot/schemas:test:  ✓ test/state-machines.test.ts (9 tests) 18ms
+@autopilot/schemas:test: 
+@autopilot/schemas:test:  Test Files  2 passed (2)
+@autopilot/schemas:test:       Tests  31 passed (31)
+@autopilot/schemas:test:    Start at  18:45:59
+@autopilot/schemas:test:    Duration  447ms (transform 169ms, setup 0ms, collect 256ms, tests 41ms, environment 0ms, prepare 139ms)
+@autopilot/schemas:test: 
+@autopilot/insurance-engine:test:  ✓ test/property-rule-outcomes.test.ts (9 tests) 7ms
+@autopilot/insurance-engine:test:  ✓ test/digest-and-persistence.test.ts (6 tests) 17ms
+@autopilot/insurance-engine:test:  ✓ test/quote-integrity.test.ts (5 tests) 17ms
+@autopilot/insurance-engine:test:  ✓ test/engine.test.ts (26 tests) 23ms
+@autopilot/insurance-engine:test: 
+@autopilot/insurance-engine:test:  Test Files  5 passed (5)
+@autopilot/insurance-engine:test:       Tests  54 passed (54)
+@autopilot/insurance-engine:test:    Start at  18:45:59
+@autopilot/insurance-engine:test:    Duration  531ms (transform 384ms, setup 0ms, collect 1.05s, tests 67ms, environment 1ms, prepare 278ms)
+@autopilot/insurance-engine:test: 
+@autopilot/mobile:test: PASS __tests__/welcome.test.tsx
+@autopilot/mobile:test:   Welcome screen
+@autopilot/mobile:test:     ✓ shows the value proposition and demo disclaimer (226 ms)
+@autopilot/mobile:test: 
+@autopilot/mobile:test: Test Suites: 1 passed, 1 total
+@autopilot/mobile:test: Tests:       1 passed, 1 total
+@autopilot/mobile:test: Snapshots:   0 total
+@autopilot/mobile:test: Time:        0.61 s, estimated 1 s
+@autopilot/mobile:test: Ran all test suites.
+
+ Tasks:    4 successful, 4 total
+Cached:    0 cached, 4 total
+  Time:    1.26s 
+
+
+> @autopilot/admin@0.1.0 build /home/ubuntu/repos/insurance-platform/apps/admin
+> next build
+
+   ▲ Next.js 15.1.3
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/8) ...
+   Generating static pages (2/8) 
+   Generating static pages (4/8) 
+   Generating static pages (6/8) 
+ ✓ Generating static pages (8/8)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    2.03 kB         185 kB
+├ ○ /_not-found                          981 B           106 kB
+├ ○ /cases                               2.12 kB         185 kB
+├ ƒ /cases/[id]                          26.3 kB         209 kB
+├ ○ /insurers                            1.66 kB         184 kB
+├ ○ /login                               1.16 kB         173 kB
+└ ○ /outbox                              1.63 kB         184 kB
++ First Load JS shared by all            105 kB
+  ├ chunks/855-60ee6d5c9a05a5f1.js       50.5 kB
+  ├ chunks/87c73c54-92c7ca9a0541e495.js  52.9 kB
+  └ other shared chunks (total)          1.94 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+> @autopilot/mobile@0.1.0 expo:doctor /home/ubuntu/repos/insurance-platform/apps/mobile
+> expo config --type public
+
+env: load .env.local
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY
+
+{
+  name: [32m'Insurance Autopilot'[39m,
+  slug: [32m'insurance-autopilot'[39m,
+  version: [32m'0.1.0'[39m,
+  scheme: [32m'insurance-autopilot'[39m,
+  orientation: [32m'portrait'[39m,
+  userInterfaceStyle: [32m'light'[39m,
+  newArchEnabled: [33mtrue[39m,
+  plugins: [
+    [32m'expo-router'[39m,
+    [32m'expo-secure-store'[39m,
+    [32m'expo-local-authentication'[39m,
+    [
+      [32m'expo-notifications'[39m,
+      {
+        defaultChannel: [32m'default'[39m
+      }
+    ]
+  ],
+  description: [90mundefined[39m,
+  sdkVersion: [32m'52.0.0'[39m,
+  platforms: [
+    [32m'ios'[39m,
+    [32m'android'[39m,
+    [32m'web'[39m
+  ],
+  ios: {
+    supportsTablet: [33mfalse[39m,
+    bundleIdentifier: [32m'com.insuranceautopilot.app'[39m
+  },
+  android: {
+    package: [32m'com.insuranceautopilot.app'[39m,
+    permissions: [
+      [32m'android.permission.USE_BIOMETRIC'[39m,
+      [32m'android.permission.USE_FINGERPRINT'[39m
+    ]
+  },
+  extra: {
+    supabaseUrl: [32m'http://127.0.0.1:54321'[39m,
+    supabaseAnonKey: [32m''[39m,
+    router: {
+      origin: [33mfalse[39m
+    }
+  }
+}
+
+
+> @autopilot/insurance-engine@0.1.0 check:edge /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+> pnpm build:edge && git diff --exit-code ../../supabase/functions/_shared/autopilot.js
+
+
+> @autopilot/insurance-engine@0.1.0 build:edge /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+> tsx scripts/build-edge-bundle.ts
+
+Edge bundle written to /home/ubuntu/repos/insurance-platform/supabase/functions/_shared/autopilot.js (21 inputs, hash df7dd03a98a37a9f89d148bd73e0bf5f91887f60060b45156c3c1cb38cf5c55b)
+
+> insurance-autopilot@0.1.0 ci:database /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-database.sh
+
+Supabase local stack is already running; reusing existing stack.
+
+> insurance-autopilot@0.1.0 db:types:check /home/ubuntu/repos/insurance-platform
+> supabase gen types typescript --local --schema public > /tmp/database.types.ts && pnpm prettier --config .prettierrc --write /tmp/database.types.ts && diff -u packages/database/src/database.types.ts /tmp/database.types.ts
+
+../../../../tmp/database.types.ts 198ms
+/home/ubuntu/repos/insurance-platform/supabase/tests/001_rls_and_guards.sql .................. ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/002_security_tests.sql .................. ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/003_workflow_rpc_tests.sql .............. ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/004_document_tests.sql .................. ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/005_activation_tests.sql ................ ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/006_quote_request_tests.sql ............. ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/007_mandate_v2_tests.sql ................ ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/008_quote_atomic_persistence_tests.sql .. ok
+/home/ubuntu/repos/insurance-platform/supabase/tests/009_quote_migration_upgrade_test.sql .... ok
+All tests successful.
+Files=9, Tests=95,  1 wallclock secs ( 0.02 usr  0.02 sys +  0.06 cusr  0.01 csys =  0.11 CPU)
+Result: PASS
+
+> @autopilot/database@0.1.0 test:integration /home/ubuntu/repos/insurance-platform/packages/database
+> vitest run test/mandate-save-reload.integration.test.ts
+
+
+ RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/database
+
+ ✓ test/mandate-save-reload.integration.test.ts (2 tests) 65ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  18:46:53
+   Duration  338ms (transform 95ms, setup 0ms, collect 146ms, tests 65ms, environment 0ms, prepare 36ms)
+
+
+> insurance-autopilot@0.1.0 ci:e2e /home/ubuntu/repos/insurance-platform
+> bash scripts/ci/run-e2e.sh
+
+Supabase local stack is already running; reusing existing stack.
+
+> @autopilot/insurance-engine@0.1.0 build:edge /home/ubuntu/repos/insurance-platform/packages/insurance-engine
+> tsx scripts/build-edge-bundle.ts
+
+Edge bundle written to /home/ubuntu/repos/insurance-platform/supabase/functions/_shared/autopilot.js (21 inputs, hash df7dd03a98a37a9f89d148bd73e0bf5f91887f60060b45156c3c1cb38cf5c55b)
+Supabase environment exported to /tmp/tmp.uAB1r1miJb
+
+Running 4 tests using 1 worker
+
+  ✓  1 smoke.spec.ts:13:5 › operations can sign in and view the dashboard (934ms)
+  ✓  2 smoke.spec.ts:19:5 › staff can open a case and browse tabs (2.9s)
+  ✓  3 smoke.spec.ts:39:5 › customer accounts are rejected from the admin console (647ms)
+  ✓  4 smoke.spec.ts:49:5 › unauthenticated users are redirected to login (543ms)
+
+  4 passed (6.0s)
+Connecting to http://127.0.0.1:54321
+1. Customer saved V2 mandate 1
+   V2 mandate row liability = 2.5M, version 1
+   Legacy coverage_requirements row remains at 2M
+2. Updated auto quote coverages to 2.5M
+3. Generated recommendation fbae1768-7012-4e0f-8e14-3aefec5c37b1 version 1
+4. Recommendation bound to exact V2 snapshot fe0f5932-c823-4611-b677-a5b36998fc93 v1
+5. Case advanced to licensed_review
+6. Reviewer published recommendation
+7. Customer changed V2 mandate to 3M, new version 2
+8. Stale recommendation approval rejected: mandate used by this recommendation is no longer current
+9. Regenerated recommendation 824b4460-3051-4626-aa36-c7747b338d3b
+10. Reviewer published replacement recommendation
+11. Multi-asset household rejected by Edge Function: {"code":"MISSING_INSURED_ASSET","message":"No auto component matches the insured vehicle 22000000-0000-0000-0000-000000000099"}
+12. Legacy mandate change did not affect V2 recommendation b81385ae-cfca-4c99-9607-faf5b3d23361
+13. Customer approved final recommendation; switch 233e3c7d-1470-4741-8fb6-15123ac57f0d
+14. Switch advanced to completed
+15. Audit events contain V2 mandate identity fe0f5932-c823-4611-b677-a5b36998fc93
+
+--- Negative tests ---
+16. Malformed V2 JSON rejected
+17. Customer internal persist RPC denied
+18. Duplicate override asset IDs rejected
+19. Skipped cross-household override (no other vehicle found)
+
+V2 mandate lifecycle E2E passed.
+
+All local CI checks passed in 137s.
