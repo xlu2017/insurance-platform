@@ -364,9 +364,11 @@ export type Database = {
           body: string;
           created_at: string;
           email_type: string;
+          error: string | null;
           id: string;
           provider: string;
           sent_at: string | null;
+          status: string;
           subject: string;
           to_email: string;
         };
@@ -374,9 +376,11 @@ export type Database = {
           body: string;
           created_at?: string;
           email_type: string;
+          error?: string | null;
           id?: string;
           provider?: string;
           sent_at?: string | null;
+          status?: string;
           subject: string;
           to_email: string;
         };
@@ -384,9 +388,11 @@ export type Database = {
           body?: string;
           created_at?: string;
           email_type?: string;
+          error?: string | null;
           id?: string;
           provider?: string;
           sent_at?: string | null;
+          status?: string;
           subject?: string;
           to_email?: string;
         };
@@ -1386,13 +1392,16 @@ export type Database = {
           current_total_cents: number;
           disclosure_version: string;
           effective_date: string | null;
+          engine_version: string;
           id: string;
           mandate_version: number;
           net_savings_cents: number;
           proposed_total_cents: number;
           quote_ids: string[];
+          quote_snapshot: Json;
           reason_codes: string[];
           status: Database["public"]["Enums"]["recommendation_status"];
+          switching_preferences_version: number;
           updated_at: string;
           updated_by: string | null;
           version: number;
@@ -1405,13 +1414,16 @@ export type Database = {
           current_total_cents: number;
           disclosure_version?: string;
           effective_date?: string | null;
+          engine_version?: string;
           id?: string;
           mandate_version?: number;
           net_savings_cents: number;
           proposed_total_cents: number;
           quote_ids?: string[];
+          quote_snapshot?: Json;
           reason_codes?: string[];
           status?: Database["public"]["Enums"]["recommendation_status"];
+          switching_preferences_version?: number;
           updated_at?: string;
           updated_by?: string | null;
           version?: number;
@@ -1424,13 +1436,16 @@ export type Database = {
           current_total_cents?: number;
           disclosure_version?: string;
           effective_date?: string | null;
+          engine_version?: string;
           id?: string;
           mandate_version?: number;
           net_savings_cents?: number;
           proposed_total_cents?: number;
           quote_ids?: string[];
+          quote_snapshot?: Json;
           reason_codes?: string[];
           status?: Database["public"]["Enums"]["recommendation_status"];
+          switching_preferences_version?: number;
           updated_at?: string;
           updated_by?: string | null;
           version?: number;
@@ -1799,6 +1814,7 @@ export type Database = {
       };
     };
     Functions: {
+      activate_autopilot: { Args: { p_household_id: string }; Returns: Json };
       advance_switch_event: {
         Args: {
           p_switch_event_id: string;
@@ -1818,6 +1834,7 @@ export type Database = {
         Args: {
           p_expected_mandate_version: number;
           p_expected_rec_version: number;
+          p_expected_switching_version: number;
           p_recommendation_id: string;
         };
         Returns: Json;
@@ -1847,6 +1864,7 @@ export type Database = {
         Args: {
           p_expected_mandate_version: number;
           p_expected_rec_version: number;
+          p_expected_switching_version: number;
           p_recommendation_id: string;
         };
         Returns: Json;
@@ -1865,6 +1883,24 @@ export type Database = {
           household_id: string;
         };
         Returns: undefined;
+      };
+      persist_recommendation: {
+        Args: {
+          p_case_id: string;
+          p_comparison: Json;
+          p_current_total_cents: number;
+          p_disclosure_version?: string;
+          p_engine_version: string;
+          p_mandate_version: number;
+          p_net_savings_cents: number;
+          p_options: Json;
+          p_proposed_total_cents: number;
+          p_quote_snapshot: Json;
+          p_reason_codes: string[];
+          p_recommended: Json;
+          p_switching_version: number;
+        };
+        Returns: Json;
       };
       process_stripe_event: {
         Args: {
@@ -1885,12 +1921,31 @@ export type Database = {
       review_recommendation: {
         Args: {
           p_approved: boolean;
-          p_notes: string;
+          p_notes?: string;
           p_recommendation_id: string;
         };
         Returns: Json;
       };
+      send_quote_request_email: {
+        Args: {
+          p_external_success?: boolean;
+          p_provider: string;
+          p_quote_request_id: string;
+        };
+        Returns: Json;
+      };
       staff_can_access_household: { Args: { hid: string }; Returns: boolean };
+      supersede_prior_recommendations: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      update_case_state: {
+        Args: {
+          p_case_id: string;
+          p_target_state: Database["public"]["Enums"]["case_state"];
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       case_state:
