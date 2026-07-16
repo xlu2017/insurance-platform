@@ -228,3 +228,160 @@ describe("ranking", () => {
     expect(result.recommended!.configuration.auto.quoteId).toBe("quote-alt-b-bundle");
   });
 });
+
+describe("asset-specific mandate inheritance", () => {
+  it("uses a vehicle override when a quote component targets that asset", () => {
+    const mandate = structuredClone(demoMandate);
+    // Override requires a higher liability limit for this vehicle.
+    mandate.vehicleOverrides["vehicle-1"] = {
+      liability: { rule: "minimum", cents: 2_000_000_000 },
+    };
+
+    const assetQuote = makeQuote({
+      id: "q-vehicle-1",
+      insurerId: "insurer-asset",
+      insurerName: "Asset Insurer",
+      components: [
+        {
+          ...autoComponent(150_000, { thirdPartyLiabilityCents: 1_500_000_000 }),
+          assetId: "vehicle-1",
+        },
+        propertyComponent(100_000),
+      ],
+    });
+    const householdQuote = makeQuote({
+      id: "q-household",
+      insurerId: "insurer-household",
+      insurerName: "Household Insurer",
+      components: [
+        autoComponent(150_000, { thirdPartyLiabilityCents: 2_000_000_000 }),
+        propertyComponent(100_000),
+      ],
+    });
+
+    const input = scenarioInput({
+      mandate,
+      quotes: [assetQuote, householdQuote],
+    });
+    const result = evaluateHousehold(input);
+
+    const assetCfg = result.evaluated.find(
+      (e) => e.configuration.auto.quoteId === "q-vehicle-1" && e.configuration.bundled,
+    )!;
+    expect(assetCfg.eligible).toBe(false);
+    expect(assetCfg.reasonCodes).toContain("AUTO_LIABILITY_BELOW_MINIMUM");
+
+    const householdCfg = result.evaluated.find(
+      (e) => e.configuration.auto.quoteId === "q-household" && e.configuration.bundled,
+    )!;
+    expect(householdCfg.eligible).toBe(true);
+    expect(householdCfg.reasonCodes).toContain("MEETS_ALL_HARD_REQUIREMENTS");
+  });
+
+  it("uses a property override when a quote component targets that property", () => {
+    const mandate = structuredClone(demoMandate);
+    mandate.propertyOverrides["property-1"] = {
+      dwellingLimit: { rule: "minimum", cents: 600_000_000 },
+    };
+
+    const assetQuote = makeQuote({
+      id: "q-asset-prop",
+      insurerId: "insurer-asset-prop",
+      insurerName: "Asset Prop Insurer",
+      components: [
+        autoComponent(150_000),
+        {
+          ...propertyComponent(100_000, { dwellingLimitCents: 500_000_000 }),
+          assetId: "property-1",
+        },
+      ],
+    });
+
+    const input = scenarioInput({
+      mandate,
+      quotes: [assetQuote],
+    });
+    const result = evaluateHousehold(input);
+    const cfg = result.evaluated.find((e) => e.configuration.property.quoteId === "q-asset-prop")!;
+    expect(cfg.eligible).toBe(false);
+    expect(cfg.reasonCodes).toContain("PROPERTY_DWELLING_LIMIT_BELOW_MINIMUM");
+  });
+});
+
+describe("coverage reductions vs incumbent", () => {
+  it("flags settlement basis reductions", () => {
+    const reducedSettlement = makeQuote({
+      id: "q-settlement",
+      insurerId: "insurer-settlement",
+      insurerName: "Settlement Co",
+      components: [
+        autoComponent(150_000),
+        propertyComponent(100_000, { settlementBasis: "actual_cash_value" }),
+      ],
+    });
+    const result = evaluateHousehold(scenarioInput({ quotes: [reducedSettlement] }));
+    const cfg = result.evaluated.find((e) => e.configuration.property.quoteId === "q-settlement")!;
+    expect(cfg.eligible).toBe(false);
+    expect(cfg.reasonCodes).toContain("COVERAGE_REDUCTION_VS_INCUMBENT");
+    expect(cfg.coverageReductions).toContain("property_settlement_reduced");
+  });
+
+  it("flags lowered property limits", () => {
+    const loweredContents = makeQuote({
+      id: "q-contents",
+      insurerId: "insurer-contents",
+      insurerName: "Contents Co",
+      components: [
+        autoComponent(150_000),
+        propertyComponent(100_000, { contentsLimitCents: 5_000_000 }),
+      ],
+    });
+    const result = evaluateHousehold(scenarioInput({ quotes: [loweredContents] }));
+    const cfg = result.evaluated.find((e) => e.configuration.property.quoteId === "q-contents")!;
+    expect(cfg.eligible).toBe(false);
+    expect(cfg.reasonCodes).toContain("COVERAGE_REDUCTION_VS_INCUMBENT");
+    expect(cfg.coverageReductions).toContain("property_contents_limit_reduced");
+  });
+});
+
+describe("quote normalization and switching filters", () => {
+  it("rejects insurers with a rating below the household minimum", () => {
+    const mandate = structuredClone(demoMandate);
+    mandate.switching.minimumInsurerFinancialRating = "A";
+
+    const weakRated = makeQuote({
+      id: "q-weak-rated",
+      insurerId: "insurer-weak-rated",
+      insurerName: "Weak Rated Co",
+      insurerFinancialRating: "A_minus",
+      components: [autoComponent(150_000), propertyComponent(100_000)],
+    });
+
+    const result = evaluateHousehold(scenarioInput({ mandate, quotes: [weakRated] }));
+    const cfg = result.evaluated.find((e) => e.configuration.auto.quoteId === "q-weak-rated")!;
+    expect(cfg.eligible).toBe(false);
+    expect(cfg.reasonCodes).toContain("INSURER_RATING_BELOW_MINIMUM");
+  });
+
+  it("rejects a deductible increase when deductible increases are prohibited", () => {
+    const mandate = structuredClone(demoMandate);
+    mandate.switching.deductibleIncreasesAllowed = false;
+
+    const higherDeductible = makeQuote({
+      id: "q-deductible-increase",
+      insurerId: "insurer-deductible",
+      insurerName: "Deductible Co",
+      components: [
+        autoComponent(150_000, { collisionDeductibleCents: 1_000_000 }),
+        propertyComponent(100_000),
+      ],
+    });
+
+    const result = evaluateHousehold(scenarioInput({ mandate, quotes: [higherDeductible] }));
+    const cfg = result.evaluated.find(
+      (e) => e.configuration.auto.quoteId === "q-deductible-increase" && e.configuration.bundled,
+    )!;
+    expect(cfg.eligible).toBe(false);
+    expect(cfg.reasonCodes).toContain("DEDUCTIBLE_INCREASE_PROHIBITED");
+  });
+});

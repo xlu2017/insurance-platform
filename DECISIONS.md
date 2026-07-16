@@ -17,5 +17,5 @@
 15. **CI scope**: GitHub Actions runs `pnpm install`, `format:check`, `lint`, `typecheck`, `test`, admin build and Expo config validation; DB/RLS tests run via a documented local `supabase test db` command.
 16. **No real insurer names** in seed data; 8 fictional Alberta insurers.
 17. **Dark mode**: skipped for MVP speed (allowed by spec).
-18. **Edge Function engine copy**: `supabase/functions/recommendation-generator/engine.ts` is a vendored copy of `packages/insurance-engine` so the Deno/Edge runtime can execute it without external module resolution; it must be kept in sync with the workspace engine.
+18. **Edge Function engine copy**: `supabase/functions/recommendation-generator/engine.ts` is a vendored, Deno-compatible copy of `packages/insurance-engine/src/engine.ts` with its local type definitions inlined so the Edge runtime can execute it without external module resolution; it must be kept in sync with the workspace engine.
 19. **Package versions**: current stable at build time, pinned via `pnpm-lock.yaml`.

@@ -1,87 +1,23 @@
-export interface AutoCoverageDetails {
-  thirdPartyLiabilityCents: number;
-  collisionIncluded: boolean;
-  collisionDeductibleCents: number | null;
-  comprehensiveIncluded: boolean;
-  comprehensiveDeductibleCents: number | null;
-  accidentForgivenessIncluded: boolean;
-  rentalVehicleCoverageIncluded: boolean;
-  telematicsRequired: boolean;
-}
+import type {
+  AutoCoverageDetails,
+  EngineQuote as EngineQuoteSchema,
+  HouseholdMandate,
+  PropertyCoverageDetails,
+  QuoteComponent as QuoteComponentSchema,
+} from "@autopilot/schemas";
 
-export interface PropertyCoverageDetails {
-  dwellingLimitCents: number;
-  replacementCostIncluded: boolean;
-  sewerBackupIncluded: boolean;
-  overlandWaterIncluded: boolean;
-  baseDeductibleCents: number;
-  waterDeductibleCents: number | null;
-  additionalLivingExpensesIncluded: boolean;
-  equipmentBreakdownIncluded: boolean;
-}
+export type { AutoCoverageDetails, PropertyCoverageDetails } from "@autopilot/schemas";
+export type {
+  AutoRequirements,
+  PropertyRequirements,
+  SwitchingPreferences,
+  HouseholdMandate,
+} from "@autopilot/schemas";
 
 export type ProductLine = "auto" | "property";
 
-export interface QuoteComponent {
-  productLine: ProductLine;
-  annualPremiumCents: number;
-  auto: AutoCoverageDetails | null;
-  property: PropertyCoverageDetails | null;
-}
-
-export interface EngineQuote {
-  id: string;
-  insurerId: string;
-  insurerName: string;
-  state: string;
-  isIncumbent: boolean;
-  policyFeesCents: number;
-  paymentFeesCents: number;
-  bundleDiscountCents: number;
-  cancellationChargeCents: number;
-  underwritingConditions: string[];
-  components: QuoteComponent[];
-  expiresAt: string | null;
-}
-
-export interface AutoRequirements {
-  minThirdPartyLiabilityCents: number;
-  collisionRequired: boolean;
-  comprehensiveRequired: boolean;
-  maxCollisionDeductibleCents: number;
-  maxComprehensiveDeductibleCents: number;
-  accidentForgivenessRequired: boolean;
-  rentalVehicleCoverageRequired: boolean;
-  telematicsAllowed: boolean;
-}
-
-export interface PropertyRequirements {
-  minDwellingLimitCents: number;
-  replacementCostRequired: boolean;
-  sewerBackupRequired: boolean;
-  overlandWaterRequired: boolean;
-  maxBaseDeductibleCents: number;
-  maxWaterDeductibleCents: number;
-  additionalLivingExpensesRequired: boolean;
-  equipmentBreakdownRequired: boolean;
-}
-
-export interface SwitchingPreferences {
-  minNetAnnualSavingsCents: number;
-  renewalOnlySwitching: boolean;
-  householdOptimizationEnabled: boolean;
-  splitInsurersAllowed: boolean;
-  excludedInsurerIds: string[];
-  deductibleIncreasesAllowed: boolean;
-  materialCoverageReductionsAllowed: boolean;
-  customerApprovalRequired: boolean;
-}
-
-export interface HouseholdMandate {
-  auto: AutoRequirements;
-  property: PropertyRequirements;
-  switching: SwitchingPreferences;
-}
+export type QuoteComponent = QuoteComponentSchema;
+export type EngineQuote = EngineQuoteSchema;
 
 export interface LineSelection {
   quoteId: string;
@@ -114,24 +50,54 @@ export type ReasonCode =
   | "BUNDLED_CONFIGURATION"
   | "SPLIT_CONFIGURATION"
   | "SPLIT_INSURERS_PROHIBITED"
+  | "BUNDLE_BREAKUP_PROHIBITED"
   | "EXCLUDED_INSURER"
+  | "INSURER_RATING_BELOW_MINIMUM"
   | "AUTO_LIABILITY_BELOW_MINIMUM"
-  | "AUTO_COLLISION_MISSING"
-  | "AUTO_COMPREHENSIVE_MISSING"
+  | "AUTO_LIABILITY_EXCEEDS_MAXIMUM"
+  | "AUTO_LIABILITY_NOT_EXACT"
+  | "AUTO_COVERAGE_FORM_INSUFFICIENT"
+  | "AUTO_COVERAGE_FORM_PROHIBITED"
   | "AUTO_COLLISION_DEDUCTIBLE_TOO_HIGH"
+  | "AUTO_COLLISION_DEDUCTIBLE_NOT_EXACT"
   | "AUTO_COMPREHENSIVE_DEDUCTIBLE_TOO_HIGH"
-  | "AUTO_ACCIDENT_FORGIVENESS_MISSING"
-  | "AUTO_RENTAL_COVERAGE_MISSING"
+  | "AUTO_COMPREHENSIVE_DEDUCTIBLE_NOT_EXACT"
+  | "AUTO_GLASS_DEDUCTIBLE_TOO_HIGH"
+  | "AUTO_ENDORSEMENT_MISSING"
+  | "AUTO_ENDORSEMENT_PROHIBITED"
   | "AUTO_TELEMATICS_PROHIBITED"
+  | "AUTO_TELEMATICS_REQUIRED"
+  | "AUTO_VEHICLE_CLASS_MISMATCH"
+  | "AUTO_FINANCING_STATUS_MISMATCH"
   | "PROPERTY_DWELLING_LIMIT_BELOW_MINIMUM"
-  | "PROPERTY_REPLACEMENT_COST_MISSING"
-  | "PROPERTY_SEWER_BACKUP_MISSING"
-  | "PROPERTY_OVERLAND_WATER_MISSING"
+  | "PROPERTY_DWELLING_LIMIT_EXCEEDS_MAXIMUM"
+  | "PROPERTY_DWELLING_LIMIT_NOT_EXACT"
+  | "PROPERTY_TYPE_MISMATCH"
+  | "PROPERTY_COVERAGE_FORM_INSUFFICIENT"
+  | "PROPERTY_COVERAGE_FORM_PROHIBITED"
+  | "PROPERTY_SETTLEMENT_BELOW_REQUIRED"
+  | "PROPERTY_SETTLEMENT_PROHIBITED"
   | "PROPERTY_BASE_DEDUCTIBLE_TOO_HIGH"
+  | "PROPERTY_BASE_DEDUCTIBLE_NOT_EXACT"
   | "PROPERTY_WATER_DEDUCTIBLE_TOO_HIGH"
-  | "PROPERTY_ALE_MISSING"
-  | "PROPERTY_EQUIPMENT_BREAKDOWN_MISSING"
+  | "PROPERTY_WIND_HAIL_DEDUCTIBLE_TOO_HIGH"
+  | "PROPERTY_EARTHQUAKE_DEDUCTIBLE_TOO_HIGH"
+  | "PROPERTY_SEWER_BACKUP_MISSING"
+  | "PROPERTY_SEWER_BACKUP_PROHIBITED"
+  | "PROPERTY_SEWER_BACKUP_LIMIT_TOO_LOW"
+  | "PROPERTY_SEWER_BACKUP_DEDUCTIBLE_TOO_HIGH"
+  | "PROPERTY_OVERLAND_WATER_MISSING"
+  | "PROPERTY_OVERLAND_WATER_PROHIBITED"
+  | "PROPERTY_OVERLAND_WATER_LIMIT_TOO_LOW"
+  | "PROPERTY_OVERLAND_WATER_DEDUCTIBLE_TOO_HIGH"
+  | "PROPERTY_CONTENTS_LIMIT_TOO_LOW"
+  | "PROPERTY_DETACHED_STRUCTURES_LIMIT_TOO_LOW"
+  | "PROPERTY_PERSONAL_LIABILITY_LIMIT_TOO_LOW"
+  | "PROPERTY_ADDITIONAL_LIVING_EXPENSE_LIMIT_TOO_LOW"
+  | "PROPERTY_OPTIONAL_COVERAGE_MISSING"
+  | "PROPERTY_OPTIONAL_COVERAGE_PROHIBITED"
   | "DEDUCTIBLE_INCREASE_PROHIBITED"
+  | "PREMIUM_INCREASE_TOO_HIGH"
   | "COVERAGE_REDUCTION_VS_INCUMBENT"
   | "BELOW_SAVINGS_THRESHOLD"
   | "MEETS_ALL_HARD_REQUIREMENTS"
