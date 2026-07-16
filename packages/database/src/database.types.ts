@@ -404,6 +404,76 @@ export type Database = {
         };
         Relationships: [];
       };
+      household_coverage_mandates: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          effective_from: string;
+          household_auto_defaults: Json;
+          household_id: string;
+          household_property_defaults: Json;
+          id: string;
+          is_current: boolean;
+          jurisdiction: string;
+          schema_version: number;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          effective_from: string;
+          household_auto_defaults?: Json;
+          household_id: string;
+          household_property_defaults?: Json;
+          id?: string;
+          is_current?: boolean;
+          jurisdiction: string;
+          schema_version: number;
+          updated_at?: string;
+          updated_by?: string | null;
+          version: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          effective_from?: string;
+          household_auto_defaults?: Json;
+          household_id?: string;
+          household_property_defaults?: Json;
+          id?: string;
+          is_current?: boolean;
+          jurisdiction?: string;
+          schema_version?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "household_coverage_mandates_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "household_coverage_mandates_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "household_coverage_mandates_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       household_members: {
         Row: {
           created_at: string;
@@ -986,6 +1056,48 @@ export type Database = {
           },
         ];
       };
+      property_mandate_overrides: {
+        Row: {
+          created_at: string;
+          id: string;
+          mandate_id: string;
+          override_values: Json;
+          property_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          mandate_id: string;
+          override_values?: Json;
+          property_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          mandate_id?: string;
+          override_values?: Json;
+          property_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "property_mandate_overrides_mandate_id_fkey";
+            columns: ["mandate_id"];
+            isOneToOne: false;
+            referencedRelation: "household_coverage_mandates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "property_mandate_overrides_property_id_fkey";
+            columns: ["property_id"];
+            isOneToOne: false;
+            referencedRelation: "properties";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       quote_coverages: {
         Row: {
           coverage: Json;
@@ -1021,6 +1133,7 @@ export type Database = {
       quote_policy_components: {
         Row: {
           annual_premium_cents: number;
+          asset_id: string | null;
           created_at: string;
           id: string;
           product_line: Database["public"]["Enums"]["product_line"];
@@ -1029,6 +1142,7 @@ export type Database = {
         };
         Insert: {
           annual_premium_cents: number;
+          asset_id?: string | null;
           created_at?: string;
           id?: string;
           product_line: Database["public"]["Enums"]["product_line"];
@@ -1037,6 +1151,7 @@ export type Database = {
         };
         Update: {
           annual_premium_cents?: number;
+          asset_id?: string | null;
           created_at?: string;
           id?: string;
           product_line?: Database["public"]["Enums"]["product_line"];
@@ -1734,6 +1849,48 @@ export type Database = {
           },
         ];
       };
+      vehicle_mandate_overrides: {
+        Row: {
+          created_at: string;
+          id: string;
+          mandate_id: string;
+          override_values: Json;
+          updated_at: string;
+          vehicle_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          mandate_id: string;
+          override_values?: Json;
+          updated_at?: string;
+          vehicle_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          mandate_id?: string;
+          override_values?: Json;
+          updated_at?: string;
+          vehicle_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_mandate_overrides_mandate_id_fkey";
+            columns: ["mandate_id"];
+            isOneToOne: false;
+            referencedRelation: "household_coverage_mandates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "vehicle_mandate_overrides_vehicle_id_fkey";
+            columns: ["vehicle_id"];
+            isOneToOne: false;
+            referencedRelation: "vehicles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       vehicles: {
         Row: {
           annual_km: number | null;
@@ -1908,6 +2065,7 @@ export type Database = {
           actor_role: Database["public"]["Enums"]["user_role"];
         }[];
       };
+      backfill_coverage_mandate_v2: { Args: never; Returns: undefined };
       can_access_case: { Args: { cid: string }; Returns: boolean };
       can_access_household: { Args: { hid: string }; Returns: boolean };
       create_customer_support_question: {
@@ -1977,6 +2135,21 @@ export type Database = {
           p_approved: boolean;
           p_notes?: string;
           p_recommendation_id: string;
+        };
+        Returns: Json;
+      };
+      save_household_mandate_v2: {
+        Args: {
+          p_effective_from: string;
+          p_expected_mandate_version: number;
+          p_expected_switching_version: number;
+          p_household_auto_defaults: Json;
+          p_household_id: string;
+          p_household_property_defaults: Json;
+          p_jurisdiction: string;
+          p_property_overrides: Json;
+          p_switching_preferences: Json;
+          p_vehicle_overrides: Json;
         };
         Returns: Json;
       };
