@@ -68,8 +68,14 @@ jobs:
       - name: Check generated database types are up to date
         run: pnpm db:types:check
 
+      - name: Reset database and seed
+        run: supabase db reset
+
       - name: Database tests (pgTAP)
         run: supabase test db
+
+      - name: Mandate save/reload integration test
+        run: pnpm --filter @autopilot/database test:integration
 
   e2e:
     needs: [checks, database]
