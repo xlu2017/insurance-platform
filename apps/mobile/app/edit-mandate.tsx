@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Switch, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { useHousehold } from "@/lib/household";
 import {
   Body,
@@ -37,7 +38,6 @@ import {
   MandateValidationError,
   resolveEffectivePropertyMandateV2,
   resolveEffectiveVehicleMandateV2,
-  saveHouseholdMandateV2,
   updatePropertyOverrideV2,
   updateVehicleOverrideV2,
   clearVehicleOverrideV2,
@@ -609,20 +609,31 @@ export default function EditMandate() {
     setBusy(true);
     setError(null);
     try {
-      const result = await saveHouseholdMandateV2(supabase, {
+      const { data: result, error } = await invokeEdgeFunction<{
+        success: boolean;
+        mandateVersion?: number;
+        switchingVersion?: number;
+        code?: string;
+        message?: string;
+      }>("save-household-mandate", {
         householdId: household.id,
         expectedMandateVersion: versions.mandateVersion,
         expectedSwitchingVersion: versions.switchingVersion,
         mandate,
         switching,
       });
-      if (!result.success) {
-        if (result.code === "STALE_VERSION") {
+      if (error) {
+        if (error.code === "STALE_VERSION") {
           setError("The mandate was changed by another session. Please review and save again.");
           queryClient.invalidateQueries({ queryKey: ["edit-mandate", household.id] });
         } else {
-          setError(result.message ?? "Save failed");
+          setError(error.message ?? "Save failed");
         }
+        setBusy(false);
+        return;
+      }
+      if (!result?.success) {
+        setError(result?.message ?? "Save failed");
         setBusy(false);
         return;
       }

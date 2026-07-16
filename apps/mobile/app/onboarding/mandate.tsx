@@ -2,6 +2,7 @@ import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { ScrollView, Switch, View } from "react-native";
 import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { useHousehold } from "@/lib/household";
 import {
   Body,
@@ -14,6 +15,10 @@ import {
   Subtitle,
   Title,
 } from "@/components/ui";
+import {
+  createDefaultHouseholdCoverageMandateV2,
+  createDefaultSwitchingPreferencesV2,
+} from "@autopilot/schemas";
 
 export default function Mandate() {
   const { data: household, isLoading } = useHousehold();
@@ -38,42 +43,83 @@ export default function Mandate() {
   if (isLoading || !household) return <Loading />;
 
   const save = async () => {
+    if (!household) return;
     setBusy(true);
     setError(null);
     const dollars = (s: string) => Math.round(Number(s || "0") * 100);
-    const { error: reqError } = await supabase.from("coverage_requirements").insert({
-      household_id: household.id,
-      is_current: true,
-      auto_requirements: {
-        minThirdPartyLiabilityCents: dollars(minLiability),
-        collisionRequired,
-        comprehensiveRequired,
-        maxCollisionDeductibleCents: dollars(maxCollisionDeductible),
-        maxComprehensiveDeductibleCents: dollars(maxComprehensiveDeductible),
-        accidentForgivenessRequired: accidentForgiveness,
-        rentalVehicleCoverageRequired: rentalCoverage,
-        telematicsAllowed,
+
+    const baseMandate = createDefaultHouseholdCoverageMandateV2();
+    const mandate = {
+      ...baseMandate,
+      householdAutoDefaults: {
+        ...baseMandate.householdAutoDefaults,
+        liability: { rule: "minimum", amountCents: dollars(minLiability) } as const,
+        collisionDeductible: {
+          rule: "maximum",
+          amountCents: dollars(maxCollisionDeductible),
+        } as const,
+        comprehensiveDeductible: {
+          rule: "maximum",
+          amountCents: dollars(maxComprehensiveDeductible),
+        } as const,
+        coverageForm: {
+          preference: collisionRequired && comprehensiveRequired ? "required" : "preferred",
+          value: collisionRequired && comprehensiveRequired ? "comprehensive" : "liability_only",
+        },
+        endorsements: {
+          ...baseMandate.householdAutoDefaults.endorsements,
+          accident_forgiveness: accidentForgiveness ? "required" : "indifferent",
+          rental_vehicle_coverage: rentalCoverage ? "required" : "indifferent",
+          telematics: telematicsAllowed ? "indifferent" : "prohibited",
+        },
       },
-      property_requirements: {
-        minDwellingLimitCents: dollars(minDwelling),
-        replacementCostRequired: true,
-        sewerBackupRequired: sewerBackup,
-        overlandWaterRequired: overlandWater,
-        maxBaseDeductibleCents: dollars(maxBaseDeductible),
-        maxWaterDeductibleCents: dollars(maxWaterDeductible),
-        additionalLivingExpensesRequired: ale,
-        equipmentBreakdownRequired: equipmentBreakdown,
+      householdPropertyDefaults: {
+        ...baseMandate.householdPropertyDefaults,
+        dwellingLimit: { rule: "minimum", amountCents: dollars(minDwelling) } as const,
+        baseDeductible: { rule: "maximum", amountCents: dollars(maxBaseDeductible) } as const,
+        waterDeductible: { rule: "maximum", amountCents: dollars(maxWaterDeductible) } as const,
+        sewerBackup: {
+          preference: sewerBackup ? "required" : "indifferent",
+          limit: { rule: "any" },
+          deductible: { rule: "any" },
+        },
+        overlandWater: {
+          preference: overlandWater ? "required" : "indifferent",
+          limit: { rule: "any" },
+          deductible: { rule: "any" },
+        },
+        optionalCoverages: {
+          ...baseMandate.householdPropertyDefaults.optionalCoverages,
+          equipment_breakdown: equipmentBreakdown ? "required" : "indifferent",
+          additional_living_expenses: ale ? "required" : "indifferent",
+        },
       },
+    };
+    const switching = createDefaultSwitchingPreferencesV2();
+
+    const { error } = await invokeEdgeFunction("save-household-mandate", {
+      householdId: household.id,
+      expectedMandateVersion: 0,
+      expectedSwitchingVersion: 0,
+      mandate,
+      switching,
     });
-    if (reqError) {
+
+    if (error) {
       setBusy(false);
-      setError(reqError.message);
+      setError(error.message ?? "Save failed");
       return;
     }
-    await supabase
+
+    const { error: householdError } = await supabase
       .from("households")
       .update({ onboarding_step: "preferences" })
       .eq("id", household.id);
+    if (householdError) {
+      setBusy(false);
+      setError(householdError.message);
+      return;
+    }
     setBusy(false);
     router.push("/onboarding/preferences");
   };
