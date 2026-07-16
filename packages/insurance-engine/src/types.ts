@@ -102,6 +102,8 @@ export type ReasonCode =
   | "BELOW_SAVINGS_THRESHOLD"
   | "MEETS_ALL_HARD_REQUIREMENTS"
   | "MEETS_SAVINGS_THRESHOLD"
+  | "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED"
+  | "MISSING_INSURED_ASSET"
   | "QUOTE_NOT_USABLE";
 
 export interface EvaluatedConfiguration {
@@ -123,6 +125,10 @@ export interface EngineInput {
     quote: EngineQuote;
     component: QuoteComponent & { property: PropertyCoverageDetails };
   };
+  assets?: {
+    vehicles: Array<{ id: string }>;
+    properties: Array<{ id: string }>;
+  };
 }
 
 export interface EngineResult {
@@ -130,4 +136,5 @@ export interface EngineResult {
   evaluated: EvaluatedConfiguration[];
   eligible: EvaluatedConfiguration[];
   recommended: EvaluatedConfiguration | null;
+  rejection?: { code: ReasonCode; message: string };
 }

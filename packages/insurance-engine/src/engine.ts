@@ -856,11 +856,128 @@ function underwritingConditionCount(input: EngineInput, config: HouseholdConfigu
   return quotes.reduce((n, q) => n + q.underwritingConditions.length, 0);
 }
 
+function validateEngineInput(input: EngineInput): { code: ReasonCode; message: string } | null {
+  const autoIds = new Set<string | undefined>();
+  const propertyIds = new Set<string | undefined>();
+
+  const allQuotes = [...input.quotes, input.incumbentAuto.quote, input.incumbentProperty.quote];
+  for (const quote of allQuotes) {
+    let autoSeen = false;
+    let propertySeen = false;
+    for (const component of quote.components) {
+      if (component.productLine === "auto") {
+        if (autoSeen) {
+          return {
+            code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
+            message: "Multi-asset optimization is not enabled in this release.",
+          };
+        }
+        autoSeen = true;
+        autoIds.add(component.assetId);
+      }
+      if (component.productLine === "property") {
+        if (propertySeen) {
+          return {
+            code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
+            message: "Multi-asset optimization is not enabled in this release.",
+          };
+        }
+        propertySeen = true;
+        propertyIds.add(component.assetId);
+      }
+    }
+  }
+
+  if (autoIds.size > 1) {
+    return {
+      code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
+      message: "Multi-asset optimization is not enabled in this release.",
+    };
+  }
+  if (propertyIds.size > 1) {
+    return {
+      code: "MULTI_ASSET_OPTIMIZATION_NOT_ENABLED",
+      message: "Multi-asset optimization is not enabled in this release.",
+    };
+  }
+
+  if (input.assets) {
+    const vehicleIdSet = new Set(input.assets.vehicles.map((v) => v.id));
+    const propertyIdSet = new Set(input.assets.properties.map((p) => p.id));
+
+    for (const id of autoIds) {
+      if (id && !vehicleIdSet.has(id)) {
+        return {
+          code: "MISSING_INSURED_ASSET",
+          message: `Auto component references unknown vehicle ${id}`,
+        };
+      }
+    }
+    for (const id of propertyIds) {
+      if (id && !propertyIdSet.has(id)) {
+        return {
+          code: "MISSING_INSURED_ASSET",
+          message: `Property component references unknown property ${id}`,
+        };
+      }
+    }
+
+    if (
+      input.assets.vehicles.length > 0 &&
+      ![...autoIds].some((id) => id && vehicleIdSet.has(id))
+    ) {
+      return {
+        code: "MISSING_INSURED_ASSET",
+        message: "No auto component matches the insured vehicle",
+      };
+    }
+    if (
+      input.assets.properties.length > 0 &&
+      ![...propertyIds].some((id) => id && propertyIdSet.has(id))
+    ) {
+      return {
+        code: "MISSING_INSURED_ASSET",
+        message: "No property component matches the insured property",
+      };
+    }
+
+    for (const key of Object.keys(input.mandate.vehicleOverrides)) {
+      if (!vehicleIdSet.has(key)) {
+        return {
+          code: "MISSING_INSURED_ASSET",
+          message: `Vehicle override without matching asset ${key}`,
+        };
+      }
+    }
+    for (const key of Object.keys(input.mandate.propertyOverrides)) {
+      if (!propertyIdSet.has(key)) {
+        return {
+          code: "MISSING_INSURED_ASSET",
+          message: `Property override without matching property ${key}`,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Deterministic household optimization.
  * Pure: same input always produces the same ranked output. No AI, no randomness.
  */
 export function evaluateHousehold(input: EngineInput): EngineResult {
+  const validation = validateEngineInput(input);
+  if (validation) {
+    return {
+      incumbentTotalCents: 0,
+      evaluated: [],
+      eligible: [],
+      recommended: null,
+      rejection: validation,
+    };
+  }
+
   const mandate = input.mandate;
   const configurations = buildConfigurations(input);
 

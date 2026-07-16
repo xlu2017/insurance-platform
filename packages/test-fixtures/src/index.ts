@@ -7,6 +7,9 @@ import type {
 } from "@autopilot/schemas";
 import { defaultAutoEndorsements, defaultPropertyOptionalCoverages } from "@autopilot/schemas";
 
+export const TEST_VEHICLE_ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
+export const TEST_PROPERTY_ID = "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b22";
+
 export const standardAutoCoverage: AutoCoverageDetails = {
   thirdPartyLiabilityCents: 200_000_000, // C$2,000,000
   coverageForm: "comprehensive",
@@ -125,6 +128,7 @@ export function autoComponent(
 ): QuoteComponent {
   return {
     productLine: "auto",
+    assetId: TEST_VEHICLE_ID,
     annualPremiumCents,
     auto: { ...standardAutoCoverage, ...overrides },
     property: null,
@@ -137,6 +141,7 @@ export function propertyComponent(
 ): QuoteComponent {
   return {
     productLine: "property",
+    assetId: TEST_PROPERTY_ID,
     annualPremiumCents,
     auto: null,
     property: { ...standardPropertyCoverage, ...overrides },

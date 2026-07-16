@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  TEST_PROPERTY_ID,
+  TEST_VEHICLE_ID,
   autoComponent,
   bundleLossScenario,
   demoMandate,
@@ -233,7 +235,7 @@ describe("asset-specific mandate inheritance", () => {
   it("uses a vehicle override when a quote component targets that asset", () => {
     const mandate = structuredClone(demoMandate);
     // Override requires a higher liability limit for this vehicle.
-    mandate.vehicleOverrides["vehicle-1"] = {
+    mandate.vehicleOverrides[TEST_VEHICLE_ID] = {
       liability: { rule: "minimum", cents: 2_000_000_000 },
     };
 
@@ -242,10 +244,7 @@ describe("asset-specific mandate inheritance", () => {
       insurerId: "insurer-asset",
       insurerName: "Asset Insurer",
       components: [
-        {
-          ...autoComponent(150_000, { thirdPartyLiabilityCents: 1_500_000_000 }),
-          assetId: "vehicle-1",
-        },
+        autoComponent(150_000, { thirdPartyLiabilityCents: 1_500_000_000 }),
         propertyComponent(100_000),
       ],
     });
@@ -280,7 +279,7 @@ describe("asset-specific mandate inheritance", () => {
 
   it("uses a property override when a quote component targets that property", () => {
     const mandate = structuredClone(demoMandate);
-    mandate.propertyOverrides["property-1"] = {
+    mandate.propertyOverrides[TEST_PROPERTY_ID] = {
       dwellingLimit: { rule: "minimum", cents: 600_000_000 },
     };
 
@@ -290,10 +289,7 @@ describe("asset-specific mandate inheritance", () => {
       insurerName: "Asset Prop Insurer",
       components: [
         autoComponent(150_000),
-        {
-          ...propertyComponent(100_000, { dwellingLimitCents: 500_000_000 }),
-          assetId: "property-1",
-        },
+        propertyComponent(100_000, { dwellingLimitCents: 500_000_000 }),
       ],
     });
 
