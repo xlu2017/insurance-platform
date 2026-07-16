@@ -26,6 +26,31 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
 PAYMENTS_BYPASS=true
 EOF
 
+# Clean up any stale Next.js dev server before starting a fresh one.
+for pid in $(ss -ltp | grep ':3000' | grep -oP 'pid=\K[0-9]+' || true); do
+  kill -9 "$pid" 2>/dev/null || true
+done
+rm -rf apps/admin/.next
+
+# Start the admin dev server in the background for Playwright.
+ADMIN_LOG=$(mktemp)
+pnpm --filter @autopilot/admin dev > "$ADMIN_LOG" 2>&1 &
+ADMIN_PID=$!
+trap 'kill "$ADMIN_PID" 2>/dev/null || true; rm -f "$ADMIN_LOG" "$ENV_FILE"' EXIT
+
+# Wait for the dev server to be ready.
+for i in {1..60}; do
+  if curl -sf http://localhost:3000/login >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! curl -sf http://localhost:3000/login >/dev/null 2>&1; then
+  echo "Admin dev server failed to start" >&2
+  cat "$ADMIN_LOG" >&2
+  exit 1
+fi
+
 supabase db reset
 
 # Ensure Playwright Chromium is installed. Do not reinstall system dependencies on every run.

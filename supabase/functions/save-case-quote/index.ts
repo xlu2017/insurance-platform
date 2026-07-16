@@ -133,7 +133,7 @@ function validateAndClassifyComponent(
 
   // Unknown enum values mean the operator has not supplied the required fact.
   const cov = component.coverage as Record<string, unknown>;
-  if (productLine === "auto") {
+  if (component.productLine === "auto") {
     if (cov.coverageForm === "unknown") {
       issues.push({
         path: ["coverage", "coverageForm"],
