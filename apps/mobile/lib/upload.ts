@@ -1,7 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import type { DocumentCategory } from "@autopilot/schemas";
-import { supabase } from "./supabase";
+import { supabase, SUPABASE_URL } from "./supabase";
 
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -55,8 +55,8 @@ export async function uploadPolicyDocument(
   category: DocumentCategory,
   file: PickedFile,
 ): Promise<UploadResult> {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session?.access_token) {
     throw new Error("You must be signed in to upload documents");
   }
   if (!ALLOWED_MIME_TYPES.includes(file.mimeType)) {
@@ -66,42 +66,32 @@ export async function uploadPolicyDocument(
     throw new Error("File is too large (max 10 MB)");
   }
   if (file.size === undefined) {
-    // Picked files may not report size; the bucket policy and row size still protect the system.
-    console.warn("File size not provided; skipping size validation");
+    console.warn("File size not provided; server will enforce the limit");
   }
-
-  const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_");
-  const randomSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const path = `${householdId}/${randomSuffix}-${safeName}`;
 
   const response = await fetch(file.uri);
-  const blob = await response.arrayBuffer();
+  const blob = await response.blob();
 
-  const { error: storageError } = await supabase.storage
-    .from("policy-documents")
-    .upload(path, blob, { contentType: file.mimeType });
-  if (storageError) throw storageError;
+  const form = new FormData();
+  form.append("householdId", householdId);
+  form.append("category", category);
+  form.append("file", blob, file.name);
 
-  const { data: inserted, error } = await supabase
-    .from("policy_documents")
-    .insert({
-      household_id: householdId,
-      category,
-      status: "uploaded",
-      storage_path: path,
-      file_name: file.name,
-      mime_type: file.mimeType,
-      size_bytes: file.size ?? 0,
-      uploaded_by: userData.user.id,
-    })
-    .select("id")
-    .single();
+  const uploadRes = await fetch(`${SUPABASE_URL}/functions/v1/upload-document`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session.session.access_token}`,
+    },
+    body: form,
+  });
 
-  if (error || !inserted) {
-    // Best-effort cleanup so a failed metadata write does not orphan the object.
-    await supabase.storage.from("policy-documents").remove([path]);
-    throw new Error(error?.message ?? "Failed to save document metadata");
+  const payload = (await uploadRes.json()) as { id?: string; path?: string; message?: string };
+  if (!uploadRes.ok) {
+    throw new Error(payload.message ?? `Upload failed (${uploadRes.status})`);
+  }
+  if (!payload.id || !payload.path) {
+    throw new Error("Invalid server response");
   }
 
-  return { path, id: inserted.id };
+  return { path: payload.path, id: payload.id };
 }

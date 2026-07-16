@@ -89,13 +89,23 @@ export default function Profile() {
   const toggleAutopilot = async (value: boolean) => {
     if (!household) return;
     setAutopilot(value);
-    const { error } = await supabase
-      .from("households")
-      .update({ autopilot_active: value })
-      .eq("id", household.id);
-    if (error) {
-      setAutopilot(!value);
-      return;
+    if (value) {
+      const { data, error } = await supabase.rpc("activate_autopilot", {
+        p_household_id: household.id,
+      });
+      if (error || !data || (data as { success?: boolean }).success !== true) {
+        setAutopilot(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from("households")
+        .update({ autopilot_active: false })
+        .eq("id", household.id);
+      if (error) {
+        setAutopilot(true);
+        return;
+      }
     }
     queryClient.invalidateQueries({ queryKey: ["household"] });
   };

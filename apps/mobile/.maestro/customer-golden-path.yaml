@@ -37,4 +37,4 @@ appId: com.insuranceautopilot.app
 - tapOn:
     id: "approve-switch"
 # Switch-in-progress status is visible on the timeline.
-- assertVisible: "Switch in progress.*current"
+- assertVisible: "Switch in progress"

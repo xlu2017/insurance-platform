@@ -10,17 +10,26 @@ export default function Activate() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (isLoading || !household) return <Loading />;
 
   const activate = async () => {
     setBusy(true);
-    await supabase
-      .from("households")
-      .update({ autopilot_active: true, onboarding_step: "complete" })
-      .eq("id", household.id);
-    queryClient.invalidateQueries({ queryKey: ["household"] });
+    setError(null);
+    const { data, error: rpcError } = await supabase.rpc("activate_autopilot", {
+      p_household_id: household.id,
+    });
     setBusy(false);
+    if (rpcError) {
+      setError(rpcError.message);
+      return;
+    }
+    if (!data || (data as { success?: boolean }).success !== true) {
+      setError("Activation failed");
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ["household"] });
     router.replace("/(tabs)/home");
   };
 
@@ -33,6 +42,7 @@ export default function Activate() {
         meets your rules. You approve every change.
       </Body>
       <View style={{ height: 24 }} />
+      {error ? <Body muted>{error}</Body> : null}
       <PrimaryButton label="Activate Autopilot" onPress={activate} loading={busy} />
     </Screen>
   );

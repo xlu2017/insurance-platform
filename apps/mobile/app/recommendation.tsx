@@ -26,6 +26,7 @@ interface RecommendationRow {
   status: string;
   version: number;
   mandate_version: number;
+  switching_preferences_version: number;
   quote_ids: string[];
   current_total_cents: number;
   proposed_total_cents: number;
@@ -136,6 +137,7 @@ export default function Recommendation() {
       p_recommendation_id: recommendation.id,
       p_expected_rec_version: recommendation.version,
       p_expected_mandate_version: recommendation.mandate_version,
+      p_expected_switching_version: recommendation.switching_preferences_version,
     });
     setBusy(false);
     if (rpcError) {
@@ -153,6 +155,7 @@ export default function Recommendation() {
       p_recommendation_id: recommendation.id,
       p_expected_rec_version: recommendation.version,
       p_expected_mandate_version: recommendation.mandate_version,
+      p_expected_switching_version: recommendation.switching_preferences_version,
     });
     setBusy(false);
     if (rpcError) {
