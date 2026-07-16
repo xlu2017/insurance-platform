@@ -8,6 +8,7 @@ import type {
 import type { EngineInput, HouseholdConfiguration } from "./types.ts";
 
 const autoFormCapabilities: Record<AutoCoverageDetails["coverageForm"], string[]> = {
+  unknown: [],
   liability_only: ["third_party_liability"],
   collision: ["third_party_liability", "collision_damage"],
   comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
@@ -21,6 +22,7 @@ const autoFormCapabilities: Record<AutoCoverageDetails["coverageForm"], string[]
 };
 
 const propertyFormCapabilities: Record<PropertyCoverageDetails["coverageForm"], string[]> = {
+  unknown: [],
   basic: ["fire_lightning"],
   named_perils: ["fire_lightning", "named_perils"],
   broad: ["fire_lightning", "named_perils", "broad_perils"],
@@ -28,6 +30,7 @@ const propertyFormCapabilities: Record<PropertyCoverageDetails["coverageForm"], 
 };
 
 const settlementRank: Record<PropertyCoverageDetails["settlementBasis"], number> = {
+  unknown: 0,
   actual_cash_value: 1,
   replacement_cost: 2,
   extended_replacement_cost: 3,

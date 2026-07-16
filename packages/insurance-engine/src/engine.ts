@@ -358,6 +358,7 @@ function pushWaterDeductibleViolations(
 // =============================================================================
 
 const autoFormCapabilities: Record<AutoCoverageDetails["coverageForm"], string[]> = {
+  unknown: [],
   liability_only: ["third_party_liability"],
   collision: ["third_party_liability", "collision_damage"],
   comprehensive: ["third_party_liability", "collision_damage", "comprehensive_perils"],
@@ -371,6 +372,7 @@ const autoFormCapabilities: Record<AutoCoverageDetails["coverageForm"], string[]
 };
 
 const propertyFormCapabilities: Record<PropertyCoverageDetails["coverageForm"], string[]> = {
+  unknown: [],
   basic: ["fire_lightning"],
   named_perils: ["fire_lightning", "named_perils"],
   broad: ["fire_lightning", "named_perils", "broad_perils"],
@@ -378,6 +380,7 @@ const propertyFormCapabilities: Record<PropertyCoverageDetails["coverageForm"], 
 };
 
 const settlementRank: Record<PropertyCoverageDetails["settlementBasis"], number> = {
+  unknown: 0,
   actual_cash_value: 1,
   replacement_cost: 2,
   extended_replacement_cost: 3,
@@ -1028,8 +1031,8 @@ function underwritingConditionCount(input: EngineInput, config: HouseholdConfigu
 export function validateEngineInput(
   input: EngineInput,
 ): { code: ReasonCode; message: string } | null {
-  const autoIds = new Set<string | undefined>();
-  const propertyIds = new Set<string | undefined>();
+  const autoIds = new Set<string>();
+  const propertyIds = new Set<string>();
 
   const allQuotes = [...input.quotes, input.incumbentAuto.quote, input.incumbentProperty.quote];
   for (const quote of allQuotes) {
@@ -1044,7 +1047,7 @@ export function validateEngineInput(
           };
         }
         autoSeen = true;
-        autoIds.add(component.assetId);
+        if (component.assetId) autoIds.add(component.assetId);
       }
       if (component.productLine === "property") {
         if (propertySeen) {
@@ -1054,7 +1057,7 @@ export function validateEngineInput(
           };
         }
         propertySeen = true;
-        propertyIds.add(component.assetId);
+        if (component.assetId) propertyIds.add(component.assetId);
       }
     }
   }

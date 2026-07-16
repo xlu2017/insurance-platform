@@ -42,6 +42,7 @@ export const deductibleRuleLabels: Record<DeductibleRule, string> = {
 };
 
 export const autoCoverageFormLabels: Record<AutoCoverageForm, string> = {
+  unknown: "Unknown",
   liability_only: "Liability only",
   collision: "Collision",
   comprehensive: "Comprehensive",
@@ -50,6 +51,7 @@ export const autoCoverageFormLabels: Record<AutoCoverageForm, string> = {
 };
 
 export const propertyCoverageFormLabels: Record<PropertyCoverageForm, string> = {
+  unknown: "Unknown",
   comprehensive: "Comprehensive",
   broad: "Broad",
   named_perils: "Named perils",
@@ -57,6 +59,7 @@ export const propertyCoverageFormLabels: Record<PropertyCoverageForm, string> = 
 };
 
 export const propertySettlementLabels: Record<PropertySettlement, string> = {
+  unknown: "Unknown",
   replacement_cost: "Replacement cost",
   guaranteed_replacement_cost: "Guaranteed replacement cost",
   extended_replacement_cost: "Extended replacement cost",
@@ -70,6 +73,7 @@ export const propertyTypeLabels: Record<PropertyType, string> = {
   landlord: "Landlord",
   seasonal: "Seasonal",
   secondary_residence: "Secondary residence",
+  unknown: "Unknown",
 };
 
 export const vehicleUseClassLabels: Record<VehicleUseClass, string> = {
@@ -77,12 +81,14 @@ export const vehicleUseClassLabels: Record<VehicleUseClass, string> = {
   commercial: "Commercial",
   classic: "Classic",
   modified: "Modified",
+  unknown: "Unknown",
 };
 
 export const financingStatusLabels: Record<FinancingStatus, string> = {
   owned: "Owned",
   financed: "Financed",
   leased: "Leased",
+  unknown: "Unknown",
 };
 
 export const paymentFrequencyLabels: Record<PaymentFrequency, string> = {

@@ -54,10 +54,10 @@ function first<T>(arr: T[] | undefined | null): T | undefined {
 }
 
 function toFinancialRating(value: string): EngineQuote["insurerFinancialRating"] {
-  const known = ["A_plus", "A", "A_minus", "B_plus", "B_or_lower"] as const;
+  const known = ["unknown", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"] as const;
   return known.includes(value as (typeof known)[number])
     ? (value as EngineQuote["insurerFinancialRating"])
-    : undefined;
+    : "unknown";
 }
 
 function toPaymentFrequency(value: string): EngineQuote["paymentFrequency"] {
@@ -181,7 +181,7 @@ export function toEngineQuote(q: DbQuote): EngineQuote | QuoteCoverageError {
     paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : undefined,
     billingMethod: billingMethod ? toBillingMethod(billingMethod) : undefined,
     distributionChannel,
-    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "any",
+    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "unknown",
   };
 }
 

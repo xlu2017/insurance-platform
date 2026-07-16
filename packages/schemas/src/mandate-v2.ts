@@ -4,7 +4,7 @@ import {
   AutoCoverageForm,
   BrokerDirectPreference,
   CoveragePreference,
-  FinancialRating,
+  CustomerMinimumInsurerFinancialRating,
   PaymentFrequency,
   BillingMethod,
   PropertyCoverageForm,
@@ -279,7 +279,7 @@ export const SwitchingPreferencesV2 = z.object({
   preferredPaymentFrequency: PaymentFrequency.default("annual"),
   preferredBillingMethod: BillingMethod.default("automatic_bank"),
   brokerDirectPreference: BrokerDirectPreference.default("indifferent"),
-  minimumInsurerFinancialRating: FinancialRating.default("any"),
+  minimumInsurerFinancialRating: CustomerMinimumInsurerFinancialRating.default("any"),
 });
 export type SwitchingPreferencesV2 = z.infer<typeof SwitchingPreferencesV2>;
 

@@ -54,6 +54,7 @@ export const deductibleRuleOptions: { value: DeductibleRule; label: string }[] =
 ];
 
 export const autoCoverageFormOptions: { value: AutoCoverageForm; label: string }[] = [
+  { value: "unknown", label: "Unknown" },
   { value: "liability_only", label: "Liability only" },
   { value: "collision", label: "Collision" },
   { value: "comprehensive", label: "Comprehensive" },
@@ -62,6 +63,7 @@ export const autoCoverageFormOptions: { value: AutoCoverageForm; label: string }
 ];
 
 export const propertyCoverageFormOptions: { value: PropertyCoverageForm; label: string }[] = [
+  { value: "unknown", label: "Unknown" },
   { value: "comprehensive", label: "Comprehensive" },
   { value: "broad", label: "Broad" },
   { value: "named_perils", label: "Named perils" },
@@ -69,6 +71,7 @@ export const propertyCoverageFormOptions: { value: PropertyCoverageForm; label: 
 ];
 
 export const propertySettlementOptions: { value: PropertySettlement; label: string }[] = [
+  { value: "unknown", label: "Unknown" },
   { value: "replacement_cost", label: "Replacement cost" },
   { value: "guaranteed_replacement_cost", label: "Guaranteed replacement cost" },
   { value: "extended_replacement_cost", label: "Extended replacement cost" },
@@ -82,6 +85,7 @@ export const propertyTypeOptions: { value: PropertyType; label: string }[] = [
   { value: "landlord", label: "Landlord" },
   { value: "seasonal", label: "Seasonal" },
   { value: "secondary_residence", label: "Secondary residence" },
+  { value: "unknown", label: "Unknown" },
 ];
 
 export const vehicleUseClassOptions: { value: VehicleUseClass; label: string }[] = [
@@ -89,12 +93,14 @@ export const vehicleUseClassOptions: { value: VehicleUseClass; label: string }[]
   { value: "commercial", label: "Commercial" },
   { value: "classic", label: "Classic" },
   { value: "modified", label: "Modified" },
+  { value: "unknown", label: "Unknown" },
 ];
 
 export const financingStatusOptions: { value: FinancingStatus; label: string }[] = [
   { value: "owned", label: "Owned" },
   { value: "financed", label: "Financed" },
   { value: "leased", label: "Leased" },
+  { value: "unknown", label: "Unknown" },
 ];
 
 export const paymentFrequencyOptions: { value: PaymentFrequency; label: string }[] = [

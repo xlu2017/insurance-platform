@@ -13,7 +13,7 @@ import {
   PaymentFrequency,
   BillingMethod,
   BrokerDirectPreference,
-  FinancialRating,
+  InsurerFinancialRating,
 } from "./enums";
 
 export const AutoCoverageDetails = z.object({
@@ -34,13 +34,13 @@ export const AutoCoverageDetails = z.object({
   disappearingDeductibleIncluded: z.boolean(),
   glassCoverageIncluded: z.boolean(),
   telematicsRequired: z.boolean(),
-  vehicleClass: VehicleUseClass.default("personal"),
-  financingStatus: FinancingStatus.default("owned"),
+  vehicleClass: VehicleUseClass,
+  financingStatus: FinancingStatus,
 });
 export type AutoCoverageDetails = z.infer<typeof AutoCoverageDetails>;
 
 export const PropertyCoverageDetails = z.object({
-  propertyType: PropertyType.default("homeowner"),
+  propertyType: PropertyType,
   coverageForm: PropertyCoverageForm,
   settlementBasis: PropertySettlement,
   dwellingLimitCents: NonNegativeCents,
@@ -77,7 +77,7 @@ export type PropertyCoverageDetails = z.infer<typeof PropertyCoverageDetails>;
 export const QuoteComponent = z.object({
   id: z.string().uuid().optional(),
   productLine: ProductLine,
-  assetId: z.string().uuid().optional(),
+  assetId: z.string().uuid().nullable().optional(),
   assetLabel: z.string().optional(),
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
@@ -113,7 +113,7 @@ export const EngineQuote = z.object({
   paymentFrequency: PaymentFrequency.optional(),
   billingMethod: BillingMethod.optional(),
   distributionChannel: BrokerDirectPreference.optional(),
-  insurerFinancialRating: FinancialRating.optional(),
+  insurerFinancialRating: InsurerFinancialRating.optional(),
 });
 export type EngineQuote = z.infer<typeof EngineQuote>;
 

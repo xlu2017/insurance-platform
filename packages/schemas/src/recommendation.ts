@@ -93,52 +93,68 @@ const PreferenceAlignmentSchema = z.object({
   ),
 });
 
-export const PersistedRecommendationOptionSchema = z.object({
-  rank: z.number().int().positive(),
-  auto_quote_id: z.string().uuid(),
-  property_quote_id: z.string().uuid(),
-  bundled: z.boolean(),
-  total_cents: z.number().int().nonnegative(),
-  net_savings_cents: z.number().int(),
-  eligible: z.boolean(),
-  reason_codes: z.array(z.string()),
-  ranking_factors: RankingFactorsSchema,
-  preference_alignment: PreferenceAlignmentSchema,
-  deductible_total_cents: z.number().int().nonnegative(),
-  underwriting_condition_count: z.number().int().nonnegative(),
-});
+export const PersistedRecommendationOptionSchema = z
+  .object({
+    rank: z.number().int().positive(),
+    auto_quote_id: z.string().uuid(),
+    property_quote_id: z.string().uuid(),
+    auto_component_id: z.string().uuid(),
+    property_component_id: z.string().uuid(),
+    auto_asset_id: z.string().uuid(),
+    property_asset_id: z.string().uuid(),
+    bundled: z.boolean(),
+    total_cents: z.number().int().nonnegative(),
+    net_savings_cents: z.number().int(),
+    eligible: z.boolean(),
+    reason_codes: z.array(z.string()),
+    ranking_factors: RankingFactorsSchema,
+    preference_alignment: PreferenceAlignmentSchema,
+    deductible_total_cents: z.number().int().nonnegative(),
+    underwriting_condition_count: z.number().int().nonnegative(),
+  })
+  .strict();
 
-export const EngineRecommendationPersistencePayloadSchema = z.object({
-  caseId: z.string().uuid(),
-  actorProfileId: z.string().uuid(),
-  mandate: z.object({
-    id: z.string().uuid(),
-    version: z.number().int().positive(),
-    schemaVersion: z.literal(2),
-    jurisdiction: z.literal("AB"),
-  }),
-  switchingPreferences: z.object({
-    id: z.string().uuid(),
-    version: z.number().int().positive(),
-  }),
-  engine: z.object({
-    version: z.string().min(1),
-    sourceHash: HexDigest,
-  }),
-  inputSnapshotJson: z.record(z.unknown()),
-  inputSnapshotDigest: HexDigest,
-  recommendedOption: PersistedRecommendationOptionSchema,
-  rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
-  rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
-  engineOutputJson: z.record(z.unknown()),
-  engineOutputDigest: HexDigest,
-  currentTotalCents: z.number().int().nonnegative(),
-  proposedTotalCents: z.number().int().nonnegative(),
-  netSavingsCents: z.number().int(),
-  reasonCodes: z.array(z.string()),
-  comparison: z.record(z.unknown()),
-  disclosureVersion: z.string().default("v1"),
-});
+export const EngineRecommendationPersistencePayloadSchema = z
+  .object({
+    caseId: z.string().uuid(),
+    actorProfileId: z.string().uuid(),
+    mandate: z
+      .object({
+        id: z.string().uuid(),
+        version: z.number().int().positive(),
+        schemaVersion: z.literal(2),
+        jurisdiction: z.literal("AB"),
+      })
+      .strict(),
+    switchingPreferences: z
+      .object({
+        id: z.string().uuid(),
+        version: z.number().int().positive(),
+      })
+      .strict(),
+    engine: z
+      .object({
+        version: z.string().min(1),
+        sourceHash: HexDigest,
+      })
+      .strict(),
+    inputSnapshotJson: z.record(z.unknown()),
+    inputSnapshotDigest: HexDigest,
+    inputSnapshotCanonical: z.string().min(1),
+    recommendedOption: PersistedRecommendationOptionSchema,
+    rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
+    rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
+    engineOutputJson: z.record(z.unknown()),
+    engineOutputDigest: HexDigest,
+    engineOutputCanonical: z.string().min(1),
+    currentTotalCents: z.number().int().nonnegative(),
+    proposedTotalCents: z.number().int().nonnegative(),
+    netSavingsCents: z.number().int(),
+    reasonCodes: z.array(z.string()),
+    comparison: z.record(z.unknown()),
+    disclosureVersion: z.string().default("v1"),
+  })
+  .strict();
 
 export type EngineRecommendationPersistencePayload = z.infer<
   typeof EngineRecommendationPersistencePayloadSchema
