@@ -137,6 +137,7 @@ jobs:
       - name: Reset database and run V2 mandate end-to-end lifecycle
         run: |
           supabase db reset
+          supabase status -o json > /tmp/supabase-status.json 2>/dev/null
           node -e "const s=JSON.parse(require('fs').readFileSync('/tmp/supabase-status.json','utf8')); console.log('SUPABASE_URL=' + s.API_URL); console.log('SUPABASE_ANON_KEY=' + s.ANON_KEY); console.log('SUPABASE_SERVICE_ROLE_KEY=' + s.SERVICE_ROLE_KEY); console.log('SUPABASE_JWT_SECRET=' + s.JWT_SECRET);" > /tmp/e2e.env
           set -a && source /tmp/e2e.env && set +a
           node scripts/e2e-v2-mandate-lifecycle.mjs
