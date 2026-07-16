@@ -1,11 +1,11 @@
-import type {
-  AutoCoverageDetails,
-  EngineQuote,
-  HouseholdMandate,
-  PropertyCoverageDetails,
-  QuoteComponent,
-} from "@autopilot/schemas";
 import type { EngineInput } from "@autopilot/insurance-engine";
+import { loadHouseholdMandateV2, MandateValidationError } from "@autopilot/database";
+import {
+  AutoCoverageDetails,
+  PropertyCoverageDetails,
+  mandateV2ToEngineMandate,
+} from "@autopilot/schemas";
+import type { EngineQuote, QuoteComponent } from "@autopilot/schemas";
 import { supabaseBrowser } from "@/lib/supabase";
 
 export interface DbQuote {
@@ -30,18 +30,32 @@ export interface DbQuote {
     id: string;
     product_line: "auto" | "property";
     annual_premium_cents: number;
+    asset_id?: string | null;
     quote_coverages: { coverage: Record<string, unknown> }[];
   }[];
 }
 
-function toComponent(c: DbQuote["quote_policy_components"][number]): QuoteComponent {
+function toComponent(c: DbQuote["quote_policy_components"][number]): QuoteComponent | null {
   const coverage = c.quote_coverages[0]?.coverage ?? {};
+  if (c.product_line === "auto") {
+    const parsed = AutoCoverageDetails.safeParse(coverage as unknown);
+    if (!parsed.success) return null;
+    return {
+      productLine: c.product_line,
+      assetId: c.asset_id ?? undefined,
+      annualPremiumCents: c.annual_premium_cents,
+      auto: parsed.data,
+      property: null,
+    };
+  }
+  const parsed = PropertyCoverageDetails.safeParse(coverage as unknown);
+  if (!parsed.success) return null;
   return {
     productLine: c.product_line,
+    assetId: c.asset_id ?? undefined,
     annualPremiumCents: c.annual_premium_cents,
-    auto: c.product_line === "auto" ? (coverage as unknown as AutoCoverageDetails) : null,
-    property:
-      c.product_line === "property" ? (coverage as unknown as PropertyCoverageDetails) : null,
+    auto: null,
+    property: parsed.data,
   };
 }
 
@@ -70,7 +84,9 @@ function toBillingMethod(value: string): EngineQuote["billingMethod"] {
     : undefined;
 }
 
-export function toEngineQuote(q: DbQuote): EngineQuote {
+export function toEngineQuote(q: DbQuote): EngineQuote | null {
+  const components = q.quote_policy_components.map(toComponent).filter(Boolean) as QuoteComponent[];
+  if (components.length !== q.quote_policy_components.length) return null;
   const insurer = q.insurers;
   const paymentFrequency = first(insurer?.payment_frequencies);
   const billingMethod = first(insurer?.billing_methods);
@@ -92,7 +108,7 @@ export function toEngineQuote(q: DbQuote): EngineQuote {
     bundleDiscountCents: q.bundle_discount_cents,
     cancellationChargeCents: q.cancellation_charge_cents,
     underwritingConditions: q.underwriting_conditions,
-    components: q.quote_policy_components.map(toComponent),
+    components,
     expiresAt: q.expires_at,
     paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : undefined,
     billingMethod: billingMethod ? toBillingMethod(billingMethod) : undefined,
@@ -106,32 +122,28 @@ export async function loadEngineInput(
   householdId: string,
 ): Promise<{ input: EngineInput; quotes: DbQuote[] } | { error: string }> {
   const supabase = supabaseBrowser();
-  const [quotesRes, reqRes, prefsRes] = await Promise.all([
+  const [quotesRes, mandateLoad, vehiclesRes, propertiesRes] = await Promise.all([
     supabase
       .from("quotes")
       .select(
-        "id, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, quote_coverages(coverage))",
+        "id, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage))",
       )
       .eq("case_id", caseId),
-    supabase
-      .from("coverage_requirements")
-      .select("auto_requirements, property_requirements, vehicle_mandates, property_mandates")
-      .eq("household_id", householdId)
-      .eq("is_current", true)
-      .maybeSingle(),
-    supabase
-      .from("switching_preferences")
-      .select("*")
-      .eq("household_id", householdId)
-      .eq("is_current", true)
-      .maybeSingle(),
+    loadHouseholdMandateV2(supabase, householdId).catch((err) => {
+      if (err instanceof MandateValidationError) {
+        return { error: `Mandate validation failed: ${err.message}` };
+      }
+      return { error: err instanceof Error ? err.message : String(err) };
+    }),
+    supabase.from("vehicles").select("id").eq("household_id", householdId),
+    supabase.from("properties").select("id").eq("household_id", householdId),
   ]);
 
   if (quotesRes.error) return { error: quotesRes.error.message };
-  if (!reqRes.data || !prefsRes.data) return { error: "Household mandate is not configured." };
+  if ("error" in mandateLoad) return { error: mandateLoad.error };
 
   const dbQuotes = quotesRes.data as unknown as DbQuote[];
-  const engineQuotes = dbQuotes.map(toEngineQuote);
+  const engineQuotes = dbQuotes.map(toEngineQuote).filter(Boolean) as EngineQuote[];
 
   const incumbentQuote = engineQuotes.find((q) => q.isIncumbent);
   if (!incumbentQuote) return { error: "No incumbent quote entered for this case." };
@@ -142,48 +154,7 @@ export async function loadEngineInput(
   if (!incumbentAutoComponent?.auto || !incumbentPropertyComponent?.property)
     return { error: "The incumbent quote must include both auto and property components." };
 
-  const prefs = prefsRes.data as Record<string, unknown>;
-
-  const mandate: HouseholdMandate = {
-    auto: reqRes.data.auto_requirements as HouseholdMandate["auto"],
-    property: reqRes.data.property_requirements as HouseholdMandate["property"],
-    switching: {
-      minNetAnnualSavingsCents: Number(prefs.min_net_annual_savings_cents ?? 0),
-      maxPremiumIncreaseCents: Number(prefs.max_premium_increase_cents ?? 0),
-      maxDeductibleIncreaseCents: Number(prefs.max_deductible_increase_cents ?? 0),
-      renewalOnlySwitching: Boolean(prefs.renewal_only_switching),
-      householdOptimizationEnabled: Boolean(prefs.household_optimization_enabled),
-      splitInsurersAllowed: Boolean(prefs.split_insurers_allowed),
-      allowBundleBreakup: Boolean(prefs.allow_bundle_breakup),
-      excludedInsurerIds: Array.isArray(prefs.excluded_insurer_ids)
-        ? (prefs.excluded_insurer_ids as string[])
-        : [],
-      deductibleIncreasesAllowed: Boolean(prefs.deductible_increases_allowed),
-      materialCoverageReductionsAllowed: Boolean(prefs.material_coverage_reductions_allowed),
-      customerApprovalRequired: true,
-      switchOnlyAfterCustomerApproval: Boolean(prefs.switch_only_after_customer_approval),
-      preferredPaymentFrequency:
-        (prefs.preferred_payment_frequency as HouseholdMandate["switching"]["preferredPaymentFrequency"]) ??
-        "annual",
-      preferredBillingMethod:
-        (prefs.preferred_billing_method as HouseholdMandate["switching"]["preferredBillingMethod"]) ??
-        "automatic_bank",
-      brokerDirectPreference:
-        (prefs.broker_direct_preference as HouseholdMandate["switching"]["brokerDirectPreference"]) ??
-        "indifferent",
-      minimumInsurerFinancialRating:
-        (prefs.minimum_insurer_financial_rating as HouseholdMandate["switching"]["minimumInsurerFinancialRating"]) ??
-        "any",
-    },
-    vehicleOverrides:
-      (reqRes.data.vehicle_mandates as Record<string, Partial<HouseholdMandate["auto"]>> | null) ??
-      {},
-    propertyOverrides:
-      (reqRes.data.property_mandates as Record<
-        string,
-        Partial<HouseholdMandate["property"]>
-      > | null) ?? {},
-  };
+  const mandate = mandateV2ToEngineMandate(mandateLoad.mandate, mandateLoad.switching);
 
   const input: EngineInput = {
     mandate,
@@ -197,6 +168,10 @@ export async function loadEngineInput(
       component: incumbentPropertyComponent as QuoteComponent & {
         property: PropertyCoverageDetails;
       },
+    },
+    assets: {
+      vehicles: (vehiclesRes.data ?? []).map((v) => ({ id: v.id })),
+      properties: (propertiesRes.data ?? []).map((p) => ({ id: p.id })),
     },
   };
 
