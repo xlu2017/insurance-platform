@@ -23,6 +23,7 @@ export {
   QuoteComponent,
   QuoteComponentDraft,
   QuoteValidationIssue,
+  QuoteSaveIntent,
   SaveCaseQuoteRequest,
 } from "../../schemas/src/quotes.ts";
 export { QuoteDataSource } from "../../schemas/src/enums.ts";

@@ -83,16 +83,14 @@ export const QuoteComponent = z.object({
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
   property: PropertyCoverageDetails.nullable(),
-  validationStatus: QuoteValidationStatus.default("valid"),
-  validationErrors: z
-    .array(
-      z.object({
-        path: z.array(z.string()),
-        code: z.string(),
-        message: z.string(),
-      }),
-    )
-    .default([]),
+  validationStatus: QuoteValidationStatus,
+  validationErrors: z.array(
+    z.object({
+      path: z.array(z.string()),
+      code: z.string(),
+      message: z.string(),
+    }),
+  ),
 });
 export type QuoteComponent = z.infer<typeof QuoteComponent>;
 
@@ -129,10 +127,10 @@ export const QuoteValidationIssue = z.object({
 });
 export type QuoteValidationIssue = z.infer<typeof QuoteValidationIssue>;
 
-export const AutoCoverageDetailsDraft = AutoCoverageDetails;
+export const AutoCoverageDetailsDraft = AutoCoverageDetails.partial();
 export type AutoCoverageDetailsDraft = z.infer<typeof AutoCoverageDetailsDraft>;
 
-export const PropertyCoverageDetailsDraft = PropertyCoverageDetails;
+export const PropertyCoverageDetailsDraft = PropertyCoverageDetails.partial();
 export type PropertyCoverageDetailsDraft = z.infer<typeof PropertyCoverageDetailsDraft>;
 
 export const QuoteComponentDraft = z.discriminatedUnion("productLine", [
@@ -153,11 +151,15 @@ export const QuoteComponentDraft = z.discriminatedUnion("productLine", [
 ]);
 export type QuoteComponentDraft = z.infer<typeof QuoteComponentDraft>;
 
+export const QuoteSaveIntent = z.enum(["draft", "validate"]);
+export type QuoteSaveIntent = z.infer<typeof QuoteSaveIntent>;
+
 export const SaveCaseQuoteRequest = z
   .object({
     caseId: z.string().uuid(),
     quoteId: z.string().uuid().optional(),
     expectedVersion: z.number().int().nonnegative().optional(),
+    saveIntent: QuoteSaveIntent,
     insurerId: z.string().uuid(),
     state: QuoteState,
     isIncumbent: z.boolean(),

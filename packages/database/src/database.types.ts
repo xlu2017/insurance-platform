@@ -1105,7 +1105,9 @@ export type Database = {
           created_at: string;
           data_source: Database["public"]["Enums"]["quote_data_source"] | null;
           id: string;
+          normalized_coverage: Json | null;
           quote_component_id: string;
+          raw_coverage: Json | null;
           updated_at: string;
           validated_at: string | null;
           validated_by: string | null;
@@ -1118,7 +1120,9 @@ export type Database = {
           created_at?: string;
           data_source?: Database["public"]["Enums"]["quote_data_source"] | null;
           id?: string;
+          normalized_coverage?: Json | null;
           quote_component_id: string;
+          raw_coverage?: Json | null;
           updated_at?: string;
           validated_at?: string | null;
           validated_by?: string | null;
@@ -1131,7 +1135,9 @@ export type Database = {
           created_at?: string;
           data_source?: Database["public"]["Enums"]["quote_data_source"] | null;
           id?: string;
+          normalized_coverage?: Json | null;
           quote_component_id?: string;
+          raw_coverage?: Json | null;
           updated_at?: string;
           validated_at?: string | null;
           validated_by?: string | null;

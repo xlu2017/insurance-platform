@@ -27,8 +27,14 @@ export type MonetaryRule = z.infer<typeof MonetaryRule>;
 
 export const LimitRuleV2 = MonetaryRule;
 export type LimitRuleV2 = MonetaryRule;
-export const DeductibleRuleV2 = MonetaryRule;
-export type DeductibleRuleV2 = MonetaryRule;
+
+export const DeductibleRuleV2 = z.discriminatedUnion("rule", [
+  z.object({ rule: z.literal("maximum"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("exact"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("match_current_or_better") }).strict(),
+  z.object({ rule: z.literal("any") }).strict(),
+]);
+export type DeductibleRuleV2 = z.infer<typeof DeductibleRuleV2>;
 
 // =============================================================================
 // Shared coverage-preference maps
@@ -74,7 +80,7 @@ export const WaterCoverageRequirementV2 = z
   .object({
     preference: CoveragePreference,
     limit: MonetaryRule,
-    deductible: MonetaryRule,
+    deductible: DeductibleRuleV2,
   })
   .strict();
 export type WaterCoverageRequirementV2 = z.infer<typeof WaterCoverageRequirementV2>;
@@ -93,9 +99,9 @@ export const AutoMandateV2 = z
   .object({
     coverageForm: AutoCoverageFormRequirementV2,
     liability: MonetaryRule,
-    collisionDeductible: MonetaryRule,
-    comprehensiveDeductible: MonetaryRule,
-    glassDeductible: MonetaryRule,
+    collisionDeductible: DeductibleRuleV2,
+    comprehensiveDeductible: DeductibleRuleV2,
+    glassDeductible: DeductibleRuleV2,
     endorsements: AutoEndorsementPreferencesV2,
   })
   .strict();
@@ -137,10 +143,10 @@ export const PropertyMandateV2 = z
     detachedStructuresLimit: MonetaryRule,
     personalLiabilityLimit: MonetaryRule,
     additionalLivingExpenseLimit: MonetaryRule,
-    baseDeductible: MonetaryRule,
-    waterDeductible: MonetaryRule,
-    windHailDeductible: MonetaryRule,
-    earthquakeDeductible: MonetaryRule,
+    baseDeductible: DeductibleRuleV2,
+    waterDeductible: DeductibleRuleV2,
+    windHailDeductible: DeductibleRuleV2,
+    earthquakeDeductible: DeductibleRuleV2,
     sewerBackup: WaterCoverageRequirementV2,
     overlandWater: WaterCoverageRequirementV2,
     optionalCoverages: PropertyOptionalCoveragePreferencesV2,
@@ -184,9 +190,9 @@ export const AutoMandateOverrideValuesV2 = z
   .object({
     coverageForm: AutoCoverageFormRequirementV2.optional(),
     liability: MonetaryRule.optional(),
-    collisionDeductible: MonetaryRule.optional(),
-    comprehensiveDeductible: MonetaryRule.optional(),
-    glassDeductible: MonetaryRule.optional(),
+    collisionDeductible: DeductibleRuleV2.optional(),
+    comprehensiveDeductible: DeductibleRuleV2.optional(),
+    glassDeductible: DeductibleRuleV2.optional(),
     endorsements: AutoEndorsementPreferencesV2.partial().optional(),
   })
   .strict();
@@ -209,10 +215,10 @@ export const PropertyMandateOverrideValuesV2 = z
     detachedStructuresLimit: MonetaryRule.optional(),
     personalLiabilityLimit: MonetaryRule.optional(),
     additionalLivingExpenseLimit: MonetaryRule.optional(),
-    baseDeductible: MonetaryRule.optional(),
-    waterDeductible: MonetaryRule.optional(),
-    windHailDeductible: MonetaryRule.optional(),
-    earthquakeDeductible: MonetaryRule.optional(),
+    baseDeductible: DeductibleRuleV2.optional(),
+    waterDeductible: DeductibleRuleV2.optional(),
+    windHailDeductible: DeductibleRuleV2.optional(),
+    earthquakeDeductible: DeductibleRuleV2.optional(),
     sewerBackup: WaterCoverageRequirementV2.partial().optional(),
     overlandWater: WaterCoverageRequirementV2.partial().optional(),
     optionalCoverages: PropertyOptionalCoveragePreferencesV2.partial().optional(),

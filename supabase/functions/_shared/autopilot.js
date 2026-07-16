@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 16263236150319eef57083603a09a54710ad9dda1b142ae24f69f37c076c288c
+// source-hash: 1863590c5e86f8057c84d954c33790197aad6a9ec88aef7e2ae6416e66954a4f
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -4395,6 +4395,12 @@ var MonetaryRule = z.discriminatedUnion("rule", [
   z.object({ rule: z.literal("match_current_or_better") }).strict(),
   z.object({ rule: z.literal("any") }).strict()
 ]);
+var DeductibleRuleV2 = z.discriminatedUnion("rule", [
+  z.object({ rule: z.literal("maximum"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("exact"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("match_current_or_better") }).strict(),
+  z.object({ rule: z.literal("any") }).strict()
+]);
 var autoEndorsementKeys2 = AutoEndorsementKey.options;
 var propertyOptionalCoverageKeys2 = PropertyOptionalCoverageKey.options;
 var AutoEndorsementPreferencesV2 = z.object(
@@ -4408,7 +4414,7 @@ var PropertyOptionalCoveragePreferencesV2 = z.object(
 var WaterCoverageRequirementV2 = z.object({
   preference: CoveragePreference,
   limit: MonetaryRule,
-  deductible: MonetaryRule
+  deductible: DeductibleRuleV2
 }).strict();
 var AutoCoverageFormRequirementV2 = z.object({
   preference: CoveragePreference,
@@ -4417,9 +4423,9 @@ var AutoCoverageFormRequirementV2 = z.object({
 var AutoMandateV2 = z.object({
   coverageForm: AutoCoverageFormRequirementV2,
   liability: MonetaryRule,
-  collisionDeductible: MonetaryRule,
-  comprehensiveDeductible: MonetaryRule,
-  glassDeductible: MonetaryRule,
+  collisionDeductible: DeductibleRuleV2,
+  comprehensiveDeductible: DeductibleRuleV2,
+  glassDeductible: DeductibleRuleV2,
   endorsements: AutoEndorsementPreferencesV2
 }).strict();
 var PropertyCoverageFormRequirementV2 = z.object({
@@ -4438,10 +4444,10 @@ var PropertyMandateV2 = z.object({
   detachedStructuresLimit: MonetaryRule,
   personalLiabilityLimit: MonetaryRule,
   additionalLivingExpenseLimit: MonetaryRule,
-  baseDeductible: MonetaryRule,
-  waterDeductible: MonetaryRule,
-  windHailDeductible: MonetaryRule,
-  earthquakeDeductible: MonetaryRule,
+  baseDeductible: DeductibleRuleV2,
+  waterDeductible: DeductibleRuleV2,
+  windHailDeductible: DeductibleRuleV2,
+  earthquakeDeductible: DeductibleRuleV2,
   sewerBackup: WaterCoverageRequirementV2,
   overlandWater: WaterCoverageRequirementV2,
   optionalCoverages: PropertyOptionalCoveragePreferencesV2
@@ -4449,9 +4455,9 @@ var PropertyMandateV2 = z.object({
 var AutoMandateOverrideValuesV2 = z.object({
   coverageForm: AutoCoverageFormRequirementV2.optional(),
   liability: MonetaryRule.optional(),
-  collisionDeductible: MonetaryRule.optional(),
-  comprehensiveDeductible: MonetaryRule.optional(),
-  glassDeductible: MonetaryRule.optional(),
+  collisionDeductible: DeductibleRuleV2.optional(),
+  comprehensiveDeductible: DeductibleRuleV2.optional(),
+  glassDeductible: DeductibleRuleV2.optional(),
   endorsements: AutoEndorsementPreferencesV2.partial().optional()
 }).strict();
 var VehicleMandateOverrideV2 = z.object({
@@ -4466,10 +4472,10 @@ var PropertyMandateOverrideValuesV2 = z.object({
   detachedStructuresLimit: MonetaryRule.optional(),
   personalLiabilityLimit: MonetaryRule.optional(),
   additionalLivingExpenseLimit: MonetaryRule.optional(),
-  baseDeductible: MonetaryRule.optional(),
-  waterDeductible: MonetaryRule.optional(),
-  windHailDeductible: MonetaryRule.optional(),
-  earthquakeDeductible: MonetaryRule.optional(),
+  baseDeductible: DeductibleRuleV2.optional(),
+  waterDeductible: DeductibleRuleV2.optional(),
+  windHailDeductible: DeductibleRuleV2.optional(),
+  earthquakeDeductible: DeductibleRuleV2.optional(),
   sewerBackup: WaterCoverageRequirementV2.partial().optional(),
   overlandWater: WaterCoverageRequirementV2.partial().optional(),
   optionalCoverages: PropertyOptionalCoveragePreferencesV2.partial().optional()
@@ -4548,7 +4554,7 @@ function monetaryRuleV2ToLegacyLimit(rule) {
   const cents = "amountCents" in rule ? rule.amountCents : 0;
   return LimitRequirement.parse({ rule: r, cents });
 }
-function monetaryRuleV2ToLegacyDeductible(rule) {
+function deductibleRuleV2ToLegacyDeductible(rule) {
   const r = DeductibleRule.parse(rule.rule);
   const cents = "amountCents" in rule ? rule.amountCents : 0;
   return DeductibleRequirement.parse({ rule: r, cents });
@@ -4557,16 +4563,16 @@ function v2WaterToLegacy(water) {
   return {
     preference: water.preference,
     limit: monetaryRuleV2ToLegacyLimit(water.limit),
-    deductible: monetaryRuleV2ToLegacyDeductible(water.deductible)
+    deductible: deductibleRuleV2ToLegacyDeductible(water.deductible)
   };
 }
 function v2AutoMandateToLegacy(auto) {
   return {
     coverageForm: AutoCoverageFormRequirement.parse(auto.coverageForm),
     liability: monetaryRuleV2ToLegacyLimit(auto.liability),
-    collisionDeductible: monetaryRuleV2ToLegacyDeductible(auto.collisionDeductible),
-    comprehensiveDeductible: monetaryRuleV2ToLegacyDeductible(auto.comprehensiveDeductible),
-    glassDeductible: monetaryRuleV2ToLegacyDeductible(auto.glassDeductible),
+    collisionDeductible: deductibleRuleV2ToLegacyDeductible(auto.collisionDeductible),
+    comprehensiveDeductible: deductibleRuleV2ToLegacyDeductible(auto.comprehensiveDeductible),
+    glassDeductible: deductibleRuleV2ToLegacyDeductible(auto.glassDeductible),
     endorsements: AutoEndorsementPreferences.parse(auto.endorsements)
   };
 }
@@ -4581,10 +4587,10 @@ function v2PropertyMandateToLegacy(property) {
     additionalLivingExpenseLimit: monetaryRuleV2ToLegacyLimit(
       property.additionalLivingExpenseLimit
     ),
-    baseDeductible: monetaryRuleV2ToLegacyDeductible(property.baseDeductible),
-    waterDeductible: monetaryRuleV2ToLegacyDeductible(property.waterDeductible),
-    windHailDeductible: monetaryRuleV2ToLegacyDeductible(property.windHailDeductible),
-    earthquakeDeductible: monetaryRuleV2ToLegacyDeductible(property.earthquakeDeductible),
+    baseDeductible: deductibleRuleV2ToLegacyDeductible(property.baseDeductible),
+    waterDeductible: deductibleRuleV2ToLegacyDeductible(property.waterDeductible),
+    windHailDeductible: deductibleRuleV2ToLegacyDeductible(property.windHailDeductible),
+    earthquakeDeductible: deductibleRuleV2ToLegacyDeductible(property.earthquakeDeductible),
     sewerBackup: v2WaterToLegacy(property.sewerBackup),
     overlandWater: v2WaterToLegacy(property.overlandWater),
     optionalCoverages: PropertyOptionalCoveragePreferences.parse(property.optionalCoverages)
@@ -4711,14 +4717,14 @@ var QuoteComponent = z.object({
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
   property: PropertyCoverageDetails.nullable(),
-  validationStatus: QuoteValidationStatus.default("valid"),
+  validationStatus: QuoteValidationStatus,
   validationErrors: z.array(
     z.object({
       path: z.array(z.string()),
       code: z.string(),
       message: z.string()
     })
-  ).default([])
+  )
 });
 var EngineQuote = z.object({
   id: z.string(),
@@ -4747,8 +4753,8 @@ var QuoteValidationIssue = z.object({
   received: z.unknown(),
   message: z.string()
 });
-var AutoCoverageDetailsDraft = AutoCoverageDetails;
-var PropertyCoverageDetailsDraft = PropertyCoverageDetails;
+var AutoCoverageDetailsDraft = AutoCoverageDetails.partial();
+var PropertyCoverageDetailsDraft = PropertyCoverageDetails.partial();
 var QuoteComponentDraft = z.discriminatedUnion("productLine", [
   z.object({
     componentId: z.string().uuid().optional(),
@@ -4765,10 +4771,12 @@ var QuoteComponentDraft = z.discriminatedUnion("productLine", [
     coverage: PropertyCoverageDetailsDraft
   })
 ]);
+var QuoteSaveIntent = z.enum(["draft", "validate"]);
 var SaveCaseQuoteRequest = z.object({
   caseId: z.string().uuid(),
   quoteId: z.string().uuid().optional(),
   expectedVersion: z.number().int().nonnegative().optional(),
+  saveIntent: QuoteSaveIntent,
   insurerId: z.string().uuid(),
   state: QuoteState,
   isIncumbent: z.boolean(),
@@ -6625,7 +6633,7 @@ function toComponent(c) {
       message: "Quote component has no active coverage row"
     };
   }
-  const coverage = row.coverage;
+  const coverage = row.normalized_coverage ?? row.coverage;
   const validationStatus = row.validation_status;
   const validationErrors = row.validation_errors ?? [];
   if (validationStatus !== "valid") {
@@ -6637,7 +6645,7 @@ function toComponent(c) {
     };
   }
   if (c.product_line === "auto") {
-    const parsed2 = AutoCoverageDetails.safeParse(coverage);
+    const parsed2 = AutoCoverageDetails.safeParse(coverage ?? {});
     if (!parsed2.success) {
       return {
         quoteId: void 0,
@@ -6657,7 +6665,7 @@ function toComponent(c) {
       validationErrors
     };
   }
-  const parsed = PropertyCoverageDetails.safeParse(coverage);
+  const parsed = PropertyCoverageDetails.safeParse(coverage ?? {});
   if (!parsed.success) {
     return {
       quoteId: void 0,
@@ -6734,7 +6742,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     supabase.from("vehicles").select("id").eq("household_id", householdId),
     supabase.from("properties").select("id").eq("household_id", householdId),
     supabase.from("quotes").select(
-      "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
+      "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
     ).eq("case_id", caseId)
   ]);
   if (!mandateResult || "code" in mandateResult) {
@@ -6811,6 +6819,7 @@ export {
   QuoteComponent,
   QuoteComponentDraft,
   QuoteDataSource,
+  QuoteSaveIntent,
   QuoteValidationIssue,
   SaveCaseQuoteRequest,
   SwitchingPreferencesV2,
@@ -6824,4 +6833,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "16263236150319eef57083603a09a54710ad9dda1b142ae24f69f37c076c288c";
+export const __AUTOPILOT_SOURCE_HASH__ = "1863590c5e86f8057c84d954c33790197aad6a9ec88aef7e2ae6416e66954a4f";

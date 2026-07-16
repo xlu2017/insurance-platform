@@ -164,18 +164,26 @@ insert into quote_policy_components (id, quote_id, product_line, annual_premium_
   ('33000000-0000-0000-0000-000000000006', '32000000-0000-0000-0000-000000000004', 'property', 110000, '23000000-0000-0000-0000-000000000001');
 
 -- Standard coverage payloads for each component.
-insert into quote_coverages (quote_component_id, coverage, validation_status, validated_at, validated_by, coverage_schema_version, data_source)
-select id, case when product_line = 'auto' then
-  '{"thirdPartyLiabilityCents": 200000000, "coverageForm": "comprehensive", "collisionIncluded": true, "collisionDeductibleCents": 50000, "comprehensiveIncluded": true, "comprehensiveDeductibleCents": 50000, "glassDeductibleCents": null, "accidentForgivenessIncluded": true, "rentalVehicleCoverageIncluded": true, "nonOwnedAutomobileIncluded": false, "familyProtectionIncluded": false, "depreciationWaiverIncluded": false, "oemPartsIncluded": false, "roadsideAssistanceIncluded": false, "disappearingDeductibleIncluded": false, "glassCoverageIncluded": false, "telematicsRequired": false, "vehicleClass": "personal", "financingStatus": "owned"}'::jsonb
-else
-  '{"propertyType": "homeowner", "coverageForm": "comprehensive", "settlementBasis": "replacement_cost", "dwellingLimitCents": 45000000, "contentsLimitCents": 30000000, "detachedStructuresLimitCents": 5000000, "personalLiabilityLimitCents": 2000000000, "additionalLivingExpenseLimitCents": 20000000, "baseDeductibleCents": 100000, "waterDeductibleCents": 200000, "windHailIncluded": false, "windHailDeductibleCents": null, "earthquakeIncluded": false, "earthquakeDeductibleCents": null, "sewerBackupIncluded": true, "sewerBackupLimitCents": null, "sewerBackupDeductibleCents": null, "overlandWaterIncluded": true, "overlandWaterLimitCents": null, "overlandWaterDeductibleCents": null, "groundwaterIncluded": false, "iceDamIncluded": false, "equipmentBreakdownIncluded": false, "serviceLineIncluded": false, "bylawCoverageIncluded": false, "homeSystemsIncluded": false, "cyberCoverageIncluded": false, "scheduledValuablesIncluded": false, "homeBusinessIncluded": false, "shortTermRentalPermissionIncluded": false, "claimsForgivenessIncluded": false}'::jsonb
-end,
+with coverage_payloads as (
+  select id,
+    case when product_line = 'auto' then
+      '{"thirdPartyLiabilityCents": 200000000, "coverageForm": "comprehensive", "collisionIncluded": true, "collisionDeductibleCents": 50000, "comprehensiveIncluded": true, "comprehensiveDeductibleCents": 50000, "glassDeductibleCents": null, "accidentForgivenessIncluded": true, "rentalVehicleCoverageIncluded": true, "nonOwnedAutomobileIncluded": false, "familyProtectionIncluded": false, "depreciationWaiverIncluded": false, "oemPartsIncluded": false, "roadsideAssistanceIncluded": false, "disappearingDeductibleIncluded": false, "glassCoverageIncluded": false, "telematicsRequired": false, "vehicleClass": "personal", "financingStatus": "owned"}'::jsonb
+    else
+      '{"propertyType": "homeowner", "coverageForm": "comprehensive", "settlementBasis": "replacement_cost", "dwellingLimitCents": 45000000, "contentsLimitCents": 30000000, "detachedStructuresLimitCents": 5000000, "personalLiabilityLimitCents": 2000000000, "additionalLivingExpenseLimitCents": 20000000, "baseDeductibleCents": 100000, "waterDeductibleCents": 200000, "windHailIncluded": false, "windHailDeductibleCents": null, "earthquakeIncluded": false, "earthquakeDeductibleCents": null, "sewerBackupIncluded": true, "sewerBackupLimitCents": null, "sewerBackupDeductibleCents": null, "overlandWaterIncluded": true, "overlandWaterLimitCents": null, "overlandWaterDeductibleCents": null, "groundwaterIncluded": false, "iceDamIncluded": false, "equipmentBreakdownIncluded": false, "serviceLineIncluded": false, "bylawCoverageIncluded": false, "homeSystemsIncluded": false, "cyberCoverageIncluded": false, "scheduledValuablesIncluded": false, "homeBusinessIncluded": false, "shortTermRentalPermissionIncluded": false, "claimsForgivenessIncluded": false}'::jsonb
+    end as payload
+  from quote_policy_components
+)
+insert into quote_coverages (quote_component_id, coverage, raw_coverage, normalized_coverage, validation_status, validated_at, validated_by, coverage_schema_version, data_source)
+select id,
+  payload,
+  payload,
+  payload,
   'valid'::quote_validation_status,
   now(),
   '00000000-0000-0000-0000-000000000002'::uuid,
   2,
   'manual_entry'
-from quote_policy_components;
+from coverage_payloads;
 
 -- Pending customer question.
 insert into customer_questions (id, case_id, question_type, status, prompt, options, created_by) values

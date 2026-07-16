@@ -238,6 +238,7 @@ async function saveCaseQuote(quoteId, components, dataSource) {
     caseId,
     quoteId: quote.id,
     expectedVersion: quote.version,
+    saveIntent: "validate",
     insurerId: quote.insurer_id,
     state: quote.state,
     isIncumbent: quote.is_incumbent,

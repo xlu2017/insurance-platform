@@ -34,7 +34,9 @@ export interface DbQuotePolicyComponent {
   annual_premium_cents: number;
   asset_id: string | null;
   quote_coverages: {
-    coverage: Record<string, unknown>;
+    coverage?: Record<string, unknown>;
+    raw_coverage?: Record<string, unknown>;
+    normalized_coverage?: Record<string, unknown>;
     validation_status?: string;
     validation_errors?: { path: string[]; code: string; message: string }[];
     coverage_schema_version?: number;
@@ -98,7 +100,7 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
       message: "Quote component has no active coverage row",
     };
   }
-  const coverage = row.coverage;
+  const coverage = row.normalized_coverage ?? row.coverage;
   const validationStatus = row.validation_status;
   const validationErrors = row.validation_errors ?? [];
 
@@ -112,7 +114,7 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
   }
 
   if (c.product_line === "auto") {
-    const parsed = AutoCoverageDetails.safeParse(coverage);
+    const parsed = AutoCoverageDetails.safeParse(coverage ?? {});
     if (!parsed.success) {
       return {
         quoteId: undefined,
@@ -133,7 +135,7 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
     };
   }
 
-  const parsed = PropertyCoverageDetails.safeParse(coverage);
+  const parsed = PropertyCoverageDetails.safeParse(coverage ?? {});
   if (!parsed.success) {
     return {
       quoteId: undefined,

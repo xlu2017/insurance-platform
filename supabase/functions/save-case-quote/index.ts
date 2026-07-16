@@ -7,6 +7,13 @@
 // draft/incomplete/invalid/valid using structured Zod issue metadata, and calls
 // the internal service-role-only RPC persist_case_quote_v2.
 //
+// The explicit saveIntent boundary controls whether a request is accepted as a
+// draft or must be fully validated before persistence:
+//   - "draft": permits incomplete coverage, classifies issues, persists the raw
+//     input, never produces normalized engine input.
+//   - "validate": requires every component to be strictly valid; on any issue
+//     it returns 422 and leaves the quote unchanged.
+//
 // No part of the quote, component, or coverage aggregate is written unless the
 // whole transaction succeeds.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -14,6 +21,7 @@ import {
   AutoCoverageDetails,
   PropertyCoverageDetails,
   QuoteDataSource,
+  QuoteSaveIntent,
   SaveCaseQuoteRequest,
   type QuoteComponentDraft,
 } from "../_shared/autopilot.js";
@@ -33,7 +41,8 @@ interface ClassifiedComponent {
   product_line: "auto" | "property";
   asset_id: string;
   annual_premium_cents: number;
-  coverage: Record<string, unknown>;
+  raw_coverage: Record<string, unknown>;
+  normalized_coverage: Record<string, unknown> | null;
   validation_status: "draft" | "incomplete" | "invalid" | "valid";
   validation_errors: ValidationIssue[];
   coverage_schema_version: number;
@@ -104,9 +113,19 @@ function validateCoverage(
   );
 }
 
+function normalizeCoverage(
+  productLine: "auto" | "property",
+  coverage: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const schema = productLine === "auto" ? AutoCoverageDetails : PropertyCoverageDetails;
+  const parsed = schema.safeParse(coverage);
+  return parsed.success ? (parsed.data as Record<string, unknown>) : null;
+}
+
 function validateAndClassifyComponent(
   component: QuoteComponentDraft,
   householdAssets: { vehicleIds: Set<string>; propertyIds: Set<string> },
+  saveIntent: "draft" | "validate",
 ): ClassifiedComponent {
   const issues: ValidationIssue[] = [];
 
@@ -185,13 +204,29 @@ function validateAndClassifyComponent(
     }
   }
 
+  const classification = classifyStatus(issues);
+  const normalized =
+    saveIntent === "validate" && classification === "valid"
+      ? normalizeCoverage(component.productLine, component.coverage)
+      : null;
+
+  // A draft is never promoted to valid, even when the coverage is complete;
+  // it remains raw input only.
+  const validation_status: ClassifiedComponent["validation_status"] =
+    saveIntent === "draft"
+      ? classification === "valid"
+        ? "draft"
+        : classification
+      : classification;
+
   return {
     component_id: component.componentId,
     product_line: component.productLine,
     asset_id: component.assetId,
     annual_premium_cents: component.annualPremiumCents,
-    coverage: component.coverage as Record<string, unknown>,
-    validation_status: classifyStatus(issues),
+    raw_coverage: component.coverage as Record<string, unknown>,
+    normalized_coverage: normalized,
+    validation_status,
     validation_errors: issues,
     coverage_schema_version: COVERAGE_SCHEMA_VERSION,
   };
@@ -251,6 +286,13 @@ Deno.serve(async (req) => {
   }
 
   const request = parsedRequest.data;
+  const saveIntent = request.saveIntent;
+  if (!QuoteSaveIntent.safeParse(saveIntent).success) {
+    return jsonResponse(
+      { code: "INVALID_SAVE_INTENT", message: "saveIntent must be 'draft' or 'validate'" },
+      400,
+    );
+  }
 
   const { data: canAccess } = await supabase.rpc("can_access_case_for_profile", {
     p_case_id: request.caseId,
@@ -298,8 +340,22 @@ Deno.serve(async (req) => {
   }
 
   const classifiedComponents = request.components.map((component) =>
-    validateAndClassifyComponent(component as QuoteComponentDraft, householdAssets),
+    validateAndClassifyComponent(component as QuoteComponentDraft, householdAssets, saveIntent),
   );
+
+  if (saveIntent === "validate") {
+    const invalidComponents = classifiedComponents.filter((c) => c.validation_status !== "valid");
+    if (invalidComponents.length > 0) {
+      return jsonResponse(
+        {
+          code: "QUOTE_VALIDATION_FAILED",
+          message: "One or more components failed validation; the quote was not saved.",
+          components: invalidComponents,
+        },
+        422,
+      );
+    }
+  }
 
   const rpcBody = {
     p_case_id: request.caseId,
@@ -332,13 +388,16 @@ Deno.serve(async (req) => {
     ? "invalid"
     : statuses.includes("incomplete")
       ? "incomplete"
-      : "valid";
+      : saveIntent === "draft"
+        ? "draft"
+        : "valid";
 
   return jsonResponse({
     success: true,
     quoteId: (persisted as { quoteId?: string })?.quoteId,
     version: (persisted as { version?: number })?.version,
     aggregateStatus,
+    saveIntent,
     components: classifiedComponents,
   });
 });

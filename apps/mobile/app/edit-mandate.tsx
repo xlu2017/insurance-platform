@@ -47,8 +47,9 @@ import type {
   AutoMandateOverrideValuesV2,
   AutoMandateV2,
   CoveragePreference,
+  DeductibleRuleV2,
   HouseholdCoverageMandateV2,
-  MonetaryRule,
+  LimitRuleV2,
   PropertyMandateOverrideValuesV2,
   PropertyMandateV2,
   SwitchingPreferencesV2,
@@ -70,19 +71,20 @@ function Collapsible({ title, children }: { title: string; children: React.React
   );
 }
 
-function MonetaryRuleField({
+function RuleField<T extends { rule: string } & Record<string, unknown>>({
   label,
   options,
   value,
   onChange,
 }: {
   label: string;
-  options: { value: MonetaryRule["rule"]; label: string }[];
-  value: MonetaryRule;
-  onChange: (next: MonetaryRule) => void;
+  options: { value: T["rule"]; label: string }[];
+  value: T;
+  onChange: (next: T) => void;
 }) {
   const showAmount = value.rule === "minimum" || value.rule === "maximum" || value.rule === "exact";
-  const amountCents = "amountCents" in value ? value.amountCents : 0;
+  const amountCents =
+    "amountCents" in value && typeof value.amountCents === "number" ? value.amountCents : 0;
   return (
     <View style={{ marginBottom: 8 }}>
       <Select
@@ -91,9 +93,9 @@ function MonetaryRuleField({
         value={value.rule}
         onValueChange={(rule) => {
           if (rule === "minimum" || rule === "maximum" || rule === "exact") {
-            onChange({ rule, amountCents });
+            onChange({ rule, amountCents } as unknown as T);
           } else {
-            onChange({ rule });
+            onChange({ rule } as unknown as T);
           }
         }}
       />
@@ -106,12 +108,30 @@ function MonetaryRuleField({
             onChange({
               rule: value.rule as "minimum" | "maximum" | "exact",
               amountCents: centsFromDollars(text),
-            })
+            } as unknown as T)
           }
         />
       ) : null}
     </View>
   );
+}
+
+function LimitRuleField(props: {
+  label: string;
+  options: { value: LimitRuleV2["rule"]; label: string }[];
+  value: LimitRuleV2;
+  onChange: (next: LimitRuleV2) => void;
+}) {
+  return <RuleField<LimitRuleV2> {...props} />;
+}
+
+function DeductibleRuleField(props: {
+  label: string;
+  options: { value: DeductibleRuleV2["rule"]; label: string }[];
+  value: DeductibleRuleV2;
+  onChange: (next: DeductibleRuleV2) => void;
+}) {
+  return <RuleField<DeductibleRuleV2> {...props} />;
 }
 
 function PreferenceSelect({
@@ -149,13 +169,13 @@ function WaterEditorV2({
         value={value.preference}
         onChange={(preference) => onChange({ ...value, preference })}
       />
-      <MonetaryRuleField
+      <LimitRuleField
         label={`${name} limit`}
         options={limitRuleOptions}
         value={value.limit}
         onChange={(limit) => onChange({ ...value, limit })}
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label={`${name} deductible`}
         options={deductibleRuleOptions}
         value={value.deductible}
@@ -193,25 +213,25 @@ function AutoMandateEditorV2({
           onChange({ ...value, coverageForm: { ...value.coverageForm, preference: v } })
         }
       />
-      <MonetaryRuleField
+      <LimitRuleField
         label="Liability"
         options={limitRuleOptions}
         value={value.liability}
         onChange={(liability) => onChange({ ...value, liability })}
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label="Collision deductible"
         options={deductibleRuleOptions}
         value={value.collisionDeductible}
         onChange={(collisionDeductible) => onChange({ ...value, collisionDeductible })}
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label="Comprehensive deductible"
         options={deductibleRuleOptions}
         value={value.comprehensiveDeductible}
         onChange={(comprehensiveDeductible) => onChange({ ...value, comprehensiveDeductible })}
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label="Glass deductible"
         options={deductibleRuleOptions}
         value={value.glassDeductible}
@@ -277,31 +297,31 @@ function PropertyMandateEditorV2({
           onChange({ ...value, settlementBasis: { ...value.settlementBasis, preference: v } })
         }
       />
-      <MonetaryRuleField
+      <LimitRuleField
         label="Dwelling limit"
         options={limitRuleOptions}
         value={value.dwellingLimit}
         onChange={(dwellingLimit) => onChange({ ...value, dwellingLimit })}
       />
-      <MonetaryRuleField
+      <LimitRuleField
         label="Contents limit"
         options={limitRuleOptions}
         value={value.contentsLimit}
         onChange={(contentsLimit) => onChange({ ...value, contentsLimit })}
       />
-      <MonetaryRuleField
+      <LimitRuleField
         label="Detached structures limit"
         options={limitRuleOptions}
         value={value.detachedStructuresLimit}
         onChange={(detachedStructuresLimit) => onChange({ ...value, detachedStructuresLimit })}
       />
-      <MonetaryRuleField
+      <LimitRuleField
         label="Personal liability limit"
         options={limitRuleOptions}
         value={value.personalLiabilityLimit}
         onChange={(personalLiabilityLimit) => onChange({ ...value, personalLiabilityLimit })}
       />
-      <MonetaryRuleField
+      <LimitRuleField
         label="Additional living expense limit"
         options={limitRuleOptions}
         value={value.additionalLivingExpenseLimit}
@@ -309,25 +329,25 @@ function PropertyMandateEditorV2({
           onChange({ ...value, additionalLivingExpenseLimit })
         }
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label="Base deductible"
         options={deductibleRuleOptions}
         value={value.baseDeductible}
         onChange={(baseDeductible) => onChange({ ...value, baseDeductible })}
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label="Water deductible"
         options={deductibleRuleOptions}
         value={value.waterDeductible}
         onChange={(waterDeductible) => onChange({ ...value, waterDeductible })}
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label="Wind/hail deductible"
         options={deductibleRuleOptions}
         value={value.windHailDeductible}
         onChange={(windHailDeductible) => onChange({ ...value, windHailDeductible })}
       />
-      <MonetaryRuleField
+      <DeductibleRuleField
         label="Earthquake deductible"
         options={deductibleRuleOptions}
         value={value.earthquakeDeductible}
@@ -362,7 +382,7 @@ function PropertyMandateEditorV2({
   );
 }
 
-function diffMonetaryRule(a: MonetaryRule, b: MonetaryRule): MonetaryRule | undefined {
+function diffRule<T extends { rule: string } & Record<string, unknown>>(a: T, b: T): T | undefined {
   if (JSON.stringify(a) === JSON.stringify(b)) return undefined;
   return b;
 }
@@ -375,16 +395,16 @@ function diffAutoMandate(
   if (JSON.stringify(defaults.coverageForm) !== JSON.stringify(next.coverageForm)) {
     patch.coverageForm = next.coverageForm;
   }
-  const liabilityDiff = diffMonetaryRule(defaults.liability, next.liability);
+  const liabilityDiff = diffRule(defaults.liability, next.liability);
   if (liabilityDiff) patch.liability = liabilityDiff;
-  const collisionDiff = diffMonetaryRule(defaults.collisionDeductible, next.collisionDeductible);
+  const collisionDiff = diffRule(defaults.collisionDeductible, next.collisionDeductible);
   if (collisionDiff) patch.collisionDeductible = collisionDiff;
-  const comprehensiveDiff = diffMonetaryRule(
+  const comprehensiveDiff = diffRule(
     defaults.comprehensiveDeductible,
     next.comprehensiveDeductible,
   );
   if (comprehensiveDiff) patch.comprehensiveDeductible = comprehensiveDiff;
-  const glassDiff = diffMonetaryRule(defaults.glassDeductible, next.glassDeductible);
+  const glassDiff = diffRule(defaults.glassDeductible, next.glassDeductible);
   if (glassDiff) patch.glassDeductible = glassDiff;
 
   const endorsements: Partial<AutoMandateV2["endorsements"]> = {};
@@ -405,9 +425,9 @@ function diffWater(
 ): Partial<WaterCoverageRequirementV2> | undefined {
   const patch: Partial<WaterCoverageRequirementV2> = {};
   if (defaults.preference !== next.preference) patch.preference = next.preference;
-  const limitDiff = diffMonetaryRule(defaults.limit, next.limit);
+  const limitDiff = diffRule(defaults.limit, next.limit);
   if (limitDiff) patch.limit = limitDiff;
-  const deductibleDiff = diffMonetaryRule(defaults.deductible, next.deductible);
+  const deductibleDiff = diffRule(defaults.deductible, next.deductible);
   if (deductibleDiff) patch.deductible = deductibleDiff;
   return Object.keys(patch).length > 0 ? patch : undefined;
 }
@@ -421,32 +441,29 @@ function diffPropertyMandate(
     patch.coverageForm = next.coverageForm;
   if (JSON.stringify(defaults.settlementBasis) !== JSON.stringify(next.settlementBasis))
     patch.settlementBasis = next.settlementBasis;
-  const dwellingDiff = diffMonetaryRule(defaults.dwellingLimit, next.dwellingLimit);
+  const dwellingDiff = diffRule(defaults.dwellingLimit, next.dwellingLimit);
   if (dwellingDiff) patch.dwellingLimit = dwellingDiff;
-  const contentsDiff = diffMonetaryRule(defaults.contentsLimit, next.contentsLimit);
+  const contentsDiff = diffRule(defaults.contentsLimit, next.contentsLimit);
   if (contentsDiff) patch.contentsLimit = contentsDiff;
-  const detachedDiff = diffMonetaryRule(
-    defaults.detachedStructuresLimit,
-    next.detachedStructuresLimit,
-  );
+  const detachedDiff = diffRule(defaults.detachedStructuresLimit, next.detachedStructuresLimit);
   if (detachedDiff) patch.detachedStructuresLimit = detachedDiff;
-  const personalLiabilityDiff = diffMonetaryRule(
+  const personalLiabilityDiff = diffRule(
     defaults.personalLiabilityLimit,
     next.personalLiabilityLimit,
   );
   if (personalLiabilityDiff) patch.personalLiabilityLimit = personalLiabilityDiff;
-  const aleDiff = diffMonetaryRule(
+  const aleDiff = diffRule(
     defaults.additionalLivingExpenseLimit,
     next.additionalLivingExpenseLimit,
   );
   if (aleDiff) patch.additionalLivingExpenseLimit = aleDiff;
-  const baseDeductibleDiff = diffMonetaryRule(defaults.baseDeductible, next.baseDeductible);
+  const baseDeductibleDiff = diffRule(defaults.baseDeductible, next.baseDeductible);
   if (baseDeductibleDiff) patch.baseDeductible = baseDeductibleDiff;
-  const waterDeductibleDiff = diffMonetaryRule(defaults.waterDeductible, next.waterDeductible);
+  const waterDeductibleDiff = diffRule(defaults.waterDeductible, next.waterDeductible);
   if (waterDeductibleDiff) patch.waterDeductible = waterDeductibleDiff;
-  const windHailDiff = diffMonetaryRule(defaults.windHailDeductible, next.windHailDeductible);
+  const windHailDiff = diffRule(defaults.windHailDeductible, next.windHailDeductible);
   if (windHailDiff) patch.windHailDeductible = windHailDiff;
-  const earthquakeDiff = diffMonetaryRule(defaults.earthquakeDeductible, next.earthquakeDeductible);
+  const earthquakeDiff = diffRule(defaults.earthquakeDeductible, next.earthquakeDeductible);
   if (earthquakeDiff) patch.earthquakeDeductible = earthquakeDiff;
 
   const sewerDiff = diffWater(defaults.sewerBackup, next.sewerBackup);

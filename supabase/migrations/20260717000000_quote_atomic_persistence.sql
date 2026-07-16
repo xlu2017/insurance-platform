@@ -28,11 +28,15 @@ alter table quote_coverages
   alter column data_source type quote_data_source using data_source::quote_data_source;
 
 -- =============================================================================
--- 2. Quote aggregate versioning
+-- 2. Quote aggregate versioning and raw/normalized coverage separation
 -- =============================================================================
 
 alter table quotes
   add column if not exists version int not null default 1;
+
+alter table quote_coverages
+  add column if not exists raw_coverage jsonb,
+  add column if not exists normalized_coverage jsonb;
 
 -- =============================================================================
 -- 3. One active coverage row per component
@@ -44,7 +48,31 @@ create unique index idx_quote_coverages_one_active
   where validation_status is distinct from 'superseded';
 
 -- =============================================================================
--- 4. Validation metadata invariants
+-- 4. Reclassify legacy quote coverage rows before enforcing the valid-state constraint
+-- =============================================================================
+
+-- Rows promoted to valid by earlier migrations without trusted provenance must not
+-- satisfy the valid-state constraint. Preserve the existing coverage JSON as the
+-- raw operator input and downgrade them to incomplete with a structured issue.
+update quote_coverages
+set validation_status = 'incomplete',
+    data_source = 'migration_unknown',
+    raw_coverage = coverage,
+    normalized_coverage = null,
+    validation_errors = jsonb_build_array(
+      jsonb_build_object(
+        'path', '[]'::jsonb,
+        'code', 'legacy_unverified',
+        'message', 'This quote predates trusted validation and must be reviewed.'
+      )
+    ),
+    validated_at = null,
+    validated_by = null
+where validation_status = 'valid'
+  and (validated_by is null or data_source is null or data_source = 'migration_unknown');
+
+-- =============================================================================
+-- 5. Validation metadata invariants
 -- =============================================================================
 
 alter table quote_coverages
@@ -58,7 +86,8 @@ alter table quote_coverages
           and coverage_schema_version is not null
           and data_source is not null
           and validation_errors = '[]'::jsonb
-          and coverage is not null
+          and normalized_coverage is not null
+          and raw_coverage is not null
         when 'incomplete' then
           validation_errors is not null and jsonb_array_length(validation_errors) > 0
         when 'invalid' then
@@ -139,6 +168,12 @@ drop policy if exists quote_coverages_insert on quote_coverages;
 drop policy if exists quote_coverages_update on quote_coverages;
 drop policy if exists quote_coverages_delete on quote_coverages;
 
+-- Explicitly revoke direct authenticated DML on quote-composition tables.
+-- The public Edge Function is the only authenticated write path.
+revoke insert, update, delete on quotes from anon, authenticated;
+revoke insert, update, delete on quote_policy_components from anon, authenticated;
+revoke insert, update, delete on quote_coverages from anon, authenticated;
+
 -- Retain select access for authenticated users.
 
 -- =============================================================================
@@ -177,7 +212,8 @@ declare
   v_product_line text;
   v_asset_id uuid;
   v_premium bigint;
-  v_coverage jsonb;
+  v_raw_coverage jsonb;
+  v_normalized_coverage jsonb;
   v_validation_status quote_validation_status;
   v_validation_errors jsonb;
   v_schema_version int;
@@ -279,7 +315,8 @@ begin
     v_product_line := v_component->>'product_line';
     v_asset_id := nullif(v_component->>'asset_id', '')::uuid;
     v_premium := (v_component->>'annual_premium_cents')::bigint;
-    v_coverage := v_component->'coverage';
+    v_raw_coverage := v_component->'raw_coverage';
+    v_normalized_coverage := v_component->'normalized_coverage';
     v_validation_status := v_component->>'validation_status';
     v_validation_errors := coalesce(v_component->'validation_errors', '[]'::jsonb);
     v_schema_version := coalesce((v_component->>'coverage_schema_version')::int, 2);
@@ -293,8 +330,11 @@ begin
     if v_premium is null or v_premium < 0 then
       raise exception 'annual_premium_cents must be a non-negative integer';
     end if;
-    if v_coverage is null or v_coverage = '{}'::jsonb then
-      raise exception 'coverage is required for every component';
+    if v_raw_coverage is null or v_raw_coverage = '{}'::jsonb then
+      raise exception 'raw_coverage is required for every component';
+    end if;
+    if v_validation_status = 'valid' and (v_normalized_coverage is null or v_normalized_coverage = '{}'::jsonb) then
+      raise exception 'valid components must include normalized coverage';
     end if;
     if v_validation_status not in ('draft', 'incomplete', 'invalid', 'valid') then
       raise exception 'invalid validation_status: %', v_validation_status;
@@ -336,10 +376,12 @@ begin
     end if;
 
     -- Upsert coverage payload. The quote_coverages_coverage_changed trigger will reset validation to draft.
-    insert into quote_coverages (quote_component_id, coverage)
-    values (v_component_id, v_coverage)
+    insert into quote_coverages (quote_component_id, coverage, raw_coverage, normalized_coverage)
+    values (v_component_id, v_raw_coverage, v_raw_coverage, v_normalized_coverage)
     on conflict (quote_component_id) where validation_status is distinct from 'superseded' do update
     set coverage = excluded.coverage,
+        raw_coverage = excluded.raw_coverage,
+        normalized_coverage = excluded.normalized_coverage,
         updated_at = now();
 
     -- Now record the classification, provenance and validator. This second update does not touch coverage,
@@ -421,3 +463,29 @@ revoke all on function persist_case_quote_v2 from public;
 revoke all on function persist_case_quote_v2 from anon;
 revoke all on function persist_case_quote_v2 from authenticated;
 grant execute on function persist_case_quote_v2 to service_role;
+
+-- Replace the coverage-changed validation reset to watch the raw operator input
+-- (and the legacy coverage column for backward compatibility). It only resets
+-- when raw coverage changes and a new normalized value has not been supplied,
+-- which lets the validated quote boundary supply both in one write cycle without
+-- losing the normalized engine input.
+create or replace function reset_quote_coverage_validation()
+returns trigger as $$
+begin
+  if (
+    new.raw_coverage is not null
+    and old.raw_coverage is distinct from new.raw_coverage
+    and new.normalized_coverage is null
+  ) or (
+    new.coverage is not null
+    and old.coverage is distinct from new.coverage
+    and new.normalized_coverage is null
+  ) then
+    new.validation_status := 'draft';
+    new.validated_at := null;
+    new.validated_by := null;
+    new.normalized_coverage := null;
+  end if;
+  return new;
+end;
+$$ language plpgsql;

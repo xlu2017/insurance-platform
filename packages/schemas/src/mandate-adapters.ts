@@ -1,5 +1,6 @@
 import {
   type AutoMandateV2,
+  type DeductibleRuleV2,
   type HouseholdCoverageMandateV2,
   type MonetaryRule,
   type PropertyMandateV2,
@@ -50,7 +51,7 @@ export function monetaryRuleV2ToLegacyLimit(rule: MonetaryRule): LimitRequiremen
   return LimitRequirement.parse({ rule: r, cents });
 }
 
-export function monetaryRuleV2ToLegacyDeductible(rule: MonetaryRule): DeductibleRequirement {
+export function deductibleRuleV2ToLegacyDeductible(rule: DeductibleRuleV2): DeductibleRequirement {
   const r = DeductibleRule.parse(rule.rule);
   const cents = "amountCents" in rule ? rule.amountCents : 0;
   return DeductibleRequirement.parse({ rule: r, cents });
@@ -73,6 +74,23 @@ export function legacyMonetaryRuleToV2(input: LegacyMonetaryRuleInput): Monetary
   return { rule };
 }
 
+export function legacyDeductibleRuleToV2(input: LegacyMonetaryRuleInput): DeductibleRuleV2 {
+  const rule = DeductibleRule.parse(input.rule);
+  const cents = input.cents;
+
+  if (rule === "maximum" || rule === "exact") {
+    if (typeof cents !== "number" || !Number.isInteger(cents) || cents < 0) {
+      throw new Error(`Deductible rule "${rule}" requires a non-negative integer amountCents`);
+    }
+    return { rule, amountCents: cents };
+  }
+
+  if (cents !== undefined && cents !== null && cents !== 0) {
+    throw new Error(`Deductible rule "${rule}" does not accept an amount`);
+  }
+  return { rule };
+}
+
 // =============================================================================
 // V2 mandate -> legacy engine mandate
 // =============================================================================
@@ -80,12 +98,12 @@ export function legacyMonetaryRuleToV2(input: LegacyMonetaryRuleInput): Monetary
 function v2WaterToLegacy(water: {
   preference: CoveragePreference;
   limit: MonetaryRule;
-  deductible: MonetaryRule;
+  deductible: DeductibleRuleV2;
 }): WaterCoverageRequirement {
   return {
     preference: water.preference,
     limit: monetaryRuleV2ToLegacyLimit(water.limit),
-    deductible: monetaryRuleV2ToLegacyDeductible(water.deductible),
+    deductible: deductibleRuleV2ToLegacyDeductible(water.deductible),
   };
 }
 
@@ -93,9 +111,9 @@ export function v2AutoMandateToLegacy(auto: AutoMandateV2): AutoRequirements {
   return {
     coverageForm: AutoCoverageFormRequirement.parse(auto.coverageForm),
     liability: monetaryRuleV2ToLegacyLimit(auto.liability),
-    collisionDeductible: monetaryRuleV2ToLegacyDeductible(auto.collisionDeductible),
-    comprehensiveDeductible: monetaryRuleV2ToLegacyDeductible(auto.comprehensiveDeductible),
-    glassDeductible: monetaryRuleV2ToLegacyDeductible(auto.glassDeductible),
+    collisionDeductible: deductibleRuleV2ToLegacyDeductible(auto.collisionDeductible),
+    comprehensiveDeductible: deductibleRuleV2ToLegacyDeductible(auto.comprehensiveDeductible),
+    glassDeductible: deductibleRuleV2ToLegacyDeductible(auto.glassDeductible),
     endorsements: AutoEndorsementPreferences.parse(auto.endorsements),
   };
 }
@@ -111,10 +129,10 @@ function v2PropertyMandateToLegacy(property: PropertyMandateV2): PropertyRequire
     additionalLivingExpenseLimit: monetaryRuleV2ToLegacyLimit(
       property.additionalLivingExpenseLimit,
     ),
-    baseDeductible: monetaryRuleV2ToLegacyDeductible(property.baseDeductible),
-    waterDeductible: monetaryRuleV2ToLegacyDeductible(property.waterDeductible),
-    windHailDeductible: monetaryRuleV2ToLegacyDeductible(property.windHailDeductible),
-    earthquakeDeductible: monetaryRuleV2ToLegacyDeductible(property.earthquakeDeductible),
+    baseDeductible: deductibleRuleV2ToLegacyDeductible(property.baseDeductible),
+    waterDeductible: deductibleRuleV2ToLegacyDeductible(property.waterDeductible),
+    windHailDeductible: deductibleRuleV2ToLegacyDeductible(property.windHailDeductible),
+    earthquakeDeductible: deductibleRuleV2ToLegacyDeductible(property.earthquakeDeductible),
     sewerBackup: v2WaterToLegacy(property.sewerBackup),
     overlandWater: v2WaterToLegacy(property.overlandWater),
     optionalCoverages: PropertyOptionalCoveragePreferences.parse(property.optionalCoverages),
@@ -180,12 +198,12 @@ export function v2ToLegacyProjection(
 function legacyWaterToV2(water: Record<string, unknown> | undefined | null): {
   preference: CoveragePreference;
   limit: MonetaryRule;
-  deductible: MonetaryRule;
+  deductible: DeductibleRuleV2;
 } {
   const raw = (water ?? {}) as Record<string, unknown>;
   const preference = CoveragePreference.parse(raw.preference ?? "indifferent");
   const limit = legacyMonetaryRuleToV2((raw.limit ?? { rule: "any" }) as LegacyMonetaryRuleInput);
-  const deductible = legacyMonetaryRuleToV2(
+  const deductible = legacyDeductibleRuleToV2(
     (raw.deductible ?? { rule: "any" }) as LegacyMonetaryRuleInput,
   );
   return { preference, limit, deductible };
@@ -245,16 +263,16 @@ function legacyAutoMandateToV2(auto: Record<string, unknown>): AutoMandateV2 {
     liability: legacyMonetaryRuleToV2(
       (auto.liability ?? { rule: "minimum", cents: 200_000_000 }) as LegacyMonetaryRuleInput,
     ),
-    collisionDeductible: legacyMonetaryRuleToV2(
+    collisionDeductible: legacyDeductibleRuleToV2(
       (auto.collisionDeductible ?? { rule: "maximum", cents: 100_000 }) as LegacyMonetaryRuleInput,
     ),
-    comprehensiveDeductible: legacyMonetaryRuleToV2(
+    comprehensiveDeductible: legacyDeductibleRuleToV2(
       (auto.comprehensiveDeductible ?? {
         rule: "maximum",
         cents: 100_000,
       }) as LegacyMonetaryRuleInput,
     ),
-    glassDeductible: legacyMonetaryRuleToV2(
+    glassDeductible: legacyDeductibleRuleToV2(
       (auto.glassDeductible ?? { rule: "any" }) as LegacyMonetaryRuleInput,
     ),
     endorsements,
@@ -305,16 +323,16 @@ function legacyPropertyMandateToV2(property: Record<string, unknown>): PropertyM
     additionalLivingExpenseLimit: legacyMonetaryRuleToV2(
       (property.additionalLivingExpenseLimit ?? { rule: "any" }) as LegacyMonetaryRuleInput,
     ),
-    baseDeductible: legacyMonetaryRuleToV2(
+    baseDeductible: legacyDeductibleRuleToV2(
       (property.baseDeductible ?? { rule: "maximum", cents: 250_000 }) as LegacyMonetaryRuleInput,
     ),
-    waterDeductible: legacyMonetaryRuleToV2(
+    waterDeductible: legacyDeductibleRuleToV2(
       (property.waterDeductible ?? { rule: "any" }) as LegacyMonetaryRuleInput,
     ),
-    windHailDeductible: legacyMonetaryRuleToV2(
+    windHailDeductible: legacyDeductibleRuleToV2(
       (property.windHailDeductible ?? { rule: "any" }) as LegacyMonetaryRuleInput,
     ),
-    earthquakeDeductible: legacyMonetaryRuleToV2(
+    earthquakeDeductible: legacyDeductibleRuleToV2(
       (property.earthquakeDeductible ?? { rule: "any" }) as LegacyMonetaryRuleInput,
     ),
     sewerBackup: legacyWaterToV2(property.sewerBackup as Record<string, unknown> | undefined),
@@ -337,13 +355,13 @@ function legacyOverrideMapToVehicleOverrides(
         ? legacyMonetaryRuleToV2(values.liability as LegacyMonetaryRuleInput)
         : undefined,
       collisionDeductible: values.collisionDeductible
-        ? legacyMonetaryRuleToV2(values.collisionDeductible as LegacyMonetaryRuleInput)
+        ? legacyDeductibleRuleToV2(values.collisionDeductible as LegacyMonetaryRuleInput)
         : undefined,
       comprehensiveDeductible: values.comprehensiveDeductible
-        ? legacyMonetaryRuleToV2(values.comprehensiveDeductible as LegacyMonetaryRuleInput)
+        ? legacyDeductibleRuleToV2(values.comprehensiveDeductible as LegacyMonetaryRuleInput)
         : undefined,
       glassDeductible: values.glassDeductible
-        ? legacyMonetaryRuleToV2(values.glassDeductible as LegacyMonetaryRuleInput)
+        ? legacyDeductibleRuleToV2(values.glassDeductible as LegacyMonetaryRuleInput)
         : undefined,
       endorsements: values.endorsements as
         | Partial<Record<AutoEndorsementKey, CoveragePreference>>
@@ -381,16 +399,16 @@ function legacyOverrideMapToPropertyOverrides(
         ? legacyMonetaryRuleToV2(values.additionalLivingExpenseLimit as LegacyMonetaryRuleInput)
         : undefined,
       baseDeductible: values.baseDeductible
-        ? legacyMonetaryRuleToV2(values.baseDeductible as LegacyMonetaryRuleInput)
+        ? legacyDeductibleRuleToV2(values.baseDeductible as LegacyMonetaryRuleInput)
         : undefined,
       waterDeductible: values.waterDeductible
-        ? legacyMonetaryRuleToV2(values.waterDeductible as LegacyMonetaryRuleInput)
+        ? legacyDeductibleRuleToV2(values.waterDeductible as LegacyMonetaryRuleInput)
         : undefined,
       windHailDeductible: values.windHailDeductible
-        ? legacyMonetaryRuleToV2(values.windHailDeductible as LegacyMonetaryRuleInput)
+        ? legacyDeductibleRuleToV2(values.windHailDeductible as LegacyMonetaryRuleInput)
         : undefined,
       earthquakeDeductible: values.earthquakeDeductible
-        ? legacyMonetaryRuleToV2(values.earthquakeDeductible as LegacyMonetaryRuleInput)
+        ? legacyDeductibleRuleToV2(values.earthquakeDeductible as LegacyMonetaryRuleInput)
         : undefined,
       sewerBackup: values.sewerBackup
         ? legacyWaterToV2(values.sewerBackup as Record<string, unknown>)
@@ -468,13 +486,15 @@ function v2AutoOverrideValuesToLegacy(values: AutoMandateOverrideValuesV2): Asse
     out.liability = monetaryRuleV2ToLegacyLimit(values.liability);
   }
   if (values.collisionDeductible) {
-    out.collisionDeductible = monetaryRuleV2ToLegacyDeductible(values.collisionDeductible);
+    out.collisionDeductible = deductibleRuleV2ToLegacyDeductible(values.collisionDeductible);
   }
   if (values.comprehensiveDeductible) {
-    out.comprehensiveDeductible = monetaryRuleV2ToLegacyDeductible(values.comprehensiveDeductible);
+    out.comprehensiveDeductible = deductibleRuleV2ToLegacyDeductible(
+      values.comprehensiveDeductible,
+    );
   }
   if (values.glassDeductible) {
-    out.glassDeductible = monetaryRuleV2ToLegacyDeductible(values.glassDeductible);
+    out.glassDeductible = deductibleRuleV2ToLegacyDeductible(values.glassDeductible);
   }
   if (values.endorsements) {
     out.endorsements = AutoEndorsementPreferences.parse(values.endorsements);
@@ -510,16 +530,16 @@ function v2PropertyOverrideValuesToLegacy(
     );
   }
   if (values.baseDeductible) {
-    out.baseDeductible = monetaryRuleV2ToLegacyDeductible(values.baseDeductible);
+    out.baseDeductible = deductibleRuleV2ToLegacyDeductible(values.baseDeductible);
   }
   if (values.waterDeductible) {
-    out.waterDeductible = monetaryRuleV2ToLegacyDeductible(values.waterDeductible);
+    out.waterDeductible = deductibleRuleV2ToLegacyDeductible(values.waterDeductible);
   }
   if (values.windHailDeductible) {
-    out.windHailDeductible = monetaryRuleV2ToLegacyDeductible(values.windHailDeductible);
+    out.windHailDeductible = deductibleRuleV2ToLegacyDeductible(values.windHailDeductible);
   }
   if (values.earthquakeDeductible) {
-    out.earthquakeDeductible = monetaryRuleV2ToLegacyDeductible(values.earthquakeDeductible);
+    out.earthquakeDeductible = deductibleRuleV2ToLegacyDeductible(values.earthquakeDeductible);
   }
   if (values.sewerBackup) {
     const w = v2PartialWaterToLegacy(values.sewerBackup);

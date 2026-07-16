@@ -130,6 +130,8 @@ type QuoteForm = z.infer<typeof QuoteForm>;
 
 interface CoverageRow {
   coverage: Json;
+  raw_coverage: Json;
+  normalized_coverage: Json;
   validation_status: string;
   validation_errors: { path: string[]; code: string; message: string }[];
   data_source: string | null;
@@ -169,7 +171,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       const { data, error } = await supabaseBrowser()
         .from("quotes")
         .select(
-          "id, state, version, is_incumbent, policy_fees_cents, bundle_discount_cents, underwriting_conditions, insurers(name), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, validation_status, validation_errors, data_source, validated_at, validated_by, coverage_schema_version))",
+          "id, state, version, is_incumbent, policy_fees_cents, bundle_discount_cents, underwriting_conditions, insurers(name), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, data_source, validated_at, validated_by, coverage_schema_version))",
         )
         .eq("case_id", caseRow.id)
         .order("created_at");
@@ -357,6 +359,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       const { data, error } = await supabase.functions.invoke("save-case-quote", {
         body: {
           caseId: caseRow.id,
+          saveIntent: values.requireValid ? "validate" : "draft",
           insurerId: values.insurerId,
           state: values.state,
           isIncumbent: values.isIncumbent,
