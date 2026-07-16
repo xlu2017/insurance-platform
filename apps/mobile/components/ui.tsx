@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -127,6 +128,60 @@ export function Field(props: TextInputProps & { label: string; error?: string })
         {...inputProps}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
+    </View>
+  );
+}
+
+export function Select<T extends string>({
+  label,
+  options,
+  value,
+  onValueChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onValueChange: (value: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value)?.label ?? value;
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable onPress={() => setOpen(true)} style={styles.selectTrigger}>
+        <Text style={styles.selectTriggerText}>{selected}</Text>
+        <Text style={{ color: colors.inkMuted, fontSize: typography.sizes.body }}>▾</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.selectOverlay} onPress={() => setOpen(false)}>
+          <View style={styles.selectSheet}>
+            <Text style={styles.subtitle}>{label}</Text>
+            {options.map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => {
+                  onValueChange(option.value);
+                  setOpen(false);
+                }}
+                style={({ pressed }) => [
+                  styles.selectOption,
+                  option.value === value && styles.selectOptionSelected,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.body,
+                    option.value === value && { color: colors.accent, fontWeight: "600" },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -284,6 +339,41 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "right",
     flexShrink: 1,
+  },
+  selectTrigger: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    minHeight: 48,
+  },
+  selectTriggerText: {
+    fontSize: typography.sizes.body,
+    color: colors.ink,
+  },
+  selectOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  selectSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+  },
+  selectOption: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  selectOptionSelected: {
+    backgroundColor: colors.accentSoft,
   },
   loading: {
     flex: 1,

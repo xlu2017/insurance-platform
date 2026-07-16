@@ -13,6 +13,7 @@ import {
   Loading,
   Screen,
   SecondaryButton,
+  Select,
   StatusPill,
   Subtitle,
   Title,
@@ -91,14 +92,12 @@ export default function Documents() {
           <Title>Documents</Title>
           <Card>
             <Subtitle>Upload</Subtitle>
-            <Caption>Category</Caption>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: 8 }}>
-              {categories.map((c) => (
-                <View key={c.value} style={{ opacity: category === c.value ? 1 : 0.55 }}>
-                  <SecondaryButton label={c.label} onPress={() => setCategory(c.value)} />
-                </View>
-              ))}
-            </View>
+            <Select
+              label="Category"
+              options={categories}
+              value={category}
+              onValueChange={setCategory}
+            />
             <View style={{ gap: 8 }}>
               <SecondaryButton
                 label="Upload a PDF"
