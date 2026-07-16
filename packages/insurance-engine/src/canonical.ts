@@ -99,13 +99,13 @@ export function canonicalSerializeRecommendationInput(
   snapshot: RecommendationInputSnapshot,
   engineVersion: string,
   engineSourceHash: string,
-): { canonicalJson: string } {
+): { canonical: unknown; canonicalJson: string } {
   const canonical = canonicalizeForDigest({
     ...snapshot,
     engineVersion,
     engineSourceHash,
   });
-  return { canonicalJson: JSON.stringify(canonical) };
+  return { canonical, canonicalJson: JSON.stringify(canonical) };
 }
 
 export function canonicalSerializeRecommendationOutput(
@@ -113,12 +113,12 @@ export function canonicalSerializeRecommendationOutput(
   recommendedOption: PersistedRecommendationOption,
   rankedOptions: PersistedRecommendationOption[],
   rejectedOptions: PersistedRecommendationOption[],
-): { canonicalJson: string } {
+): { canonical: unknown; canonicalJson: string } {
   const canonical = canonicalizeForDigest({
     incumbentTotalCents: result.incumbentTotalCents,
     recommendedOption,
     rankedOptions,
     rejectedOptions,
   });
-  return { canonicalJson: JSON.stringify(canonical) };
+  return { canonical, canonicalJson: JSON.stringify(canonical) };
 }

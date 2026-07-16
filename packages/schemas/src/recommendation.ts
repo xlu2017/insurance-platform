@@ -20,14 +20,14 @@ export interface RecommendationInputSnapshot {
   switching: SwitchingPreferencesV2;
   assets: HouseholdAssets;
   quotes: EngineQuote[];
-  quoteSnapshot?: { id: string; updated_at: string }[];
+  quoteSnapshot?: { id: string; updated_at: string; is_incumbent: boolean }[];
 }
 
 export interface CanonicalRecommendationInputSnapshot extends RecommendationInputSnapshot {
   caseId: string;
   householdId: string;
   generatedAt: string;
-  quoteSnapshot: { id: string; updated_at: string }[];
+  quoteSnapshot: { id: string; updated_at: string; is_incumbent: boolean }[];
 }
 
 export interface PreferenceAlignmentDetail {

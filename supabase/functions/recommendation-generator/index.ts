@@ -1,11 +1,15 @@
 // Generates a licensed-review recommendation for a case in `comparing_quotes`.
 // Loads the current V2 mandate, switching preferences, assets and quotes, runs
-// the same deterministic insurance engine used by workspace tests, builds a
-// canonical input/output digest, and persists the result through an internal
-// service-role-only RPC.
+// the deterministic insurance engine, builds a canonical input/output digest,
+// and persists the result through an internal service-role-only RPC.
+//
+// Generation-attempt lifecycle is managed outside the persistence transaction so
+// failed and no-eligible attempts remain durable in the audit log.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   buildEngineInputFromSnapshot,
+  canonicalSerializeRecommendationInput,
+  canonicalSerializeRecommendationOutput,
   evaluateHousehold,
   loadRecommendationInputSnapshot,
   EngineRecommendationPersistencePayloadSchema,
@@ -26,23 +30,6 @@ function jsonResponse(body: unknown, status = 200, extraHeaders?: Record<string,
       ...extraHeaders,
     },
   });
-}
-
-function canonicalizeForDigest(value: unknown): unknown {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) {
-    const sorted = value.map(canonicalizeForDigest).sort((a: unknown, b: unknown) => {
-      const ka = JSON.stringify(a);
-      const kb = JSON.stringify(b);
-      return ka.localeCompare(kb);
-    });
-    return sorted;
-  }
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-    sorted[key] = canonicalizeForDigest((value as Record<string, unknown>)[key]);
-  }
-  return sorted;
 }
 
 async function sha256Hex(input: string): Promise<string> {
@@ -70,10 +57,16 @@ function buildPreferenceAlignment(e: EvaluatedConfiguration) {
 }
 
 function buildPersistedOption(rank: number, e: EvaluatedConfiguration) {
+  const auto = e.configuration.auto;
+  const property = e.configuration.property;
   return {
     rank,
-    auto_quote_id: e.configuration.auto.quoteId,
-    property_quote_id: e.configuration.property.quoteId,
+    auto_quote_id: auto.quoteId,
+    property_quote_id: property.quoteId,
+    auto_component_id: auto.component.id,
+    property_component_id: property.component.id,
+    auto_asset_id: auto.component.assetId,
+    property_asset_id: property.component.assetId,
     bundled: e.configuration.bundled,
     total_cents: e.cost.totalCents,
     net_savings_cents: e.netSavingsCents,
@@ -84,6 +77,62 @@ function buildPersistedOption(rank: number, e: EvaluatedConfiguration) {
     deductible_total_cents: e.deductibleTotalCents,
     underwriting_condition_count: e.underwritingConditionCount,
   };
+}
+
+async function startAttempt(
+  client: ReturnType<typeof createClient>,
+  actorProfileId: string,
+  caseId: string,
+  snapshot: { mandateId: string; mandateVersion: number; switchingPreferencesId: string; switchingPreferencesVersion: string | number },
+  inputSnapshotDigest: string,
+): Promise<string> {
+  const { data, error } = await client.rpc("start_recommendation_generation_attempt", {
+    p_case_id: caseId,
+    p_actor_profile_id: actorProfileId,
+    p_mandate_id: snapshot.mandateId,
+    p_mandate_version: snapshot.mandateVersion,
+    p_switching_preferences_id: snapshot.switchingPreferencesId,
+    p_switching_preferences_version: snapshot.switchingPreferencesVersion,
+    p_engine_version: ENGINE_VERSION,
+    p_engine_source_hash: __AUTOPILOT_SOURCE_HASH__,
+    p_input_snapshot_digest: inputSnapshotDigest,
+  });
+  if (error) throw new Error(`start_recommendation_generation_attempt failed: ${error.message}`);
+  return (data as string | null) ?? "";
+}
+
+async function completeAttempt(
+  client: ReturnType<typeof createClient>,
+  attemptId: string,
+  status: "input_rejected" | "no_eligible_option" | "persistence_conflict" | "completed",
+  recommendationId?: string,
+  engineOutputDigest?: string,
+  errorCode?: string,
+  safeErrorMessage?: string,
+) {
+  const { error } = await client.rpc("complete_recommendation_generation_attempt", {
+    p_attempt_id: attemptId,
+    p_status: status,
+    p_recommendation_id: recommendationId ?? null,
+    p_engine_output_digest: engineOutputDigest ?? null,
+    p_error_code: errorCode ?? null,
+    p_safe_error_message: safeErrorMessage ?? null,
+  });
+  if (error) console.error("complete_recommendation_generation_attempt failed:", error.message);
+}
+
+async function failAttempt(
+  client: ReturnType<typeof createClient>,
+  attemptId: string,
+  errorCode: string,
+  safeErrorMessage: string,
+) {
+  const { error } = await client.rpc("fail_recommendation_generation_attempt", {
+    p_attempt_id: attemptId,
+    p_error_code: errorCode,
+    p_safe_error_message: safeErrorMessage,
+  });
+  if (error) console.error("fail_recommendation_generation_attempt failed:", error.message);
 }
 
 Deno.serve(async (req) => {
@@ -148,8 +197,48 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Pre-compute an input digest placeholder for the attempt record. The final
+  // canonical digest is computed once the snapshot is loaded and validated.
+  const { canonicalJson: placeholderInputCanonical } = canonicalSerializeRecommendationInput(
+    {
+      caseId,
+      householdId: caseRow.household_id,
+      mandateId: "",
+      mandateVersion: 0,
+      mandateSchemaVersion: 2,
+      jurisdiction: "AB",
+      switchingPreferencesId: "",
+      switchingPreferencesVersion: 0,
+      mandate: {} as unknown,
+      switching: {} as unknown,
+      assets: { vehicles: [], properties: [] },
+      quotes: [],
+      quoteSnapshot: [],
+    },
+    ENGINE_VERSION,
+    __AUTOPILOT_SOURCE_HASH__,
+  );
+  const placeholderInputDigest = await sha256Hex(placeholderInputCanonical);
+
+  // Start a durable generation attempt before any validation or engine work.
+  let attemptId: string;
+  try {
+    attemptId = await startAttempt(supabase, user.id, caseId, {
+      mandateId: "",
+      mandateVersion: 0,
+      switchingPreferencesId: "",
+      switchingPreferencesVersion: 0,
+    }, placeholderInputDigest);
+  } catch (err) {
+    return jsonResponse(
+      { code: "ATTEMPT_START_FAILED", message: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+
   const snapshot = await loadRecommendationInputSnapshot(supabase, caseId);
   if ("code" in snapshot) {
+    await completeAttempt(supabase, attemptId, "input_rejected", undefined, undefined, snapshot.code, snapshot.message);
     return jsonResponse(
       { code: snapshot.code, message: snapshot.message, details: snapshot.details },
       snapshot.code === "MANDATE_NOT_FOUND" || snapshot.code === "QUOTE_NOT_USABLE" ? 400 : 422,
@@ -158,6 +247,7 @@ Deno.serve(async (req) => {
 
   const engineInput = buildEngineInputFromSnapshot(snapshot);
   if ("code" in engineInput) {
+    await completeAttempt(supabase, attemptId, "input_rejected", undefined, undefined, engineInput.code, engineInput.message);
     return jsonResponse(
       { code: engineInput.code, message: engineInput.message, details: engineInput.details },
       400,
@@ -167,10 +257,12 @@ Deno.serve(async (req) => {
   const result: EngineResult = evaluateHousehold(engineInput);
 
   if (result.rejection) {
+    await completeAttempt(supabase, attemptId, "input_rejected", undefined, undefined, result.rejection.code, result.rejection.message);
     return jsonResponse({ code: result.rejection.code, message: result.rejection.message }, 422);
   }
 
   if (!result.recommended) {
+    await completeAttempt(supabase, attemptId, "no_eligible_option", undefined, undefined, "NO_ELIGIBLE_RECOMMENDATION", "No economically eligible recommendation was found");
     return jsonResponse({
       code: "NO_ELIGIBLE_RECOMMENDATION",
       message: "No economically eligible recommendation was found",
@@ -185,34 +277,13 @@ Deno.serve(async (req) => {
     .map((e, i) => buildPersistedOption(rankedOptions.length + i + 1, e));
   const recommendedOption = rankedOptions[0];
 
-  const canonicalInput: Record<string, unknown> = canonicalizeForDigest({
-    caseId: snapshot.caseId,
-    householdId: snapshot.householdId,
-    mandateId: snapshot.mandateId,
-    mandateVersion: snapshot.mandateVersion,
-    mandateSchemaVersion: snapshot.mandateSchemaVersion,
-    jurisdiction: snapshot.jurisdiction,
-    switchingPreferencesId: snapshot.switchingPreferencesId,
-    switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
-    mandate: snapshot.mandate,
-    switching: snapshot.switching,
-    assets: snapshot.assets,
-    quotes: snapshot.quotes,
-    quoteSnapshot: snapshot.quoteSnapshot,
-    engineVersion: ENGINE_VERSION,
-    engineSourceHash: __AUTOPILOT_SOURCE_HASH__,
-    generatedAt: new Date().toISOString(),
-  }) as Record<string, unknown>;
-  const inputSnapshotJson = canonicalInput;
-  const inputSnapshotDigest = await sha256Hex(JSON.stringify(canonicalInput));
+  const { canonical: inputSnapshotJson, canonicalJson: inputSnapshotCanonical } =
+    canonicalSerializeRecommendationInput(snapshot, ENGINE_VERSION, __AUTOPILOT_SOURCE_HASH__);
+  const inputSnapshotDigest = await sha256Hex(inputSnapshotCanonical);
 
-  const engineOutputJson = canonicalizeForDigest({
-    incumbentTotalCents: result.incumbentTotalCents,
-    recommendedOption,
-    rankedOptions,
-    rejectedOptions,
-  }) as Record<string, unknown>;
-  const engineOutputDigest = await sha256Hex(JSON.stringify(engineOutputJson));
+  const { canonical: engineOutputJson, canonicalJson: engineOutputCanonical } =
+    canonicalSerializeRecommendationOutput(result, recommendedOption, rankedOptions, rejectedOptions);
+  const engineOutputDigest = await sha256Hex(engineOutputCanonical);
 
   const payload: EngineRecommendationPersistencePayload = {
     caseId,
@@ -231,13 +302,15 @@ Deno.serve(async (req) => {
       version: ENGINE_VERSION,
       sourceHash: __AUTOPILOT_SOURCE_HASH__,
     },
-    inputSnapshotJson,
+    inputSnapshotJson: inputSnapshotJson as Record<string, unknown>,
     inputSnapshotDigest,
+    inputSnapshotCanonical,
     recommendedOption,
     rankedOptions,
     rejectedOptions,
-    engineOutputJson,
+    engineOutputJson: engineOutputJson as Record<string, unknown>,
     engineOutputDigest,
+    engineOutputCanonical,
     currentTotalCents: result.incumbentTotalCents,
     proposedTotalCents: recommendedOption.total_cents,
     netSavingsCents: recommendedOption.net_savings_cents,
@@ -253,6 +326,7 @@ Deno.serve(async (req) => {
 
   const parsed = EngineRecommendationPersistencePayloadSchema.safeParse(payload);
   if (!parsed.success) {
+    await completeAttempt(supabase, attemptId, "input_rejected", undefined, undefined, "PERSISTENCE_PAYLOAD_INVALID", parsed.error.message);
     return jsonResponse(
       { code: "PERSISTENCE_PAYLOAD_INVALID", message: parsed.error.message },
       500,
@@ -264,6 +338,7 @@ Deno.serve(async (req) => {
     Deno.env.get("SERVICE_ROLE_KEY") ??
     Deno.env.get("EDGE_SERVICE_ROLE_KEY");
   if (!serviceRoleKey) {
+    await failAttempt(supabase, attemptId, "SERVICE_ROLE_KEY_MISSING", "Server cannot persist recommendations");
     return jsonResponse(
       { code: "SERVICE_ROLE_KEY_MISSING", message: "Server cannot persist recommendations" },
       500,
@@ -283,10 +358,12 @@ Deno.serve(async (req) => {
       p_switching_preferences_id: payload.switchingPreferences.id,
       p_switching_preferences_version: payload.switchingPreferences.version,
       p_input_snapshot_json: payload.inputSnapshotJson,
+      p_input_snapshot_canonical: payload.inputSnapshotCanonical,
       p_input_snapshot_digest: payload.inputSnapshotDigest,
       p_engine_version: payload.engine.version,
       p_engine_source_hash: payload.engine.sourceHash,
       p_engine_output_json: payload.engineOutputJson,
+      p_engine_output_canonical: payload.engineOutputCanonical,
       p_engine_output_digest: payload.engineOutputDigest,
       p_current_total_cents: payload.currentTotalCents,
       p_proposed_total_cents: payload.proposedTotalCents,
@@ -301,6 +378,7 @@ Deno.serve(async (req) => {
   );
 
   if (persistError) {
+    await completeAttempt(supabase, attemptId, "persistence_conflict", undefined, undefined, "PERSIST_FAILED", persistError.message);
     return jsonResponse({ code: "PERSIST_FAILED", message: persistError.message }, 409);
   }
 
@@ -308,6 +386,15 @@ Deno.serve(async (req) => {
     recommendationId?: string;
     version?: number;
   } | null;
+
+  await completeAttempt(
+    supabase,
+    attemptId,
+    "completed",
+    persisted?.recommendationId,
+    engineOutputDigest,
+  );
+
   return jsonResponse({
     recommendationId: persisted?.recommendationId,
     version: persisted?.version,

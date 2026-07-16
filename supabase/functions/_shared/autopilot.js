@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 1dcf8e7e1f8138a6541ad0a8aaa398017fb4ce2ac724b7a1ff0a9626e33ab8e1
+// source-hash: 13838e6bf36ceac066166e33bf3ff92be28f6eb08ebeffdbd3f7790b05597c7d
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -6334,7 +6334,7 @@ function canonicalSerializeRecommendationInput(snapshot, engineVersion, engineSo
     engineVersion,
     engineSourceHash
   });
-  return { canonicalJson: JSON.stringify(canonical) };
+  return { canonical, canonicalJson: JSON.stringify(canonical) };
 }
 function canonicalSerializeRecommendationOutput(result, recommendedOption, rankedOptions, rejectedOptions) {
   const canonical = canonicalizeForDigest({
@@ -6343,7 +6343,7 @@ function canonicalSerializeRecommendationOutput(result, recommendedOption, ranke
     rankedOptions,
     rejectedOptions
   });
-  return { canonicalJson: JSON.stringify(canonical) };
+  return { canonical, canonicalJson: JSON.stringify(canonical) };
 }
 
 // ../database/src/mandate-repository.ts
@@ -6686,7 +6686,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     switching: mandateResult.switching,
     assets,
     quotes: engineQuotes,
-    quoteSnapshot: dbQuotes.map((q) => ({ id: q.id, updated_at: q.updated_at }))
+    quoteSnapshot: dbQuotes.map((q) => ({ id: q.id, updated_at: q.updated_at, is_incumbent: q.is_incumbent }))
   };
 }
 export {
@@ -6706,4 +6706,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "1dcf8e7e1f8138a6541ad0a8aaa398017fb4ce2ac724b7a1ff0a9626e33ab8e1";
+export const __AUTOPILOT_SOURCE_HASH__ = "13838e6bf36ceac066166e33bf3ff92be28f6eb08ebeffdbd3f7790b05597c7d";
