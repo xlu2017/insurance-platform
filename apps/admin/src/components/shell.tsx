@@ -22,12 +22,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = supabaseBrowser();
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user;
+      if (!user) {
         router.replace("/login");
         return;
       }
-      setEmail(data.user.email ?? null);
+      setEmail(user.email ?? null);
       setChecked(true);
     });
   }, [router]);
