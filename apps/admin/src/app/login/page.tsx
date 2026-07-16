@@ -30,28 +30,29 @@ export default function LoginPage() {
         email: formatted.email?._errors[0],
         password: formatted.password?._errors[0],
       });
+      setLoading(false);
       return;
     }
 
     setLoading(true);
     const supabase = supabaseBrowser();
     const { data, error: signInError } = await supabase.auth.signInWithPassword(parsed.data);
-    setLoading(false);
-
     if (signInError) {
       setError(signInError.message);
+      setLoading(false);
       return;
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", data.user.id)
       .single();
 
-    if (!profile || profile.role === "customer") {
+    if (profileError || !profile || profile.role === "customer") {
       await supabase.auth.signOut();
       setError("This console is for operations, reviewer and administrator accounts.");
+      setLoading(false);
       return;
     }
 

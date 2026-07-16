@@ -2,182 +2,157 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { evaluateHousehold, type EvaluatedConfiguration } from "@autopilot/insurance-engine";
 import { supabaseBrowser } from "@/lib/supabase";
-import { loadEngineInput } from "@/lib/engine-input";
-import {
-  Badge,
-  Button,
-  Card,
-  CardTitle,
-  EmptyState,
-  Skeleton,
-  Table,
-  Td,
-  Th,
-} from "@/components/ui";
+import { Badge, Button, Card, CardTitle, EmptyState, Skeleton } from "@/components/ui";
 import { formatCad } from "@/lib/utils";
 import type { CaseDetail } from "../page";
+
+interface GeneratedResult {
+  recommendationId: string;
+  version: number;
+  recommended: {
+    totalCents: number;
+    netSavingsCents: number;
+    autoInsurer: string;
+    propertyInsurer: string;
+    bundled: boolean;
+  };
+  optionsCount: number;
+}
+
+interface QuoteRow {
+  id: string;
+  state: string;
+  is_incumbent: boolean;
+  insurers: { name: string } | null;
+  quote_policy_components: { product_line: string; annual_premium_cents: number }[];
+}
 
 export function ComparisonTab({ caseRow }: { caseRow: CaseDetail }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
+  const [generated, setGenerated] = useState<GeneratedResult | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["comparison", caseRow.id],
+  const { data: quotes, isLoading } = useQuery({
+    queryKey: ["case-quotes", caseRow.id],
     queryFn: async () => {
-      const loaded = await loadEngineInput(caseRow.id, caseRow.household_id);
-      if ("error" in loaded) return { error: loaded.error };
-      return { result: evaluateHousehold(loaded.input) };
+      const { data, error } = await supabaseBrowser()
+        .from("quotes")
+        .select(
+          "id, state, is_incumbent, insurers(name), quote_policy_components(product_line, annual_premium_cents)",
+        )
+        .eq("case_id", caseRow.id);
+      if (error) throw error;
+      return (data ?? []) as unknown as QuoteRow[];
     },
   });
 
   const generateRecommendation = useMutation({
     mutationFn: async () => {
-      if (!data || "error" in data || !data.result.recommended)
-        throw new Error("No eligible configuration to recommend.");
       const supabase = supabaseBrowser();
-      const rec = data.result.recommended;
-
-      // Transaction boundary: recommendation, options and case transition are
-      // committed together through a single RPC-style sequence; failures roll
-      // back client state via query invalidation.
-      const { data: recommendation, error } = await supabase
-        .from("recommendations")
-        .insert({
-          case_id: caseRow.id,
-          status: "awaiting_review",
-          version: 1,
-          mandate_version: 1,
-          quote_ids: [rec.configuration.auto.quoteId, rec.configuration.property.quoteId],
-          current_total_cents: data.result.incumbentTotalCents,
-          proposed_total_cents: rec.cost.totalCents,
-          net_savings_cents: rec.netSavingsCents,
-          reason_codes: rec.reasonCodes,
-          comparison: {
-            proposedInsurer: rec.configuration.auto.insurerName,
-            bundled: rec.configuration.bundled,
-            materialDifferences: rec.coverageReductions,
-            deductibleDifferences: [],
-          },
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      const options = data.result.evaluated
-        .slice()
-        .sort((a, b) => a.cost.totalCents - b.cost.totalCents)
-        .slice(0, 10)
-        .map((e, i) => ({
-          recommendation_id: recommendation.id,
-          rank: i + 1,
-          auto_quote_id: e.configuration.auto.quoteId,
-          property_quote_id: e.configuration.property.quoteId,
-          bundled: e.configuration.bundled,
-          total_cents: e.cost.totalCents,
-          net_savings_cents: e.netSavingsCents,
-          eligible: e.eligible,
-          reason_codes: e.reasonCodes,
-        }));
-      const { error: optError } = await supabase.from("recommendation_options").insert(options);
-      if (optError) throw optError;
-
-      const { error: caseError } = await supabase
-        .from("optimization_cases")
-        .update({ state: "licensed_review" })
-        .eq("id", caseRow.id);
-      if (caseError) throw caseError;
-
-      await supabase.from("audit_events").insert({
-        action: "recommendation_generated",
-        entity_type: "recommendation",
-        entity_id: recommendation.id,
-        household_id: caseRow.household_id,
-        case_id: caseRow.id,
-        after_summary: { net_savings_cents: rec.netSavingsCents },
+      const { data, error } = await supabase.functions.invoke("recommendation-generator", {
+        body: { caseId: caseRow.id },
       });
+      if (error) throw new Error(error.message ?? "Generation failed");
+      if (data && data.error) throw new Error(data.error);
+      if (!data || !data.recommendationId) {
+        throw new Error(
+          data?.eligible === 0 ? "No eligible configuration found." : "Generation failed",
+        );
+      }
+      return data as GeneratedResult;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["case", caseRow.id] });
+    onSuccess: (result) => {
+      setGenerated(result);
       setMessage("Recommendation created and sent to licensed review.");
+      queryClient.invalidateQueries({ queryKey: ["case", caseRow.id] });
+      queryClient.invalidateQueries({ queryKey: ["recommendation", caseRow.id] });
     },
     onError: (e: Error) => setMessage(e.message),
   });
 
   if (isLoading) return <Skeleton className="h-48" />;
-  if (!data) return null;
-  if ("error" in data) return <EmptyState title="Cannot compare yet" hint={data.error} />;
 
-  const rows: EvaluatedConfiguration[] = data.result.evaluated
-    .slice()
-    .sort((a, b) => a.cost.totalCents - b.cost.totalCents);
+  const canGenerate = caseRow.state === "comparing_quotes";
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardTitle>Deterministic household comparison</CardTitle>
-        <p className="mb-2 text-sm">
-          Incumbent combined annual cost:{" "}
-          <span className="font-semibold">{formatCad(data.result.incumbentTotalCents)}</span>
-        </p>
-        <Table>
-          <thead>
-            <tr>
-              <Th>Rank</Th>
-              <Th>Auto</Th>
-              <Th>Property</Th>
-              <Th>Bundled</Th>
-              <Th>Total cost</Th>
-              <Th>Net savings</Th>
-              <Th>Eligible</Th>
-              <Th>Reason codes</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((e, i) => (
-              <tr key={e.configuration.id}>
-                <Td>{i + 1}</Td>
-                <Td>{e.configuration.auto.insurerName}</Td>
-                <Td>{e.configuration.property.insurerName}</Td>
-                <Td>{e.configuration.bundled ? "Yes" : "No"}</Td>
-                <Td>{formatCad(e.cost.totalCents)}</Td>
-                <Td className={e.netSavingsCents < 0 ? "text-danger" : ""}>
-                  {formatCad(e.netSavingsCents)}
-                </Td>
-                <Td>
-                  <Badge
-                    tone={
-                      e.eligible
-                        ? "accent"
-                        : e.configuration.isIncumbentConfiguration
-                          ? "neutral"
-                          : "danger"
-                    }
-                  >
-                    {e.configuration.isIncumbentConfiguration
-                      ? "Incumbent"
-                      : e.eligible
-                        ? "Eligible"
-                        : "Rejected"}
-                  </Badge>
-                </Td>
-                <Td className="max-w-72">
-                  <span className="text-xs text-ink-muted">{e.reasonCodes.join(", ")}</span>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
+        <CardTitle>Case quotes</CardTitle>
+        {quotes && quotes.length > 0 ? (
+          <ul className="mt-2 space-y-2 text-sm">
+            {quotes.map((q) => {
+              const premium = q.quote_policy_components.reduce(
+                (sum, c) => sum + c.annual_premium_cents,
+                0,
+              );
+              return (
+                <li
+                  key={q.id}
+                  className="flex items-center justify-between rounded-md border border-line p-2"
+                >
+                  <span>
+                    {q.insurers?.name ?? "Unknown insurer"} {q.is_incumbent ? "(incumbent)" : ""}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {formatCad(premium)}
+                    <Badge tone={q.state === "bindable" ? "accent" : "warning"}>{q.state}</Badge>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-muted">No quotes entered yet.</p>
+        )}
       </Card>
-      {caseRow.state === "comparing_quotes" ? (
+
+      {generated ? (
+        <Card>
+          <CardTitle>Generated recommendation v{generated.version}</CardTitle>
+          <div className="mt-2 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div>
+              <p className="text-xs text-ink-muted">Proposed insurer</p>
+              <p className="font-medium">{generated.recommended.autoInsurer}</p>
+            </div>
+            <div>
+              <p className="text-xs text-ink-muted">Proposed annual cost</p>
+              <p className="font-medium">{formatCad(generated.recommended.totalCents)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-ink-muted">Net annual savings</p>
+              <p className="font-medium text-accent">
+                {formatCad(generated.recommended.netSavingsCents)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-ink-muted">Bundle</p>
+              <p className="font-medium">{generated.recommended.bundled ? "Yes" : "No"}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">{generated.optionsCount} options evaluated.</p>
+        </Card>
+      ) : null}
+
+      {canGenerate ? (
         <Button
-          disabled={!data.result.recommended || generateRecommendation.isPending}
+          disabled={!quotes || quotes.length === 0 || generateRecommendation.isPending}
           onClick={() => generateRecommendation.mutate()}
         >
-          Generate recommendation and send to licensed review
+          {generateRecommendation.isPending
+            ? "Generating…"
+            : "Generate recommendation and send to licensed review"}
         </Button>
-      ) : null}
+      ) : (
+        <EmptyState
+          title="Comparison complete"
+          hint={
+            caseRow.state === "licensed_review"
+              ? "A recommendation has been generated and is awaiting licensed review."
+              : "Generate a recommendation while the case is in comparing_quotes."
+          }
+        />
+      )}
       {message ? <p className="text-sm text-ink-muted">{message}</p> : null}
     </div>
   );
