@@ -1,8 +1,8 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: df7dd03a98a37a9f89d148bd73e0bf5f91887f60060b45156c3c1cb38cf5c55b
+// source-hash: 54c10c70394dbb4ead89f92b9ec0035351bfffe7c2bdb95828334e2f187a9bcd
 
 
-// ../../node_modules/zod/lib/index.mjs
+// ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
 var util;
 (function(util2) {
   util2.assertEqual = (val) => val;
@@ -4170,6 +4170,8 @@ var notificationChannels = ["push", "email", "local_log"];
 var NotificationChannel = z.enum(notificationChannels);
 var coveragePreferences = ["required", "preferred", "indifferent", "prohibited"];
 var CoveragePreference = z.enum(coveragePreferences);
+var coveragePresences = ["yes", "no", "unknown", "not_applicable"];
+var CoveragePresence = z.enum(coveragePresences);
 var limitRules = [
   "minimum",
   "maximum",
@@ -4684,7 +4686,9 @@ var PropertyCoverageDetails = z.object({
   contentsLimitCents: NonNegativeCents,
   detachedStructuresLimitCents: NonNegativeCents,
   personalLiabilityLimitCents: NonNegativeCents,
-  additionalLivingExpenseLimitCents: NonNegativeCents,
+  additionalLivingExpenseLimitCents: NonNegativeCents.nullable(),
+  additionalLivingExpensesIncluded: z.boolean(),
+  replacementCostIncluded: z.boolean(),
   baseDeductibleCents: NonNegativeCents,
   waterDeductibleCents: NonNegativeCents.nullable(),
   windHailIncluded: z.boolean(),
@@ -4709,6 +4713,12 @@ var PropertyCoverageDetails = z.object({
   shortTermRentalPermissionIncluded: z.boolean(),
   claimsForgivenessIncluded: z.boolean()
 });
+var ComponentProvenance = z.object({
+  dataSource: QuoteDataSource.optional(),
+  validatedAt: z.string().datetime({ offset: true }).optional(),
+  validatedBy: z.string().uuid().optional(),
+  coverageSchemaVersion: z.number().int().nonnegative().optional()
+}).optional();
 var QuoteComponent = z.object({
   id: z.string().uuid().optional(),
   productLine: ProductLine,
@@ -4724,7 +4734,8 @@ var QuoteComponent = z.object({
       code: z.string(),
       message: z.string()
     })
-  )
+  ),
+  provenance: ComponentProvenance
 });
 var EngineQuote = z.object({
   id: z.string(),
@@ -4762,14 +4773,14 @@ var QuoteComponentDraft = z.discriminatedUnion("productLine", [
     productLine: z.literal("auto"),
     assetId: z.string().uuid(),
     annualPremiumCents: NonNegativeCents,
-    coverage: AutoCoverageDetailsDraft
+    coverage: z.record(z.unknown())
   }),
   z.object({
     componentId: z.string().uuid().optional(),
     productLine: z.literal("property"),
     assetId: z.string().uuid(),
     annualPremiumCents: NonNegativeCents,
-    coverage: PropertyCoverageDetailsDraft
+    coverage: z.record(z.unknown())
   })
 ]);
 var QuoteSaveIntent = z.enum(["draft", "validate"]);
@@ -4789,7 +4800,24 @@ var SaveCaseQuoteRequest = z.object({
   underwritingConditions: z.array(z.string()).default([]),
   dataSource: QuoteDataSource,
   components: z.array(QuoteComponentDraft).min(1)
-}).strict();
+}).strict().superRefine((val, ctx) => {
+  const componentIds = val.components.map((c) => c.componentId).filter((id) => id !== void 0);
+  if (new Set(componentIds).size !== componentIds.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["components"],
+      message: "Duplicate componentId values are not allowed"
+    });
+  }
+  const pairs = val.components.map((c) => `${c.productLine}:${c.assetId}`);
+  if (new Set(pairs).size !== pairs.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["components"],
+      message: "Duplicate productLine and assetId pairs are not allowed"
+    });
+  }
+});
 
 // ../schemas/src/recommendation.ts
 var QuoteSnapshotSchema = z.object({
@@ -4861,7 +4889,16 @@ var PersistedRecommendationOptionSchema = z.object({
   deductible_total_cents: z.number().int().nonnegative(),
   underwriting_condition_count: z.number().int().nonnegative()
 }).strict();
-var CanonicalQuoteSnapshot = EngineQuote.strict();
+var CanonicalAutoCoverageSnapshot = AutoCoverageDetails.strict();
+var CanonicalPropertyCoverageSnapshot = PropertyCoverageDetails.strict();
+var CanonicalQuoteComponentSnapshot = QuoteComponent.extend({
+  auto: CanonicalAutoCoverageSnapshot.nullable(),
+  property: CanonicalPropertyCoverageSnapshot.nullable()
+}).strict();
+var CanonicalQuoteSnapshot = z.object({
+  ...EngineQuote.shape,
+  components: z.array(CanonicalQuoteComponentSnapshot).min(1)
+}).strict();
 var CanonicalRecommendationInputSnapshotSchema = z.object({
   caseId: z.string().uuid(),
   householdId: z.string().uuid(),
@@ -5927,7 +5964,7 @@ function coverageReductionsVsIncumbent(input, config) {
     reductions.push("property_detached_structures_limit_reduced");
   if (property.personalLiabilityLimitCents < incumbentProperty.personalLiabilityLimitCents)
     reductions.push("property_personal_liability_limit_reduced");
-  if (property.additionalLivingExpenseLimitCents < incumbentProperty.additionalLivingExpenseLimitCents)
+  if (property.additionalLivingExpenseLimitCents !== null && property.additionalLivingExpenseLimitCents !== void 0 && incumbentProperty.additionalLivingExpenseLimitCents !== null && incumbentProperty.additionalLivingExpenseLimitCents !== void 0 && property.additionalLivingExpenseLimitCents < incumbentProperty.additionalLivingExpenseLimitCents)
     reductions.push("property_ale_limit_reduced");
   if (isCoverageReduced(property.sewerBackupIncluded, incumbentProperty.sewerBackupIncluded))
     reductions.push("property_sewer_backup_removed");
@@ -6464,6 +6501,21 @@ function verifyCanonicalString(canonicalJson) {
     return false;
   }
 }
+function verifyCanonicalPair(schema, value, canonicalJson) {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    return { valid: false, error: parsed.error.message };
+  }
+  try {
+    const recomputed = JSON.stringify(canonicalizeForDigest(parsed.data));
+    if (recomputed !== canonicalJson) {
+      return { valid: false, error: "Canonical string does not match regenerated canonical JSON" };
+    }
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 // ../database/src/mandate-repository.ts
 var MandateLoadError = class extends Error {
@@ -6646,6 +6698,12 @@ function toComponent(c) {
   const coverage = row.normalized_coverage ?? row.coverage;
   const validationStatus = row.validation_status;
   const validationErrors = row.validation_errors ?? [];
+  const provenance = row.data_source || row.validated_at || row.validated_by || row.coverage_schema_version ? {
+    dataSource: row.data_source,
+    validatedAt: row.validated_at ?? void 0,
+    validatedBy: row.validated_by ?? void 0,
+    coverageSchemaVersion: row.coverage_schema_version ?? void 0
+  } : void 0;
   if (validationStatus !== "valid") {
     return {
       quoteId: void 0,
@@ -6672,7 +6730,8 @@ function toComponent(c) {
       auto: parsed2.data,
       property: null,
       validationStatus,
-      validationErrors
+      validationErrors,
+      provenance
     };
   }
   const parsed = PropertyCoverageDetails.safeParse(coverage ?? {});
@@ -6692,7 +6751,8 @@ function toComponent(c) {
     auto: null,
     property: parsed.data,
     validationStatus,
-    validationErrors
+    validationErrors,
+    provenance
   };
 }
 function toEngineQuote(q) {
@@ -6740,7 +6800,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     };
   }
   const householdId = caseRow.household_id;
-  const [mandateResult, vehiclesRes, propertiesRes, quotesRes] = await Promise.all([
+  const [mandateResult, vehiclesRes, propertiesRes, quotesRes, readinessRes] = await Promise.all([
     loadCurrentV2Mandate(supabase, householdId).catch((err) => {
       if (err && typeof err === "object" && "code" in err) {
         return {
@@ -6754,7 +6814,8 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     supabase.from("properties").select("id").eq("household_id", householdId),
     supabase.from("quotes").select(
       "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, version, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
-    ).eq("case_id", caseId)
+    ).eq("case_id", caseId),
+    supabase.from("quote_readiness").select("quote_id, readiness_status").eq("case_id", caseId)
   ]);
   if (!mandateResult || "code" in mandateResult) {
     return {
@@ -6784,7 +6845,28 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
       details: { resource: "quotes", operation: "select" }
     };
   }
+  if (readinessRes.error) {
+    return {
+      code: "QUOTE_READINESS_LOAD_FAILED",
+      message: readinessRes.error.message,
+      details: { resource: "quote_readiness", operation: "select" }
+    };
+  }
+  const readinessByQuote = new Map(
+    (readinessRes.data ?? []).map((r) => [r.quote_id, r.readiness_status])
+  );
   const dbQuotes = quotesRes.data ?? [];
+  const notReady = dbQuotes.filter((q) => readinessByQuote.get(q.id) !== "ready");
+  if (notReady.length > 0) {
+    return {
+      code: "QUOTE_NOT_READY",
+      message: `Quotes are not ready for recommendation: ${notReady.map((q) => `${q.id} (${readinessByQuote.get(q.id) ?? "unknown"})`).join(", ")}`,
+      details: {
+        quoteIds: notReady.map((q) => q.id),
+        readiness: Object.fromEntries(readinessByQuote)
+      }
+    };
+  }
   const engineQuotes = [];
   for (const q of dbQuotes) {
     const result = toEngineQuote(q);
@@ -6824,6 +6906,9 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
 }
 export {
   AutoCoverageDetails,
+  CanonicalEngineOutputSchema,
+  CanonicalRecommendationInputSnapshotSchema,
+  CoveragePresence,
   EngineRecommendationPersistencePayloadSchema,
   HouseholdCoverageMandateV2,
   PropertyCoverageDetails,
@@ -6840,9 +6925,10 @@ export {
   canonicalizeForDigest,
   evaluateHousehold,
   loadRecommendationInputSnapshot,
+  verifyCanonicalPair,
   verifyCanonicalString
 };
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "df7dd03a98a37a9f89d148bd73e0bf5f91887f60060b45156c3c1cb38cf5c55b";
+export const __AUTOPILOT_SOURCE_HASH__ = "54c10c70394dbb4ead89f92b9ec0035351bfffe7c2bdb95828334e2f187a9bcd";
