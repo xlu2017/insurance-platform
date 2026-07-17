@@ -89,7 +89,7 @@ export function deriveMandateDefault(current: CurrentCoverage): DerivedMandate {
     };
   }
 
-  if (current.included === undefined) {
+  if (current.kind !== "optional_coverage" || current.included === undefined) {
     return noRequirement("invalid_current_value");
   }
 

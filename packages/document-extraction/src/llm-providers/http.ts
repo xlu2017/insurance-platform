@@ -1,0 +1,76 @@
+import type { InsuranceLlmProvider, LlmExtractionRequest } from "../llm-contract.ts";
+
+export interface HttpLlmProviderOptions {
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  providerId?: string;
+}
+
+function stripMarkdownJsonFence(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("```")) {
+    const lines = trimmed.split("\n");
+    if (lines.length > 1 && lines[0].trim().toLowerCase().startsWith("```json")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+    if (lines.length > 1 && lines[0].trim().startsWith("```")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Minimal OpenAI-compatible chat-completions provider for the insurance document
+ * extraction contract. The caller is responsible for any retry, rate-limit, or
+ * fallback policy outside this class.
+ */
+export class HttpLlmProvider implements InsuranceLlmProvider {
+  readonly providerId: string;
+  readonly modelId: string;
+  private readonly apiUrl: string;
+  private readonly apiKey: string;
+
+  constructor(options: HttpLlmProviderOptions) {
+    const url = options.apiUrl.replace(/\/+$/, "");
+    this.apiUrl = `${url}/chat/completions`;
+    this.apiKey = options.apiKey;
+    this.modelId = options.model;
+    this.providerId = options.providerId ?? "http-llm-provider";
+  }
+
+  async extract(request: LlmExtractionRequest, systemPrompt: string): Promise<unknown> {
+    const response = await fetch(this.apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        temperature: 0,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: JSON.stringify(request) },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`LLM request failed: ${response.status} ${text.slice(0, 200)}`);
+    }
+
+    const body = (await response.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = body.choices?.[0]?.message?.content;
+    if (typeof content !== "string") {
+      throw new Error("LLM response did not contain a text completion");
+    }
+
+    const jsonText = stripMarkdownJsonFence(content);
+    return JSON.parse(jsonText);
+  }
+}

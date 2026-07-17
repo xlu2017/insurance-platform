@@ -75,7 +75,7 @@ export interface OnboardingCommitPlan {
 }
 
 function keyPart(value: string): string {
-  return encodeURIComponent(value.trim().toLowerCase());
+  return encodeURIComponent(value.trim().toLowerCase()).replace(/%[0-9A-F]{2}/g, (m) => m.toLowerCase());
 }
 
 function hasValue(value: unknown): boolean {

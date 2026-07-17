@@ -132,7 +132,7 @@ function clean(value: string): string {
 }
 
 function keyPart(value: string): string {
-  return encodeURIComponent(clean(value));
+  return encodeURIComponent(clean(value)).replace(/%[0-9A-F]{2}/g, (m) => m.toLowerCase());
 }
 
 function candidateIdFor(documentFingerprint: string, localCandidateId: string): string {
