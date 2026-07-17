@@ -77,7 +77,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function valuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]));
+    return (
+      left.length === right.length &&
+      left.every((value, index) => valuesEqual(value, right[index]))
+    );
   }
   if (isRecord(left) && isRecord(right)) {
     const leftKeys = Object.keys(left).sort();
@@ -126,7 +129,7 @@ function addIssue(
   issues: LlmSemanticIssue[],
   issue: Omit<LlmSemanticIssue, "severity"> & { severity?: LlmSemanticIssueSeverity },
 ): void {
-  issues.push({ severity: issue.severity ?? "error", ...issue });
+  issues.push({ ...issue, severity: issue.severity ?? "error" });
 }
 
 function validateEvidence(
@@ -208,28 +211,49 @@ function validateFieldValues(result: LlmExtractionResult, issues: LlmSemanticIss
     }
 
     if (value !== undefined && isVinField(assertion.fieldPath)) {
-      const normalized = typeof value === "string" ? normalizeVin(value) : null;
-      if (!normalized || normalized.normalized !== value.toUpperCase().replace(/[^A-Z0-9]/g, "")) {
+      if (typeof value !== "string") {
         addIssue(issues, {
           code: "INVALID_VIN",
           path: ["assertions", assertionIndex, "normalizedValue"],
           assertionId: assertion.id,
           entityRef: assertion.entityRef,
-          message: `${assertion.fieldPath} is not a valid normalized 17-character VIN`,
+          message: `${assertion.fieldPath} is not a string VIN`,
         });
+      } else {
+        const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const normalized = normalizeVin(value);
+        if (!normalized || normalized.normalized !== compact) {
+          addIssue(issues, {
+            code: "INVALID_VIN",
+            path: ["assertions", assertionIndex, "normalizedValue"],
+            assertionId: assertion.id,
+            entityRef: assertion.entityRef,
+            message: `${assertion.fieldPath} is not a valid normalized 17-character VIN`,
+          });
+        }
       }
     }
 
     if (value !== undefined && isPostalCodeField(assertion.fieldPath)) {
-      const normalized = typeof value === "string" ? normalizePostalCode(value) : undefined;
-      if (!normalized || normalized !== value.toUpperCase()) {
+      if (typeof value !== "string") {
         addIssue(issues, {
           code: "INVALID_POSTAL_CODE",
           path: ["assertions", assertionIndex, "normalizedValue"],
           assertionId: assertion.id,
           entityRef: assertion.entityRef,
-          message: `${assertion.fieldPath} must be a normalized Canadian postal code such as T3A 0G9`,
+          message: `${assertion.fieldPath} is not a string postal code`,
         });
+      } else {
+        const normalized = normalizePostalCode(value);
+        if (!normalized || normalized !== value.toUpperCase()) {
+          addIssue(issues, {
+            code: "INVALID_POSTAL_CODE",
+            path: ["assertions", assertionIndex, "normalizedValue"],
+            assertionId: assertion.id,
+            entityRef: assertion.entityRef,
+            message: `${assertion.fieldPath} must be a normalized Canadian postal code such as T3A 0G9`,
+          });
+        }
       }
     }
 
@@ -320,7 +344,9 @@ function validateDuplicateAndConflictSemantics(
     grouped.set(key, group);
   });
 
-  const declaredConflictAssertions = new Set(result.conflicts.flatMap((conflict) => conflict.assertionIds));
+  const declaredConflictAssertions = new Set(
+    result.conflicts.flatMap((conflict) => conflict.assertionIds),
+  );
 
   for (const group of grouped.values()) {
     if (group.length < 2) continue;
@@ -329,7 +355,9 @@ function validateDuplicateAndConflictSemantics(
     );
     if (known.length < 2) continue;
 
-    const firstValue = knownComparableValue(known[0].assertion);
+    const [firstKnown] = known;
+    if (!firstKnown) continue;
+    const firstValue = knownComparableValue(firstKnown.assertion);
     const allEqual = known.every(({ assertion }) =>
       valuesEqual(firstValue, knownComparableValue(assertion)),
     );
@@ -348,14 +376,16 @@ function validateDuplicateAndConflictSemantics(
       continue;
     }
 
-    const allDeclared = known.every(({ assertion }) => declaredConflictAssertions.has(assertion.id));
+    const allDeclared = known.every(({ assertion }) =>
+      declaredConflictAssertions.has(assertion.id),
+    );
     if (!allDeclared) {
       addIssue(issues, {
         code: "UNDECLARED_CONFLICT",
-        path: ["assertions", known[0].index],
-        assertionId: known[0].assertion.id,
-        entityRef: known[0].assertion.entityRef,
-        message: `Different values for ${known[0].assertion.fieldPath} require an explicit conflict`,
+        path: ["assertions", firstKnown.index],
+        assertionId: firstKnown.assertion.id,
+        entityRef: firstKnown.assertion.entityRef,
+        message: `Different values for ${firstKnown.assertion.fieldPath} require an explicit conflict`,
       });
     }
   }
@@ -403,7 +433,9 @@ function validatePolicyTermDates(result: LlmExtractionResult, issues: LlmSemanti
     const effective = term.effectiveDateAssertionId
       ? assertions.get(term.effectiveDateAssertionId)
       : undefined;
-    const expiry = term.expiryDateAssertionId ? assertions.get(term.expiryDateAssertionId) : undefined;
+    const expiry = term.expiryDateAssertionId
+      ? assertions.get(term.expiryDateAssertionId)
+      : undefined;
     const effectiveValue = effective ? knownComparableValue(effective) : undefined;
     const expiryValue = expiry ? knownComparableValue(expiry) : undefined;
 
