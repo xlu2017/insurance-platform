@@ -21,16 +21,16 @@ turbo 2.3.3
 • Packages in scope: @autopilot/admin, @autopilot/config, @autopilot/database, @autopilot/design-tokens, @autopilot/insurance-engine, @autopilot/mobile, @autopilot/schemas, @autopilot/test-fixtures
 • Running lint in 8 packages
 • Remote caching disabled
-@autopilot/schemas:lint: cache hit, replaying logs e50ce0c41d56cc85
-@autopilot/schemas:lint: 
-@autopilot/schemas:lint: > @autopilot/schemas@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/schemas
-@autopilot/schemas:lint: > eslint src
-@autopilot/schemas:lint: 
 @autopilot/design-tokens:lint: cache hit, replaying logs 97188c87325023ce
 @autopilot/design-tokens:lint: 
 @autopilot/design-tokens:lint: > @autopilot/design-tokens@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/design-tokens
 @autopilot/design-tokens:lint: > eslint src
 @autopilot/design-tokens:lint: 
+@autopilot/schemas:lint: cache hit, replaying logs e50ce0c41d56cc85
+@autopilot/schemas:lint: 
+@autopilot/schemas:lint: > @autopilot/schemas@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/schemas
+@autopilot/schemas:lint: > eslint src
+@autopilot/schemas:lint: 
 @autopilot/test-fixtures:lint: cache hit, replaying logs 5821158053a0f601
 @autopilot/test-fixtures:lint: 
 @autopilot/test-fixtures:lint: > @autopilot/test-fixtures@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/test-fixtures
@@ -41,16 +41,16 @@ turbo 2.3.3
 @autopilot/database:lint: > @autopilot/database@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/database
 @autopilot/database:lint: > eslint src
 @autopilot/database:lint: 
-@autopilot/mobile:lint: cache hit, replaying logs 800e0833b0b6e5b0
-@autopilot/mobile:lint: 
-@autopilot/mobile:lint: > @autopilot/mobile@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/mobile
-@autopilot/mobile:lint: > eslint app lib components
-@autopilot/mobile:lint: 
 @autopilot/insurance-engine:lint: cache hit, replaying logs 6ba308b7102abdd7
 @autopilot/insurance-engine:lint: 
 @autopilot/insurance-engine:lint: > @autopilot/insurance-engine@0.1.0 lint /home/ubuntu/repos/insurance-platform/packages/insurance-engine
 @autopilot/insurance-engine:lint: > eslint src test scripts
 @autopilot/insurance-engine:lint: 
+@autopilot/mobile:lint: cache hit, replaying logs 800e0833b0b6e5b0
+@autopilot/mobile:lint: 
+@autopilot/mobile:lint: > @autopilot/mobile@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:lint: > eslint app lib components
+@autopilot/mobile:lint: 
 @autopilot/admin:lint: cache hit, replaying logs 7bebf3715fca55ec
 @autopilot/admin:lint: 
 @autopilot/admin:lint: > @autopilot/admin@0.1.0 lint /home/ubuntu/repos/insurance-platform/apps/admin
@@ -59,7 +59,7 @@ turbo 2.3.3
 
  Tasks:    7 successful, 7 total
 Cached:    7 cached, 7 total
-  Time:    82ms >>> FULL TURBO
+  Time:    79ms >>> FULL TURBO
 
 
 > insurance-autopilot@0.1.0 typecheck /home/ubuntu/repos/insurance-platform
@@ -108,7 +108,7 @@ turbo 2.3.3
 
  Tasks:    7 successful, 7 total
 Cached:    7 cached, 7 total
-  Time:    87ms >>> FULL TURBO
+  Time:    85ms >>> FULL TURBO
 
 
 > insurance-autopilot@0.1.0 typecheck:edge /home/ubuntu/repos/insurance-platform
@@ -154,20 +154,6 @@ turbo 2.3.3
 @autopilot/database:test:    Start at  01:38:26
 @autopilot/database:test:    Duration  401ms (transform 63ms, setup 0ms, collect 46ms, tests 4ms, environment 0ms, prepare 123ms)
 @autopilot/database:test: 
-@autopilot/mobile:test: cache hit, replaying logs 37a86ca3c08ea496
-@autopilot/mobile:test: 
-@autopilot/mobile:test: > @autopilot/mobile@0.1.0 test /home/ubuntu/repos/insurance-platform/apps/mobile
-@autopilot/mobile:test: > jest
-@autopilot/mobile:test: 
-@autopilot/mobile:test: PASS __tests__/welcome.test.tsx
-@autopilot/mobile:test:   Welcome screen
-@autopilot/mobile:test:     ✓ shows the value proposition and demo disclaimer (206 ms)
-@autopilot/mobile:test: 
-@autopilot/mobile:test: Test Suites: 1 passed, 1 total
-@autopilot/mobile:test: Tests:       1 passed, 1 total
-@autopilot/mobile:test: Snapshots:   0 total
-@autopilot/mobile:test: Time:        0.631 s, estimated 4 s
-@autopilot/mobile:test: Ran all test suites.
 @autopilot/insurance-engine:test: cache hit, replaying logs c83d03a1fcc691a0
 @autopilot/insurance-engine:test: 
 @autopilot/insurance-engine:test: > @autopilot/insurance-engine@0.1.0 test /home/ubuntu/repos/insurance-platform/packages/insurance-engine
@@ -187,10 +173,24 @@ turbo 2.3.3
 @autopilot/insurance-engine:test:    Start at  01:39:29
 @autopilot/insurance-engine:test:    Duration  532ms (transform 386ms, setup 0ms, collect 1.10s, tests 58ms, environment 1ms, prepare 280ms)
 @autopilot/insurance-engine:test: 
+@autopilot/mobile:test: cache hit, replaying logs 37a86ca3c08ea496
+@autopilot/mobile:test: 
+@autopilot/mobile:test: > @autopilot/mobile@0.1.0 test /home/ubuntu/repos/insurance-platform/apps/mobile
+@autopilot/mobile:test: > jest
+@autopilot/mobile:test: 
+@autopilot/mobile:test: PASS __tests__/welcome.test.tsx
+@autopilot/mobile:test:   Welcome screen
+@autopilot/mobile:test:     ✓ shows the value proposition and demo disclaimer (206 ms)
+@autopilot/mobile:test: 
+@autopilot/mobile:test: Test Suites: 1 passed, 1 total
+@autopilot/mobile:test: Tests:       1 passed, 1 total
+@autopilot/mobile:test: Snapshots:   0 total
+@autopilot/mobile:test: Time:        0.631 s, estimated 4 s
+@autopilot/mobile:test: Ran all test suites.
 
  Tasks:    4 successful, 4 total
 Cached:    4 cached, 4 total
-  Time:    90ms >>> FULL TURBO
+  Time:    79ms >>> FULL TURBO
 
 
 > @autopilot/admin@0.1.0 build /home/ubuntu/repos/insurance-platform/apps/admin
@@ -360,6 +360,7 @@ NOTICE (00000): policy "quote_coverages_delete" for relation "quote_coverages" d
 Applying migration 20260717000001_quote_readiness_and_insurer_versioning.sql...
 NOTICE (00000): trigger "insurers_version_bump" for relation "insurers" does not exist, skipping
 NOTICE (00000): trigger "recommendations_insurer_staleness" for relation "recommendations" does not exist, skipping
+Applying migration 20260718000002_quote_coverage_validation_trigger.sql...
 Seeding data from supabase/seed.sql...
 Restarting containers...
 Finished supabase db reset on branch devin/1784150712-mvp-scaffold.
@@ -369,7 +370,7 @@ Finished supabase db reset on branch devin/1784150712-mvp-scaffold.
 
 WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
 Connecting to db 5432
-../../../../tmp/database.types.ts 202ms
+../../../../tmp/database.types.ts 187ms
 Connecting to local database...
 psql:/home/ubuntu/repos/insurance-platform/supabase/tests/001_rls_and_guards.sql:2: NOTICE:  extension "pgtap" already exists, skipping
 /home/ubuntu/repos/insurance-platform/supabase/tests/001_rls_and_guards.sql .................. ok
@@ -390,7 +391,7 @@ psql:/home/ubuntu/repos/insurance-platform/supabase/tests/008_quote_atomic_persi
 psql:/home/ubuntu/repos/insurance-platform/supabase/tests/009_quote_migration_upgrade_test.sql:2: NOTICE:  extension "pgtap" already exists, skipping
 /home/ubuntu/repos/insurance-platform/supabase/tests/009_quote_migration_upgrade_test.sql .... ok
 All tests successful.
-Files=9, Tests=95,  1 wallclock secs ( 0.03 usr  0.00 sys +  0.05 cusr  0.02 csys =  0.10 CPU)
+Files=9, Tests=95,  0 wallclock secs ( 0.02 usr  0.01 sys +  0.04 cusr  0.03 csys =  0.10 CPU)
 Result: PASS
 
 > @autopilot/database@0.1.0 test:integration /home/ubuntu/repos/insurance-platform/packages/database
@@ -399,12 +400,12 @@ Result: PASS
 
  RUN  v2.1.8 /home/ubuntu/repos/insurance-platform/packages/database
 
- ✓ test/mandate-save-reload.integration.test.ts (2 tests) 67ms
+ ✓ test/mandate-save-reload.integration.test.ts (2 tests) 66ms
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
-   Start at  01:44:34
-   Duration  363ms (transform 98ms, setup 0ms, collect 155ms, tests 67ms, environment 0ms, prepare 41ms)
+   Start at  01:52:18
+   Duration  357ms (transform 102ms, setup 0ms, collect 158ms, tests 66ms, environment 0ms, prepare 37ms)
 
 
 > insurance-autopilot@0.1.0 ci:e2e /home/ubuntu/repos/insurance-platform
@@ -416,7 +417,7 @@ Supabase local stack is already running; reusing existing stack.
 > tsx scripts/build-edge-bundle.ts
 
 Edge bundle written to /home/ubuntu/repos/insurance-platform/supabase/functions/_shared/autopilot.js (21 inputs, hash 54c10c70394dbb4ead89f92b9ec0035351bfffe7c2bdb95828334e2f187a9bcd)
-Supabase environment exported to /tmp/tmp.lToaDWlIYx
+Supabase environment exported to /tmp/tmp.NZ3bwqHhtI
 WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
 Resetting local database...
 Recreating database...
@@ -480,6 +481,7 @@ NOTICE (00000): policy "quote_coverages_delete" for relation "quote_coverages" d
 Applying migration 20260717000001_quote_readiness_and_insurer_versioning.sql...
 NOTICE (00000): trigger "insurers_version_bump" for relation "insurers" does not exist, skipping
 NOTICE (00000): trigger "recommendations_insurer_staleness" for relation "recommendations" does not exist, skipping
+Applying migration 20260718000002_quote_coverage_validation_trigger.sql...
 Seeding data from supabase/seed.sql...
 Restarting containers...
 Finished supabase db reset on branch devin/1784150712-mvp-scaffold.
@@ -487,10 +489,10 @@ WARNING: Ignoring custom format, because both --format and --quiet are set.
 
 Running 4 tests using 1 worker
 
-  ✓  1 smoke.spec.ts:13:5 › operations can sign in and view the dashboard (932ms)
+  ✓  1 smoke.spec.ts:13:5 › operations can sign in and view the dashboard (910ms)
   ✓  2 smoke.spec.ts:19:5 › staff can open a case and browse tabs (2.9s)
-  ✓  3 smoke.spec.ts:39:5 › customer accounts are rejected from the admin console (683ms)
-  ✓  4 smoke.spec.ts:49:5 › unauthenticated users are redirected to login (550ms)
+  ✓  3 smoke.spec.ts:39:5 › customer accounts are rejected from the admin console (663ms)
+  ✓  4 smoke.spec.ts:49:5 › unauthenticated users are redirected to login (572ms)
 
   4 passed (6.1s)
 WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
@@ -556,6 +558,7 @@ NOTICE (00000): policy "quote_coverages_delete" for relation "quote_coverages" d
 Applying migration 20260717000001_quote_readiness_and_insurer_versioning.sql...
 NOTICE (00000): trigger "insurers_version_bump" for relation "insurers" does not exist, skipping
 NOTICE (00000): trigger "recommendations_insurer_staleness" for relation "recommendations" does not exist, skipping
+Applying migration 20260718000002_quote_coverage_validation_trigger.sql...
 Seeding data from supabase/seed.sql...
 Restarting containers...
 Finished supabase db reset on branch devin/1784150712-mvp-scaffold.
@@ -565,19 +568,22 @@ Connecting to http://127.0.0.1:54321
    V2 mandate row liability = 2.5M, version 1
    Legacy coverage_requirements row remains at 2M
 2. Updated auto quote coverages to 2.5M
-3. Generated recommendation 98878ab2-7773-4c51-b182-816f4752ff90 version 1
-4. Recommendation bound to exact V2 snapshot 6110bb94-3ce4-4170-b81b-a8a5ed18d89d v1
+2b. Quote draft edit saved
+2c. Quote validated after draft
+2d. Stale quote edit rejected
+3. Generated recommendation d417a9ec-331e-4e5a-94f6-72a5a3d5a691 version 1
+4. Recommendation bound to exact V2 snapshot 3a5e72bb-dff0-491d-8066-339044394d2c v1
 5. Case advanced to licensed_review
 6. Reviewer published recommendation
 7. Customer changed V2 mandate to 3M, new version 2
 8. Stale recommendation approval rejected: mandate used by this recommendation is no longer current
-9. Regenerated recommendation df2c23a4-6a1d-4eef-befc-0ee3118a094c
+9. Regenerated recommendation c5017655-0550-4de6-b573-3ad7f2ef70fe
 10. Reviewer published replacement recommendation
 11. Multi-asset household rejected by Edge Function: {"code":"MISSING_INSURED_ASSET","message":"No auto component matches the insured vehicle 22000000-0000-0000-0000-000000000099"}
-12. Legacy mandate change did not affect V2 recommendation ec8fde1f-3a52-4f62-8892-f919a0948d22
-13. Customer approved final recommendation; switch 60091a27-e167-4a17-b1ca-cb2b81be8d12
+12. Legacy mandate change did not affect V2 recommendation 6fb449a9-2c91-4c5d-8caf-bbd49d13caf8
+13. Customer approved final recommendation; switch b6783c5f-f97e-4be7-bc3e-97fc84d39b40
 14. Switch advanced to completed
-15. Audit events contain V2 mandate identity 6110bb94-3ce4-4170-b81b-a8a5ed18d89d
+15. Audit events contain V2 mandate identity 3a5e72bb-dff0-491d-8066-339044394d2c
 
 --- Negative tests ---
 16. Malformed V2 JSON rejected
@@ -587,4 +593,4 @@ Connecting to http://127.0.0.1:54321
 
 V2 mandate lifecycle E2E passed.
 
-All local CI checks passed in 142s.
+All local CI checks passed in 140s.
