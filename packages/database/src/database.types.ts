@@ -3,6 +3,75 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
+      asset_candidates: {
+        Row: {
+          asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          conflicts_json: Json;
+          created_at: string;
+          decision: Database["public"]["Enums"]["candidate_decision"];
+          display_label: string;
+          household_id: string;
+          id: string;
+          identity_fingerprint: string;
+          match_classification: Database["public"]["Enums"]["candidate_match_classification"];
+          occupancy: string | null;
+          review_status: string;
+          selected_facts_json: Json;
+          session_id: string;
+          source_document_ids: string[];
+          updated_at: string;
+        };
+        Insert: {
+          asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          conflicts_json?: Json;
+          created_at?: string;
+          decision?: Database["public"]["Enums"]["candidate_decision"];
+          display_label: string;
+          household_id: string;
+          id?: string;
+          identity_fingerprint: string;
+          match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
+          occupancy?: string | null;
+          review_status?: string;
+          selected_facts_json?: Json;
+          session_id: string;
+          source_document_ids?: string[];
+          updated_at?: string;
+        };
+        Update: {
+          asset_type?: Database["public"]["Enums"]["candidate_asset_type"];
+          conflicts_json?: Json;
+          created_at?: string;
+          decision?: Database["public"]["Enums"]["candidate_decision"];
+          display_label?: string;
+          household_id?: string;
+          id?: string;
+          identity_fingerprint?: string;
+          match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
+          occupancy?: string | null;
+          review_status?: string;
+          selected_facts_json?: Json;
+          session_id?: string;
+          source_document_ids?: string[];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "asset_candidates_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asset_candidates_session_id_fkey";
+            columns: ["session_id"];
+            isOneToOne: false;
+            referencedRelation: "document_extraction_sessions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       audit_events: {
         Row: {
           action: string;
@@ -66,6 +135,51 @@ export type Database = {
             columns: ["household_id"];
             isOneToOne: false;
             referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      candidate_conflicts: {
+        Row: {
+          assertion_ids: string[];
+          candidate_id: string;
+          created_at: string;
+          field_path: string;
+          id: string;
+          reason: string;
+          selected_assertion_id: string | null;
+        };
+        Insert: {
+          assertion_ids: string[];
+          candidate_id: string;
+          created_at?: string;
+          field_path: string;
+          id?: string;
+          reason: string;
+          selected_assertion_id?: string | null;
+        };
+        Update: {
+          assertion_ids?: string[];
+          candidate_id?: string;
+          created_at?: string;
+          field_path?: string;
+          id?: string;
+          reason?: string;
+          selected_assertion_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "candidate_conflicts_candidate_id_fkey";
+            columns: ["candidate_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_candidates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_conflicts_selected_assertion_id_fkey";
+            columns: ["selected_assertion_id"];
+            isOneToOne: false;
+            referencedRelation: "extracted_fact_assertions";
             referencedColumns: ["id"];
           },
         ];
@@ -304,6 +418,48 @@ export type Database = {
           },
         ];
       };
+      document_extraction_sessions: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          household_id: string;
+          id: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          household_id: string;
+          id?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          household_id?: string;
+          id?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_extraction_sessions_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_extraction_sessions_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       drivers: {
         Row: {
           created_at: string;
@@ -403,6 +559,148 @@ export type Database = {
           to_email?: string;
         };
         Relationships: [];
+      };
+      extracted_documents: {
+        Row: {
+          classification: string;
+          created_at: string;
+          extracted_at: string;
+          file_digest: string;
+          id: string;
+          page_count: number;
+          pages_json: Json;
+          parser_id: string | null;
+          parser_version: string | null;
+          policy_document_id: string | null;
+          session_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          classification?: string;
+          created_at?: string;
+          extracted_at?: string;
+          file_digest: string;
+          id?: string;
+          page_count?: number;
+          pages_json?: Json;
+          parser_id?: string | null;
+          parser_version?: string | null;
+          policy_document_id?: string | null;
+          session_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          classification?: string;
+          created_at?: string;
+          extracted_at?: string;
+          file_digest?: string;
+          id?: string;
+          page_count?: number;
+          pages_json?: Json;
+          parser_id?: string | null;
+          parser_version?: string | null;
+          policy_document_id?: string | null;
+          session_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "extracted_documents_policy_document_id_fkey";
+            columns: ["policy_document_id"];
+            isOneToOne: false;
+            referencedRelation: "policy_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "extracted_documents_session_id_fkey";
+            columns: ["session_id"];
+            isOneToOne: false;
+            referencedRelation: "document_extraction_sessions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      extracted_fact_assertions: {
+        Row: {
+          authority: Database["public"]["Enums"]["assertion_authority"];
+          candidate_id: string | null;
+          confidence: number;
+          confirmation_status: Database["public"]["Enums"]["assertion_confirmation_status"];
+          confirmed_at: string | null;
+          confirmed_by: string | null;
+          created_at: string;
+          document_id: string;
+          entity_scope: string;
+          field_path: string;
+          id: string;
+          normalized_value: Json | null;
+          page_number: number;
+          parsed_value: Json | null;
+          parser_id: string;
+          parser_version: string;
+          raw_text: string;
+        };
+        Insert: {
+          authority: Database["public"]["Enums"]["assertion_authority"];
+          candidate_id?: string | null;
+          confidence: number;
+          confirmation_status?: Database["public"]["Enums"]["assertion_confirmation_status"];
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          created_at?: string;
+          document_id: string;
+          entity_scope: string;
+          field_path: string;
+          id?: string;
+          normalized_value?: Json | null;
+          page_number: number;
+          parsed_value?: Json | null;
+          parser_id: string;
+          parser_version: string;
+          raw_text: string;
+        };
+        Update: {
+          authority?: Database["public"]["Enums"]["assertion_authority"];
+          candidate_id?: string | null;
+          confidence?: number;
+          confirmation_status?: Database["public"]["Enums"]["assertion_confirmation_status"];
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          created_at?: string;
+          document_id?: string;
+          entity_scope?: string;
+          field_path?: string;
+          id?: string;
+          normalized_value?: Json | null;
+          page_number?: number;
+          parsed_value?: Json | null;
+          parser_id?: string;
+          parser_version?: string;
+          raw_text?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "extracted_fact_assertions_candidate_id_fkey";
+            columns: ["candidate_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_candidates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "extracted_fact_assertions_confirmed_by_fkey";
+            columns: ["confirmed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "extracted_fact_assertions_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "extracted_documents";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       household_coverage_mandates: {
         Row: {
@@ -2475,6 +2773,21 @@ export type Database = {
       };
     };
     Enums: {
+      assertion_authority:
+        | "coverage_summary"
+        | "insurance_certificate"
+        | "endorsement"
+        | "invoice"
+        | "renewal_overview"
+        | "notice"
+        | "header_footer";
+      assertion_confirmation_status:
+        | "extracted"
+        | "confirmed"
+        | "corrected"
+        | "unknown"
+        | "not_applicable"
+        | "conflicting";
       auto_coverage_form:
         | "liability_only"
         | "collision"
@@ -2483,6 +2796,13 @@ export type Database = {
         | "all_perils";
       billing_method: "automatic_bank" | "credit_card" | "mail";
       broker_direct_preference: "broker" | "direct" | "indifferent";
+      candidate_asset_type: "property" | "vehicle";
+      candidate_decision: "undecided" | "approve_new" | "link_existing" | "skip" | "not_sure";
+      candidate_match_classification:
+        | "new"
+        | "exact_existing_match"
+        | "possible_existing_match"
+        | "new_identity_confirmation_required";
       case_state:
         | "draft"
         | "awaiting_documents"
@@ -2706,6 +3026,23 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      assertion_authority: [
+        "coverage_summary",
+        "insurance_certificate",
+        "endorsement",
+        "invoice",
+        "renewal_overview",
+        "notice",
+        "header_footer",
+      ],
+      assertion_confirmation_status: [
+        "extracted",
+        "confirmed",
+        "corrected",
+        "unknown",
+        "not_applicable",
+        "conflicting",
+      ],
       auto_coverage_form: [
         "liability_only",
         "collision",
@@ -2715,6 +3052,14 @@ export const Constants = {
       ],
       billing_method: ["automatic_bank", "credit_card", "mail"],
       broker_direct_preference: ["broker", "direct", "indifferent"],
+      candidate_asset_type: ["property", "vehicle"],
+      candidate_decision: ["undecided", "approve_new", "link_existing", "skip", "not_sure"],
+      candidate_match_classification: [
+        "new",
+        "exact_existing_match",
+        "possible_existing_match",
+        "new_identity_confirmation_required",
+      ],
       case_state: [
         "draft",
         "awaiting_documents",
