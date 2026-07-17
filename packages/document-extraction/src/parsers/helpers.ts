@@ -14,7 +14,9 @@ export function normalizeProvince(input: string): string | undefined {
     ALBERTA: "AB",
     BC: "BC",
     ON: "ON",
+    ONTARIO: "ON",
     QC: "QC",
+    QUEBEC: "QC",
   };
   const key = input.trim().toUpperCase();
   return map[key];
