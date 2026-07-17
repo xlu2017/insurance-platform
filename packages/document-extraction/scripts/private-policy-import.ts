@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -11,26 +12,90 @@ import {
 } from "../src/index.ts";
 import { FileSystemDocumentLoader } from "../src/document-loaders/node.ts";
 
-function canonicalHash(result: InsuranceDocumentAnalysisResult): string {
-  const summary = {
-    documents: result.documents
-      .map((d) => ({ fileDigest: d.fileDigest, classification: d.classification }))
-      .sort((a, b) => a.fileDigest.localeCompare(b.fileDigest)),
-    entities: result.detectedEntities
-      .map((e) => ({
+function canonicalStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalStringify).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  const pairs = keys
+    .filter((k) => obj[k] !== undefined)
+    .map((k) => `${JSON.stringify(k)}:${canonicalStringify(obj[k])}`);
+  return `{${pairs.join(",")}}`;
+}
+
+function canonicalDigest(result: InsuranceDocumentAnalysisResult): string {
+  const digestByDocumentId = new Map<string, string>();
+  for (const doc of result.documents) {
+    digestByDocumentId.set(doc.documentId, doc.fileDigest);
+  }
+
+  const documents = result.documents
+    .map((d) => ({
+      fileDigest: d.fileDigest,
+      classification: d.classification,
+      pageCount: d.pageCount,
+      extractedEntityCount: d.extractedEntityCount,
+    }))
+    .sort((a, b) => a.fileDigest.localeCompare(b.fileDigest));
+
+  const entities = result.detectedEntities
+    .map((e) => {
+      const coverage: Record<string, unknown> = {};
+      for (const [fieldPath, current] of Object.entries(e.currentCoverage)) {
+        const evidence = current.evidence?.map((ref) => ({
+          documentDigest: digestByDocumentId.get(ref.documentId ?? "") ?? ref.documentId,
+          pageNumber: ref.pageNumber,
+          evidenceSummary: ref.evidenceSummary ? "[REDACTED]" : undefined,
+        }));
+        coverage[fieldPath] = evidence
+          ? {
+              status: current.status,
+              value: current.value,
+              confidence: current.confidence,
+              evidence,
+            }
+          : { status: current.status, value: current.value, confidence: current.confidence };
+      }
+      return {
         entityType: e.entityType,
-        identityFingerprint: `${e.entityType}:${e.displayLabel}`,
+        identityFingerprint: e.temporaryId,
         resolution: e.resolution.status,
-      }))
-      .sort((a, b) => a.identityFingerprint.localeCompare(b.identityFingerprint)),
+        currentCoverage: coverage,
+        mandateSuggestions: e.mandateSuggestions,
+      };
+    })
+    .sort((a, b) => a.identityFingerprint.localeCompare(b.identityFingerprint));
+
+  const normalized = {
+    documents,
+    entities,
     conflicts: result.unresolvedConflicts.map((c) => c.fieldPath).sort(),
     warnings: result.warnings.map((w) => w.message).sort(),
   };
-  const text = JSON.stringify(summary);
-  const encoded = new TextEncoder().encode(text);
-  return Array.from(new Uint8Array(encoded))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+
+  return crypto.createHash("sha256").update(canonicalStringify(normalized)).digest("hex");
+}
+
+function sanitizedSummary(result: InsuranceDocumentAnalysisResult): string {
+  const properties = result.detectedEntities.filter((e) => e.entityType === "property").length;
+  const vehicles = result.detectedEntities.filter((e) => e.entityType === "vehicle").length;
+  const confirmation = result.detectedEntities.filter(
+    (e) => e.resolution.status === "possible_match_requires_confirmation",
+  ).length;
+  const documents = result.documents.map((d) => ({
+    classification: d.classification,
+    pageCount: d.pageCount,
+  }));
+  return canonicalStringify({
+    documents,
+    properties,
+    vehicles,
+    confirmationRequired: confirmation,
+    conflicts: result.unresolvedConflicts.length,
+    warnings: result.warnings.length,
+  });
 }
 
 function assertEq<T>(label: string, actual: T, expected: T) {
@@ -117,7 +182,7 @@ async function main() {
 
   const analyzer = createLlmFirstAnalyzer({
     provider,
-    loader: new FileSystemDocumentLoader(),
+    loader: new FileSystemDocumentLoader({ includeImages: !!provider }),
     fallbackToDeterministic: true,
   });
 
@@ -132,8 +197,10 @@ async function main() {
   console.log("\nScenario A: all together");
   const resultA = await runAnalyzer(analyzer, allDocs);
   summarize(resultA);
-  const hashA = canonicalHash(resultA);
-  console.log(`  semantic hash: ${hashA}`);
+  const hashA = canonicalDigest(resultA);
+  const summaryA = sanitizedSummary(resultA);
+  console.log(`  digest: ${hashA}`);
+  console.log(`  summary: ${summaryA}`);
 
   // Scenario B: separate processing
   console.log("\nScenario B: separate processing");
@@ -152,11 +219,14 @@ async function main() {
     pending = r.detectedEntities.map((e) => ({
       id: e.temporaryId,
       assetType: e.entityType,
-      identityFingerprint: `${e.entityType}:${e.displayLabel}`,
+      identityFingerprint: e.temporaryId,
     }));
     if (doc === allDocs[allDocs.length - 1]) {
       summarize(r);
-      console.log(`  semantic hash: ${canonicalHash(r)}`);
+      const hashB = canonicalDigest(r);
+      const summaryB = sanitizedSummary(r);
+      console.log(`  digest: ${hashB}`);
+      console.log(`  summary: ${summaryB}`);
     }
   }
 
@@ -164,16 +234,20 @@ async function main() {
   console.log("\nScenario C: reverse order");
   const resultC = await runAnalyzer(analyzer, [...allDocs].reverse());
   summarize(resultC);
-  const hashC = canonicalHash(resultC);
-  console.log(`  semantic hash: ${hashC}`);
+  const hashC = canonicalDigest(resultC);
+  const summaryC = sanitizedSummary(resultC);
+  console.log(`  digest: ${hashC}`);
+  console.log(`  summary: ${summaryC}`);
 
   // Scenario D: renamed files
   console.log("\nScenario D: renamed files");
   const renamedDocs = allDocs.map((d, i) => ({ ...d, documentId: `renamed-${i}-${d.filename}` }));
   const resultD = await runAnalyzer(analyzer, renamedDocs);
   summarize(resultD);
-  const hashD = canonicalHash(resultD);
-  console.log(`  semantic hash: ${hashD}`);
+  const hashD = canonicalDigest(resultD);
+  const summaryD = sanitizedSummary(resultD);
+  console.log(`  digest: ${hashD}`);
+  console.log(`  summary: ${summaryD}`);
 
   // Scenario E: duplicate uploads
   console.log("\nScenario E: duplicate uploads");
@@ -184,8 +258,10 @@ async function main() {
   }
   const resultE = await runAnalyzer(analyzer, dupDocs);
   summarize(resultE);
-  const hashE = canonicalHash(resultE);
-  console.log(`  semantic hash: ${hashE}`);
+  const hashE = canonicalDigest(resultE);
+  const summaryE = sanitizedSummary(resultE);
+  console.log(`  digest: ${hashE}`);
+  console.log(`  summary: ${summaryE}`);
 
   let allPass = true;
   allPass =
@@ -306,10 +382,11 @@ async function main() {
     `provider: ${provider ? provider.providerId : "deterministic"}`,
     `model: ${provider ? provider.modelId : "pdfjs-fallback"}`,
     `private PDF count: ${files.length}`,
-    `A hash: ${hashA}`,
-    `C hash: ${hashC}`,
-    `D hash: ${hashD}`,
-    `E hash: ${hashE}`,
+    `A digest: ${hashA}`,
+    `A summary: ${summaryA}`,
+    `C digest: ${hashC}`,
+    `D digest: ${hashD}`,
+    `E digest: ${hashE}`,
     `A result: ${resultA.documents.length} documents, ${resultA.detectedEntities.filter((e) => e.entityType === "property").length} properties, ${resultA.detectedEntities.filter((e) => e.entityType === "vehicle").length} vehicles, ${resultA.detectedEntities.filter((e) => e.resolution.status === "possible_match_requires_confirmation").length} confirmation-required`,
     `private acceptance: ${allPass ? "PASS" : "FAIL"}`,
   ].join("\n");

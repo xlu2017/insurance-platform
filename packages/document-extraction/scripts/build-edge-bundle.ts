@@ -42,6 +42,7 @@ const result = await esbuild.build({
   metafile: true,
   minify: false,
   sourcemap: false,
+  external: ["canvas"],
   define: {
     __PDF_WORKER_DATA_URL__: JSON.stringify(workerDataUrl),
   },

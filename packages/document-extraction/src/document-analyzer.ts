@@ -138,12 +138,11 @@ export const CurrentPolicySchema = z
 export type CurrentPolicy = z.infer<typeof CurrentPolicySchema>;
 
 export const MandateRuleSchema = z.union([
-  z.object({ rule: z.literal("minimum"), amountCents: z.number().int() }).strict(),
-  z.object({ rule: z.literal("maximum"), amountCents: z.number().int() }).strict(),
-  z.object({ rule: z.literal("match_current_or_better"), value: z.string() }).strict(),
+  z.object({ rule: z.literal("minimum"), amountCents: z.number().int().positive() }).strict(),
+  z.object({ rule: z.literal("maximum"), amountCents: z.number().int().positive() }).strict(),
+  z.object({ rule: z.literal("match_current_or_better"), value: z.string().min(1) }).strict(),
+  z.object({ rule: z.literal("required") }).strict(),
   z.object({ rule: z.literal("any"), reason: z.string().optional() }).strict(),
-  z.object({ preference: z.literal("required"), value: z.string() }).strict(),
-  z.object({ preference: z.literal("indifferent"), reason: z.string().optional() }).strict(),
 ]);
 export type MandateRule = z.infer<typeof MandateRuleSchema>;
 
@@ -204,6 +203,9 @@ export const InsuranceDocumentAnalysisResultSchema = z
     detectedEntities: z.array(DetectedInsuranceEntitySchema),
     unresolvedConflicts: z.array(DetectedConflictSchema),
     warnings: z.array(AnalysisWarningSchema),
+    attemptedModelProvider: z.string().min(1).optional(),
+    attemptedModelId: z.string().min(1).optional(),
+    fallbackReason: z.string().optional(),
   })
   .strict();
 export type InsuranceDocumentAnalysisResult = z.infer<typeof InsuranceDocumentAnalysisResultSchema>;
@@ -223,16 +225,22 @@ function valueForFieldPath(
   return assertions.find((a) => a.fieldPath === fieldPath)?.normalizedValue;
 }
 
-function confidenceFromPresence(presence?: ExtractedCoveragePresence): number {
-  switch (presence) {
-    case "included":
-    case "not_included":
-    case "not_applicable":
-      return 0.95;
-    case "unknown":
-    default:
-      return 0.5;
-  }
+function authorityRank(authority: string): number {
+  const order = [
+    "coverage_summary",
+    "insurance_certificate",
+    "active_endorsement",
+    "endorsement",
+    "invoice",
+    "renewal_overview",
+    "notice",
+    "informational_notice",
+    "policy_wording",
+    "header_footer",
+    "unknown",
+  ];
+  const index = order.indexOf(authority);
+  return index === -1 ? order.length : index;
 }
 
 function statusFromPresence(presence?: ExtractedCoveragePresence): ExtractedCurrentValue["status"] {
@@ -249,32 +257,65 @@ function statusFromPresence(presence?: ExtractedCoveragePresence): ExtractedCurr
   }
 }
 
+function isOptionalCoverageBoolean(fieldPath: string): boolean {
+  return /Included$/i.test(fieldPath) || /Coverage$/i.test(fieldPath);
+}
+
 function buildCurrentCoverage(
   candidate: ParsedAssetAssertion,
   documentId: string,
 ): Record<string, ExtractedCurrentValue> {
   const coverage: Record<string, ExtractedCurrentValue> = {};
-  for (const assertion of candidate.assertions) {
-    if (
-      assertion.entityScope !== "coverage" &&
-      assertion.entityScope !== "premium" &&
-      assertion.entityScope !== "policy" &&
-      !assertion.fieldPath.startsWith("property.") &&
-      !assertion.fieldPath.startsWith("vehicle.") &&
-      !assertion.fieldPath.startsWith("auto.")
-    ) {
+  const sorted = [...candidate.assertions].sort(
+    (a, b) => authorityRank(a.authority) - authorityRank(b.authority),
+  );
+  for (const assertion of sorted) {
+    if (assertion.entityScope !== "coverage") {
       continue;
     }
-    const status = statusFromPresence(assertion.coveragePresence);
-    const value = assertion.normalizedValue ?? null;
-    coverage[assertion.fieldPath] = {
-      status,
-      value,
-      confidence: assertion.confidence ?? confidenceFromPresence(assertion.coveragePresence),
-      evidence: [
-        { documentId, pageNumber: assertion.pageNumber, evidenceSummary: assertion.rawText },
-      ],
-    };
+
+    const fieldPath = assertion.fieldPath;
+    if (Object.prototype.hasOwnProperty.call(coverage, fieldPath)) {
+      continue;
+    }
+
+    let status: ExtractedCurrentValue["status"];
+    let value: unknown = null;
+    const confidence = assertion.confidence;
+
+    if (isOptionalCoverageBoolean(fieldPath)) {
+      const presence = assertion.coveragePresence;
+      status = statusFromPresence(presence);
+      value = presence === "included" ? true : presence === "not_included" ? false : null;
+    } else if (typeof assertion.normalizedValue === "number" && assertion.normalizedValue > 0) {
+      status = "known";
+      value = assertion.normalizedValue;
+    } else if (
+      typeof assertion.normalizedValue === "string" &&
+      assertion.normalizedValue.length > 0
+    ) {
+      status = "known";
+      value = assertion.normalizedValue;
+    } else if (assertion.coveragePresence) {
+      status = statusFromPresence(assertion.coveragePresence);
+      value = null;
+    } else {
+      status = "unknown";
+      value = null;
+    }
+
+    if (status === "unknown") {
+      coverage[fieldPath] = { status, value, confidence };
+    } else {
+      coverage[fieldPath] = {
+        status,
+        value,
+        confidence,
+        evidence: [
+          { documentId, pageNumber: assertion.pageNumber, evidenceSummary: assertion.rawText },
+        ],
+      };
+    }
   }
   return coverage;
 }
@@ -288,11 +329,23 @@ function suggestMandate(
   }
 
   if (current.status === "not_included") {
-    return { preference: "indifferent", reason: "currently not included" };
+    return { rule: "any", reason: "currently not included" };
+  }
+
+  if (isOptionalCoverageBoolean(fieldPath) && current.status === "known") {
+    return current.value === true
+      ? { rule: "required" }
+      : { rule: "any", reason: "currently not included" };
   }
 
   const value = current.value;
   if (typeof value !== "number" || value <= 0) {
+    if (typeof value === "string" && String(value).length > 0) {
+      if (fieldPath.includes("Form") || fieldPath.includes("form")) {
+        return { rule: "match_current_or_better", value: String(value) };
+      }
+      return { rule: "any", reason: "no mandateable numeric or form value" };
+    }
     return { rule: "any", reason: "no numeric value to preserve" };
   }
 
@@ -306,11 +359,11 @@ function suggestMandate(
   ) {
     return { rule: "minimum", amountCents: value };
   }
-  if (fieldPath.includes("coverageForm") || fieldPath.includes("CoverageForm")) {
+  if (fieldPath.includes("Form") || fieldPath.includes("form")) {
     return { rule: "match_current_or_better", value: String(value) };
   }
 
-  return { preference: "required", value: String(value) };
+  return { rule: "any", reason: "field is not mandateable" };
 }
 
 function buildMandateSuggestions(
@@ -326,24 +379,37 @@ function buildMandateSuggestions(
   return suggestions;
 }
 
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[,\s]/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function buildIdentity(candidate: ParsedAssetAssertion): DetectedEntityIdentity {
   if (candidate.assetType === "vehicle") {
     return {
-      vin: String(valueForFieldPath(candidate.assertions, "vehicle.vin") ?? ""),
-      year: Number(valueForFieldPath(candidate.assertions, "vehicle.year")),
-      make: String(valueForFieldPath(candidate.assertions, "vehicle.make") ?? ""),
-      model: String(valueForFieldPath(candidate.assertions, "vehicle.model") ?? ""),
-      trim: String(valueForFieldPath(candidate.assertions, "vehicle.trim") ?? ""),
-      vehicleUse: String(valueForFieldPath(candidate.assertions, "vehicle.vehicleUse") ?? ""),
+      vin: nullableString(valueForFieldPath(candidate.assertions, "vehicle.vin")),
+      year: nullableNumber(valueForFieldPath(candidate.assertions, "vehicle.year")),
+      make: nullableString(valueForFieldPath(candidate.assertions, "vehicle.make")),
+      model: nullableString(valueForFieldPath(candidate.assertions, "vehicle.model")),
+      trim: nullableString(valueForFieldPath(candidate.assertions, "vehicle.trim")),
+      vehicleUse: nullableString(valueForFieldPath(candidate.assertions, "vehicle.vehicleUse")),
     };
   }
 
   const occupancy = valueForFieldPath(candidate.assertions, "property.occupancy");
   return {
-    fullAddress: String(valueForFieldPath(candidate.assertions, "property.streetAddress") ?? ""),
-    city: String(valueForFieldPath(candidate.assertions, "property.city") ?? ""),
-    province: String(valueForFieldPath(candidate.assertions, "property.province") ?? ""),
-    postalCode: String(valueForFieldPath(candidate.assertions, "property.postalCode") ?? ""),
+    fullAddress: nullableString(valueForFieldPath(candidate.assertions, "property.streetAddress")),
+    city: nullableString(valueForFieldPath(candidate.assertions, "property.city")),
+    province: nullableString(valueForFieldPath(candidate.assertions, "property.province")),
+    postalCode: nullableString(valueForFieldPath(candidate.assertions, "property.postalCode")),
     occupancy:
       occupancy === "principal_residence" || occupancy === "rental" ? occupancy : "unknown",
   };
@@ -354,19 +420,18 @@ function buildCurrentPolicy(
   doc: ParsedInsuranceDocument,
 ): CurrentPolicy {
   const term = doc.policyTerms[0] ?? {};
+  const policyNumber = nullableString(
+    term.policyNumber ?? valueForFieldPath(candidate.assertions, "policy.policyNumber"),
+  );
+  const premium = nullableNumber(
+    term.annualPremiumCents ?? valueForFieldPath(candidate.assertions, "policy.annualPremiumCents"),
+  );
   return {
-    insurer: doc.insurer?.name ?? null,
-    policyNumber: String(
-      term.policyNumber ?? valueForFieldPath(candidate.assertions, "policy.policyNumber") ?? "",
-    ),
-    effectiveDate: term.effectiveDate ?? null,
-    expiryDate: term.expiryDate ?? null,
-    annualPremiumCents:
-      Number(
-        term.annualPremiumCents ??
-          valueForFieldPath(candidate.assertions, "policy.annualPremiumCents") ??
-          0,
-      ) || null,
+    insurer: nullableString(doc.insurer?.name) ?? null,
+    policyNumber,
+    effectiveDate: nullableString(term.effectiveDate),
+    expiryDate: nullableString(term.expiryDate),
+    annualPremiumCents: premium,
   };
 }
 
@@ -494,12 +559,17 @@ function buildDetectedEntity(
     currentCoverage,
     mandateSuggestions: buildMandateSuggestions(currentCoverage),
     evidence: candidate.assertions
-      .filter((a) => a.entityScope !== "notice")
-      .slice(0, 20)
+      .filter(
+        (a) =>
+          a.entityScope !== "notice" &&
+          typeof a.rawText === "string" &&
+          a.rawText.trim().length > 0,
+      )
+      .slice(0, 10)
       .map((a) => ({
         documentId,
         pageNumber: a.pageNumber,
-        evidenceSummary: a.rawText ? `${a.fieldPath}: ${a.rawText.slice(0, 200)}` : a.fieldPath,
+        evidenceSummary: `${a.fieldPath}: ${a.rawText.trim().slice(0, 200)}`,
       })),
     requiredConfirmations,
   };
@@ -576,8 +646,9 @@ function recomputePropertyIdentity(asset: ParsedAssetAssertion): {
       : `${occupancy ?? ""} ${result.normalizedCity ?? city ?? ""} ${result.normalizedProvince ?? province ?? ""} ${result.normalizedPostalCode ?? postal ?? ""}`.trim();
 
   if (!fingerprint) {
+    const fallback = display.toUpperCase().replace(/[^A-Z0-9]/g, "-") || "unidentified";
     return {
-      identityFingerprint: `property:unknown:${crypto.randomUUID()}`,
+      identityFingerprint: `property:unknown:${fallback}`,
       displayLabel: display || "Unidentified property",
       matchClassification: "new_identity_confirmation_required",
     };
@@ -624,8 +695,9 @@ function recomputeVehicleIdentity(asset: ParsedAssetAssertion): {
       : `${year ?? ""} ${make ?? ""} ${model ?? ""} ${trim ?? ""}`.trim();
 
   if (!fingerprint) {
+    const fallback = display.toUpperCase().replace(/[^A-Z0-9]/g, "-") || "unidentified";
     return {
-      identityFingerprint: `vehicle:unknown:${crypto.randomUUID()}`,
+      identityFingerprint: `vehicle:unknown:${fallback}`,
       displayLabel: display || "Unidentified vehicle",
       matchClassification: "new_identity_confirmation_required",
     };
@@ -834,13 +906,19 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       requiresHumanResolution: true,
     }));
 
-    const providerId = this.provider?.providerId ?? "deterministic";
-    const modelId = this.provider?.modelId ?? "pdfjs-fallback";
+    const attempted = this.provider
+      ? {
+          attemptedModelProvider: this.provider.providerId,
+          attemptedModelId: this.provider.modelId,
+        }
+      : {};
 
     return InsuranceDocumentAnalysisResultSchema.parse({
       analysisVersion: "1" as const,
-      modelProvider: providerId,
-      modelId,
+      modelProvider: "deterministic",
+      modelId: "pdfjs-fallback",
+      ...attempted,
+      fallbackReason: warnings.find((w) => w.message.includes("LLM analysis failed"))?.message,
       documents,
       detectedEntities,
       unresolvedConflicts,
@@ -849,33 +927,43 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
   }
 }
 
+export type LlmContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 function buildLlmAnalysisRequest(
   input: InsuranceDocumentAnalysisInput,
   extractedDocs: ExtractedPdf[],
-): unknown {
-  return {
-    jurisdiction: input.jurisdiction,
-    uploadedDocuments: extractedDocs.map((doc) => {
-      const meta = input.uploadedDocuments.find((u) => u.documentId === doc.documentId);
-      return {
-        documentId: doc.documentId,
-        filename: meta?.filename ?? doc.documentId,
-        mimeType: meta?.mimeType ?? "application/pdf",
-        pageCount: doc.pageCount,
-        pages: doc.pages.map((p) => ({ pageNumber: p.pageNumber, text: p.text })),
-      };
-    }),
-    existingAssets: input.existingAssets.map((a) => ({
-      id: a.id,
-      assetType: a.assetType,
-      identityFingerprint: a.identityFingerprint,
-    })),
-    pendingCandidates: input.pendingCandidates.map((c) => ({
-      id: c.id,
-      assetType: c.assetType,
-      identityFingerprint: c.identityFingerprint,
-    })),
-  };
+): { content: LlmContentPart[] } {
+  const parts: LlmContentPart[] = [];
+
+  parts.push({
+    type: "text",
+    text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.\n\nJurisdiction: ${input.jurisdiction}\n\nExisting household assets:\n${JSON.stringify(input.existingAssets)}\n\nPending candidates:\n${JSON.stringify(input.pendingCandidates)}\n\nThe pages below are provided as extracted text. When page images are available they are included after the text for the same page.`,
+  });
+
+  for (const doc of extractedDocs) {
+    const meta = input.uploadedDocuments.find((u) => u.documentId === doc.documentId);
+    const filename = meta?.filename ?? doc.documentId;
+    parts.push({
+      type: "text",
+      text: `\n--- Document ${doc.documentId} (${filename}, ${doc.pageCount} pages) ---`,
+    });
+    for (const page of doc.pages) {
+      parts.push({
+        type: "text",
+        text: `\nPage ${page.pageNumber}:\n${page.text}`,
+      });
+      if (page.image) {
+        parts.push({
+          type: "image_url",
+          image_url: { url: `data:${page.image.mimeType};base64,${page.image.base64}` },
+        });
+      }
+    }
+  }
+
+  return { content: parts };
 }
 
 const INSURANCE_ANALYSIS_SYSTEM_PROMPT = `You are an insurance document analyst. Read the uploaded policy PDFs (provided as page-level text) and produce a single JSON object that conforms to the schema below. Do not include markdown fences, commentary, or any keys not in the schema.
@@ -988,113 +1076,226 @@ function documentClassification(documentId: string, entities: DetectedInsuranceE
   return "unknown";
 }
 
+function normalizeMandateRule(raw: unknown, fieldPath: string): MandateRule {
+  if (!raw || typeof raw !== "object") {
+    throw new Error(`mandateSuggestions.${fieldPath} is not an object`);
+  }
+  const typed = raw as Record<string, unknown>;
+  const rule = typed.rule;
+  if (rule === "minimum" || rule === "maximum") {
+    if (
+      typeof typed.amountCents !== "number" ||
+      typed.amountCents <= 0 ||
+      !Number.isInteger(typed.amountCents)
+    ) {
+      throw new Error(
+        `mandateSuggestions.${fieldPath}.${rule} requires a positive integer amountCents`,
+      );
+    }
+    return { rule, amountCents: typed.amountCents } as MandateRule;
+  }
+  if (rule === "match_current_or_better") {
+    if (typeof typed.value !== "string" || typed.value.trim().length === 0) {
+      throw new Error(`mandateSuggestions.${fieldPath}.${rule} requires a non-empty value`);
+    }
+    return { rule, value: typed.value.trim() } as MandateRule;
+  }
+  if (rule === "required") {
+    return { rule: "required" } as MandateRule;
+  }
+  if (rule === "any") {
+    return {
+      rule: "any",
+      reason: typeof typed.reason === "string" ? typed.reason : undefined,
+    } as MandateRule;
+  }
+  throw new Error(`mandateSuggestions.${fieldPath} has unknown rule ${String(rule)}`);
+}
+
+function normalizeCurrentValue(
+  raw: unknown,
+  fieldPath: string,
+  documentIdMap: Map<string, string>,
+): ExtractedCurrentValue {
+  if (!raw || typeof raw !== "object") {
+    throw new Error(`currentCoverage.${fieldPath} is not an object`);
+  }
+  const typed = raw as Record<string, unknown>;
+  const status = String(typed.status);
+  if (
+    status !== "known" &&
+    status !== "unknown" &&
+    status !== "not_included" &&
+    status !== "not_applicable" &&
+    status !== "conflicting"
+  ) {
+    throw new Error(`currentCoverage.${fieldPath} has invalid status ${status}`);
+  }
+  if (typeof typed.confidence !== "number" || typed.confidence < 0 || typed.confidence > 1) {
+    throw new Error(`currentCoverage.${fieldPath} requires a confidence number between 0 and 1`);
+  }
+
+  const value = Object.prototype.hasOwnProperty.call(typed, "value") ? typed.value : null;
+  const explanation =
+    typeof typed.explanation === "string" && typed.explanation.length > 0
+      ? typed.explanation
+      : undefined;
+
+  let evidence: ExtractedCurrentValue["evidence"];
+  if (Array.isArray(typed.evidence) && typed.evidence.length > 0) {
+    evidence = typed.evidence.map((item, index) => {
+      try {
+        return EvidenceReferenceSchema.parse(item);
+      } catch (err) {
+        throw new Error(
+          `currentCoverage.${fieldPath}.evidence[${index}] is invalid: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    });
+    for (const ref of evidence) {
+      if (ref.documentId && !documentIdMap.has(ref.documentId)) {
+        throw new Error(`currentCoverage.${fieldPath} cites unknown documentId ${ref.documentId}`);
+      }
+    }
+  }
+
+  if ((status === "known" || status === "conflicting") && (!evidence || evidence.length === 0)) {
+    throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
+  }
+
+  return evidence
+    ? { status, value, confidence: typed.confidence, evidence, explanation }
+    : { status, value, confidence: typed.confidence, explanation };
+}
+
 function normalizeLlmAnalysisResult(
   raw: unknown,
   input: InsuranceDocumentAnalysisInput,
   extractedDocs: ExtractedPdf[],
   provider: InsuranceLlmProvider,
-): unknown {
+): InsuranceDocumentAnalysisResult {
   if (!raw || typeof raw !== "object") {
     throw new Error("LLM response is not a JSON object");
   }
 
   const typed = raw as Record<string, unknown>;
-  const detectedEntities = Array.isArray(typed.detectedEntities) ? typed.detectedEntities : [];
+  if (!Array.isArray(typed.detectedEntities)) {
+    throw new Error('LLM response missing required "detectedEntities" array');
+  }
   const unresolvedConflicts = Array.isArray(typed.unresolvedConflicts)
     ? typed.unresolvedConflicts
     : [];
   const warnings = Array.isArray(typed.warnings) ? typed.warnings : [];
 
-  // Enrich each detected entity with sensible defaults if the model omitted them.
-  const enrichedEntities = detectedEntities.map((entity: unknown, index: number) => {
-    if (!entity || typeof entity !== "object") {
-      throw new Error(`detectedEntities[${index}] is not an object`);
-    }
-    const typedEntity = entity as Record<string, unknown>;
-    const entityType =
-      typedEntity.entityType === "property" || typedEntity.entityType === "vehicle"
-        ? typedEntity.entityType
-        : null;
-    if (!entityType) {
-      throw new Error(`detectedEntities[${index}] is missing a valid entityType`);
-    }
+  const documentIdMap = new Map<string, string>();
+  for (const doc of extractedDocs) {
+    documentIdMap.set(doc.documentId, doc.documentId);
+  }
+  for (const doc of input.priorDocumentSummaries) {
+    documentIdMap.set(doc.documentId, doc.documentId);
+  }
 
-    const temporaryId =
-      typeof typedEntity.temporaryId === "string" && typedEntity.temporaryId.length > 0
-        ? typedEntity.temporaryId
-        : `llm-${entityType}-${index}`;
-    const displayLabel =
-      typeof typedEntity.displayLabel === "string" && typedEntity.displayLabel.length > 0
-        ? typedEntity.displayLabel
-        : temporaryId;
-
-    const currentCoverage = (typedEntity.currentCoverage as Record<string, unknown>) ?? {};
-    const normalizedCoverage: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(currentCoverage)) {
-      if (value && typeof value === "object") {
-        const typedValue = value as Record<string, unknown>;
-        normalizedCoverage[key] = {
-          status: ["known", "unknown", "not_included", "not_applicable", "conflicting"].includes(
-            String(typedValue.status),
-          )
-            ? typedValue.status
-            : "unknown",
-          value: typedValue.value ?? null,
-          confidence: typeof typedValue.confidence === "number" ? typedValue.confidence : 0.7,
-          evidence: Array.isArray(typedValue.evidence) ? typedValue.evidence : [],
-          explanation: typedValue.explanation ?? undefined,
-        };
+  const enrichedEntities: DetectedInsuranceEntity[] = typed.detectedEntities.map(
+    (entity: unknown, index: number) => {
+      if (!entity || typeof entity !== "object") {
+        throw new Error(`detectedEntities[${index}] is not an object`);
       }
-    }
-
-    const mandateSuggestions = (typedEntity.mandateSuggestions as Record<string, unknown>) ?? {};
-    const normalizedMandates: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(mandateSuggestions)) {
-      if (value && typeof value === "object") {
-        const typedValue = value as Record<string, unknown>;
-        const rule = typedValue.rule;
-        const normalized: Record<string, unknown> = { rule };
-        if (rule === "minimum" || rule === "maximum") {
-          normalized.amountCents =
-            typeof typedValue.amountCents === "number" ? typedValue.amountCents : 0;
-        }
-        if (rule === "match_current_or_better") {
-          normalized.value = typeof typedValue.value === "string" ? typedValue.value : "";
-        }
-        if (rule === "any") {
-          normalized.reason = typeof typedValue.reason === "string" ? typedValue.reason : "unknown";
-        }
-        normalizedMandates[key] = normalized;
+      const e = entity as Record<string, unknown>;
+      const entityType =
+        e.entityType === "property" || e.entityType === "vehicle" ? e.entityType : null;
+      if (!entityType) {
+        throw new Error(`detectedEntities[${index}] is missing a valid entityType`);
       }
-    }
 
-    return {
-      ...typedEntity,
-      temporaryId,
-      displayLabel,
-      currentCoverage: normalizedCoverage,
-      mandateSuggestions: normalizedMandates,
-      evidence: Array.isArray(typedEntity.evidence) ? typedEntity.evidence : [],
-      requiredConfirmations: Array.isArray(typedEntity.requiredConfirmations)
-        ? typedEntity.requiredConfirmations
-        : [],
-    };
+      if (typeof e.temporaryId !== "string" || e.temporaryId.trim().length === 0) {
+        throw new Error(`detectedEntities[${index}] is missing a temporaryId`);
+      }
+      const temporaryId = e.temporaryId.trim();
+      const displayLabel =
+        typeof e.displayLabel === "string" && e.displayLabel.trim().length > 0
+          ? e.displayLabel.trim()
+          : temporaryId;
+
+      const identity = DetectedEntityIdentitySchema.parse(e.identity);
+      const resolution = EntityResolutionSchema.parse(e.resolution);
+      const currentPolicy = CurrentPolicySchema.parse(e.currentPolicy);
+
+      const rawCoverage = (e.currentCoverage as Record<string, unknown>) ?? {};
+      const currentCoverage: Record<string, ExtractedCurrentValue> = {};
+      for (const [fieldPath, rawValue] of Object.entries(rawCoverage)) {
+        currentCoverage[fieldPath] = normalizeCurrentValue(rawValue, fieldPath, documentIdMap);
+      }
+
+      const rawMandates = (e.mandateSuggestions as Record<string, unknown>) ?? {};
+      const mandateSuggestions: Record<string, MandateRule> = {};
+      for (const [fieldPath, rawValue] of Object.entries(rawMandates)) {
+        mandateSuggestions[fieldPath] = normalizeMandateRule(rawValue, fieldPath);
+      }
+
+      const evidence: EvidenceReference[] = Array.isArray(e.evidence)
+        ? e.evidence
+            .map((item, idx) => {
+              try {
+                return EvidenceReferenceSchema.parse(item);
+              } catch (err) {
+                throw new Error(
+                  `detectedEntities[${index}].evidence[${idx}] is invalid: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            })
+            .filter(
+              (ref): ref is EvidenceReference =>
+                typeof ref.evidenceSummary === "string" && ref.evidenceSummary.length > 0,
+            )
+        : [];
+
+      const requiredConfirmations = Array.isArray(e.requiredConfirmations)
+        ? e.requiredConfirmations.filter((x): x is string => typeof x === "string" && x.length > 0)
+        : [];
+
+      return {
+        temporaryId,
+        entityType,
+        displayLabel,
+        identity,
+        resolution,
+        currentPolicy,
+        currentCoverage,
+        mandateSuggestions,
+        evidence,
+        requiredConfirmations,
+      };
+    },
+  );
+
+  const normalizedConflicts: DetectedConflict[] = unresolvedConflicts.map((conflict, index) => {
+    try {
+      return DetectedConflictSchema.parse(conflict);
+    } catch (err) {
+      throw new Error(
+        `unresolvedConflicts[${index}] is invalid: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
+
+  const normalizedWarnings: AnalysisWarning[] = warnings.map((warning, index) => {
+    try {
+      return AnalysisWarningSchema.parse(warning);
+    } catch (err) {
+      throw new Error(
+        `warnings[${index}] is invalid: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   });
 
   const documents: AnalyzedDocument[] = extractedDocs.map((doc) => ({
     documentId: doc.documentId,
     fileDigest: doc.fileDigest,
-    classification: documentClassification(
-      doc.documentId,
-      enrichedEntities as DetectedInsuranceEntity[],
-    ),
+    classification: documentClassification(doc.documentId, enrichedEntities),
     parserId: provider.providerId,
     parserVersion: provider.modelId,
     pageCount: doc.pageCount,
-    extractedEntityCount: countEntitiesForDocument(
-      doc.documentId,
-      enrichedEntities as DetectedInsuranceEntity[],
-    ),
+    extractedEntityCount: countEntitiesForDocument(doc.documentId, enrichedEntities),
   }));
 
   return {
@@ -1103,8 +1304,8 @@ function normalizeLlmAnalysisResult(
     modelId: provider.modelId,
     documents,
     detectedEntities: enrichedEntities,
-    unresolvedConflicts,
-    warnings,
+    unresolvedConflicts: normalizedConflicts,
+    warnings: normalizedWarnings,
   };
 }
 

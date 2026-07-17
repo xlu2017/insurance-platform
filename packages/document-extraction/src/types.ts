@@ -1,9 +1,18 @@
 import { z } from "zod";
 
+export const ExtractedPdfImageSchema = z
+  .object({
+    mimeType: z.string().min(1),
+    base64: z.string().min(1),
+  })
+  .strict();
+export type ExtractedPdfImage = z.infer<typeof ExtractedPdfImageSchema>;
+
 export const ExtractedPdfPage = z
   .object({
     pageNumber: z.number().int().positive(),
     text: z.string(),
+    image: ExtractedPdfImageSchema.optional(),
     items: z
       .array(
         z

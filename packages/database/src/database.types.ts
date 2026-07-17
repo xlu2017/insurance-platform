@@ -1319,7 +1319,7 @@ export type Database = {
           city: string;
           created_at?: string;
           created_by?: string | null;
-          dwelling_type?: string;
+          dwelling_type: string;
           household_id: string;
           id?: string;
           owner_occupied?: boolean;
@@ -2443,7 +2443,7 @@ export type Database = {
           is_modified?: boolean;
           make: string;
           model: string;
-          primary_use?: string;
+          primary_use: string;
           updated_at?: string;
           updated_by?: string | null;
           vehicle_use_class?: Database["public"]["Enums"]["vehicle_use_class"];

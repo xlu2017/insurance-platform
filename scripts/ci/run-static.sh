@@ -11,3 +11,4 @@ pnpm test
 pnpm --filter @autopilot/admin build
 pnpm --filter @autopilot/mobile expo:doctor
 pnpm --filter @autopilot/insurance-engine check:edge
+pnpm --filter @autopilot/document-extraction check:edge

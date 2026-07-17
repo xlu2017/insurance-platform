@@ -1,10 +1,16 @@
 import type { InsuranceLlmProvider } from "../llm-contract.ts";
+import type { LlmContentPart } from "../document-analyzer.ts";
 
 export interface HttpLlmProviderOptions {
   apiUrl: string;
   apiKey: string;
   model: string;
   providerId?: string;
+}
+
+interface ChatMessage {
+  role: "system" | "user";
+  content: string | LlmContentPart[];
 }
 
 function stripMarkdownJsonFence(text: string): string {
@@ -41,6 +47,24 @@ export class HttpLlmProvider implements InsuranceLlmProvider {
   }
 
   async extract(request: unknown, systemPrompt: string): Promise<unknown> {
+    let messages: ChatMessage[];
+    if (
+      typeof request === "object" &&
+      request !== null &&
+      "content" in request &&
+      Array.isArray((request as { content: unknown }).content)
+    ) {
+      messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: (request as { content: LlmContentPart[] }).content },
+      ];
+    } else {
+      messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: JSON.stringify(request) },
+      ];
+    }
+
     const response = await fetch(this.apiUrl, {
       method: "POST",
       headers: {
@@ -50,10 +74,7 @@ export class HttpLlmProvider implements InsuranceLlmProvider {
       body: JSON.stringify({
         model: this.modelId,
         temperature: 0,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: JSON.stringify(request) },
-        ],
+        messages,
       }),
     });
 

@@ -20,4 +20,6 @@ deno check \
   upload-document/index.ts \
   create-checkout-session/index.ts \
   stripe-webhook/index.ts \
-  send-quote-request/index.ts
+  send-quote-request/index.ts \
+  extract-policy-entities/index.ts \
+  approve-policy-candidates/index.ts

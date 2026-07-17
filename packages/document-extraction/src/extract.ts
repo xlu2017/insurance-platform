@@ -127,11 +127,30 @@ function ensureCanvasPolyfills(): void {
   if (typeof g.Path2D === "undefined") {
     g.Path2D = PolyfillPath2D as unknown as typeof globalThis.Path2D;
   }
+  const abProto = ArrayBuffer.prototype as unknown as Record<string, unknown>;
+  if (typeof abProto.transferToFixedLength !== "function") {
+    abProto.transferToFixedLength = function (this: ArrayBuffer) {
+      return this.slice(0);
+    };
+  }
+  if (typeof abProto.transfer !== "function") {
+    abProto.transfer = function (this: ArrayBuffer) {
+      return this.slice(0);
+    };
+  }
 }
 
-export async function extractPdfText(bytes: Uint8Array, documentId: string): Promise<ExtractedPdf> {
+export interface ExtractPdfOptions {
+  bytes: Uint8Array;
+  documentId: string;
+  includeImages?: boolean;
+  imageScale?: number;
+}
+
+export async function extractPdfPages(options: ExtractPdfOptions): Promise<ExtractedPdf> {
   ensureCanvasPolyfills();
-  const buffer = await crypto.subtle.digest("SHA-256", bytes);
+  const bytesArray = options.bytes;
+  const buffer = await crypto.subtle.digest("SHA-256", bytesArray);
   const fileDigest = Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -143,10 +162,13 @@ export async function extractPdfText(bytes: Uint8Array, documentId: string): Pro
     pdfjs.GlobalWorkerOptions.workerSrc = __PDF_WORKER_DATA_URL__;
   }
   const doc = await pdfjs.getDocument({
-    data: bytes,
+    data: bytesArray,
     useSystemFonts: true,
     isEvalSupported: false,
   } as unknown as Parameters<typeof pdfjs.getDocument>[0]).promise;
+
+  const includeImages = options.includeImages ?? false;
+  const imageScale = options.imageScale ?? 2;
 
   const pages: ExtractedPdfPage[] = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
@@ -166,18 +188,57 @@ export async function extractPdfText(bytes: Uint8Array, documentId: string): Pro
         if (text.trim().length > 0) parts.push(text);
       }
     }
+
+    let image: ExtractedPdfPage["image"] | undefined;
+    if (includeImages) {
+      image = await renderPageToImage(page, imageScale);
+    }
+
     pages.push({
       pageNumber,
       text: parts.join("\n"),
+      image,
       items,
     });
     await page.cleanup();
   }
 
   return {
-    documentId,
+    documentId: options.documentId,
     fileDigest,
     pageCount: doc.numPages,
     pages,
   };
+}
+
+export async function extractPdfText(bytes: Uint8Array, documentId: string): Promise<ExtractedPdf> {
+  return extractPdfPages({ bytes, documentId, includeImages: false });
+}
+
+async function renderPageToImage(
+  page: unknown,
+  scale: number,
+): Promise<ExtractedPdfPage["image"] | undefined> {
+  try {
+    const { createCanvas } = await import("canvas");
+    const viewport = (
+      page as { getViewport: (opts: { scale: number }) => { width: number; height: number } }
+    ).getViewport({ scale });
+    const canvas = createCanvas(viewport.width, viewport.height);
+    const ctx = canvas.getContext("2d");
+    await (
+      page as {
+        render: (opts: { canvasContext: unknown; viewport: unknown }) => {
+          promise: Promise<unknown>;
+        };
+      }
+    ).render({
+      canvasContext: ctx,
+      viewport,
+    }).promise;
+    const base64 = canvas.toDataURL("image/png").split(",")[1];
+    return { mimeType: "image/png", base64 };
+  } catch {
+    return undefined;
+  }
 }

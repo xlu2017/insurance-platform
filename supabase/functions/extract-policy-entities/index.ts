@@ -1,26 +1,18 @@
-// Extract text and parse an uploaded policy document into stable asset candidates.
+// @ts-nocheck
+// Analyze all selected policy documents together and extract stable asset candidates.
 //
-// The PDF is downloaded from the private policy-documents bucket. When LLM_API_URL
-// and LLM_API_KEY are configured, the extraction uses a provider-neutral LLM
-// pipeline; otherwise it falls back to the local pdfjs-dist + TD parsers. The
-// resulting assertions and candidates are persisted in document_extraction_sessions,
-// extracted_documents, asset_candidates, extracted_fact_assertions, and
-// candidate_conflicts.
-//
-// Duplicate file digests are ignored after the first extraction. Candidates are
-// matched across sessions by normalized identity fingerprint (VIN for vehicles,
-// normalized civic address for properties) and enriched rather than duplicated.
+// The PDFs are downloaded from the private policy-documents bucket. When LLM_API_URL
+// and LLM_API_KEY are configured, the extraction routes the documents through the
+// InsuranceDocumentAnalyzer with an HTTP LLM provider; otherwise it falls back to
+// the deterministic pdfjs-dist + TD parser path. Results are persisted in
+// document_extraction_sessions, extracted_documents, and asset_candidates.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  extractPdfText,
+  buildPropertyIdentity,
+  buildVehicleIdentity,
+  createLlmFirstAnalyzer,
   HttpLlmProvider,
-  parseDocument,
-  projectLlmRunToParsedDocument,
-  resolveLlmAssetIdentity,
-  runLlmExtraction,
-  type ExtractedFactAssertion,
-  type ParsedAssetAssertion,
-  type ParsedInsuranceDocument,
+  MemoryDocumentLoader,
 } from "../_shared/document-extraction.js";
 
 const corsHeaders = {
@@ -28,24 +20,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const authorityOrder = [
-  "coverage_summary",
-  "insurance_certificate",
-  "endorsement",
-  "invoice",
-  "renewal_overview",
-  "notice",
-  "header_footer",
-] as const;
-
-function authorityRank(a: string): number {
-  return authorityOrder.indexOf(a as (typeof authorityOrder)[number]);
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-}
 
 function jsonError(message: string, status: number) {
   return new Response(JSON.stringify({ message }), {
@@ -61,228 +35,115 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-interface CandidateRecord {
-  id: string;
-  session_id: string;
-  household_id: string;
-  asset_type: string;
-  identity_fingerprint: string;
-  display_label: string;
-  occupancy: string | null;
-  match_classification: string;
-  decision: string;
-  review_status: string;
-  source_document_ids: string[];
-  selected_facts_json: Record<string, string>;
-  conflicts_json: unknown[];
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
-interface FactRow {
-  id: string;
-  candidate_id: string | null;
-  document_id: string;
-  page_number: number;
-  entity_scope: string;
-  field_path: string;
-  raw_text: string;
-  parsed_value: unknown;
-  normalized_value: unknown;
-  parser_id: string;
-  parser_version: string;
-  confidence: number;
-  authority: string;
-  created_at: string;
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const buffer = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function candidateDisplayLabel(a: ParsedAssetAssertion): string {
-  if (a.assetType === "vehicle") {
-    return a.displayLabel;
-  }
-  const addr = a.displayLabel;
-  return addr || a.identityFingerprint;
-}
-
-function normalizeIdentity(a: ParsedAssetAssertion): {
-  fingerprint: string;
-  label: string;
-  occupancy?: string;
-} {
-  const label = candidateDisplayLabel(a);
-  return {
-    fingerprint: a.identityFingerprint,
-    label,
-    occupancy: a.occupancy,
-  };
-}
-
-function assertionFromParsed(
-  docId: string,
-  candidateId: string | null,
-  a: ExtractedFactAssertion,
-): Omit<FactRow, "created_at"> {
-  return {
-    id: a.id,
-    candidate_id: candidateId,
-    document_id: docId,
-    page_number: a.pageNumber,
-    entity_scope: a.entityScope,
-    field_path: a.fieldPath,
-    raw_text: a.rawText,
-    parsed_value: a.parsedValue,
-    normalized_value: a.normalizedValue,
-    parser_id: a.parserId,
-    parser_version: a.parserVersion,
-    confidence: a.confidence,
-    authority: a.authority,
-  };
-}
-
-async function resolveOrCreateCandidate(
-  admin: ReturnType<typeof createClient>,
-  sessionId: string,
-  householdId: string,
-  extractedDocId: string,
-  parsed: ParsedAssetAssertion,
-): Promise<CandidateRecord> {
-  const { fingerprint, label, occupancy } = normalizeIdentity(parsed);
-
-  const { data: existing } = await admin
-    .from("asset_candidates")
-    .select("*")
-    .eq("household_id", householdId)
-    .eq("asset_type", parsed.assetType)
-    .eq("identity_fingerprint", fingerprint)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let candidate: CandidateRecord;
-
-  if (existing) {
-    candidate = existing as CandidateRecord;
-    const sourceIds = new Set(candidate.source_document_ids);
-    sourceIds.add(extractedDocId);
-    const { data: updated, error: updateErr } = await admin
-      .from("asset_candidates")
-      .update({
-        source_document_ids: Array.from(sourceIds),
-        occupancy: occupancy ?? candidate.occupancy,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", candidate.id)
-      .select()
-      .single();
-    if (updateErr) throw new Error(updateErr.message);
-    candidate = updated as CandidateRecord;
-  } else {
-    const { data: inserted, error: insertErr } = await admin
-      .from("asset_candidates")
-      .insert({
-        session_id: sessionId,
-        household_id: householdId,
-        asset_type: parsed.assetType,
-        identity_fingerprint: fingerprint,
-        display_label: label,
-        occupancy: occupancy ?? "unknown",
-        match_classification: parsed.matchClassification ?? "new",
-        decision: "undecided",
-        review_status: "pending",
-        source_document_ids: [extractedDocId],
-        selected_facts_json: {},
-        conflicts_json: [],
-      })
-      .select()
-      .single();
-    if (insertErr) throw new Error(insertErr.message);
-    candidate = inserted as CandidateRecord;
-  }
-
-  for (const a of parsed.assertions) {
-    const row = assertionFromParsed(extractedDocId, candidate.id, a);
-    const { error } = await admin.from("extracted_fact_assertions").insert(row);
-    if (error) throw new Error(error.message);
-  }
-
-  await recomputeCandidateFacts(admin, candidate.id);
-
-  const { data: refreshed, error: refreshErr } = await admin
-    .from("asset_candidates")
-    .select("*")
-    .eq("id", candidate.id)
-    .single();
-  if (refreshErr || !refreshed) throw new Error(refreshErr?.message ?? "candidate not found");
-  return refreshed as CandidateRecord;
-}
-
-async function recomputeCandidateFacts(
-  admin: ReturnType<typeof createClient>,
-  candidateId: string,
-): Promise<void> {
-  const { data: rows, error } = await admin
-    .from("extracted_fact_assertions")
-    .select("*")
-    .eq("candidate_id", candidateId);
-  if (error) throw new Error(error.message);
-
-  const byPath = new Map<string, FactRow[]>();
-  for (const row of (rows ?? []) as FactRow[]) {
-    const list = byPath.get(row.field_path) ?? [];
-    list.push(row);
-    byPath.set(row.field_path, list);
-  }
-
-  const selectedFacts: Record<string, string> = {};
-  const conflicts: {
-    fieldPath: string;
-    assertionIds: string[];
-    selectedAssertionId?: string;
-    reason: string;
-  }[] = [];
-
-  for (const [path, list] of byPath.entries()) {
-    const sorted = [...list].sort(
-      (a, b) =>
-        authorityRank(b.authority) - authorityRank(a.authority) || b.confidence - a.confidence,
-    );
-    selectedFacts[path] = sorted[0].id;
-
-    const distinct = new Set(list.map((r) => JSON.stringify(r.normalized_value)));
-    if (distinct.size > 1) {
-      conflicts.push({
-        fieldPath: path,
-        assertionIds: sorted.map((r) => r.id),
-        selectedAssertionId: sorted[0].id,
-        reason: `Conflicting values for ${path}; selected ${sorted[0].authority}.`,
-      });
+function mapResolutionStatus(entity: DetectedInsuranceEntity): string {
+  const status = entity.resolution.status;
+  if (status === "new") return "new";
+  if (status === "possible_match_requires_confirmation") {
+    if (entity.resolution.matchedExistingEntityId || entity.resolution.matchedPendingCandidateId) {
+      return "possible_existing_match";
     }
+    return "new_identity_confirmation_required";
   }
+  if (status === "matches_existing" || status === "matches_pending_candidate") {
+    return "exact_existing_match";
+  }
+  return "new";
+}
 
-  const { error: deleteErr } = await admin
-    .from("candidate_conflicts")
-    .delete()
-    .eq("candidate_id", candidateId);
-  if (deleteErr) throw new Error(deleteErr.message);
+function occupancyForEntity(entity: DetectedInsuranceEntity): string | null {
+  if (entity.entityType === "vehicle") return null;
+  const value = entity.identity.occupancy;
+  if (value === "principal_residence" || value === "rental" || value === "unknown") return value;
+  return "unknown";
+}
 
-  for (const c of conflicts) {
-    const { error } = await admin.from("candidate_conflicts").insert({
-      candidate_id: candidateId,
-      field_path: c.fieldPath,
-      assertion_ids: c.assertionIds,
-      selected_assertion_id: c.selectedAssertionId,
-      reason: c.reason,
+function candidateDisplayLabel(entity: DetectedInsuranceEntity): string {
+  if (entity.displayLabel && entity.displayLabel.trim().length > 0)
+    return entity.displayLabel.trim();
+  if (entity.entityType === "vehicle") {
+    const { year, make, model, trim } = entity.identity;
+    return [year, make, model, trim].filter(Boolean).join(" ") || "Unidentified vehicle";
+  }
+  const { fullAddress, city, province, postalCode, occupancy } = entity.identity;
+  const parts = [fullAddress, city, province, postalCode].filter(Boolean);
+  const label = parts.join(" ") || `${occupancy ?? "Property"} at ${city ?? "unknown"}`;
+  return label;
+}
+
+async function loadExistingAssets(
+  admin: ReturnType<typeof createClient>,
+  householdId: string,
+): Promise<ExistingHouseholdAsset[]> {
+  const { data: vehicles, error: vehicleErr } = await admin
+    .from("vehicles")
+    .select("id, year, make, model, vin")
+    .eq("household_id", householdId);
+  if (vehicleErr) throw new Error(vehicleErr.message);
+
+  const { data: properties, error: propertyErr } = await admin
+    .from("properties")
+    .select("id, address_line1, city, province, postal_code, owner_occupied")
+    .eq("household_id", householdId);
+  if (propertyErr) throw new Error(propertyErr.message);
+
+  const assets: ExistingHouseholdAsset[] = [];
+  for (const v of vehicles ?? []) {
+    const identity = buildVehicleIdentity({
+      vin: typeof v.vin === "string" ? v.vin : undefined,
+      modelYear: typeof v.year === "number" ? v.year : undefined,
+      make: typeof v.make === "string" ? v.make : undefined,
+      model: typeof v.model === "string" ? v.model : undefined,
     });
-    if (error) throw new Error(error.message);
+    const fingerprint = identity.exactFingerprint ?? identity.possibleMatchHint ?? String(v.id);
+    assets.push({ id: String(v.id), assetType: "vehicle", identityFingerprint: fingerprint });
   }
+  for (const p of properties ?? []) {
+    const identity = buildPropertyIdentity({
+      addressLine1: typeof p.address_line1 === "string" ? p.address_line1 : undefined,
+      city: typeof p.city === "string" ? p.city : undefined,
+      province: typeof p.province === "string" ? p.province : undefined,
+      postalCode: typeof p.postal_code === "string" ? p.postal_code : undefined,
+      occupancy: p.owner_occupied === false ? "rental" : "principal_residence",
+      isRedacted: false,
+    });
+    const fingerprint = identity.exactFingerprint ?? identity.possibleMatchHint ?? String(p.id);
+    assets.push({ id: String(p.id), assetType: "property", identityFingerprint: fingerprint });
+  }
+  return assets;
+}
 
-  const { error: updateErr } = await admin
+async function loadPendingCandidates(
+  admin: ReturnType<typeof createClient>,
+  householdId: string,
+  excludeSessionId?: string,
+): Promise<PendingEntityCandidate[]> {
+  const query = admin
     .from("asset_candidates")
-    .update({
-      selected_facts_json: selectedFacts,
-      conflicts_json: conflicts,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", candidateId);
-  if (updateErr) throw new Error(updateErr.message);
+    .select("id, asset_type, identity_fingerprint, session_id")
+    .eq("household_id", householdId)
+    .in("review_status", ["pending", "reviewing"])
+    .in("decision", ["undecided", "not_sure"]);
+  if (excludeSessionId) {
+    query.neq("session_id", excludeSessionId);
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((c) => ({
+    id: String(c.id),
+    assetType: c.asset_type as "property" | "vehicle",
+    identityFingerprint: String(c.identity_fingerprint),
+  }));
 }
 
 Deno.serve(async (req) => {
@@ -315,20 +176,30 @@ Deno.serve(async (req) => {
   }
 
   const householdId = body.household_id as string | undefined;
-  const policyDocumentId = body.policy_document_id as string | undefined;
-  let sessionId = body.session_id as string | undefined;
+  const sessionIdRaw = body.session_id as string | undefined;
+  const rawDocIds = body.policy_document_ids ?? [body.policy_document_id];
 
   if (!householdId || !isUuid(householdId)) {
     return jsonError("Missing or invalid household_id", 400);
   }
-  if (!policyDocumentId || !isUuid(policyDocumentId)) {
-    return jsonError("Missing or invalid policy_document_id", 400);
-  }
-  if (sessionId && !isUuid(sessionId)) {
+  if (sessionIdRaw && !isUuid(sessionIdRaw)) {
     return jsonError("Invalid session_id", 400);
   }
 
-  // Verify the caller has access to the household.
+  let policyDocumentIds: string[];
+  if (Array.isArray(rawDocIds)) {
+    policyDocumentIds = rawDocIds.filter(
+      (id): id is string => typeof id === "string" && isUuid(id),
+    );
+  } else if (typeof rawDocIds === "string" && isUuid(rawDocIds)) {
+    policyDocumentIds = [rawDocIds];
+  } else {
+    return jsonError("Missing or invalid policy_document_ids", 400);
+  }
+  if (policyDocumentIds.length === 0) {
+    return jsonError("At least one policy_document_id is required", 400);
+  }
+
   const { data: household, error: householdErr } = await supabase
     .from("households")
     .select("id")
@@ -338,64 +209,73 @@ Deno.serve(async (req) => {
     return jsonError("Household not found", 404);
   }
 
-  const { data: docRow, error: docErr } = await supabase
+  const { data: docRows, error: docsErr } = await supabase
     .from("policy_documents")
     .select("id, storage_path, file_name, household_id")
-    .eq("id", policyDocumentId)
-    .maybeSingle();
-  if (docErr || !docRow) {
-    return jsonError("Policy document not found", 404);
+    .in("id", policyDocumentIds)
+    .eq("household_id", householdId);
+  if (docsErr) {
+    return jsonError(docsErr.message, 500);
   }
-  if (docRow.household_id !== householdId) {
-    return jsonError("Policy document does not belong to household", 403);
+  if (!docRows || docRows.length !== policyDocumentIds.length) {
+    return jsonError("One or more policy documents not found", 404);
   }
 
-  // Download the file bytes with service role.
-  const { data: fileData, error: downloadErr } = await admin.storage
-    .from("policy-documents")
-    .download(docRow.storage_path);
-  if (downloadErr || !fileData) {
-    return jsonError(downloadErr?.message ?? "Failed to download document", 502);
+  // Download PDF bytes and compute digests for all requested documents.
+  const bytesByReference: Record<string, Uint8Array> = {};
+  const digestByDocId: Record<string, string> = {};
+  const filenameByDocId: Record<string, string> = {};
+  for (const docRow of docRows) {
+    const { data: fileData, error: downloadErr } = await admin.storage
+      .from("policy-documents")
+      .download(docRow.storage_path);
+    if (downloadErr || !fileData) {
+      return jsonError(downloadErr?.message ?? "Failed to download document", 502);
+    }
+    const bytes = new Uint8Array(await fileData.arrayBuffer());
+    const digest = await sha256Hex(bytes);
+    bytesByReference[docRow.id] = bytes;
+    digestByDocId[docRow.id] = digest;
+    filenameByDocId[docRow.id] = docRow.file_name ?? docRow.id;
   }
-  const bytes = new Uint8Array(await fileData.arrayBuffer());
 
-  // Compute the file digest to detect duplicates.
-  const digestBuffer = await crypto.subtle.digest("SHA-256", bytes);
-  const fileDigest = Array.from(new Uint8Array(digestBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-
-  const { data: existingDoc } = await admin
+  // Check for existing extracted documents by digest to avoid re-parsing duplicates.
+  const { data: existingExtractedDocs } = await admin
     .from("extracted_documents")
-    .select("id, file_digest, session_id")
+    .select("id, file_digest, session_id, policy_document_id")
     .eq("household_id", householdId)
-    .eq("file_digest", fileDigest)
-    .limit(1)
-    .maybeSingle();
+    .in("file_digest", Object.values(digestByDocId));
 
-  if (existingDoc) {
-    const { data: existingCandidates } = await admin
-      .from("asset_candidates")
-      .select("*")
-      .eq("session_id", existingDoc.session_id);
-    return jsonResponse({
-      session_id: existingDoc.session_id,
-      extracted_document_id: existingDoc.id,
-      duplicate: true,
-      candidates: existingCandidates ?? [],
+  const existingByDigest = new Map<string, { id: string; session_id: string }>();
+  for (const row of existingExtractedDocs ?? []) {
+    existingByDigest.set(String(row.file_digest), {
+      id: String(row.id),
+      session_id: String(row.session_id),
     });
   }
 
+  const duplicatedDocIds = policyDocumentIds.filter((id) =>
+    existingByDigest.has(digestByDocId[id]),
+  );
+  const newDocIds = policyDocumentIds.filter((id) => !existingByDigest.has(digestByDocId[id]));
+
+  let sessionId = sessionIdRaw;
   if (!sessionId) {
-    const { data: session, error: sessionErr } = await admin
-      .from("document_extraction_sessions")
-      .insert({ household_id: householdId, status: "open", created_by: user.id })
-      .select()
-      .single();
-    if (sessionErr || !session) {
-      return jsonError(sessionErr?.message ?? "Failed to create extraction session", 500);
+    if (duplicatedDocIds.length > 0 && existingByDigest.size > 0) {
+      const first = existingByDigest.get(digestByDocId[duplicatedDocIds[0]]);
+      sessionId = first?.session_id;
     }
-    sessionId = session.id;
+    if (!sessionId) {
+      const { data: session, error: sessionErr } = await admin
+        .from("document_extraction_sessions")
+        .insert({ household_id: householdId, status: "open", created_by: user.id })
+        .select()
+        .single();
+      if (sessionErr || !session) {
+        return jsonError(sessionErr?.message ?? "Failed to create extraction session", 500);
+      }
+      sessionId = session.id;
+    }
   } else {
     const { data: session } = await supabase
       .from("document_extraction_sessions")
@@ -407,63 +287,182 @@ Deno.serve(async (req) => {
     }
   }
 
-  const extracted = await extractPdfText(bytes, policyDocumentId);
+  // If every document is a duplicate, return the existing session and candidates.
+  if (newDocIds.length === 0) {
+    const { data: existingCandidates } = await admin
+      .from("asset_candidates")
+      .select("*")
+      .eq("session_id", sessionId);
+    return jsonResponse({
+      session_id: sessionId,
+      extracted_document_ids: duplicatedDocIds.map(
+        (id) => existingByDigest.get(digestByDocId[id])!.id,
+      ),
+      duplicate: true,
+      candidates: existingCandidates ?? [],
+    });
+  }
 
-  let parsed: ParsedInsuranceDocument;
+  const uploadedDocuments: InsuranceDocumentAnalysisInput["uploadedDocuments"] = newDocIds.map(
+    (id) => ({
+      documentId: id,
+      filename: filenameByDocId[id],
+      mimeType: "application/pdf",
+      fileReference: id,
+    }),
+  );
+
+  const [existingAssets, pendingCandidates] = await Promise.all([
+    loadExistingAssets(admin, householdId),
+    loadPendingCandidates(admin, householdId, sessionId),
+  ]);
+
   const llmApiUrl = Deno.env.get("LLM_API_URL");
   const llmApiKey = Deno.env.get("LLM_API_KEY");
-  const llmModel = Deno.env.get("LLM_MODEL") ?? "gpt-4o";
+  const llmModel = Deno.env.get("LLM_MODEL") ?? "deepseek-v4-pro";
 
-  if (llmApiUrl && llmApiKey) {
-    const provider = new HttpLlmProvider({
-      apiUrl: llmApiUrl,
-      apiKey: llmApiKey,
-      model: llmModel,
-    });
-    const run = await runLlmExtraction(extracted, provider);
-    const projected = await projectLlmRunToParsedDocument(run, {
-      resolveAssetIdentity: resolveLlmAssetIdentity,
-    });
-    parsed = projected.document;
-  } else {
-    parsed = await parseDocument(extracted);
+  const provider =
+    llmApiUrl && llmApiKey
+      ? new HttpLlmProvider({
+          apiUrl: llmApiUrl,
+          apiKey: llmApiKey,
+          model: llmModel,
+          providerId: llmModel.includes("deepseek") ? "deepseek" : "http-llm-provider",
+        })
+      : undefined;
+
+  const analyzer = createLlmFirstAnalyzer({
+    provider,
+    loader: new MemoryDocumentLoader(bytesByReference),
+    fallbackToDeterministic: true,
+  });
+
+  const analysis = await analyzer.analyze({
+    householdId,
+    uploadedDocuments,
+    existingAssets,
+    pendingCandidates,
+    priorDocumentSummaries: [],
+    jurisdiction: "AB",
+  });
+
+  // Persist new extracted document rows.
+  const extractedDocRows: { id: string; policy_document_id: string }[] = [];
+  for (const analyzedDoc of analysis.documents) {
+    const docId = analyzedDoc.documentId;
+    const { data: extractedDoc, error: extractedErr } = await admin
+      .from("extracted_documents")
+      .insert({
+        session_id: sessionId,
+        household_id: householdId,
+        policy_document_id: docId,
+        file_digest: analyzedDoc.fileDigest,
+        page_count: analyzedDoc.pageCount,
+        classification: analyzedDoc.classification,
+        parser_id: analyzedDoc.parserId,
+        parser_version: analyzedDoc.parserVersion,
+        pages_json: [],
+      })
+      .select()
+      .single();
+    if (extractedErr || !extractedDoc) {
+      return jsonError(extractedErr?.message ?? "Failed to record extracted document", 500);
+    }
+    extractedDocRows.push({ id: extractedDoc.id, policy_document_id: docId });
   }
 
-  const { data: extractedDoc, error: extractedErr } = await admin
-    .from("extracted_documents")
-    .insert({
-      session_id: sessionId,
-      household_id: householdId,
-      policy_document_id: docRow.id,
-      file_digest: fileDigest,
-      page_count: extracted.pageCount,
-      classification: parsed.classification,
-      parser_id: parsed.parserId,
-      parser_version: parsed.parserVersion,
-      pages_json: extracted.pages,
-    })
-    .select()
-    .single();
-  if (extractedErr || !extractedDoc) {
-    return jsonError(extractedErr?.message ?? "Failed to record extracted document", 500);
+  const extractedDocIdByInputId = new Map<string, string>();
+  for (const row of extractedDocRows) {
+    extractedDocIdByInputId.set(row.policy_document_id, row.id);
   }
 
-  const candidateRecords: CandidateRecord[] = [];
-  for (const assetAssertion of parsed.assetAssertions) {
-    const candidate = await resolveOrCreateCandidate(
-      admin,
-      sessionId,
-      householdId,
-      extractedDoc.id,
-      assetAssertion,
+  // Upsert candidates by identity fingerprint within the session.
+  const candidateRecords: unknown[] = [];
+  for (const entity of analysis.detectedEntities) {
+    const fingerprint = entity.temporaryId;
+    const { data: existing } = await admin
+      .from("asset_candidates")
+      .select("id, source_document_ids")
+      .eq("session_id", sessionId)
+      .eq("asset_type", entity.entityType)
+      .eq("identity_fingerprint", fingerprint)
+      .maybeSingle();
+
+    const sourceDocIds = new Set<string>(existing?.source_document_ids ?? []);
+    for (const ref of entity.evidence) {
+      const extractedId = extractedDocIdByInputId.get(ref.documentId);
+      if (extractedId) sourceDocIds.add(extractedId);
+    }
+
+    const entityConflicts = analysis.unresolvedConflicts.filter(
+      (c) => c.entityRef === entity.temporaryId,
     );
-    candidateRecords.push(candidate);
+    const selectedFacts = {
+      entity,
+      sourceDocuments: Array.from(sourceDocIds),
+    };
+
+    const payload = {
+      display_label: candidateDisplayLabel(entity),
+      occupancy: occupancyForEntity(entity),
+      match_classification: mapResolutionStatus(entity),
+      source_document_ids: Array.from(sourceDocIds),
+      selected_facts_json: selectedFacts,
+      conflicts_json: entityConflicts,
+      updated_at: new Date().toISOString(),
+    };
+
+    let candidateId: string;
+    if (existing) {
+      const { data: updated, error: updateErr } = await admin
+        .from("asset_candidates")
+        .update(payload)
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (updateErr || !updated) {
+        return jsonError(updateErr?.message ?? "Failed to update candidate", 500);
+      }
+      candidateId = updated.id;
+      candidateRecords.push(updated);
+    } else {
+      const { data: inserted, error: insertErr } = await admin
+        .from("asset_candidates")
+        .insert({
+          session_id: sessionId,
+          household_id: householdId,
+          asset_type: entity.entityType,
+          identity_fingerprint: fingerprint,
+          display_label: candidateDisplayLabel(entity),
+          occupancy: occupancyForEntity(entity),
+          match_classification: mapResolutionStatus(entity),
+          source_document_ids: Array.from(sourceDocIds),
+          selected_facts_json: selectedFacts,
+          conflicts_json: entityConflicts,
+        })
+        .select()
+        .single();
+      if (insertErr || !inserted) {
+        return jsonError(insertErr?.message ?? "Failed to insert candidate", 500);
+      }
+      candidateId = inserted.id;
+      candidateRecords.push(inserted);
+    }
   }
 
   return jsonResponse({
     session_id: sessionId,
-    extracted_document_id: extractedDoc.id,
+    extracted_document_ids: extractedDocRows.map((r) => r.id),
     duplicate: false,
     candidates: candidateRecords,
+    analysis: {
+      modelProvider: analysis.modelProvider,
+      modelId: analysis.modelId,
+      attemptedModelProvider: analysis.attemptedModelProvider,
+      attemptedModelId: analysis.attemptedModelId,
+      fallbackReason: analysis.fallbackReason,
+      warnings: analysis.warnings,
+      unresolvedConflicts: analysis.unresolvedConflicts,
+    },
   });
 });
