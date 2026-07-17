@@ -266,8 +266,9 @@ function findStringAssertion(
 }
 
 function stableValue(value: unknown): string {
+  if (value === undefined) return "undefined";
   if (value === null) return "null";
-  if (typeof value !== "object") return JSON.stringify(value);
+  if (typeof value !== "object") return JSON.stringify(value) ?? String(value);
   if (Array.isArray(value)) return `[${value.map(stableValue).join(",")}]`;
 
   return `{${Object.entries(value as Record<string, unknown>)
