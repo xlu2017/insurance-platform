@@ -60,6 +60,7 @@ create table if not exists document_extraction_sessions (
 create table if not exists extracted_documents (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references document_extraction_sessions (id) on delete cascade,
+  household_id uuid not null references households (id) on delete cascade,
   policy_document_id uuid references policy_documents (id) on delete set null,
   file_digest text not null,
   page_count int not null default 0 check (page_count >= 0),
@@ -138,6 +139,7 @@ create table if not exists candidate_conflicts (
 
 create index if not exists idx_extracted_documents_session on extracted_documents (session_id);
 create index if not exists idx_extracted_documents_digest on extracted_documents (file_digest);
+create index if not exists idx_extracted_documents_household_digest on extracted_documents (household_id, file_digest);
 
 create index if not exists idx_asset_candidates_session on asset_candidates (session_id);
 create index if not exists idx_asset_candidates_household_fingerprint on asset_candidates (household_id, asset_type, identity_fingerprint);

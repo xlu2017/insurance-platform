@@ -566,6 +566,7 @@ export type Database = {
           created_at: string;
           extracted_at: string;
           file_digest: string;
+          household_id: string;
           id: string;
           page_count: number;
           pages_json: Json;
@@ -580,6 +581,7 @@ export type Database = {
           created_at?: string;
           extracted_at?: string;
           file_digest: string;
+          household_id: string;
           id?: string;
           page_count?: number;
           pages_json?: Json;
@@ -594,6 +596,7 @@ export type Database = {
           created_at?: string;
           extracted_at?: string;
           file_digest?: string;
+          household_id?: string;
           id?: string;
           page_count?: number;
           pages_json?: Json;
@@ -604,6 +607,13 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "extracted_documents_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "extracted_documents_policy_document_id_fkey";
             columns: ["policy_document_id"];
