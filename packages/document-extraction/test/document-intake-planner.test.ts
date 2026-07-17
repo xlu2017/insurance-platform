@@ -48,7 +48,9 @@ describe("planDocumentIntake", () => {
       "rental-2",
       "vehicle",
     ]);
-    expect(new Set(plan.acceptedUploads.map((document) => document.session))).toHaveLength(1);
+    expect(
+      plan.acceptedUploads.every((document) => document.session === plan.session),
+    ).toBe(true);
     expect(plan.duplicateUploads).toEqual([]);
   });
 
