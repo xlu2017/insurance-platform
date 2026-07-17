@@ -17,6 +17,7 @@
     "test:db": "supabase test db",
     "test:database": "bash scripts/ci/run-database.sh",
     "test:e2e": "bash scripts/ci/run-e2e.sh",
+    "test:private-policy-import": "tsx packages/document-extraction/scripts/private-policy-import.ts",
     "typecheck:edge": "bash scripts/ci/typecheck-edge.sh",
     "ci:static": "bash scripts/ci/run-static.sh",
     "ci:database": "bash scripts/ci/run-database.sh",
@@ -35,6 +36,7 @@
     }
   },
   "devDependencies": {
+    "pdfjs-dist": "^6.1.200",
     "prettier": "3.4.2",
     "turbo": "2.3.3",
     "typescript": "5.7.2"
