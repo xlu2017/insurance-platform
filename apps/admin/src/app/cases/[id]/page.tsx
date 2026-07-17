@@ -17,11 +17,13 @@ import { QuestionsTab } from "./tabs/questions";
 import { RecommendationTab } from "./tabs/recommendation";
 import { SwitchingTab } from "./tabs/switching";
 import { AuditTab } from "./tabs/audit";
+import { ExtractionTab } from "./tabs/extraction";
 
 const tabs = [
   "household",
   "policies",
   "documents",
+  "extraction",
   "mandate",
   "shortlist",
   "quotes",
@@ -87,6 +89,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
           {tab === "household" && <HouseholdTab caseRow={caseRow} />}
           {tab === "policies" && <PoliciesTab caseRow={caseRow} />}
           {tab === "documents" && <DocumentsTab caseRow={caseRow} />}
+          {tab === "extraction" && <ExtractionTab caseRow={caseRow} />}
           {tab === "mandate" && <MandateTab caseRow={caseRow} />}
           {tab === "shortlist" && <ShortlistTab caseRow={caseRow} />}
           {tab === "quotes" && <QuotesTab caseRow={caseRow} />}
