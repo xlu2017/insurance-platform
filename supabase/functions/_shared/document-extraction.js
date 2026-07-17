@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 0fefa5d57aa6952db62c5ef87979dafea1c7fb0eb0494daa8a22e5db272de6a9
+// source-hash: 18b1024bc5595e88daea2287b000c82f78738b35c5cada05e2581a6d7a63295d
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -31807,7 +31807,10 @@ var PolyfillDOMMatrix = class _PolyfillDOMMatrix {
     return this;
   }
   translate(x, y) {
-    return new _PolyfillDOMMatrix([this.a, this.b, this.c, this.d, this.e, this.f]).translateSelf(x, y);
+    return new _PolyfillDOMMatrix([this.a, this.b, this.c, this.d, this.e, this.f]).translateSelf(
+      x,
+      y
+    );
   }
   scale(x, y) {
     return new _PolyfillDOMMatrix([this.a, this.b, this.c, this.d, this.e, this.f]).scaleSelf(x, y);
@@ -32828,4 +32831,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "0fefa5d57aa6952db62c5ef87979dafea1c7fb0eb0494daa8a22e5db272de6a9";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "18b1024bc5595e88daea2287b000c82f78738b35c5cada05e2581a6d7a63295d";

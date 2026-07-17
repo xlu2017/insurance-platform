@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { pickDocument, pickImage, uploadPolicyDocument, type PickedFile } from "@/lib/upload";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import {
   Body,
   Caption,
@@ -19,12 +20,14 @@ import {
 interface UploadedFile {
   name: string;
   category: string;
+  documentId: string;
 }
 
 export default function OnboardingDocuments() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
   const [uploaded, setUploaded] = useState<UploadedFile[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -40,8 +43,19 @@ export default function OnboardingDocuments() {
       const file: PickedFile | null =
         source === "document" ? await pickDocument() : await pickImage(source === "camera");
       if (file) {
-        await uploadPolicyDocument(household.id, category, file);
-        setUploaded((u) => [...u, { name: file.name, category }]);
+        const result = await uploadPolicyDocument(household.id, category, file);
+        const { data } = await invokeEdgeFunction<{
+          session_id: string;
+          candidates: unknown[];
+        }>("extract-policy-entities", {
+          household_id: household.id,
+          policy_document_id: result.id,
+          session_id: sessionId ?? undefined,
+        });
+        if (data?.session_id) {
+          setSessionId(data.session_id);
+        }
+        setUploaded((u) => [...u, { name: file.name, category, documentId: result.id }]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
@@ -74,8 +88,9 @@ export default function OnboardingDocuments() {
     }
     await supabase.from("households").update({ onboarding_step: "mandate" }).eq("id", household.id);
     queryClient.invalidateQueries({ queryKey: ["household"] });
+    queryClient.invalidateQueries({ queryKey: ["extraction-session"] });
     setBusy(false);
-    router.push("/onboarding/mandate");
+    router.push("/onboarding/review-entities");
   };
 
   return (

@@ -35,6 +35,8 @@ export { CoveragePresence, QuoteDataSource } from "../../schemas/src/enums.ts";
 export {
   HouseholdCoverageMandateV2,
   SwitchingPreferencesV2,
+  createDefaultHouseholdCoverageMandateV2,
+  createDefaultSwitchingPreferencesV2,
 } from "../../schemas/src/mandate-v2.ts";
 
 // Re-export recommendation persistence schemas so the Edge Function can build

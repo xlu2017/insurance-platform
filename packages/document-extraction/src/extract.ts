@@ -83,7 +83,14 @@ class PolyfillDOMMatrix {
     return this;
   }
 
-  setTransform(a: number, b: number, c: number, d: number, e: number, f: number): PolyfillDOMMatrix {
+  setTransform(
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: number,
+  ): PolyfillDOMMatrix {
     this.a = a;
     this.b = b;
     this.c = c;
@@ -94,7 +101,10 @@ class PolyfillDOMMatrix {
   }
 
   translate(x: number, y: number): PolyfillDOMMatrix {
-    return new PolyfillDOMMatrix([this.a, this.b, this.c, this.d, this.e, this.f]).translateSelf(x, y);
+    return new PolyfillDOMMatrix([this.a, this.b, this.c, this.d, this.e, this.f]).translateSelf(
+      x,
+      y,
+    );
   }
 
   scale(x: number, y?: number): PolyfillDOMMatrix {
@@ -122,7 +132,10 @@ function ensureCanvasPolyfills(): void {
 export async function extractPdfText(bytes: Uint8Array, documentId: string): Promise<ExtractedPdf> {
   ensureCanvasPolyfills();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  if (typeof (globalThis as unknown as { Deno?: unknown }).Deno !== "undefined" && typeof __PDF_WORKER_DATA_URL__ !== "undefined") {
+  if (
+    typeof (globalThis as unknown as { Deno?: unknown }).Deno !== "undefined" &&
+    typeof __PDF_WORKER_DATA_URL__ !== "undefined"
+  ) {
     pdfjs.GlobalWorkerOptions.workerSrc = __PDF_WORKER_DATA_URL__;
   }
   const doc = await pdfjs.getDocument({

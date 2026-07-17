@@ -95,7 +95,11 @@ function candidateDisplayLabel(a: ParsedAssetAssertion): string {
   return addr || a.identityFingerprint;
 }
 
-function normalizeIdentity(a: ParsedAssetAssertion): { fingerprint: string; label: string; occupancy?: string } {
+function normalizeIdentity(a: ParsedAssetAssertion): {
+  fingerprint: string;
+  label: string;
+  occupancy?: string;
+} {
   const label = candidateDisplayLabel(a);
   return {
     fingerprint: a.identityFingerprint,
@@ -221,11 +225,17 @@ async function recomputeCandidateFacts(
   }
 
   const selectedFacts: Record<string, string> = {};
-  const conflicts: { fieldPath: string; assertionIds: string[]; selectedAssertionId?: string; reason: string }[] = [];
+  const conflicts: {
+    fieldPath: string;
+    assertionIds: string[];
+    selectedAssertionId?: string;
+    reason: string;
+  }[] = [];
 
   for (const [path, list] of byPath.entries()) {
     const sorted = [...list].sort(
-      (a, b) => authorityRank(b.authority) - authorityRank(a.authority) || b.confidence - a.confidence,
+      (a, b) =>
+        authorityRank(b.authority) - authorityRank(a.authority) || b.confidence - a.confidence,
     );
     selectedFacts[path] = sorted[0].id;
 
@@ -240,7 +250,10 @@ async function recomputeCandidateFacts(
     }
   }
 
-  const { error: deleteErr } = await admin.from("candidate_conflicts").delete().eq("candidate_id", candidateId);
+  const { error: deleteErr } = await admin
+    .from("candidate_conflicts")
+    .delete()
+    .eq("candidate_id", candidateId);
   if (deleteErr) throw new Error(deleteErr.message);
 
   for (const c of conflicts) {
@@ -277,7 +290,10 @@ Deno.serve(async (req) => {
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: authHeader } },
   });
-  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
 
   const {
     data: { user },

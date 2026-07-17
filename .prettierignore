@@ -6,3 +6,4 @@ dist
 supabase/migrations
 supabase/seed.sql
 supabase/functions/_shared/autopilot.js
+supabase/functions/_shared/document-extraction.js

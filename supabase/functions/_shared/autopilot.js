@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 5f25f4e7c9a867511b8a9a908c06a6d663da156e7089a13b5a11919d76b38e23
+// source-hash: c0e09f133751209cf41cd19016f5a8fae9d833ebbd989e6e0a112be0071ce2fc
 
 
 // ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
@@ -4413,6 +4413,16 @@ var PropertyOptionalCoveragePreferencesV2 = z.object(
     propertyOptionalCoverageKeys2.map((key) => [key, CoveragePreference])
   )
 );
+function createDefaultAutoEndorsementsV2() {
+  const fresh = Object.fromEntries(autoEndorsementKeys2.map((k) => [k, "indifferent"]));
+  return AutoEndorsementPreferencesV2.parse(fresh);
+}
+function createDefaultPropertyOptionalCoveragesV2() {
+  const fresh = Object.fromEntries(
+    propertyOptionalCoverageKeys2.map((k) => [k, "indifferent"])
+  );
+  return PropertyOptionalCoveragePreferencesV2.parse(fresh);
+}
 var WaterCoverageRequirementV2 = z.object({
   preference: CoveragePreference,
   limit: MonetaryRule,
@@ -4430,6 +4440,16 @@ var AutoMandateV2 = z.object({
   glassDeductible: DeductibleRuleV2,
   endorsements: AutoEndorsementPreferencesV2
 }).strict();
+function createDefaultAutoMandateV2() {
+  return AutoMandateV2.parse({
+    coverageForm: { preference: "required", value: "comprehensive" },
+    liability: { rule: "minimum", amountCents: 2e8 },
+    collisionDeductible: { rule: "maximum", amountCents: 1e5 },
+    comprehensiveDeductible: { rule: "maximum", amountCents: 1e5 },
+    glassDeductible: { rule: "any" },
+    endorsements: createDefaultAutoEndorsementsV2()
+  });
+}
 var PropertyCoverageFormRequirementV2 = z.object({
   preference: CoveragePreference,
   value: PropertyCoverageForm
@@ -4454,6 +4474,33 @@ var PropertyMandateV2 = z.object({
   overlandWater: WaterCoverageRequirementV2,
   optionalCoverages: PropertyOptionalCoveragePreferencesV2
 }).strict();
+function createDefaultPropertyMandateV2() {
+  const anyRule = { rule: "any" };
+  return PropertyMandateV2.parse({
+    coverageForm: { preference: "required", value: "comprehensive" },
+    settlementBasis: { preference: "required", value: "replacement_cost" },
+    dwellingLimit: { rule: "minimum", amountCents: 45e6 },
+    contentsLimit: anyRule,
+    detachedStructuresLimit: anyRule,
+    personalLiabilityLimit: anyRule,
+    additionalLivingExpenseLimit: anyRule,
+    baseDeductible: { rule: "maximum", amountCents: 25e4 },
+    waterDeductible: anyRule,
+    windHailDeductible: anyRule,
+    earthquakeDeductible: anyRule,
+    sewerBackup: {
+      preference: "indifferent",
+      limit: anyRule,
+      deductible: anyRule
+    },
+    overlandWater: {
+      preference: "indifferent",
+      limit: anyRule,
+      deductible: anyRule
+    },
+    optionalCoverages: createDefaultPropertyOptionalCoveragesV2()
+  });
+}
 var AutoMandateOverrideValuesV2 = z.object({
   coverageForm: AutoCoverageFormRequirementV2.optional(),
   liability: MonetaryRule.optional(),
@@ -4496,6 +4543,18 @@ var HouseholdCoverageMandateV2 = z.object({
   vehicleOverrides: z.array(VehicleMandateOverrideV2).default([]),
   propertyOverrides: z.array(PropertyMandateOverrideV2).default([])
 }).strict();
+function createDefaultHouseholdCoverageMandateV2() {
+  return HouseholdCoverageMandateV2.parse({
+    schemaVersion: 2,
+    jurisdiction: "AB",
+    version: 1,
+    effectiveFrom: (/* @__PURE__ */ new Date()).toISOString(),
+    householdAutoDefaults: createDefaultAutoMandateV2(),
+    householdPropertyDefaults: createDefaultPropertyMandateV2(),
+    vehicleOverrides: [],
+    propertyOverrides: []
+  });
+}
 var SwitchingPreferencesV2 = z.object({
   minNetAnnualSavingsCents: NonNegativeCents.default(2e4),
   maxPremiumIncreaseCents: NonNegativeCents.default(0),
@@ -6984,6 +7043,8 @@ export {
   canonicalSerializeRecommendationInput,
   canonicalSerializeRecommendationOutput,
   canonicalizeForDigest,
+  createDefaultHouseholdCoverageMandateV2,
+  createDefaultSwitchingPreferencesV2,
   evaluateHousehold,
   loadRecommendationInputSnapshot,
   verifyCanonicalPair,
@@ -6992,4 +7053,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "5f25f4e7c9a867511b8a9a908c06a6d663da156e7089a13b5a11919d76b38e23";
+export const __AUTOPILOT_SOURCE_HASH__ = "c0e09f133751209cf41cd19016f5a8fae9d833ebbd989e6e0a112be0071ce2fc";
