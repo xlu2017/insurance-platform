@@ -131,6 +131,10 @@ function ensureCanvasPolyfills(): void {
 
 export async function extractPdfText(bytes: Uint8Array, documentId: string): Promise<ExtractedPdf> {
   ensureCanvasPolyfills();
+  const buffer = await crypto.subtle.digest("SHA-256", bytes);
+  const fileDigest = Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   if (
     typeof (globalThis as unknown as { Deno?: unknown }).Deno !== "undefined" &&
@@ -170,10 +174,6 @@ export async function extractPdfText(bytes: Uint8Array, documentId: string): Pro
     await page.cleanup();
   }
 
-  const buffer = await crypto.subtle.digest("SHA-256", bytes);
-  const fileDigest = Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
   return {
     documentId,
     fileDigest,

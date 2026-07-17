@@ -363,7 +363,7 @@ export type LlmExtractionRequest = z.infer<typeof LlmExtractionRequestSchema>;
 export interface InsuranceLlmProvider {
   readonly providerId: string;
   readonly modelId: string;
-  extract(request: LlmExtractionRequest, systemPrompt: string): Promise<unknown>;
+  extract(request: unknown, systemPrompt: string): Promise<unknown>;
 }
 
 export function parseLlmExtractionResult(

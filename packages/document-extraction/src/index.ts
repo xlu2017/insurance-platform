@@ -1,5 +1,7 @@
 export { extractPdfText } from "./extract.ts";
 export { parseDocument, parsers } from "./parsers/index.ts";
+export { resolveParsedDocuments } from "./entity-resolution.ts";
+export * from "./document-analyzer.ts";
 export * from "./types.ts";
 
 export * from "./entity-identity.ts";

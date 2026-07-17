@@ -1,8 +1,9 @@
-import type { ExtractedPdf, InsuranceDocumentParser, ParsedInsuranceDocument } from "../types.ts";
+import type { ExtractedPdf, ParsedInsuranceDocument } from "../types.ts";
+import { ParsedInsuranceDocument as ParsedInsuranceDocumentSchema } from "../types.ts";
 import { canParseHome, parseHome } from "./td-home.ts";
 import { canParseAuto, parseAuto } from "./td-auto.ts";
 
-export const parsers: InsuranceDocumentParser[] = [
+export const parsers = [
   {
     id: "TdSecurityNationalHomeRenewalParserV1",
     version: "1.0.0",
@@ -17,20 +18,22 @@ export const parsers: InsuranceDocumentParser[] = [
   },
 ];
 
-export function parseDocument(document: ExtractedPdf): ParsedInsuranceDocument {
+export async function parseDocument(document: ExtractedPdf): Promise<ParsedInsuranceDocument> {
   for (const parser of parsers) {
     if (parser.canParse(document)) {
-      return parser.parse(document);
+      const parsed = await parser.parse(document);
+      return ParsedInsuranceDocumentSchema.parse({
+        ...parsed,
+        documentId: document.documentId,
+        fileDigest: document.fileDigest,
+      });
     }
   }
-  return {
+  return ParsedInsuranceDocumentSchema.parse({
     classification: "unsupported",
-    policyTerms: [],
-    assetAssertions: [],
-    coverageAssertions: [],
-    notices: [],
-    conflicts: [],
+    documentId: document.documentId,
+    fileDigest: document.fileDigest,
     parserId: "none",
     parserVersion: "0",
-  };
+  });
 }

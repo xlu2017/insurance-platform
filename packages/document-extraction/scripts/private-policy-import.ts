@@ -1,106 +1,328 @@
+/* eslint-disable no-console */
 import fs from "node:fs";
 import path from "node:path";
-import { extractPdfText, parseDocument } from "../src/index.ts";
+import {
+  createLlmFirstAnalyzer,
+  HttpLlmProvider,
+  type InsuranceDocumentAnalysisInput,
+  type InsuranceDocumentAnalysisResult,
+  type InsuranceDocumentAnalyzer,
+  type UploadedDocument,
+} from "../src/index.ts";
+import { FileSystemDocumentLoader } from "../src/document-loaders/node.ts";
 
-function maskVin(vin?: string): string {
-  if (!vin) return "unknown";
-  return `${vin.slice(0, 4)}••••${vin.slice(vin.length - 4)}`;
+function canonicalHash(result: InsuranceDocumentAnalysisResult): string {
+  const summary = {
+    documents: result.documents
+      .map((d) => ({ fileDigest: d.fileDigest, classification: d.classification }))
+      .sort((a, b) => a.fileDigest.localeCompare(b.fileDigest)),
+    entities: result.detectedEntities
+      .map((e) => ({
+        entityType: e.entityType,
+        identityFingerprint: `${e.entityType}:${e.displayLabel}`,
+        resolution: e.resolution.status,
+      }))
+      .sort((a, b) => a.identityFingerprint.localeCompare(b.identityFingerprint)),
+    conflicts: result.unresolvedConflicts.map((c) => c.fieldPath).sort(),
+    warnings: result.warnings.map((w) => w.message).sort(),
+  };
+  const text = JSON.stringify(summary);
+  const encoded = new TextEncoder().encode(text);
+  return Array.from(new Uint8Array(encoded))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function maskPostal(postal?: string): string {
-  if (!postal) return "unknown";
-  const p = postal.replace(/\s/g, "");
-  return `${p.slice(0, 2)}•• ${p.slice(p.length - 2)}`;
+function assertEq<T>(label: string, actual: T, expected: T) {
+  const pass = actual === expected;
+  console.log(
+    `  ${pass ? "PASS" : "FAIL"}: ${label}: ${JSON.stringify(actual)} (expected ${JSON.stringify(expected)})`,
+  );
+  return pass;
+}
+
+async function runAnalyzer(
+  analyzer: InsuranceDocumentAnalyzer,
+  docs: UploadedDocument[],
+): Promise<InsuranceDocumentAnalysisResult> {
+  const input: InsuranceDocumentAnalysisInput = {
+    householdId: "test-household",
+    uploadedDocuments: docs,
+    existingAssets: [],
+    pendingCandidates: [],
+    priorDocumentSummaries: [],
+    jurisdiction: "AB",
+  };
+  return analyzer.analyze(input);
+}
+
+function summarize(result: InsuranceDocumentAnalysisResult) {
+  const properties = result.detectedEntities.filter((e) => e.entityType === "property");
+  const vehicles = result.detectedEntities.filter((e) => e.entityType === "vehicle");
+  const confirmation = result.detectedEntities.filter(
+    (e) => e.resolution.status === "possible_match_requires_confirmation",
+  ).length;
+  const exact = result.detectedEntities.filter(
+    (e) => e.resolution.status === "matches_existing",
+  ).length;
+  const possible = result.detectedEntities.filter(
+    (e) =>
+      e.resolution.status === "possible_match_requires_confirmation" &&
+      e.resolution.matchedExistingEntityId == null,
+  ).length;
+  console.log(`    documents: ${result.documents.length}`);
+  console.log(`    properties: ${properties.length}`);
+  for (const p of properties) {
+    console.log(
+      `      - ${p.temporaryId} -> ${p.resolution.status} (postal: ${p.identity.postalCode ?? "n/a"})`,
+    );
+  }
+  console.log(`    vehicles: ${vehicles.length}`);
+  for (const v of vehicles) {
+    console.log(`      - ${v.temporaryId} -> ${v.resolution.status}`);
+  }
+  console.log(`    matches_existing: ${exact}`);
+  console.log(`    possible_match_requires_confirmation: ${possible + confirmation}`);
+  console.log(`    unresolved conflicts: ${result.unresolvedConflicts.length}`);
 }
 
 async function main() {
   const dir = path.resolve(process.cwd(), "fixtures/private/phase-1e");
+  if (!fs.existsSync(dir)) {
+    console.error(
+      "FAIL: fixtures/private/phase-1e/ is unavailable. Place the four private PDFs there.",
+    );
+    process.exit(1);
+  }
+
   const files = fs
     .readdirSync(dir)
     .filter((f) => f.toLowerCase().endsWith(".pdf"))
     .sort();
 
-  const documents: {
-    file: string;
-    classification: string;
-    candidates: { type: string; label: string; classification: string }[];
-  }[] = [];
-  const allCandidates: {
-    type: string;
-    fingerprint: string;
-    label: string;
-    classification: string;
-  }[] = [];
+  if (files.length === 0) {
+    console.error("FAIL: fixtures/private/phase-1e/ contains no PDFs.");
+    process.exit(1);
+  }
 
-  for (const file of files) {
-    const filePath = path.join(dir, file);
-    const bytes = new Uint8Array(fs.readFileSync(filePath));
-    const extracted = await extractPdfText(bytes, file);
-    const parsed = parseDocument(extracted);
+  const provider =
+    process.env.LLM_API_URL && process.env.LLM_API_KEY
+      ? new HttpLlmProvider({
+          apiUrl: process.env.LLM_API_URL,
+          apiKey: process.env.LLM_API_KEY,
+          model: process.env.LLM_MODEL || "deepseek-chat",
+          providerId: process.env.LLM_PROVIDER || "http-llm-provider",
+        })
+      : undefined;
 
-    const candidates = parsed.assetAssertions.map((a) => ({
-      type: a.assetType,
-      label: a.displayLabel,
-      fingerprint: a.identityFingerprint,
-      classification: a.matchClassification,
+  const analyzer = createLlmFirstAnalyzer({
+    provider,
+    loader: new FileSystemDocumentLoader(),
+    fallbackToDeterministic: true,
+  });
+
+  const allDocs: UploadedDocument[] = files.map((f) => ({
+    documentId: f,
+    filename: f,
+    mimeType: "application/pdf",
+    fileReference: path.join(dir, f),
+  }));
+
+  // Scenario A: all together
+  console.log("\nScenario A: all together");
+  const resultA = await runAnalyzer(analyzer, allDocs);
+  summarize(resultA);
+  const hashA = canonicalHash(resultA);
+  console.log(`  semantic hash: ${hashA}`);
+
+  // Scenario B: separate processing
+  console.log("\nScenario B: separate processing");
+  let pending: { id: string; assetType: "property" | "vehicle"; identityFingerprint: string }[] =
+    [];
+  for (const doc of allDocs) {
+    const input: InsuranceDocumentAnalysisInput = {
+      householdId: "test-household",
+      uploadedDocuments: [doc],
+      existingAssets: [],
+      pendingCandidates: pending,
+      priorDocumentSummaries: [],
+      jurisdiction: "AB",
+    };
+    const r = await analyzer.analyze(input);
+    pending = r.detectedEntities.map((e) => ({
+      id: e.temporaryId,
+      assetType: e.entityType,
+      identityFingerprint: `${e.entityType}:${e.displayLabel}`,
     }));
-    documents.push({ file, classification: parsed.classification, candidates });
-    for (const c of candidates) {
-      if (!allCandidates.some((x) => x.fingerprint === c.fingerprint && x.type === c.type)) {
-        allCandidates.push({
-          type: c.type,
-          fingerprint: c.fingerprint,
-          label: c.label,
-          classification: c.classification,
-        });
-      }
+    if (doc === allDocs[allDocs.length - 1]) {
+      summarize(r);
+      console.log(`  semantic hash: ${canonicalHash(r)}`);
     }
   }
 
-  const properties = allCandidates.filter((c) => c.type === "property");
-  const vehicles = allCandidates.filter((c) => c.type === "vehicle");
-  const identityConfirmationRequired = allCandidates.filter(
-    (c) => c.classification === "new_identity_confirmation_required",
-  ).length;
+  // Scenario C: reverse order
+  console.log("\nScenario C: reverse order");
+  const resultC = await runAnalyzer(analyzer, [...allDocs].reverse());
+  summarize(resultC);
+  const hashC = canonicalHash(resultC);
+  console.log(`  semantic hash: ${hashC}`);
 
-  console.log("=== Private policy import report ===");
-  for (const d of documents) {
-    console.log(`\n${d.file} -> ${d.classification}`);
-    for (const c of d.candidates) {
-      const safeId = c.type === "vehicle" ? maskVin(c.fingerprint) : maskPostal(c.fingerprint);
-      console.log(`  - ${c.type} (${c.classification}): ${c.label} (${safeId})`);
-    }
+  // Scenario D: renamed files
+  console.log("\nScenario D: renamed files");
+  const renamedDocs = allDocs.map((d, i) => ({ ...d, documentId: `renamed-${i}-${d.filename}` }));
+  const resultD = await runAnalyzer(analyzer, renamedDocs);
+  summarize(resultD);
+  const hashD = canonicalHash(resultD);
+  console.log(`  semantic hash: ${hashD}`);
+
+  // Scenario E: duplicate uploads
+  console.log("\nScenario E: duplicate uploads");
+  const dupDocs: UploadedDocument[] = [];
+  for (const doc of allDocs) {
+    dupDocs.push({ ...doc, documentId: `upload-1-${doc.filename}` });
+    dupDocs.push({ ...doc, documentId: `upload-2-${doc.filename}` });
   }
+  const resultE = await runAnalyzer(analyzer, dupDocs);
+  summarize(resultE);
+  const hashE = canonicalHash(resultE);
+  console.log(`  semantic hash: ${hashE}`);
+
+  let allPass = true;
+  allPass =
+    assertEq(
+      "A properties",
+      resultA.detectedEntities.filter((e) => e.entityType === "property").length,
+      3,
+    ) && allPass;
+  allPass =
+    assertEq(
+      "A vehicles",
+      resultA.detectedEntities.filter((e) => e.entityType === "vehicle").length,
+      1,
+    ) && allPass;
+  allPass =
+    assertEq(
+      "A confirmation-required",
+      resultA.detectedEntities.filter(
+        (e) => e.resolution.status === "possible_match_requires_confirmation",
+      ).length,
+      1,
+    ) && allPass;
+  allPass = assertEq("A documents", resultA.documents.length, 4) && allPass;
+
+  // Scenario F: existing vehicle with same VIN
+  console.log("\nScenario F: existing vehicle with same VIN");
+  const vehicle = resultA.detectedEntities.find((e) => e.entityType === "vehicle");
+  if (!vehicle) {
+    console.error("FAIL: could not find vehicle for scenario F");
+    process.exit(1);
+  }
+  const inputF: InsuranceDocumentAnalysisInput = {
+    householdId: "test-household",
+    uploadedDocuments: allDocs,
+    existingAssets: [
+      { id: "existing-vehicle-1", assetType: "vehicle", identityFingerprint: vehicle.temporaryId },
+    ],
+    pendingCandidates: [],
+    priorDocumentSummaries: [],
+    jurisdiction: "AB",
+  };
+  const resultF = await analyzer.analyze(inputF);
+  summarize(resultF);
+  allPass =
+    assertEq(
+      "F vehicle exact match",
+      resultF.detectedEntities.filter(
+        (e) => e.entityType === "vehicle" && e.resolution.status === "matches_existing",
+      ).length,
+      1,
+    ) && allPass;
+
+  // Scenario G: property matching
+  console.log("\nScenario G: property matching");
+  const properties = resultA.detectedEntities.filter((e) => e.entityType === "property");
+  const exactProperty = properties.find((p) => !p.temporaryId.startsWith("property-hint:"));
+  const samePostalProperty = properties.find((p) => p.identity.postalCode?.includes("0Z4"));
+  if (!exactProperty || !samePostalProperty) {
+    console.error("FAIL: could not derive property fingerprints for scenario G");
+    process.exit(1);
+  }
+  const inputG: InsuranceDocumentAnalysisInput = {
+    householdId: "test-household",
+    uploadedDocuments: allDocs,
+    existingAssets: [
+      {
+        id: "existing-exact",
+        assetType: "property",
+        identityFingerprint: exactProperty.temporaryId,
+      },
+      {
+        id: "existing-same-postal",
+        assetType: "property",
+        identityFingerprint: `property:${samePostalProperty.identity.postalCode}`,
+      },
+      { id: "existing-mailing", assetType: "property", identityFingerprint: "property:MAILING" },
+    ],
+    pendingCandidates: [],
+    priorDocumentSummaries: [],
+    jurisdiction: "AB",
+  };
+  const resultG = await analyzer.analyze(inputG);
+  summarize(resultG);
+  allPass =
+    assertEq(
+      "G exact match",
+      resultG.detectedEntities.filter(
+        (e) => e.entityType === "property" && e.resolution.status === "matches_existing",
+      ).length,
+      1,
+    ) && allPass;
+  allPass =
+    assertEq(
+      "G redacted/confirmation",
+      resultG.detectedEntities.filter(
+        (e) =>
+          e.entityType === "property" &&
+          e.resolution.status === "possible_match_requires_confirmation",
+      ).length,
+      2,
+    ) && allPass;
+
+  // Per-file category pass/fail
+  console.log("\n=== Per-file extracted fact categories ===");
+  for (const doc of resultA.documents) {
+    const file = doc.documentId;
+    const cat =
+      doc.classification === "home_policy_renewal"
+        ? "home"
+        : doc.classification === "auto_policy_renewal"
+          ? "auto"
+          : "unknown";
+    console.log(`  ${file} -> ${cat}`);
+  }
+
+  const artifact = [
+    `commit: ${process.env.GIT_SHA ?? "local"}`,
+    `provider: ${provider ? provider.providerId : "deterministic"}`,
+    `model: ${provider ? provider.modelId : "pdfjs-fallback"}`,
+    `private PDF count: ${files.length}`,
+    `A hash: ${hashA}`,
+    `C hash: ${hashC}`,
+    `D hash: ${hashD}`,
+    `E hash: ${hashE}`,
+    `A result: ${resultA.documents.length} documents, ${resultA.detectedEntities.filter((e) => e.entityType === "property").length} properties, ${resultA.detectedEntities.filter((e) => e.entityType === "vehicle").length} vehicles, ${resultA.detectedEntities.filter((e) => e.resolution.status === "possible_match_requires_confirmation").length} confirmation-required`,
+    `private acceptance: ${allPass ? "PASS" : "FAIL"}`,
+  ].join("\n");
+
+  const artifactDir = path.resolve(process.cwd(), "artifacts");
+  if (!fs.existsSync(artifactDir)) fs.mkdirSync(artifactDir, { recursive: true });
+  fs.writeFileSync(path.join(artifactDir, "phase-1e-parser-acceptance.txt"), artifact);
 
   console.log("\n=== Aggregate ===");
-  console.log(`documents processed: ${documents.length}`);
-  console.log(`property candidates: ${properties.length}`);
-  console.log(`vehicle candidates: ${vehicles.length}`);
-  console.log(`identity-confirmation-required: ${identityConfirmationRequired}`);
-  console.log(
-    `exact duplicate candidates: ${documents.flatMap((d) => d.candidates).length - allCandidates.length}`,
-  );
+  summarize(resultA);
+  console.log(`\n${allPass ? "PASS" : "FAIL"}: phase 1E parser acceptance`);
 
-  if (documents.length !== 4) {
-    console.error("FAIL: expected 4 documents");
-    process.exit(1);
-  }
-  if (properties.length !== 3) {
-    console.error(`FAIL: expected 3 property candidates, got ${properties.length}`);
-    process.exit(1);
-  }
-  if (vehicles.length !== 1) {
-    console.error(`FAIL: expected 1 vehicle candidate, got ${vehicles.length}`);
-    process.exit(1);
-  }
-  if (identityConfirmationRequired !== 1) {
-    console.error(
-      `FAIL: expected exactly 1 identity-confirmation-required, got ${identityConfirmationRequired}`,
-    );
-    process.exit(1);
-  }
-
-  console.log("\nPASS: four documents resolve to three properties and one vehicle");
+  if (!allPass) process.exit(1);
 }
 
 main().catch((e) => {

@@ -22,3 +22,4 @@ export * from "../src/llm-parsed-document-projection.ts";
 export * from "../src/llm-identity-resolver.ts";
 export * from "../src/llm-pipeline.ts";
 export { HttpLlmProvider } from "../src/llm-providers/http.ts";
+export * from "../src/document-analyzer.ts";

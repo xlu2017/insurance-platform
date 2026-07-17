@@ -426,7 +426,7 @@ Deno.serve(async (req) => {
     });
     parsed = projected.document;
   } else {
-    parsed = parseDocument(extracted);
+    parsed = await parseDocument(extracted);
   }
 
   const { data: extractedDoc, error: extractedErr } = await admin

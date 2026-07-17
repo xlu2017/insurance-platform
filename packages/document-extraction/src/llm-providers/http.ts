@@ -1,4 +1,4 @@
-import type { InsuranceLlmProvider, LlmExtractionRequest } from "../llm-contract.ts";
+import type { InsuranceLlmProvider } from "../llm-contract.ts";
 
 export interface HttpLlmProviderOptions {
   apiUrl: string;
@@ -40,7 +40,7 @@ export class HttpLlmProvider implements InsuranceLlmProvider {
     this.providerId = options.providerId ?? "http-llm-provider";
   }
 
-  async extract(request: LlmExtractionRequest, systemPrompt: string): Promise<unknown> {
+  async extract(request: unknown, systemPrompt: string): Promise<unknown> {
     const response = await fetch(this.apiUrl, {
       method: "POST",
       headers: {

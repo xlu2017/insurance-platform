@@ -1,92 +1,25 @@
 import type {
-  ExtractedPdf,
+  AddressRole,
+  AuthorityLevel,
+  ExtractedCoveragePresence,
   ExtractedFactAssertion,
+  ExtractedPdf,
   ParsedAssetAssertion,
   ParsedInsuranceDocument,
+  ParsedPolicyNotice,
 } from "../types.ts";
+import { assertionId } from "./ids.ts";
 import {
   normalizePostalCode,
   normalizeProvince,
-  parseMoneyCents,
   parseDateIso,
+  parseMoneyCents,
   splitLines,
 } from "./helpers.ts";
+import { resolveByAuthority, selectedValues } from "./resolve.ts";
 
 const ID = "TdSecurityNationalHomeRenewalParserV1";
 const VERSION = "1.0.0";
-
-const authorityOrder = [
-  "coverage_summary",
-  "insurance_certificate",
-  "endorsement",
-  "invoice",
-  "renewal_overview",
-  "notice",
-  "header_footer",
-] as const;
-
-function authorityRank(a: string): number {
-  return authorityOrder.indexOf(a as (typeof authorityOrder)[number]);
-}
-
-function uuid(): string {
-  return crypto.randomUUID();
-}
-
-function assertion(fields: Omit<ExtractedFactAssertion, "id">): ExtractedFactAssertion {
-  return { id: uuid(), ...fields };
-}
-
-function detectPageAuthority(text: string): string {
-  const t = text.toLowerCase();
-  if (t.includes("coverage summary page")) return "coverage_summary";
-  if (t.includes("certificate of insurance") || t.includes("insurance certificate")) {
-    return "insurance_certificate";
-  }
-  if (t.includes("invoice")) return "invoice";
-  if (t.includes("renewal")) return "renewal_overview";
-  if (t.includes("important") || t.includes("notice")) return "notice";
-  return "header_footer";
-}
-
-interface AddressBlock {
-  streetAddress?: string;
-  city?: string;
-  province?: string;
-  postalCode?: string;
-  redacted: boolean;
-}
-
-function stripAddressLabel(line: string): string {
-  return line
-    .replace(
-      /^\s*(RENTAL HOME|HOMEOWNER, PRINCIPAL RESIDENCE|HOMEOWNER|PRINCIPAL RESIDENCE)[:\s-]+/i,
-      "",
-    )
-    .trim();
-}
-
-function extractAddressBlock(lines: string[]): AddressBlock {
-  const result: AddressBlock = { redacted: true };
-  const regex = /(.+?),?\s*(AB|BC|ON|QC)\s*([A-Z]\d[A-Z]\s?\d[A-Z]\d)/i;
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line.toLowerCase().startsWith("policy number")) continue;
-    const m = line.match(regex);
-    if (m) {
-      result.postalCode = normalizePostalCode(m[3]);
-      result.province = normalizeProvince(m[2]) ?? undefined;
-      result.city = "Calgary";
-      const prefix = stripAddressLabel(m[1] ? m[1].trim() : "");
-      if (prefix && prefix.toLowerCase() !== "calgary") {
-        result.streetAddress = prefix.replace(/^,\s*/, "").replace(/,\s*$/, "").trim() || undefined;
-      }
-      result.redacted = !result.streetAddress || /^[NSWE]?$/i.test(result.streetAddress);
-      break;
-    }
-  }
-  return result;
-}
 
 export function canParseHome(document: ExtractedPdf): boolean {
   const text = document.pages
@@ -95,22 +28,47 @@ export function canParseHome(document: ExtractedPdf): boolean {
     .toLowerCase();
   return (
     text.includes("security national insurance company") &&
-    text.includes("home insurance renewal") &&
+    text.includes("home insurance") &&
     (text.includes("your rental home package") || text.includes("your homeowner package"))
   );
 }
 
-function fieldForCoverageLabel(label: string): string | null {
-  const l = label.toLowerCase();
-  if (l.includes("dwelling building")) return "property.dwellingLimitCents";
-  if (l.includes("personal property")) return "property.contentsLimitCents";
-  if (l.includes("fair rental value") || l.includes("additional living expenses")) {
-    return "property.fairRentalValueLimitCents";
+const directionTokens = new Set(["N", "S", "E", "W", "NW", "NE", "SW", "SE"]);
+
+function detectPageAuthority(text: string): AuthorityLevel {
+  const t = text.toLowerCase();
+  const hasCoverageLines = /coverage\s+[a-z]\s*[-–]\s*.+?:/i.test(text);
+  const hasPackageSolution = /million\s+solution/i.test(text);
+  const isPackageOrSummary =
+    t.includes("coverage summary page") ||
+    t.includes("your rental home package") ||
+    t.includes("your homeowner package");
+  if (
+    t.includes("insurance issued by") ||
+    t.includes("certificate of insurance") ||
+    t.includes("insurance certificate")
+  ) {
+    return "insurance_certificate";
   }
-  if (l.includes("legal liability")) return "property.personalLiabilityLimitCents";
-  if (l.includes("voluntary medical")) return "property.voluntaryMedicalLimitCents";
-  if (l.includes("voluntary payment for damage to property")) {
-    return "property.voluntaryPropertyDamageLimitCents";
+  if (isPackageOrSummary && (hasCoverageLines || hasPackageSolution)) return "coverage_summary";
+  if (t.includes("endorsement")) return "active_endorsement";
+  if (t.includes("invoice")) return "invoice";
+  if (t.includes("overview of your") && t.includes("renewal")) return "renewal_overview";
+  if (
+    t.includes("important information") ||
+    t.includes("updates to your coverage") ||
+    t.includes("changes to your coverage")
+  ) {
+    return "notice";
+  }
+  if (t.includes("notice")) return "notice";
+  return "header_footer";
+}
+
+function nextNonEmpty(lines: string[], start: number, max = 5): string | null {
+  for (let i = 1; i <= max && start + i < lines.length; i++) {
+    const v = lines[start + i].trim();
+    if (v.length > 0) return v;
   }
   return null;
 }
@@ -130,457 +88,166 @@ function parseTermRange(text: string): { effective?: string; expiry?: string } {
   return {};
 }
 
-function nextNonEmpty(lines: string[], start: number, max = 5): string {
-  for (let i = 1; i <= max && start + i < lines.length; i++) {
-    const v = lines[start + i].trim();
-    if (v.length > 0) return v;
-  }
-  return "";
+function isPolicyNumberCandidate(value: string): boolean {
+  const cleaned = value.replace(/\s/g, "");
+  if (cleaned.length === 0) return false;
+  if (!/^\d+$/.test(cleaned)) return false;
+  if (cleaned.length < 4) return false;
+  return true;
 }
 
-export function parseHome(document: ExtractedPdf): ParsedInsuranceDocument {
-  const assertions: ExtractedFactAssertion[] = [];
-  let occupancy: "rental" | "principal_residence" | undefined;
-
-  for (const page of document.pages) {
-    const lines = splitLines(page.text);
-    const authority = detectPageAuthority(page.text);
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      const lower = line.toLowerCase();
-
-      if (lower.includes("your rental home package")) {
-        occupancy = "rental";
-      } else if (lower.includes("your homeowner package")) {
-        occupancy = "principal_residence";
-      }
-
-      if (lower.startsWith("renewal date")) {
-        const val = lines[i + 1]?.trim();
-        if (val) {
-          const date = parseDateIso(val);
-          if (date) {
-            assertions.push(
-              assertion({
-                documentId: document.documentId,
-                pageNumber: page.pageNumber,
-                entityScope: "policy",
-                fieldPath: "policy.renewalDate",
-                rawText: val,
-                parsedValue: date,
-                normalizedValue: date,
-                parserId: ID,
-                parserVersion: VERSION,
-                confidence: 0.9,
-                authority: authority as ExtractedFactAssertion["authority"],
-              }),
-            );
-          }
-        }
-      }
-
-      if (lower.startsWith("term of your coverage")) {
-        const next = nextNonEmpty(lines, i);
-        const after = nextNonEmpty(lines, i + 1);
-        const range = parseTermRange(`${next} ${after}`);
-        if (range.effective) {
-          assertions.push(
-            assertion({
-              documentId: document.documentId,
-              pageNumber: page.pageNumber,
-              entityScope: "policy",
-              fieldPath: "policy.effectiveDate",
-              rawText: `${next} ${after}`,
-              parsedValue: range.effective,
-              normalizedValue: range.effective,
-              parserId: ID,
-              parserVersion: VERSION,
-              confidence: 0.95,
-              authority: authority as ExtractedFactAssertion["authority"],
-            }),
-          );
-        }
-        if (range.expiry) {
-          assertions.push(
-            assertion({
-              documentId: document.documentId,
-              pageNumber: page.pageNumber,
-              entityScope: "policy",
-              fieldPath: "policy.expiryDate",
-              rawText: `${next} ${after}`,
-              parsedValue: range.expiry,
-              normalizedValue: range.expiry,
-              parserId: ID,
-              parserVersion: VERSION,
-              confidence: 0.95,
-              authority: authority as ExtractedFactAssertion["authority"],
-            }),
-          );
-        }
-      }
-
-      if (lower.startsWith("policy number")) {
-        const val = nextNonEmpty(lines, i, 3);
-        if (val && /^[\d\s]+$/.test(val.replace(/\s/g, ""))) {
-          const cleaned = val.replace(/\s/g, "");
-          assertions.push(
-            assertion({
-              documentId: document.documentId,
-              pageNumber: page.pageNumber,
-              entityScope: "policy",
-              fieldPath: "policy.policyNumber",
-              rawText: val,
-              parsedValue: cleaned,
-              normalizedValue: cleaned,
-              parserId: ID,
-              parserVersion: VERSION,
-              confidence: cleaned === "0000" ? 0.3 : 0.9,
-              authority: authority as ExtractedFactAssertion["authority"],
-            }),
-          );
-        }
-      }
-
-      if (lower.includes("your term premium") || lower.includes("your total term premium")) {
-        const m = line.match(/\$([\d,]+\.\d{2})/);
-        if (m) {
-          const cents = parseMoneyCents(m[0]);
-          if (cents !== null) {
-            assertions.push(
-              assertion({
-                documentId: document.documentId,
-                pageNumber: page.pageNumber,
-                entityScope: "premium",
-                fieldPath: "policy.annualPremiumCents",
-                rawText: m[0],
-                parsedValue: cents,
-                normalizedValue: cents,
-                parserId: ID,
-                parserVersion: VERSION,
-                confidence: 0.9,
-                authority: authority as ExtractedFactAssertion["authority"],
-              }),
-            );
-          }
-        }
-      }
-    }
-
-    if (page.text.toLowerCase().includes("coverage summary page")) {
-      const address = extractAddressBlock(lines);
-      if (address.postalCode) {
-        assertions.push(
-          assertion({
-            documentId: document.documentId,
-            pageNumber: page.pageNumber,
-            entityScope: "property",
-            fieldPath: "property.postalCode",
-            rawText: address.postalCode,
-            parsedValue: address.postalCode,
-            normalizedValue: address.postalCode,
-            parserId: ID,
-            parserVersion: VERSION,
-            confidence: 0.95,
-            authority: "coverage_summary",
-          }),
-        );
-      }
-      if (address.province) {
-        assertions.push(
-          assertion({
-            documentId: document.documentId,
-            pageNumber: page.pageNumber,
-            entityScope: "property",
-            fieldPath: "property.province",
-            rawText: address.province,
-            parsedValue: address.province,
-            normalizedValue: address.province,
-            parserId: ID,
-            parserVersion: VERSION,
-            confidence: 0.95,
-            authority: "coverage_summary",
-          }),
-        );
-      }
-      if (address.city) {
-        assertions.push(
-          assertion({
-            documentId: document.documentId,
-            pageNumber: page.pageNumber,
-            entityScope: "property",
-            fieldPath: "property.city",
-            rawText: address.city,
-            parsedValue: address.city,
-            normalizedValue: address.city,
-            parserId: ID,
-            parserVersion: VERSION,
-            confidence: 0.95,
-            authority: "coverage_summary",
-          }),
-        );
-      }
-      if (address.streetAddress) {
-        assertions.push(
-          assertion({
-            documentId: document.documentId,
-            pageNumber: page.pageNumber,
-            entityScope: "property",
-            fieldPath: "property.streetAddress",
-            rawText: address.streetAddress,
-            parsedValue: address.streetAddress,
-            normalizedValue: address.streetAddress,
-            parserId: ID,
-            parserVersion: VERSION,
-            confidence: address.redacted ? 0.4 : 0.95,
-            authority: "coverage_summary",
-          }),
-        );
-      }
-
-      // Look for a package solution amount such as "$3 - Million Solution™: ... $3,000,000"
-      let packageAmountCents: number | undefined;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (/million\s+solution/i.test(line)) {
-          const nextLines = lines.slice(i + 1, i + 6).join(" ");
-          const m = nextLines.match(/\$([\d,]+(?:\.\d{2})?)/);
-          if (m) packageAmountCents = parseMoneyCents(m[0]) ?? undefined;
-        }
-      }
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        const covMatch = line.match(/Coverage\s+([A-Z])\s*-\s*(.+?):\s*(.+)/i);
-        if (covMatch) {
-          const label = covMatch[2].trim();
-          const rawValue = covMatch[3].trim();
-          const amount = parseMoneyCents(rawValue);
-          const included = rawValue.toLowerCase() === "included";
-          const fieldPath = fieldForCoverageLabel(label);
-          if (fieldPath === "property.dwellingLimitCents" && included && packageAmountCents) {
-            // Package solution where dwelling is "Included" under a global limit.
-            assertions.push(
-              assertion({
-                documentId: document.documentId,
-                pageNumber: page.pageNumber,
-                entityScope: "coverage",
-                fieldPath,
-                rawText: line,
-                parsedValue: packageAmountCents,
-                normalizedValue: packageAmountCents,
-                parserId: ID,
-                parserVersion: VERSION,
-                confidence: 0.9,
-                authority: "coverage_summary",
-              }),
-            );
-            continue;
-          }
-          if (fieldPath && (amount !== null || included)) {
-            assertions.push(
-              assertion({
-                documentId: document.documentId,
-                pageNumber: page.pageNumber,
-                entityScope: "coverage",
-                fieldPath,
-                rawText: line,
-                parsedValue: amount ?? included,
-                normalizedValue: amount ?? included,
-                parserId: ID,
-                parserVersion: VERSION,
-                confidence: amount !== null ? 0.95 : 0.7,
-                authority: "coverage_summary",
-              }),
-            );
-          }
-        }
-
-        if (line.toLowerCase().startsWith("base deductible")) {
-          const next = lines[i + 1]?.trim();
-          const val = parseMoneyCents(next ?? "");
-          if (val !== null) {
-            assertions.push(
-              assertion({
-                documentId: document.documentId,
-                pageNumber: page.pageNumber,
-                entityScope: "coverage",
-                fieldPath: "property.baseDeductibleCents",
-                rawText: next,
-                parsedValue: val,
-                normalizedValue: val,
-                parserId: ID,
-                parserVersion: VERSION,
-                confidence: 0.9,
-                authority: "coverage_summary",
-              }),
-            );
-          }
-        }
-
-        if (/wind.*hail.*deductible/i.test(line)) {
-          const next = lines[i + 1]?.trim();
-          const val = parseMoneyCents(next ?? "");
-          if (val !== null) {
-            assertions.push(
-              assertion({
-                documentId: document.documentId,
-                pageNumber: page.pageNumber,
-                entityScope: "coverage",
-                fieldPath: "property.windHailDeductibleCents",
-                rawText: next,
-                parsedValue: val,
-                normalizedValue: val,
-                parserId: ID,
-                parserVersion: VERSION,
-                confidence: 0.9,
-                authority: "coverage_summary",
-              }),
-            );
-          }
-        }
-      }
-    }
+function findPolicyNumber(lines: string[], start: number): string | null {
+  for (let i = 1; i <= 4 && start + i < lines.length; i++) {
+    const v = lines[start + i].trim();
+    if (v.length === 0) continue;
+    if (isPolicyNumberCandidate(v)) return v.replace(/\s/g, "");
   }
+  return null;
+}
 
-  if (occupancy) {
-    assertions.push(
-      assertion({
-        documentId: document.documentId,
-        pageNumber: 1,
-        entityScope: "property",
-        fieldPath: "property.occupancy",
-        rawText: occupancy,
-        parsedValue: occupancy,
-        normalizedValue: occupancy,
-        parserId: ID,
-        parserVersion: VERSION,
-        confidence: 0.95,
-        authority: "renewal_overview",
-      }),
-    );
-  }
+function stripAddressRolePrefix(s: string): string {
+  return s
+    .replace(
+      /^(?:YOUR\s+)?(?:RENTAL\s+HOME|HOMEOWNER(?:,\s*PRINCIPAL\s+RESIDENCE)?|PRINCIPAL\s+RESIDENCE)\s*(?:PACKAGE)?\s*[:\s-]+\s*/i,
+      "",
+    )
+    .trim();
+}
 
-  const { selected, conflicts } = resolveByAuthority(assertions);
-
-  const postal = selected["property.postalCode"]?.normalizedValue as string | undefined;
-  const city = selected["property.city"]?.normalizedValue as string | undefined;
-  const province = selected["property.province"]?.normalizedValue as string | undefined;
-  const street = selected["property.streetAddress"]?.normalizedValue as string | undefined;
-  const occ = (selected["property.occupancy"]?.normalizedValue as string) ?? "unknown";
-
-  const policyNumber = selected["policy.policyNumber"]?.normalizedValue as string | undefined;
-  const addressRedacted = !street || /^[NSWE]?$/i.test(street);
-  const policyRedacted = policyNumber === "0000";
-
-  const identityFingerprint = normalizeAddress(
-    `${street ?? ""} ${city ?? ""} ${province ?? ""} ${postal ?? ""}`,
+function parseAddressParts(text: string): {
+  beforeCity: string;
+  city: string;
+  province: string;
+  postalCode: string;
+} | null {
+  const m = text.match(
+    /^(.*?)\s*,?\s*([A-Za-z][A-Za-z\s]{1,40}?)\s+(AB|BC|ON|QC)\s+([A-Z]\d[A-Z]\s?\d[A-Z]\d)/i,
   );
-  const displayLabel = `${city ?? ""} ${province ?? ""} ${postal ?? ""}`.trim();
-
-  let matchClassification: string;
-  if (policyRedacted) {
-    matchClassification = "new_identity_confirmation_required";
-  } else if (occ === "rental" && postal) {
-    matchClassification = "new";
-  } else if (occ === "principal_residence" && addressRedacted) {
-    matchClassification = "new_identity_confirmation_required";
-  } else {
-    matchClassification = "new";
-  }
-
-  const assetAssertions = [
-    {
-      assetType: "property" as const,
-      identityFingerprint,
-      displayLabel,
-      matchClassification: matchClassification as ParsedAssetAssertion["matchClassification"],
-      occupancy: occ as ParsedAssetAssertion["occupancy"],
-      assertions: selectedValues(selected),
-    },
-  ];
-
+  if (!m) return null;
   return {
-    classification: "home_policy_renewal",
-    insurer: { name: "Security National Insurance Company" },
-    agency: { name: "TD Insurance Direct Agency Inc." },
-    policyTerms: buildPolicyTerms(selected),
-    assetAssertions,
-    coverageAssertions: selectedValues(selected),
-    notices: [],
-    conflicts,
-    parserId: ID,
-    parserVersion: VERSION,
+    beforeCity: m[1].trim(),
+    city: m[2].trim().replace(/,\s*$/, "").trim(),
+    province: m[3].toUpperCase(),
+    postalCode: m[4].toUpperCase().replace(/\s/g, ""),
   };
 }
 
-function resolveByAuthority(assertions: ExtractedFactAssertion[]): {
-  selected: Record<string, ExtractedFactAssertion>;
-  conflicts: {
-    fieldPath: string;
-    assertionIds: string[];
-    selectedAssertionId?: string;
-    reason: string;
-  }[];
-} {
-  const byPath: Record<string, ExtractedFactAssertion[]> = {};
-  for (const a of assertions) {
-    byPath[a.fieldPath] = byPath[a.fieldPath] ?? [];
-    byPath[a.fieldPath].push(a);
-  }
-  const selected: Record<string, ExtractedFactAssertion> = {};
-  const conflicts: {
-    fieldPath: string;
-    assertionIds: string[];
-    selectedAssertionId?: string;
-    reason: string;
-  }[] = [];
-  for (const [path, list] of Object.entries(byPath)) {
-    const sorted = [...list].sort(
-      (a, b) => authorityRank(b.authority) - authorityRank(a.authority),
-    );
-    selected[path] = sorted[0];
-    if (sorted.length > 1) {
-      const disagree = sorted.filter(
-        (a, idx) =>
-          idx > 0 &&
-          JSON.stringify(a.normalizedValue) !== JSON.stringify(sorted[0].normalizedValue),
-      );
-      if (disagree.length > 0) {
-        conflicts.push({
-          fieldPath: path,
-          assertionIds: sorted.map((a) => a.id),
-          selectedAssertionId: sorted[0].id,
-          reason: `Conflicting values from ${disagree.map((a) => a.authority).join(", ")}; selected ${sorted[0].authority}.`,
-        });
-      }
-    }
-  }
-  return { selected, conflicts };
+function isRedactedStreet(street: string | undefined): boolean {
+  if (!street) return true;
+  const cleaned = street.replace(/[^A-Za-z0-9]/g, " ").trim();
+  if (cleaned.length < 2) return true;
+  if (/placeholder|redacted|removed|xxxx|\*+|0000|•/.test(cleaned.toLowerCase())) return true;
+  const tokens = cleaned.split(/\s+/).filter((w) => !directionTokens.has(w.toUpperCase()));
+  if (tokens.length === 0) return true;
+  const hasWord = tokens.some((w) => /^[A-Za-z]{2,}$/.test(w));
+  const hasNumber = tokens.some((w) => /\d/.test(w));
+  if (!hasWord && !hasNumber) return true;
+  if (!hasWord) return true;
+  return false;
 }
 
-function selectedValues(
-  selected: Record<string, ExtractedFactAssertion>,
-): ExtractedFactAssertion[] {
-  return Object.values(selected);
+function detectAddressRole(lines: string[], i: number): AddressRole | null {
+  const prev = lines[i - 1]?.trim() ?? "";
+  const lowerPrev = prev.toLowerCase();
+  const lowerCurr = lines[i].toLowerCase();
+  if (
+    lowerPrev.includes("your rental home package") ||
+    lowerCurr.startsWith("rental home") ||
+    lowerPrev.startsWith("rental home")
+  ) {
+    return "insured_location";
+  }
+  if (
+    lowerPrev.includes("your homeowner package") ||
+    lowerCurr.startsWith("homeowner") ||
+    lowerCurr.startsWith("principal residence") ||
+    lowerPrev.startsWith("homeowner") ||
+    lowerPrev.startsWith("principal residence")
+  ) {
+    return "insured_location";
+  }
+  if (lowerCurr.includes("mortgagee") || lowerPrev.includes("mortgagee"))
+    return "mortgagee_address";
+  if (lowerCurr.includes("payment") || lowerPrev.includes("payment")) return "payment_address";
+  if (lowerCurr.includes("agency")) return "agency_address";
+  if (i < 4) {
+    const lookahead = lines.slice(i + 1, i + 6).join(" ");
+    if (/Page\s+\d+\s+of/i.test(lookahead)) return "mailing_address";
+  }
+  return null;
 }
 
-function buildPolicyTerms(selected: Record<string, ExtractedFactAssertion>): {
-  effectiveDate?: string;
-  expiryDate?: string;
-  policyNumber?: string;
-  annualPremiumCents?: number;
-}[] {
-  return [
-    {
-      effectiveDate: selected["policy.effectiveDate"]?.normalizedValue as string | undefined,
-      expiryDate: selected["policy.expiryDate"]?.normalizedValue as string | undefined,
-      policyNumber: selected["policy.policyNumber"]?.normalizedValue as string | undefined,
-      annualPremiumCents: selected["policy.annualPremiumCents"]?.normalizedValue as
-        | number
-        | undefined,
-    },
-  ];
+function addressLabelOccupancy(
+  role: AddressRole,
+  line: string,
+  prev?: string,
+): "rental" | "principal_residence" | undefined {
+  if (role !== "insured_location") return undefined;
+  const sources = [line, prev ?? ""].map((s) => s.toLowerCase());
+  for (const lower of sources) {
+    if (lower.includes("rental home")) return "rental";
+    if (lower.includes("homeowner") || lower.includes("principal residence"))
+      return "principal_residence";
+  }
+  return undefined;
+}
+
+function fieldForCoverageLabel(label: string): string | null {
+  const l = label.toLowerCase();
+  if (l.includes("dwelling building")) return "property.dwellingLimitCents";
+  if (l.includes("personal property")) return "property.contentsLimitCents";
+  if (l.includes("fair rental value") || l.includes("additional living expenses")) {
+    return "property.fairRentalValueLimitCents";
+  }
+  if (l.includes("legal liability")) return "property.personalLiabilityLimitCents";
+  if (l.includes("voluntary medical")) return "property.voluntaryMedicalLimitCents";
+  if (l.includes("voluntary payment for damage to property")) {
+    return "property.voluntaryPropertyDamageLimitCents";
+  }
+  return null;
+}
+
+function coveragePresenceFromRest(rest: string, amount: number | null): ExtractedCoveragePresence {
+  const lower = rest.toLowerCase();
+  if (lower.includes("not covered") || lower.includes("not included")) return "not_included";
+  if (lower.includes("not applicable")) return "not_applicable";
+  if (lower.includes("included")) return "included";
+  if (amount !== null && amount > 0) return "included";
+  if (lower.includes("unknown") || lower.includes("not shown")) return "unknown";
+  return "unknown";
+}
+
+function extractNoticeKind(line: string, next: string): ParsedPolicyNotice["kind"] | null {
+  const text = `${line} ${next}`.toLowerCase();
+  if (
+    text.includes("will change in the future") ||
+    text.includes("will now appear") ||
+    text.includes("will be eligible")
+  ) {
+    return "future_coverage_change";
+  }
+  if (
+    text.includes("available to purchase") ||
+    text.includes("contact us to add") ||
+    text.includes("consider this coverage") ||
+    text.includes("to purchase this coverage")
+  ) {
+    return "coverage_available_for_purchase";
+  }
+  if (text.includes("may be eligible")) return "eligibility_notice";
+  if (
+    text.includes("please contact us") ||
+    text.includes("call us") ||
+    text.includes("reach out to")
+  ) {
+    return "customer_action_required";
+  }
+  if (text.includes("if you do nothing") && text.includes("policy will renew"))
+    return "renewal_information";
+  if (text.includes("general description") || text.includes("this is not a complete description")) {
+    return "general_explanation";
+  }
+  return null;
 }
 
 function normalizeAddress(input: string): string {
@@ -598,4 +265,476 @@ function normalizeAddress(input: string): string {
     .replace(/\bEAST\b/g, "E")
     .replace(/\bWEST\b/g, "W")
     .trim();
+}
+
+export async function parseHome(document: ExtractedPdf): Promise<ParsedInsuranceDocument> {
+  const allAssertions: ExtractedFactAssertion[] = [];
+  const allNotices: ParsedPolicyNotice[] = [];
+  const occurrenceIndex = new Map<string, number>();
+
+  async function makeAssertion(
+    fields: Omit<ExtractedFactAssertion, "id" | "parserId" | "parserVersion">,
+  ): Promise<ExtractedFactAssertion> {
+    const key = fields.fieldPath;
+    const idx = occurrenceIndex.get(key) ?? 0;
+    occurrenceIndex.set(key, idx + 1);
+    const id = await assertionId({
+      fileDigest: document.fileDigest,
+      parserId: ID,
+      parserVersion: VERSION,
+      pageNumber: fields.pageNumber,
+      fieldPath: fields.fieldPath,
+      occurrenceIndex: idx,
+      normalizedValue: fields.normalizedValue,
+    });
+    return {
+      id,
+      parserId: ID,
+      parserVersion: VERSION,
+      ...fields,
+    };
+  }
+
+  for (const page of document.pages) {
+    const lines = splitLines(page.text);
+    const authority = detectPageAuthority(page.text);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const lower = line.toLowerCase();
+
+      if (lower.startsWith("renewal date")) {
+        const val = nextNonEmpty(lines, i);
+        if (val) {
+          const date = parseDateIso(val);
+          if (date) {
+            allAssertions.push(
+              await makeAssertion({
+                documentId: document.documentId,
+                pageNumber: page.pageNumber,
+                entityScope: "policy",
+                fieldPath: "policy.renewalDate",
+                rawText: val,
+                parsedValue: date,
+                normalizedValue: date,
+                confidence: 0.9,
+                authority,
+              }),
+            );
+          }
+        }
+      }
+
+      if (lower.startsWith("term of your coverage")) {
+        const next = nextNonEmpty(lines, i);
+        const after = nextNonEmpty(lines, i + 1);
+        const range = parseTermRange(`${next ?? ""} ${after ?? ""}`);
+        if (range.effective) {
+          allAssertions.push(
+            await makeAssertion({
+              documentId: document.documentId,
+              pageNumber: page.pageNumber,
+              entityScope: "policy",
+              fieldPath: "policy.effectiveDate",
+              rawText: `${next ?? ""} ${after ?? ""}`,
+              parsedValue: range.effective,
+              normalizedValue: range.effective,
+              confidence: 0.95,
+              authority,
+            }),
+          );
+        }
+        if (range.expiry) {
+          allAssertions.push(
+            await makeAssertion({
+              documentId: document.documentId,
+              pageNumber: page.pageNumber,
+              entityScope: "policy",
+              fieldPath: "policy.expiryDate",
+              rawText: `${next ?? ""} ${after ?? ""}`,
+              parsedValue: range.expiry,
+              normalizedValue: range.expiry,
+              confidence: 0.95,
+              authority,
+            }),
+          );
+        }
+      }
+
+      if (lower.startsWith("policy number")) {
+        const val = findPolicyNumber(lines, i);
+        if (val) {
+          allAssertions.push(
+            await makeAssertion({
+              documentId: document.documentId,
+              pageNumber: page.pageNumber,
+              entityScope: "policy",
+              fieldPath: "policy.policyNumber",
+              rawText: val,
+              parsedValue: val,
+              normalizedValue: val,
+              confidence: val === "0000" ? 0.3 : 0.9,
+              authority,
+            }),
+          );
+        }
+      }
+
+      if (lower.includes("your term premium") || lower.includes("your total term premium")) {
+        const m = line.match(/\$([\d,]+(?:\.\d{2})?)/);
+        if (m) {
+          const cents = parseMoneyCents(m[0]);
+          if (cents !== null) {
+            allAssertions.push(
+              await makeAssertion({
+                documentId: document.documentId,
+                pageNumber: page.pageNumber,
+                entityScope: "premium",
+                fieldPath: "policy.annualPremiumCents",
+                rawText: m[0],
+                parsedValue: cents,
+                normalizedValue: cents,
+                confidence: 0.9,
+                authority,
+              }),
+            );
+          }
+        }
+      }
+    }
+
+    // Address extraction
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const parsed = parseAddressParts(line);
+      if (!parsed) continue;
+      const role = detectAddressRole(lines, i);
+      if (!role) continue;
+
+      const streetRaw = stripAddressRolePrefix(parsed.beforeCity);
+      const redacted = isRedactedStreet(streetRaw);
+      const province = normalizeProvince(parsed.province);
+      const postalCode = normalizePostalCode(parsed.postalCode);
+      const city = parsed.city.toUpperCase() === "CALGARY" ? "Calgary" : parsed.city;
+
+      if (postalCode) {
+        allAssertions.push(
+          await makeAssertion({
+            documentId: document.documentId,
+            pageNumber: page.pageNumber,
+            entityScope: "property",
+            fieldPath: "property.postalCode",
+            rawText: parsed.postalCode,
+            parsedValue: postalCode,
+            normalizedValue: postalCode,
+            confidence: redacted ? 0.5 : 0.95,
+            authority,
+            addressRole: role,
+          }),
+        );
+      }
+      if (province) {
+        allAssertions.push(
+          await makeAssertion({
+            documentId: document.documentId,
+            pageNumber: page.pageNumber,
+            entityScope: "property",
+            fieldPath: "property.province",
+            rawText: parsed.province,
+            parsedValue: province,
+            normalizedValue: province,
+            confidence: redacted ? 0.5 : 0.95,
+            authority,
+            addressRole: role,
+          }),
+        );
+      }
+      if (city) {
+        allAssertions.push(
+          await makeAssertion({
+            documentId: document.documentId,
+            pageNumber: page.pageNumber,
+            entityScope: "property",
+            fieldPath: "property.city",
+            rawText: city,
+            parsedValue: city,
+            normalizedValue: city,
+            confidence: redacted ? 0.5 : 0.95,
+            authority,
+            addressRole: role,
+          }),
+        );
+      }
+      if (streetRaw) {
+        allAssertions.push(
+          await makeAssertion({
+            documentId: document.documentId,
+            pageNumber: page.pageNumber,
+            entityScope: "property",
+            fieldPath: "property.streetAddress",
+            rawText: streetRaw,
+            parsedValue: streetRaw,
+            normalizedValue: streetRaw,
+            confidence: redacted ? 0.4 : 0.95,
+            authority,
+            addressRole: role,
+          }),
+        );
+      }
+
+      const occupancy = addressLabelOccupancy(role, line, lines[i - 1]);
+      if (occupancy && role === "insured_location") {
+        allAssertions.push(
+          await makeAssertion({
+            documentId: document.documentId,
+            pageNumber: page.pageNumber,
+            entityScope: "property",
+            fieldPath: "property.occupancy",
+            rawText: occupancy,
+            parsedValue: occupancy,
+            normalizedValue: occupancy,
+            confidence: 0.95,
+            authority,
+          }),
+        );
+      }
+    }
+
+    // Package solution amount (package limit) detection
+    let packageLimitCents: number | undefined;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (/million\s+solution/i.test(line)) {
+        const nextText = lines.slice(i + 1, i + 6).join(" ");
+        const m = nextText.match(/\$([\d,]+(?:\.\d{2})?)/);
+        if (m) packageLimitCents = parseMoneyCents(m[0]) ?? undefined;
+      }
+    }
+
+    // Coverage and deductible extraction
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const lower = line.toLowerCase();
+
+      const covMatch = line.match(/^Coverage\s+([A-Z])\s*[-–]\s*(.+?)\s*:\s*(.*)$/i);
+      if (covMatch) {
+        const label = covMatch[2].trim();
+        const rest = covMatch[3].trim();
+        const fieldPath = fieldForCoverageLabel(label);
+        if (!fieldPath) continue;
+
+        const amount = parseMoneyCents(rest);
+        let presence = coveragePresenceFromRest(rest, amount);
+        let value: unknown = amount;
+
+        if (
+          fieldPath === "property.dwellingLimitCents" &&
+          packageLimitCents &&
+          (presence === "included" || amount === null)
+        ) {
+          value = packageLimitCents;
+          presence = "included";
+        }
+
+        if (amount !== null && amount > 0) {
+          value = amount;
+        } else if (presence === "included") {
+          value = null;
+        } else {
+          value = null;
+        }
+
+        allAssertions.push(
+          await makeAssertion({
+            documentId: document.documentId,
+            pageNumber: page.pageNumber,
+            entityScope: "coverage",
+            fieldPath,
+            rawText: line,
+            parsedValue: value,
+            normalizedValue: value,
+            confidence: 0.9,
+            authority,
+            coveragePresence: presence,
+          }),
+        );
+      }
+
+      if (lower.startsWith("base deductible")) {
+        const next = nextNonEmpty(lines, i);
+        if (next) {
+          const val = parseMoneyCents(next);
+          if (val !== null) {
+            allAssertions.push(
+              await makeAssertion({
+                documentId: document.documentId,
+                pageNumber: page.pageNumber,
+                entityScope: "coverage",
+                fieldPath: "property.baseDeductibleCents",
+                rawText: next,
+                parsedValue: val,
+                normalizedValue: val,
+                confidence: 0.9,
+                authority,
+              }),
+            );
+          }
+        }
+      }
+
+      const windHailMatch =
+        lower.match(/^wind\s*(?:and|&|\/)\s*hail\s*deductible/i) ||
+        lower.match(/windstorm.*hail.*deductible/i);
+      if (windHailMatch) {
+        const next = nextNonEmpty(lines, i);
+        if (next) {
+          const val = parseMoneyCents(next);
+          if (val !== null) {
+            allAssertions.push(
+              await makeAssertion({
+                documentId: document.documentId,
+                pageNumber: page.pageNumber,
+                entityScope: "coverage",
+                fieldPath: "property.windHailDeductibleCents",
+                rawText: next,
+                parsedValue: val,
+                normalizedValue: val,
+                confidence: 0.9,
+                authority,
+              }),
+            );
+          }
+        }
+      }
+
+      if (lower.match(/^windstorm:/i) || lower.match(/^hail:/i)) {
+        const searchText = lines.slice(i, i + 6).join(" ");
+        const m = searchText.match(/Deductible:\s*\$([\d,]+(?:\.\d{2})?)/i);
+        if (m) {
+          const val = parseMoneyCents(m[0]);
+          if (val !== null) {
+            // Only add if a standalone wind/hail deductible is not already present for this page
+            const already = allAssertions.some(
+              (a) =>
+                a.fieldPath === "property.windHailDeductibleCents" &&
+                a.pageNumber === page.pageNumber,
+            );
+            if (!already) {
+              allAssertions.push(
+                await makeAssertion({
+                  documentId: document.documentId,
+                  pageNumber: page.pageNumber,
+                  entityScope: "coverage",
+                  fieldPath: "property.windHailDeductibleCents",
+                  rawText: m[0],
+                  parsedValue: val,
+                  normalizedValue: val,
+                  confidence: 0.85,
+                  authority,
+                }),
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Notice extraction
+    if (authority !== "coverage_summary" && authority !== "insurance_certificate") {
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const next = lines[i + 1]?.trim() ?? "";
+        const kind = extractNoticeKind(line, next);
+        if (kind) {
+          allNotices.push({
+            kind,
+            text: line,
+            pageNumber: page.pageNumber,
+            authority,
+          });
+        }
+      }
+    }
+  }
+
+  const { selected, conflicts } = resolveByAuthority(allAssertions);
+
+  const insuredLocationAssertions = selectedValues(selected).filter(
+    (a) => a.addressRole === "insured_location",
+  );
+  const postalCode = selected["property.postalCode"]?.normalizedValue as string | undefined;
+  const city = selected["property.city"]?.normalizedValue as string | undefined;
+  const province = selected["property.province"]?.normalizedValue as string | undefined;
+  const streetAddress = selected["property.streetAddress"]?.normalizedValue as string | undefined;
+  const occupancy =
+    (selected["property.occupancy"]?.normalizedValue as ParsedAssetAssertion["occupancy"]) ??
+    "unknown";
+  const policyNumber = selected["policy.policyNumber"]?.normalizedValue as string | undefined;
+
+  const hasInsuredStreet = selectedValues(selected).some(
+    (a) => a.fieldPath === "property.streetAddress" && a.addressRole === "insured_location",
+  );
+  const addressRedacted =
+    !hasInsuredStreet ||
+    insuredLocationAssertions.some(
+      (a) =>
+        a.fieldPath === "property.streetAddress" && isRedactedStreet(a.normalizedValue as string),
+    );
+  const policyRedacted = !policyNumber || policyNumber === "0000";
+
+  const displayLabel = `${city ?? ""} ${province ?? ""} ${postalCode ?? ""}`.trim();
+  const identityFingerprint =
+    normalizeAddress(
+      `${streetAddress ?? ""} ${city ?? ""} ${province ?? ""} ${postalCode ?? ""}`.trim(),
+    ) ||
+    normalizeAddress(
+      `${occupancy} ${city ?? ""} ${province ?? ""} ${postalCode ?? ""} ${policyNumber ?? ""}`.trim(),
+    );
+
+  let matchClassification: ParsedAssetAssertion["matchClassification"] = "new";
+  if (policyRedacted || (occupancy === "principal_residence" && addressRedacted)) {
+    matchClassification = "new_identity_confirmation_required";
+  }
+
+  const assetAssertions: ParsedAssetAssertion[] = [
+    {
+      assetType: "property",
+      identityFingerprint,
+      displayLabel,
+      matchClassification,
+      occupancy,
+      assertions: selectedValues(selected),
+    },
+  ];
+
+  const buildPolicyTerms = (s: Record<string, ExtractedFactAssertion>) => [
+    {
+      effectiveDate: s["policy.effectiveDate"]?.normalizedValue as string | undefined,
+      expiryDate: s["policy.expiryDate"]?.normalizedValue as string | undefined,
+      policyNumber: s["policy.policyNumber"]?.normalizedValue as string | undefined,
+      annualPremiumCents: s["policy.annualPremiumCents"]?.normalizedValue as number | undefined,
+    },
+  ];
+
+  const selectedMap: Record<string, string> = {};
+  for (const [path, a] of Object.entries(selected)) {
+    selectedMap[path] = a.id;
+  }
+
+  const result: ParsedInsuranceDocument = {
+    classification: "home_policy_renewal",
+    insurer: { name: "Security National Insurance Company" },
+    agency: { name: "TD Insurance Direct Agency Inc." },
+    policyTerms: buildPolicyTerms(selected),
+    assertions: allAssertions,
+    selectedAssertions: selectedMap,
+    conflicts,
+    notices: allNotices,
+    assetAssertions,
+    coverageAssertions: selectedValues(selected),
+    parserId: ID,
+    parserVersion: VERSION,
+  };
+
+  return result;
 }
