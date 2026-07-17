@@ -1,6 +1,6 @@
 import type { ExtractedPdf } from "./types.ts";
 import {
-  INSURANCE_LLM_SYSTEM_PROMPT,
+  buildInsuranceExtractionSystemPrompt,
   type InsuranceLlmProvider,
   type LlmAssetCandidate,
   type LlmExtractionRequest,
@@ -10,6 +10,7 @@ import {
 
 export interface LlmExtractionRunOptions {
   requestedModel?: string;
+  /** Optional override used for both passes. Defaults to the contract's pass-specific prompts. */
   systemPrompt?: string;
   maxCoveragePasses?: number;
   selectCoveragePages?: (
@@ -132,13 +133,14 @@ export async function runLlmExtraction(
     throw new Error("Cannot run LLM extraction for a document with no pages");
   }
 
-  const systemPrompt = options.systemPrompt ?? INSURANCE_LLM_SYSTEM_PROMPT;
   const discoveryRequest = buildRequest(
     document,
     { kind: "discovery" },
     options.requestedModel,
   );
-  const discoveryRaw = await provider.extract(discoveryRequest, systemPrompt);
+  const discoveryPrompt =
+    options.systemPrompt ?? buildInsuranceExtractionSystemPrompt("discovery");
+  const discoveryRaw = await provider.extract(discoveryRequest, discoveryPrompt);
   const discovery = parseLlmExtractionResult(discoveryRaw, discoveryRequest);
 
   if (discovery.pass !== "discovery") {
@@ -183,7 +185,9 @@ export async function runLlmExtraction(
       },
       options.requestedModel,
     );
-    const coverageRaw = await provider.extract(coverageRequest, systemPrompt);
+    const coveragePrompt =
+      options.systemPrompt ?? buildInsuranceExtractionSystemPrompt("asset_coverage");
+    const coverageRaw = await provider.extract(coverageRequest, coveragePrompt);
     const coverage = parseLlmExtractionResult(coverageRaw, coverageRequest);
     assertCoverageResultMatchesAsset(coverage, asset.localId);
     coverageByAssetLocalId.set(asset.localId, coverage);
