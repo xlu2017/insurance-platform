@@ -16,7 +16,11 @@ import type { ExtractedPdf, ExtractedPdfPage } from "./types.ts";
 export const LLM_PIPELINE_VERSION = 1 as const;
 
 type LlmPageInput = LlmExtractionRequest["pages"][number];
-export type LlmPipelinePassStatus = "completed" | "invalid_output" | "provider_error";
+export type LlmPipelinePassStatus =
+  | "completed"
+  | "invalid_output"
+  | "provider_error"
+  | "pipeline_error";
 
 export interface LlmPipelinePassSummary {
   pass: "discovery" | "asset_coverage";
@@ -29,7 +33,8 @@ export interface LlmPipelineFailure {
     | "PROVIDER_ERROR"
     | "INVALID_MODEL_OUTPUT"
     | "MODEL_IDENTITY_MISMATCH"
-    | "ASSET_TYPE_CHANGED";
+    | "ASSET_TYPE_CHANGED"
+    | "PIPELINE_ERROR";
   message: string;
 }
 
@@ -105,6 +110,7 @@ export interface InsuranceLlmPipelineOptions {
 interface ExecutePassInput {
   provider: InsuranceLlmProvider;
   request: LlmExtractionRequest;
+  systemPrompt: string;
   maxAttempts: number;
   enforceProviderIdentity: boolean;
   onEvent?: InsuranceLlmPipelineOptions["onEvent"];
@@ -165,7 +171,9 @@ function summarizeRequest(request: LlmExtractionRequest): LlmPipelinePassSummary
 }
 
 function requestAssetLocalId(request: LlmExtractionRequest): string | undefined {
-  return request.pass.kind === "asset_coverage" ? request.pass.targetAssetLocalId : undefined;
+  return request.pass.kind === "asset_coverage"
+    ? request.pass.targetAssetLocalId
+    : undefined;
 }
 
 function safeErrorName(error: unknown): string {
@@ -192,13 +200,54 @@ function providerIdentityMatches(
   result: LlmExtractionResult,
   provider: InsuranceLlmProvider,
 ): boolean {
-  return result.model.provider === provider.providerId && result.model.model === provider.modelId;
+  return (
+    result.model.provider === provider.providerId &&
+    result.model.model === provider.modelId
+  );
+}
+
+function buildAssetCoveragePrompt(
+  discovery: LlmExtractionResult,
+  asset: LlmAssetCandidate,
+): string {
+  const identityAssertionIds = new Set(asset.identityAssertionIds);
+  const identityFacts = discovery.assertions
+    .filter((assertion) => identityAssertionIds.has(assertion.id))
+    .map((assertion) => ({
+      id: assertion.id,
+      fieldPath: assertion.fieldPath,
+      status: assertion.status,
+      value: assertion.value,
+      normalizedValue: assertion.normalizedValue,
+      confidence: assertion.confidence,
+      pageNumbers: assertion.evidence.map((evidence) => evidence.pageNumber),
+    }));
+  const policyTermIds = discovery.policyTerms
+    .filter((term) => term.insuredAssetRefs.includes(asset.localId))
+    .map((term) => term.localId);
+  const context = JSON.stringify({
+    asset: {
+      localId: asset.localId,
+      assetType: asset.assetType,
+      displayLabel: asset.displayLabel,
+      identityFacts,
+      policyTermIds,
+    },
+  });
+
+  return `${buildInsuranceExtractionSystemPrompt("asset_coverage")}\n\nTarget asset context from the validated discovery pass:\n${context}\n\nPreserve this exact localId and assetType. Return exactly one asset: the target asset. Use the identity facts only to distinguish this asset from other properties or vehicles in the document; re-read the supplied pages for every coverage fact. Do not copy coverage from another asset that shares a policyholder, mailing address, or policy package.`;
 }
 
 async function executePass(input: ExecutePassInput): Promise<LlmPipelinePassResult> {
-  const { provider, request, maxAttempts, enforceProviderIdentity, onEvent } = input;
-  const basePrompt = buildInsuranceExtractionSystemPrompt(request.pass.kind);
-  let prompt = basePrompt;
+  const {
+    provider,
+    request,
+    systemPrompt,
+    maxAttempts,
+    enforceProviderIdentity,
+    onEvent,
+  } = input;
+  let prompt = systemPrompt;
   let lastValidation: LlmSemanticValidationResult | undefined;
   let lastFailure: LlmPipelineFailure | undefined;
 
@@ -229,7 +278,7 @@ async function executePass(input: ExecutePassInput): Promise<LlmPipelinePassResu
           attempt,
           reason: "provider_error",
         });
-        prompt = repairPrompt(basePrompt, "provider_error", []);
+        prompt = repairPrompt(systemPrompt, "provider_error", []);
         continue;
       }
       break;
@@ -252,7 +301,7 @@ async function executePass(input: ExecutePassInput): Promise<LlmPipelinePassResu
             attempt,
             reason: "validation_error",
           });
-          prompt = repairPrompt(basePrompt, "validation_error", validation.issues);
+          prompt = repairPrompt(systemPrompt, "validation_error", validation.issues);
           continue;
         }
         break;
@@ -273,7 +322,7 @@ async function executePass(input: ExecutePassInput): Promise<LlmPipelinePassResu
             attempt,
             reason: "model_identity_mismatch",
           });
-          prompt = repairPrompt(basePrompt, "model_identity_mismatch", []);
+          prompt = repairPrompt(systemPrompt, "model_identity_mismatch", []);
           continue;
         }
         break;
@@ -285,7 +334,9 @@ async function executePass(input: ExecutePassInput): Promise<LlmPipelinePassResu
         pass: request.pass.kind,
         assetLocalId,
         attempt,
-        warningCount: validation.issues.filter((issue) => issue.severity === "warning").length,
+        warningCount: validation.issues.filter(
+          (issue) => issue.severity === "warning",
+        ).length,
       });
       return {
         status: "completed",
@@ -308,14 +359,17 @@ async function executePass(input: ExecutePassInput): Promise<LlmPipelinePassResu
           attempt,
           reason: "validation_error",
         });
-        prompt = repairPrompt(basePrompt, "validation_error", []);
+        prompt = repairPrompt(systemPrompt, "validation_error", []);
         continue;
       }
     }
   }
 
   return {
-    status: lastFailure?.code === "PROVIDER_ERROR" ? "provider_error" : "invalid_output",
+    status:
+      lastFailure?.code === "PROVIDER_ERROR"
+        ? "provider_error"
+        : "invalid_output",
     attempts: maxAttempts,
     request: summarizeRequest(request),
     validation: lastValidation,
@@ -334,7 +388,9 @@ async function toPageInputs(
 ): Promise<LlmPageInput[]> {
   return Promise.all(
     pages.map(async (page) => {
-      const imageRef = resolver ? await resolver(document.documentId, page.pageNumber) : undefined;
+      const imageRef = resolver
+        ? await resolver(document.documentId, page.pageNumber)
+        : undefined;
       return imageRef
         ? { pageNumber: page.pageNumber, text: page.text, imageRef }
         : { pageNumber: page.pageNumber, text: page.text };
@@ -342,15 +398,24 @@ async function toPageInputs(
   );
 }
 
-function selectPages(document: ExtractedPdf, pageNumbers: number[]): ExtractedPdfPage[] {
+function selectPages(
+  document: ExtractedPdf,
+  pageNumbers: number[],
+): ExtractedPdfPage[] {
   const unique = [...new Set(pageNumbers)];
-  if (unique.length === 0) throw new Error("Coverage page selector returned no pages");
+  if (unique.length === 0) {
+    throw new Error("Coverage page selector returned no pages");
+  }
 
-  const pagesByNumber = new Map(document.pages.map((page) => [page.pageNumber, page]));
+  const pagesByNumber = new Map(
+    document.pages.map((page) => [page.pageNumber, page]),
+  );
   return unique
     .map((pageNumber) => {
       const page = pagesByNumber.get(pageNumber);
-      if (!page) throw new Error(`Coverage page selector returned unknown page ${pageNumber}`);
+      if (!page) {
+        throw new Error(`Coverage page selector returned unknown page ${pageNumber}`);
+      }
       return page;
     })
     .sort((left, right) => left.pageNumber - right.pageNumber);
@@ -369,9 +434,44 @@ async function mapInBatches<T, R>(
   return output;
 }
 
-function assetTypeChanged(asset: LlmAssetCandidate, pass: LlmPipelinePassResult): boolean {
-  const returned = pass.result?.assets.find((candidate) => candidate.localId === asset.localId);
+function assetTypeChanged(
+  asset: LlmAssetCandidate,
+  pass: LlmPipelinePassResult,
+): boolean {
+  const returned = pass.result?.assets.find(
+    (candidate) => candidate.localId === asset.localId,
+  );
   return Boolean(returned && returned.assetType !== asset.assetType);
+}
+
+function pipelineFailure(
+  asset: LlmAssetCandidate,
+  pageNumbers: number[],
+  error: unknown,
+): LlmAssetCoverageResult {
+  return {
+    asset,
+    pass: {
+      status: "pipeline_error",
+      attempts: 0,
+      request: {
+        pass: "asset_coverage",
+        assetLocalId: asset.localId,
+        pageNumbers,
+      },
+      failure: {
+        code: "PIPELINE_ERROR",
+        message: `Asset coverage pipeline failed before a valid result (${safeErrorName(error)})`,
+      },
+    },
+  };
+}
+
+function withRequestedModel(
+  request: Omit<LlmExtractionRequest, "requestedModel">,
+  requestedModel: string | undefined,
+): LlmExtractionRequest {
+  return requestedModel ? { ...request, requestedModel } : request;
 }
 
 /**
@@ -386,7 +486,12 @@ export async function runInsuranceLlmPipeline(
 ): Promise<InsuranceLlmPipelineResult> {
   assertValidDocument(document);
 
-  const maxAttempts = boundedInteger(options.maxAttempts, DEFAULT_MAX_ATTEMPTS, 1, 3);
+  const maxAttempts = boundedInteger(
+    options.maxAttempts,
+    DEFAULT_MAX_ATTEMPTS,
+    1,
+    3,
+  );
   const concurrency = boundedInteger(
     options.maxConcurrentAssetPasses,
     DEFAULT_ASSET_CONCURRENCY,
@@ -394,18 +499,27 @@ export async function runInsuranceLlmPipeline(
     4,
   );
   const enforceProviderIdentity = options.enforceProviderIdentity ?? true;
-  const orderedPages = [...document.pages].sort((left, right) => left.pageNumber - right.pageNumber);
-  const discoveryPages = await toPageInputs(document, orderedPages, options.resolvePageImageRef);
-  const discoveryRequest: LlmExtractionRequest = {
-    documentId: document.documentId,
-    fileDigest: document.fileDigest,
-    pages: discoveryPages,
-    pass: { kind: "discovery" },
-    requestedModel: options.requestedModel,
-  };
+  const orderedPages = [...document.pages].sort(
+    (left, right) => left.pageNumber - right.pageNumber,
+  );
+  const discoveryPages = await toPageInputs(
+    document,
+    orderedPages,
+    options.resolvePageImageRef,
+  );
+  const discoveryRequest = withRequestedModel(
+    {
+      documentId: document.documentId,
+      fileDigest: document.fileDigest,
+      pages: discoveryPages,
+      pass: { kind: "discovery" },
+    },
+    options.requestedModel,
+  );
   const discovery = await executePass({
     provider,
     request: discoveryRequest,
+    systemPrompt: buildInsuranceExtractionSystemPrompt("discovery"),
     maxAttempts,
     enforceProviderIdentity,
     onEvent: options.onEvent,
@@ -422,7 +536,9 @@ export async function runInsuranceLlmPipeline(
       assetCoverage: [],
       complete: false,
       requiresManualReview: true,
-      warnings: ["Document discovery failed; coverage extraction was not attempted"],
+      warnings: [
+        "Document discovery failed; coverage extraction was not attempted",
+      ],
     };
   }
 
@@ -446,61 +562,83 @@ export async function runInsuranceLlmPipeline(
     discoveryResult.assets,
     concurrency,
     async (asset): Promise<LlmAssetCoverageResult> => {
-      const selectedNumbers = options.selectCoveragePageNumbers
-        ? await options.selectCoveragePageNumbers({ document, discovery: discoveryResult, asset })
-        : orderedPages.map((page) => page.pageNumber);
-      const selected = selectPages(document, selectedNumbers);
-      const pages = await toPageInputs(document, selected, options.resolvePageImageRef);
-      const request: LlmExtractionRequest = {
-        documentId: document.documentId,
-        fileDigest: document.fileDigest,
-        pages,
-        pass: {
-          kind: "asset_coverage",
-          targetAssetLocalId: asset.localId,
-          relevantPageNumbers: selected.map((page) => page.pageNumber),
-        },
-        requestedModel: options.requestedModel,
-      };
-      const pass = await executePass({
-        provider,
-        request,
-        maxAttempts,
-        enforceProviderIdentity,
-        onEvent: options.onEvent,
-      });
-
-      if (assetTypeChanged(asset, pass)) {
-        return {
-          asset,
-          pass: {
-            ...pass,
-            status: "invalid_output",
-            failure: {
-              code: "ASSET_TYPE_CHANGED",
-              message: "Coverage extraction changed the discovered asset type",
+      let selectedNumbers = orderedPages.map((page) => page.pageNumber);
+      try {
+        if (options.selectCoveragePageNumbers) {
+          selectedNumbers = await options.selectCoveragePageNumbers({
+            document,
+            discovery: discoveryResult,
+            asset,
+          });
+        }
+        const selected = selectPages(document, selectedNumbers);
+        const pages = await toPageInputs(
+          document,
+          selected,
+          options.resolvePageImageRef,
+        );
+        const request = withRequestedModel(
+          {
+            documentId: document.documentId,
+            fileDigest: document.fileDigest,
+            pages,
+            pass: {
+              kind: "asset_coverage",
+              targetAssetLocalId: asset.localId,
+              relevantPageNumbers: selected.map((page) => page.pageNumber),
             },
           },
-        };
+          options.requestedModel,
+        );
+        const pass = await executePass({
+          provider,
+          request,
+          systemPrompt: buildAssetCoveragePrompt(discoveryResult, asset),
+          maxAttempts,
+          enforceProviderIdentity,
+          onEvent: options.onEvent,
+        });
+
+        if (assetTypeChanged(asset, pass)) {
+          return {
+            asset,
+            pass: {
+              ...pass,
+              status: "invalid_output",
+              failure: {
+                code: "ASSET_TYPE_CHANGED",
+                message: "Coverage extraction changed the discovered asset type",
+              },
+            },
+          };
+        }
+        return { asset, pass };
+      } catch (error) {
+        return pipelineFailure(asset, selectedNumbers, error);
       }
-      return { asset, pass };
     },
   );
 
   const hasAssets = discoveryResult.assets.length > 0;
-  const complete = hasAssets && assetCoverage.every((entry) => entry.pass.status === "completed");
+  const complete =
+    hasAssets &&
+    assetCoverage.every((entry) => entry.pass.status === "completed");
   const executions = [discovery, ...assetCoverage.map((entry) => entry.pass)];
   const validationWarnings = executions.reduce(
     (total, execution) =>
       total +
-      (execution.validation?.issues.filter((issue) => issue.severity === "warning").length ?? 0),
+      (execution.validation?.issues.filter(
+        (issue) => issue.severity === "warning",
+      ).length ?? 0),
     0,
   );
   const uncertainIdentity = discoveryResult.assets.some(
     (asset) =>
       asset.proposedMatchClassification !== "new" ||
-      (asset.assetType === "property" && asset.insuredLocationStatus !== "complete") ||
-      (asset.assetType === "vehicle" && asset.vinStatus !== "valid_appearing"),
+      (asset.assetType === "property" &&
+        asset.insuredLocationStatus !== "complete") ||
+      (asset.assetType === "vehicle" &&
+        asset.vinStatus !== "valid_appearing"),
   );
 
   return {
@@ -516,11 +654,15 @@ export async function runInsuranceLlmPipeline(
       !complete || !hasAssets || validationWarnings > 0 || uncertainIdentity,
     warnings: [
       ...(!hasAssets ? ["Discovery returned no insured assets"] : []),
-      ...(!complete && hasAssets ? ["One or more asset coverage passes failed"] : []),
+      ...(!complete && hasAssets
+        ? ["One or more asset coverage passes failed"]
+        : []),
       ...(validationWarnings > 0
         ? [`Deterministic validation produced ${validationWarnings} warning(s)`]
         : []),
-      ...(uncertainIdentity ? ["At least one asset identity requires review"] : []),
+      ...(uncertainIdentity
+        ? ["At least one asset identity requires review"]
+        : []),
     ],
   };
 }
