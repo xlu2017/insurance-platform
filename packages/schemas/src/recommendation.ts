@@ -1,9 +1,16 @@
 import { z } from "zod";
+import { NonNegativeCents } from "./money";
 import {
-  EngineQuote,
-  QuoteComponent,
   AutoCoverageDetails,
   PropertyCoverageDetails,
+  ComponentFieldProvenance,
+  PaymentFrequency,
+  BillingMethod,
+  BrokerDirectPreference,
+  InsurerFinancialRating,
+  QuoteState,
+  QuoteDataSource,
+  type EngineQuote,
 } from "./quotes";
 import { HouseholdCoverageMandateV2, SwitchingPreferencesV2 } from "./mandate-v2";
 
@@ -81,23 +88,47 @@ export const QuoteSnapshotSchema = z
   })
   .strict();
 
+const CanonicalAutoCoverageSnapshot = AutoCoverageDetails.strict();
+const CanonicalPropertyCoverageSnapshot = PropertyCoverageDetails.strict();
+
 export const CanonicalComponentSnapshotSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.string().uuid().optional(),
     productLine: z.enum(["auto", "property"]),
     assetId: z.string().uuid(),
-    annualPremiumCents: z.number().int().nonnegative(),
+    annualPremiumCents: NonNegativeCents,
+    auto: CanonicalAutoCoverageSnapshot.nullable(),
+    property: CanonicalPropertyCoverageSnapshot.nullable(),
+    rawCoverage: z.record(z.unknown()),
+    fieldProvenance: ComponentFieldProvenance,
+    validationStatus: z.literal("valid"),
+    validationErrors: z
+      .array(
+        z.object({
+          path: z.array(z.string()),
+          code: z.string(),
+          message: z.string(),
+        }),
+      )
+      .default([]),
+    provenance: z.object({
+      dataSource: QuoteDataSource,
+      validatedAt: z.string().datetime({ offset: true }).optional(),
+      validatedBy: z.string().uuid().optional(),
+      coverageSchemaVersion: z.number().int().nonnegative(),
+    }),
   })
   .strict();
 
 export const CanonicalInsurerMetadataSnapshotSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.string().min(1),
     name: z.string(),
-    financialStrengthRating: z.string(),
-    paymentFrequencies: z.array(z.string()),
-    billingMethods: z.array(z.string()),
-    distribution: z.string(),
+    financialStrengthRating: InsurerFinancialRating,
+    paymentFrequencies: z.array(PaymentFrequency),
+    billingMethods: z.array(BillingMethod),
+    distribution: BrokerDirectPreference.nullable(),
+    version: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -161,16 +192,19 @@ export const PersistedRecommendationOptionSchema = z
   })
   .strict();
 
-const CanonicalAutoCoverageSnapshot = AutoCoverageDetails.strict();
-const CanonicalPropertyCoverageSnapshot = PropertyCoverageDetails.strict();
-const CanonicalQuoteComponentSnapshot = QuoteComponent.extend({
-  auto: CanonicalAutoCoverageSnapshot.nullable(),
-  property: CanonicalPropertyCoverageSnapshot.nullable(),
-}).strict();
 const CanonicalQuoteSnapshot = z
   .object({
-    ...EngineQuote.shape,
-    components: z.array(CanonicalQuoteComponentSnapshot).min(1),
+    id: z.string().uuid(),
+    state: QuoteState,
+    isIncumbent: z.boolean(),
+    policyFeesCents: NonNegativeCents,
+    paymentFeesCents: NonNegativeCents,
+    bundleDiscountCents: NonNegativeCents,
+    cancellationChargeCents: NonNegativeCents,
+    underwritingConditions: z.array(z.string()),
+    components: z.array(CanonicalComponentSnapshotSchema).min(1),
+    expiresAt: z.string().datetime().nullable(),
+    insurer: CanonicalInsurerMetadataSnapshotSchema,
   })
   .strict();
 

@@ -1110,6 +1110,7 @@ export type Database = {
           coverage_schema_version: number;
           created_at: string;
           data_source: Database["public"]["Enums"]["quote_data_source"] | null;
+          field_provenance: Json | null;
           id: string;
           normalized_coverage: Json | null;
           quote_component_id: string;
@@ -1125,6 +1126,7 @@ export type Database = {
           coverage_schema_version?: number;
           created_at?: string;
           data_source?: Database["public"]["Enums"]["quote_data_source"] | null;
+          field_provenance?: Json | null;
           id?: string;
           normalized_coverage?: Json | null;
           quote_component_id: string;
@@ -1140,6 +1142,7 @@ export type Database = {
           coverage_schema_version?: number;
           created_at?: string;
           data_source?: Database["public"]["Enums"]["quote_data_source"] | null;
+          field_provenance?: Json | null;
           id?: string;
           normalized_coverage?: Json | null;
           quote_component_id?: string;

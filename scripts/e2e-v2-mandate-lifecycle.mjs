@@ -163,18 +163,29 @@ async function currentSwitchingVersion() {
   return data || { version: 0, id: null };
 }
 
-async function setCaseState(state) {
-  const { error } = await serviceClient.from("optimization_cases").update({ state }).eq("id", caseId);
+async function setCaseState(state, targetCaseId = caseId) {
+  const { error } = await serviceClient.from("optimization_cases").update({ state }).eq("id", targetCaseId);
   if (error) throw error;
 }
 
-async function deleteRecommendations() {
-  const { data: recs } = await serviceClient.from("recommendations").select("id").eq("case_id", caseId);
+async function deleteRecommendations(targetCaseId = caseId) {
+  const { data: recs } = await serviceClient.from("recommendations").select("id").eq("case_id", targetCaseId);
   const ids = (recs || []).map((r) => r.id);
   if (ids.length) {
     await serviceClient.from("recommendation_options").delete().in("recommendation_id", ids);
     await serviceClient.from("recommendation_approvals").delete().in("recommendation_id", ids);
     await serviceClient.from("recommendations").delete().in("id", ids);
+  }
+}
+
+async function deleteQuotesForCase(targetCaseId = caseId) {
+  const { data: quoteIds } = await serviceClient.from("quotes").select("id").eq("case_id", targetCaseId);
+  for (const q of quoteIds || []) {
+    const { data: comps } = await serviceClient.from("quote_policy_components").select("id").eq("quote_id", q.id);
+    const compIds = (comps || []).map((c) => c.id);
+    if (compIds.length) await serviceClient.from("quote_coverages").delete().in("quote_component_id", compIds);
+    await serviceClient.from("quote_policy_components").delete().eq("quote_id", q.id);
+    await serviceClient.from("quotes").delete().eq("id", q.id);
   }
 }
 
@@ -235,7 +246,7 @@ async function saveCaseQuote(quoteId, components, dataSource, opts = {}) {
     };
   });
   const res = await invokeEdgeFunction(operationsToken, "save-case-quote", {
-    caseId,
+    caseId: quote.case_id,
     quoteId: quote.id,
     expectedVersion: opts.expectedVersion ?? quote.version,
     saveIntent: opts.saveIntent ?? "validate",
@@ -305,13 +316,13 @@ async function invokeSaveMandate(payload) {
   return invokeEdgeFunction(token, "save-household-mandate", payload);
 }
 
-async function invokeGenerateRecommendation() {
+async function invokeGenerateRecommendation(targetCaseId = caseId) {
   const token = createAccessToken(
     { sub: USERS.operations.id, appRole: USERS.operations.role, email: USERS.operations.email },
     JWT_SECRET,
     3600,
   );
-  return invokeEdgeFunction(token, "recommendation-generator", { caseId });
+  return invokeEdgeFunction(token, "recommendation-generator", { caseId: targetCaseId });
 }
 
 async function expectSuccess(label, rpc, args) {
@@ -616,6 +627,264 @@ async function main() {
   } else {
     console.log("19. Skipped cross-household override (no other vehicle found)");
   }
+
+  // --- Phase 1D-E runtime integrity acceptance tests ---
+  // Create a fresh case because the main lifecycle ends in 'completed', which
+  // cannot transition back to 'comparing_quotes'.
+  const { data: phase1deCase, error: phase1deCaseErr } = await serviceClient
+    .from("optimization_cases")
+    .insert({ household_id: householdId, state: "comparing_quotes", notes: "Phase 1D-E acceptance" })
+    .select("id")
+    .single();
+  assert(!phase1deCaseErr, `failed to create phase1de case: ${phase1deCaseErr?.message}`);
+  assert(phase1deCase, "failed to create phase1de case");
+  const phase1deCaseId = phase1deCase.id;
+  const { error: assignmentErr } = await serviceClient.from("case_assignments").insert({
+    case_id: phase1deCaseId,
+    assignee_profile_id: USERS.operations.id,
+    assignment_role: "operations",
+  });
+  assert(!assignmentErr, `failed to assign operations to phase1de case: ${assignmentErr?.message}`);
+  console.log("Phase 1D-E fresh case", phase1deCaseId);
+
+  const { keepVehicle, keepProperty } = await ensureSingleAssetPerLine();
+  const { data: insurers } = await serviceClient
+    .from("insurers")
+    .select("id, name, payment_frequencies, billing_methods, version")
+    .limit(2);
+  assert(insurers && insurers.length >= 2, "need at least two insurers");
+  const incumbentInsurer = insurers[0];
+  const competitorInsurer = insurers[1];
+
+  function autoCoverage(overrides = {}) {
+    return {
+      coverageForm: "comprehensive",
+      vehicleClass: "personal",
+      financingStatus: "owned",
+      thirdPartyLiabilityCents: 300000000,
+      collisionIncluded: "yes",
+      collisionDeductibleCents: 50000,
+      comprehensiveIncluded: "yes",
+      comprehensiveDeductibleCents: 50000,
+      glassDeductibleCents: null,
+      accidentForgivenessIncluded: "yes",
+      rentalVehicleCoverageIncluded: "yes",
+      nonOwnedAutomobileIncluded: "no",
+      familyProtectionIncluded: "no",
+      depreciationWaiverIncluded: "no",
+      oemPartsIncluded: "no",
+      roadsideAssistanceIncluded: "no",
+      disappearingDeductibleIncluded: "no",
+      glassCoverageIncluded: "no",
+      telematicsRequired: "no",
+      ...overrides,
+    };
+  }
+
+  function propertyCoverage(overrides = {}) {
+    return {
+      propertyType: "homeowner",
+      coverageForm: "comprehensive",
+      settlementBasis: "replacement_cost",
+      dwellingLimitCents: 45000000,
+      contentsLimitCents: 30000000,
+      detachedStructuresLimitCents: 5000000,
+      personalLiabilityLimitCents: 2000000,
+      additionalLivingExpenseLimitCents: 100000,
+      additionalLivingExpensesIncluded: "yes",
+      replacementCostIncluded: "yes",
+      baseDeductibleCents: 250000,
+      waterDeductibleCents: null,
+      windHailIncluded: "no",
+      windHailDeductibleCents: null,
+      earthquakeIncluded: "no",
+      earthquakeDeductibleCents: null,
+      sewerBackupIncluded: "no",
+      sewerBackupLimitCents: null,
+      sewerBackupDeductibleCents: null,
+      overlandWaterIncluded: "no",
+      overlandWaterLimitCents: null,
+      overlandWaterDeductibleCents: null,
+      groundwaterIncluded: "no",
+      iceDamIncluded: "no",
+      equipmentBreakdownIncluded: "no",
+      serviceLineIncluded: "no",
+      bylawCoverageIncluded: "no",
+      homeSystemsIncluded: "no",
+      cyberCoverageIncluded: "no",
+      scheduledValuablesIncluded: "no",
+      homeBusinessIncluded: "no",
+      shortTermRentalPermissionIncluded: "no",
+      claimsForgivenessIncluded: "no",
+      ...overrides,
+    };
+  }
+
+  function buildQuotePayload({ insurerId, isIncumbent, state, saveIntent, components }) {
+    return {
+      caseId: phase1deCaseId,
+      saveIntent,
+      insurerId,
+      state,
+      isIncumbent,
+      expiresAt: null,
+      policyFeesCents: 0,
+      paymentFeesCents: 0,
+      bundleDiscountCents: 0,
+      cancellationChargeCents: 0,
+      underwritingConditions: [],
+      dataSource: "manual_entry",
+      components,
+    };
+  }
+
+  // 20. Save a valid incumbent and a competitor quote for the case.
+  const incumbentPayload = buildQuotePayload({
+    insurerId: incumbentInsurer.id,
+    isIncumbent: true,
+    state: "bindable",
+    saveIntent: "validate",
+    components: [
+      { productLine: "auto", assetId: keepVehicle.id, annualPremiumCents: 150000, coverage: autoCoverage() },
+      { productLine: "property", assetId: keepProperty.id, annualPremiumCents: 150000, coverage: propertyCoverage() },
+    ],
+  });
+  const incumbentRes = await invokeEdgeFunction(operationsToken, "save-case-quote", incumbentPayload);
+  assert(incumbentRes.data && incumbentRes.data.success, `incumbent save failed: ${incumbentRes.error?.message}`);
+  assert(incumbentRes.data.aggregateStatus === "valid", `incumbent should be valid, got ${incumbentRes.data.aggregateStatus}`);
+  const incumbentQuoteId = incumbentRes.data.quoteId;
+  console.log("20. Incumbent quote saved and validated", incumbentQuoteId);
+
+  const competitorPayload = buildQuotePayload({
+    insurerId: competitorInsurer.id,
+    isIncumbent: false,
+    state: "conditional",
+    saveIntent: "validate",
+    components: [
+      { productLine: "auto", assetId: keepVehicle.id, annualPremiumCents: 120000, coverage: autoCoverage({ familyProtectionIncluded: "not_applicable" }) },
+      { productLine: "property", assetId: keepProperty.id, annualPremiumCents: 100000, coverage: propertyCoverage() },
+    ],
+  });
+  const competitorRes = await invokeEdgeFunction(operationsToken, "save-case-quote", competitorPayload);
+  assert(competitorRes.data && competitorRes.data.success, `competitor save failed: ${competitorRes.error?.message}`);
+  assert(competitorRes.data.aggregateStatus === "valid", `competitor should be valid, got ${competitorRes.data.aggregateStatus}`);
+  const competitorQuoteId = competitorRes.data.quoteId;
+  console.log("21. Competitor quote saved and validated (family protection not_applicable)", competitorQuoteId);
+
+  // 22. not_applicable survives save and validate cycle with distinct raw/normalized coverage.
+  const { components: competitorComponents } = await loadQuoteAggregate(competitorQuoteId);
+  const competitorCoverage = competitorComponents[0].quote_coverages[0];
+  assert(competitorCoverage.coverage.familyProtectionIncluded === "not_applicable", "raw coverage must preserve not_applicable");
+  assert(competitorCoverage.normalized_coverage.familyProtectionIncluded === false, "normalized coverage must convert not_applicable to false");
+  console.log("22. not_applicable preserved in raw coverage and normalized to false");
+
+  // 23. Generate an initial recommendation for the valid quotes.
+  const genRecA = await invokeGenerateRecommendation(phase1deCaseId);
+  assert(genRecA.data && genRecA.data.recommendationId, `initial generation failed: ${genRecA.error?.message}`);
+  console.log("23. Initial recommendation generated", genRecA.data.recommendationId);
+
+  // 24. An incomplete draft is classified as incomplete and blocks recommendation generation.
+  const incompleteQuotePayload = buildQuotePayload({
+    insurerId: competitorInsurer.id,
+    isIncumbent: false,
+    state: "estimate",
+    saveIntent: "draft",
+    components: [
+      { productLine: "auto", assetId: keepVehicle.id, annualPremiumCents: 100000, coverage: autoCoverage({ coverageForm: "unknown", thirdPartyLiabilityCents: undefined }) },
+    ],
+  });
+  const incompleteRes = await invokeEdgeFunction(operationsToken, "save-case-quote", incompleteQuotePayload);
+  assert(incompleteRes.data && incompleteRes.data.success, `incomplete draft save failed: ${incompleteRes.error?.message}`);
+  assert(incompleteRes.data.aggregateStatus === "incomplete", `incomplete draft should be incomplete, got ${incompleteRes.data.aggregateStatus}`);
+  const incompleteQuoteId = incompleteRes.data.quoteId;
+  console.log("24. Incomplete draft saved as incomplete", incompleteQuoteId);
+
+  await setCaseState("comparing_quotes", phase1deCaseId);
+  const draftGenRes = await invokeGenerateRecommendation(phase1deCaseId);
+  assert(draftGenRes.error, "recommendation generator should reject a case with an incomplete draft");
+  assert(draftGenRes.error.message.includes("not ready") || draftGenRes.error.message.includes("QUOTE_NOT"), `expected not-ready error, got ${draftGenRes.error.message}`);
+  console.log("25. Recommendation generator rejected incomplete draft");
+
+  // 25. Duplicate product-line/asset pair is rejected in a single quote.
+  const quoteDuplicatePayload = buildQuotePayload({
+    insurerId: competitorInsurer.id,
+    isIncumbent: false,
+    state: "estimate",
+    saveIntent: "draft",
+    components: [
+      { productLine: "auto", assetId: keepVehicle.id, annualPremiumCents: 100000, coverage: autoCoverage() },
+      { productLine: "auto", assetId: keepVehicle.id, annualPremiumCents: 90000, coverage: autoCoverage() },
+    ],
+  });
+  const duplicateRes = await invokeEdgeFunction(operationsToken, "save-case-quote", quoteDuplicatePayload);
+  assert(duplicateRes.error, "duplicate component should be rejected");
+  console.log("26. Duplicate auto component rejected");
+
+  // Clean up the test-only incomplete and duplicate-scenario quotes.
+  await serviceClient.from("quotes").delete().in("id", [incompleteQuoteId]);
+  await setCaseState("comparing_quotes", phase1deCaseId);
+
+  // 26. Insurer metadata staleness rejects recommendation publication and customer approval.
+  // Review the initial recommendation, then bump the competitor insurer metadata.
+  const { data: insurerBeforeBump } = await serviceClient.from("insurers").select("version").eq("id", competitorInsurer.id).single();
+  const originalFreqs = competitorInsurer.payment_frequencies || ["annual"];
+  const updatedFreqs = originalFreqs.includes("monthly") ? ["annual"] : ["monthly", ...originalFreqs];
+  const { error: insurerUpdateErr } = await serviceClient
+    .from("insurers")
+    .update({ payment_frequencies: updatedFreqs })
+    .eq("id", competitorInsurer.id);
+  assert(!insurerUpdateErr, `insurer update failed: ${insurerUpdateErr?.message}`);
+  const { data: insurerAfterBump } = await serviceClient.from("insurers").select("version").eq("id", competitorInsurer.id).single();
+  assert(insurerAfterBump.version > insurerBeforeBump.version, "insurer version should be bumped");
+  console.log("27. Competitor insurer metadata bumped to version", insurerAfterBump.version);
+
+  const staleReview = await reviewer.rpc("review_recommendation", {
+    p_recommendation_id: genRecA.data.recommendationId,
+    p_approved: true,
+    p_notes: "Should fail due to stale insurer",
+  });
+  assert(staleReview.error, "reviewer publication should fail when insurer metadata changed");
+  console.log("28. Reviewer publication rejected stale insurer metadata");
+
+  // 29. Regenerate after insurer update, publish, then bump again and confirm approval fails.
+  const { components: revalComponents } = await loadQuoteAggregate(competitorQuoteId);
+  const revalidateRes = await saveCaseQuote(competitorQuoteId, revalComponents, "manual_entry", { saveIntent: "validate" });
+  assert(revalidateRes.data && revalidateRes.data.success, `re-validate after insurer bump failed: ${revalidateRes.error?.message}`);
+  await setCaseState("comparing_quotes", phase1deCaseId);
+  const genRecB = await invokeGenerateRecommendation(phase1deCaseId);
+  assert(genRecB.data && genRecB.data.recommendationId, `regeneration failed: ${genRecB.error?.message}`);
+  console.log("29. Regenerated recommendation after insurer update", genRecB.data.recommendationId);
+
+  const publishB = await reviewer.rpc("review_recommendation", {
+    p_recommendation_id: genRecB.data.recommendationId,
+    p_approved: true,
+    p_notes: "Publish with updated insurer",
+  });
+  assert(publishB.error === null, `publish after insurer update failed: ${publishB.error?.message}`);
+  console.log("30. Recommendation published with updated insurer metadata");
+
+  const { data: insurerBeforeSecondBump } = await serviceClient.from("insurers").select("version").eq("id", competitorInsurer.id).single();
+  const secondFreqs = updatedFreqs.includes("annual") && updatedFreqs.length > 1 ? ["monthly"] : ["annual", "monthly"];
+  await serviceClient.from("insurers").update({ payment_frequencies: secondFreqs }).eq("id", competitorInsurer.id);
+  const { data: insurerAfterSecondBump } = await serviceClient.from("insurers").select("version").eq("id", competitorInsurer.id).single();
+  assert(insurerAfterSecondBump.version > insurerBeforeSecondBump.version, "insurer version should be bumped again");
+
+  const staleApprove = await customer.rpc("approve_customer_recommendation", {
+    p_recommendation_id: genRecB.data.recommendationId,
+    p_expected_rec_version: genRecB.data.version,
+  });
+  assert(staleApprove.error, "customer approval should fail after insurer metadata changes");
+  console.log("31. Customer approval rejected stale insurer metadata");
+
+  // 32. Concurrent draft saves against the same quote version produce a conflict.
+  const { components: concurrentComponents } = await loadQuoteAggregate(competitorQuoteId);
+  const [concurrentA, concurrentB] = await Promise.all([
+    saveCaseQuote(competitorQuoteId, concurrentComponents, "manual_entry", { saveIntent: "draft", expectError: true }),
+    saveCaseQuote(competitorQuoteId, concurrentComponents, "manual_entry", { saveIntent: "draft", expectError: true }),
+  ]);
+  const concurrentSuccesses = [concurrentA, concurrentB].filter((r) => r.data && r.data.success).length;
+  assert(concurrentSuccesses === 1, `expected exactly one concurrent draft to succeed, got ${concurrentSuccesses}`);
+  console.log("32. Concurrent draft save conflict handled (one succeeded, one failed)");
 
   console.log("\nV2 mandate lifecycle E2E passed.");
 }

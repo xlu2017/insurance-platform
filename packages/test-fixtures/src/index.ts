@@ -128,14 +128,18 @@ export function autoComponent(
   annualPremiumCents: number,
   overrides: Partial<AutoCoverageDetails> = {},
 ): QuoteComponent {
+  const coverage: AutoCoverageDetails = { ...standardAutoCoverage, ...overrides };
   return {
     productLine: "auto",
     assetId: TEST_VEHICLE_ID,
     annualPremiumCents,
-    auto: { ...standardAutoCoverage, ...overrides },
+    auto: coverage,
     property: null,
+    rawCoverage: coverage as unknown as Record<string, unknown>,
+    fieldProvenance: {},
     validationStatus: "valid",
     validationErrors: [],
+    provenance: { dataSource: "manual_entry", coverageSchemaVersion: 2 },
   };
 }
 
@@ -143,21 +147,69 @@ export function propertyComponent(
   annualPremiumCents: number,
   overrides: Partial<PropertyCoverageDetails> = {},
 ): QuoteComponent {
+  const coverage: PropertyCoverageDetails = { ...standardPropertyCoverage, ...overrides };
   return {
     productLine: "property",
     assetId: TEST_PROPERTY_ID,
     annualPremiumCents,
     auto: null,
-    property: { ...standardPropertyCoverage, ...overrides },
+    property: coverage,
+    rawCoverage: coverage as unknown as Record<string, unknown>,
+    fieldProvenance: {},
     validationStatus: "valid",
     validationErrors: [],
+    provenance: { dataSource: "manual_entry", coverageSchemaVersion: 2 },
   };
 }
 
-export function makeQuote(
-  overrides: Partial<EngineQuote> &
-    Pick<EngineQuote, "id" | "insurerId" | "insurerName" | "components">,
-): EngineQuote {
+type MakeQuoteOverrides = Partial<EngineQuote> &
+  Pick<EngineQuote, "id" | "components"> & {
+    insurerId?: string;
+    insurerName?: string;
+    insurerFinancialRating?: EngineQuote["insurer"]["financialStrengthRating"];
+    paymentFrequency?: string;
+    paymentFrequencies?: EngineQuote["insurer"]["paymentFrequencies"];
+    billingMethod?: string;
+    billingMethods?: EngineQuote["insurer"]["billingMethods"];
+    distribution?: EngineQuote["insurer"]["distribution"];
+    distributionChannel?: string;
+    insurerVersion?: number;
+  };
+
+export function makeQuote(overrides: MakeQuoteOverrides): EngineQuote {
+  const {
+    insurerId,
+    insurerName,
+    insurerFinancialRating,
+    paymentFrequency,
+    paymentFrequencies,
+    billingMethod,
+    billingMethods,
+    distribution,
+    distributionChannel,
+    insurerVersion,
+    ...rest
+  } = overrides;
+  const resolvedPaymentFrequencies: EngineQuote["insurer"]["paymentFrequencies"] =
+    paymentFrequencies ??
+    (paymentFrequency
+      ? [paymentFrequency as EngineQuote["insurer"]["paymentFrequencies"][number]]
+      : []);
+  const resolvedBillingMethods: EngineQuote["insurer"]["billingMethods"] =
+    billingMethods ??
+    (billingMethod ? [billingMethod as EngineQuote["insurer"]["billingMethods"][number]] : []);
+  const resolvedDistribution =
+    distribution ??
+    (distributionChannel ? (distributionChannel as EngineQuote["insurer"]["distribution"]) : null);
+  const insurer: EngineQuote["insurer"] = {
+    id: insurerId ?? "insurer-default",
+    name: insurerName ?? "Default Insurer",
+    financialStrengthRating: insurerFinancialRating ?? "unknown",
+    paymentFrequencies: resolvedPaymentFrequencies,
+    billingMethods: resolvedBillingMethods,
+    distribution: resolvedDistribution,
+    version: insurerVersion ?? 1,
+  };
   return {
     state: "bindable",
     isIncumbent: false,
@@ -167,8 +219,9 @@ export function makeQuote(
     cancellationChargeCents: 0,
     underwritingConditions: [],
     expiresAt: null,
-    ...overrides,
-  };
+    insurer,
+    ...rest,
+  } as EngineQuote;
 }
 
 /**

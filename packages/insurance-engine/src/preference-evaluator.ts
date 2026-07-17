@@ -149,9 +149,12 @@ export function evaluatePreferenceAlignment(
   }
 
   // Payment frequency (preferred)
-  const paymentFreq = autoQuote.paymentFrequency ?? propertyQuote.paymentFrequency;
-  if (switching.preferredPaymentFrequency && paymentFreq !== undefined && paymentFreq !== null) {
-    if (paymentFreq === switching.preferredPaymentFrequency) {
+  const paymentFreqs = [
+    ...(autoQuote.insurer.paymentFrequencies ?? []),
+    ...(propertyQuote.insurer.paymentFrequencies ?? []),
+  ];
+  if (switching.preferredPaymentFrequency && paymentFreqs.length > 0) {
+    if (paymentFreqs.includes(switching.preferredPaymentFrequency)) {
       details.push({ scope: "switching", item: "paymentFrequency", outcome: "satisfied" });
       satisfiedCount++;
     } else {
@@ -164,9 +167,12 @@ export function evaluatePreferenceAlignment(
   }
 
   // Billing method (preferred)
-  const billingMethod = autoQuote.billingMethod ?? propertyQuote.billingMethod;
-  if (switching.preferredBillingMethod && billingMethod !== undefined && billingMethod !== null) {
-    if (billingMethod === switching.preferredBillingMethod) {
+  const billingMethods = [
+    ...(autoQuote.insurer.billingMethods ?? []),
+    ...(propertyQuote.insurer.billingMethods ?? []),
+  ];
+  if (switching.preferredBillingMethod && billingMethods.length > 0) {
+    if (billingMethods.includes(switching.preferredBillingMethod)) {
       details.push({ scope: "switching", item: "billingMethod", outcome: "satisfied" });
       satisfiedCount++;
     } else {
@@ -180,7 +186,7 @@ export function evaluatePreferenceAlignment(
 
   // Broker / direct preference
   if (switching.brokerDirectPreference && switching.brokerDirectPreference !== "indifferent") {
-    const distribution = autoQuote.distributionChannel ?? propertyQuote.distributionChannel;
+    const distribution = autoQuote.insurer.distribution ?? propertyQuote.insurer.distribution;
     if (distribution === undefined || distribution === null) {
       details.push({ scope: "switching", item: "brokerDirectPreference", outcome: "unknown" });
       notEvaluableCount++;

@@ -82,8 +82,8 @@ function componentsFor(quote: EngineQuote, line: "auto" | "property"): QuoteComp
 function selection(quote: EngineQuote, component: QuoteComponent): LineSelection {
   return {
     quoteId: quote.id,
-    insurerId: quote.insurerId,
-    insurerName: quote.insurerName,
+    insurerId: quote.insurer.id,
+    insurerName: quote.insurer.name,
     component,
     isIncumbent: quote.isIncumbent,
   };
@@ -118,7 +118,7 @@ export function buildConfigurations(input: EngineInput): HouseholdConfiguration[
         id,
         auto: selection(auto.quote, auto.component),
         property: selection(property.quote, property.component),
-        bundled: auto.quote.insurerId === property.quote.insurerId,
+        bundled: auto.quote.insurer.id === property.quote.insurer.id,
         isIncumbentConfiguration: auto.quote.isIncumbent && property.quote.isIncumbent,
       });
     }
@@ -1141,7 +1141,7 @@ export function evaluateHousehold(input: EngineInput): EngineResult {
     }
 
     const incumbentBundled =
-      input.incumbentAuto.quote.insurerId === input.incumbentProperty.quote.insurerId;
+      input.incumbentAuto.quote.insurer.id === input.incumbentProperty.quote.insurer.id;
     if (
       !config.isIncumbentConfiguration &&
       !mandate.switching.allowBundleBreakup &&
@@ -1170,7 +1170,7 @@ export function evaluateHousehold(input: EngineInput): EngineResult {
       const requiredRank = financialRatingRank[mandate.switching.minimumInsurerFinancialRating];
       if (requiredRank !== undefined) {
         for (const q of [autoQuote, propertyQuote]) {
-          const quoteRating = q.insurerFinancialRating;
+          const quoteRating = q.insurer.financialStrengthRating;
           if (quoteRating === undefined || financialRatingRank[quoteRating] === undefined) {
             eligible = false;
             reasonCodes.push("INSURER_RATING_UNKNOWN");

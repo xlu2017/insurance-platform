@@ -85,15 +85,16 @@ begin
   if NEW.status in ('published','customer_approved','customer_declined')
      and OLD.status is distinct from NEW.status then
     for v_quote in select * from jsonb_array_elements(NEW.input_snapshot_json->'quotes') loop
-      if (v_quote->>'insurerVersion') is not null then
-        if exists (
-          select 1
-          from insurers i
-          where i.id = (v_quote->>'insurerId')::uuid
-            and i.version is distinct from (v_quote->>'insurerVersion')::int
-        ) then
-          raise exception 'insurer metadata changed for quote % since recommendation generation', v_quote->>'id';
-        end if;
+      if (v_quote->'insurer'->>'version') is null then
+        raise exception 'quote % is missing insurer version in recommendation snapshot', v_quote->>'id';
+      end if;
+      if exists (
+        select 1
+        from insurers i
+        where i.id = (v_quote->'insurer'->>'id')::uuid
+          and i.version is distinct from (v_quote->'insurer'->>'version')::int
+      ) then
+        raise exception 'insurer metadata changed for quote % since recommendation generation', v_quote->>'id';
       end if;
     end loop;
   end if;

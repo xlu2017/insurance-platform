@@ -36,7 +36,8 @@ alter table quotes
 
 alter table quote_coverages
   add column if not exists raw_coverage jsonb,
-  add column if not exists normalized_coverage jsonb;
+  add column if not exists normalized_coverage jsonb,
+  add column if not exists field_provenance jsonb default '{}'::jsonb;
 
 -- =============================================================================
 -- 3. One active coverage row per component
@@ -88,6 +89,7 @@ alter table quote_coverages
           and validation_errors = '[]'::jsonb
           and normalized_coverage is not null
           and raw_coverage is not null
+          and field_provenance is not null
         when 'incomplete' then
           validation_errors is not null and jsonb_array_length(validation_errors) > 0
         when 'invalid' then
@@ -217,6 +219,8 @@ declare
   v_validation_status quote_validation_status;
   v_validation_errors jsonb;
   v_schema_version int;
+  v_field_provenance jsonb;
+  v_field_key text;
   v_asset_exists boolean;
   v_existing_component_ids uuid[];
   v_payload_component_ids uuid[];
@@ -347,6 +351,20 @@ begin
     v_validation_errors := coalesce(nullif(v_component->'validation_errors', 'null'::jsonb), '[]'::jsonb);
     v_schema_version := coalesce((v_component->>'coverage_schema_version')::int, 2);
 
+    v_field_provenance := '{}'::jsonb;
+    for v_field_key in select jsonb_object_keys(v_raw_coverage)
+    loop
+      v_field_provenance := v_field_provenance || jsonb_build_object(
+        v_field_key,
+        jsonb_build_object(
+          'dataSource', p_data_source,
+          'validatedAt', case when v_validation_status = 'valid' then to_jsonb(now())#>>'{}' else null end,
+          'validatedBy', case when v_validation_status = 'valid' then p_actor_profile_id::text else null end,
+          'coverageSchemaVersion', v_schema_version
+        )
+      );
+    end loop;
+
     if v_product_line not in ('auto', 'property') then
       raise exception 'invalid product line: %', v_product_line;
     end if;
@@ -418,7 +436,8 @@ begin
         validated_at = case when v_validation_status = 'valid' then now() else null end,
         validated_by = case when v_validation_status = 'valid' then p_actor_profile_id else null end,
         coverage_schema_version = v_schema_version,
-        data_source = p_data_source
+        data_source = p_data_source,
+        field_provenance = v_field_provenance
     where quote_component_id = v_component_id
     returning id into v_coverage_id;
 

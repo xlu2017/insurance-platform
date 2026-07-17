@@ -551,6 +551,16 @@ Deno.serve(async (req) => {
   );
 
   if (saveIntent === "validate") {
+    if (request.state === "estimate") {
+      return jsonResponse(
+        {
+          code: "INVALID_QUOTE_STATE_FOR_VALIDATION",
+          message:
+            "Quote state must be 'conditional' or 'bindable' to validate; 'estimate' is not ready for recommendations.",
+        },
+        422,
+      );
+    }
     const invalidComponents = classifiedComponents.filter((c) => c.validation_status !== "valid");
     if (invalidComponents.length > 0) {
       return jsonResponse(

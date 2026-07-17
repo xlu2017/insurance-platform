@@ -341,15 +341,16 @@ begin
 
   -- Insurer metadata used by the engine must not have changed since the snapshot was built.
   for v_snap in select * from jsonb_array_elements(p_input_snapshot_json->'quotes') loop
-    if (v_snap.value->>'insurerVersion') is not null then
-      if exists (
-        select 1
-        from insurers i
-        where i.id = (v_snap.value->>'insurerId')::uuid
-          and i.version is distinct from (v_snap.value->>'insurerVersion')::int
-      ) then
-        raise exception 'insurer metadata changed for quote % since evaluation', v_snap.value->>'id';
-      end if;
+    if (v_snap.value->'insurer'->>'version') is null then
+      raise exception 'quote % is missing insurer version in snapshot', v_snap.value->>'id';
+    end if;
+    if exists (
+      select 1
+      from insurers i
+      where i.id = (v_snap.value->'insurer'->>'id')::uuid
+        and i.version is distinct from (v_snap.value->'insurer'->>'version')::int
+    ) then
+      raise exception 'insurer metadata changed for quote % since evaluation', v_snap.value->>'id';
     end if;
   end loop;
 

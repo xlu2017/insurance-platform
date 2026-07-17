@@ -77,6 +77,17 @@ export const PropertyCoverageDetails = z.object({
 });
 export type PropertyCoverageDetails = z.infer<typeof PropertyCoverageDetails>;
 
+export const FieldProvenance = z.object({
+  dataSource: QuoteDataSource,
+  validatedAt: z.string().datetime({ offset: true }).optional(),
+  validatedBy: z.string().uuid().optional(),
+  coverageSchemaVersion: z.number().int().nonnegative().optional(),
+});
+export type FieldProvenance = z.infer<typeof FieldProvenance>;
+
+export const ComponentFieldProvenance = z.record(z.string(), FieldProvenance);
+export type ComponentFieldProvenance = z.infer<typeof ComponentFieldProvenance>;
+
 export const ComponentProvenance = z
   .object({
     dataSource: QuoteDataSource.optional(),
@@ -94,6 +105,8 @@ export const QuoteComponent = z.object({
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
   property: PropertyCoverageDetails.nullable(),
+  rawCoverage: z.record(z.unknown()).optional(),
+  fieldProvenance: ComponentFieldProvenance.optional(),
   validationStatus: QuoteValidationStatus,
   validationErrors: z.array(
     z.object({
@@ -106,10 +119,19 @@ export const QuoteComponent = z.object({
 });
 export type QuoteComponent = z.infer<typeof QuoteComponent>;
 
+export const EngineQuoteInsurer = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  financialStrengthRating: InsurerFinancialRating,
+  paymentFrequencies: z.array(PaymentFrequency).default([]),
+  billingMethods: z.array(BillingMethod).default([]),
+  distribution: BrokerDirectPreference.nullable(),
+  version: z.number().int().nonnegative(),
+});
+export type EngineQuoteInsurer = z.infer<typeof EngineQuoteInsurer>;
+
 export const EngineQuote = z.object({
   id: z.string(),
-  insurerId: z.string(),
-  insurerName: z.string(),
   state: QuoteState,
   isIncumbent: z.boolean(),
   policyFeesCents: NonNegativeCents,
@@ -121,11 +143,7 @@ export const EngineQuote = z.object({
   underwritingConditions: z.array(z.string()),
   components: z.array(QuoteComponent).min(1),
   expiresAt: z.string().datetime().nullable(),
-  paymentFrequency: PaymentFrequency.optional(),
-  billingMethod: BillingMethod.optional(),
-  distributionChannel: BrokerDirectPreference.optional(),
-  insurerFinancialRating: InsurerFinancialRating.optional(),
-  insurerVersion: z.number().int().nonnegative().optional(),
+  insurer: EngineQuoteInsurer,
 });
 export type EngineQuote = z.infer<typeof EngineQuote>;
 
@@ -207,3 +225,20 @@ export const SaveCaseQuoteRequest = z
     }
   });
 export type SaveCaseQuoteRequest = z.infer<typeof SaveCaseQuoteRequest>;
+
+export {
+  ProductLine,
+  QuoteState,
+  QuoteDataSource,
+  QuoteValidationStatus,
+  AutoCoverageForm,
+  PropertyCoverageForm,
+  PropertySettlement,
+  PropertyType,
+  VehicleUseClass,
+  FinancingStatus,
+  PaymentFrequency,
+  BillingMethod,
+  BrokerDirectPreference,
+  InsurerFinancialRating,
+} from "./enums";

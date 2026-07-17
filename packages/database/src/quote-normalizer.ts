@@ -4,6 +4,9 @@ import {
   PropertyCoverageDetails,
   type QuoteComponent,
   type QuoteDataSource,
+  PaymentFrequency,
+  BillingMethod,
+  BrokerDirectPreference,
 } from "@autopilot/schemas";
 
 export interface DbQuote {
@@ -39,6 +42,7 @@ export interface DbQuotePolicyComponent {
     coverage?: Record<string, unknown>;
     raw_coverage?: Record<string, unknown>;
     normalized_coverage?: Record<string, unknown>;
+    field_provenance?: Record<string, QuoteComponent["fieldProvenance"]>;
     validation_status?: string;
     validation_errors?: { path: string[]; code: string; message: string }[];
     coverage_schema_version?: number;
@@ -56,29 +60,35 @@ export interface QuoteCoverageError {
   message: string;
 }
 
-function first<T>(arr: T[] | undefined | null): T | undefined {
-  return arr && arr.length > 0 ? arr[0] : undefined;
-}
-
-function toFinancialRating(value: string): EngineQuote["insurerFinancialRating"] {
+function toFinancialRating(value: string): EngineQuote["insurer"]["financialStrengthRating"] {
   const known = ["unknown", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"] as const;
   return known.includes(value as (typeof known)[number])
-    ? (value as EngineQuote["insurerFinancialRating"])
+    ? (value as EngineQuote["insurer"]["financialStrengthRating"])
     : "unknown";
 }
 
-function toPaymentFrequency(value: string): EngineQuote["paymentFrequency"] {
-  const known = ["monthly", "quarterly", "semi_annual", "annual"] as const;
-  return known.includes(value as (typeof known)[number])
-    ? (value as (typeof known)[number])
-    : undefined;
+function toPaymentFrequencies(
+  values: string[] | undefined | null,
+): EngineQuote["insurer"]["paymentFrequencies"] {
+  if (!values) return [];
+  const parsed: EngineQuote["insurer"]["paymentFrequencies"] = [];
+  for (const value of values) {
+    const result = PaymentFrequency.safeParse(value);
+    if (result.success) parsed.push(result.data);
+  }
+  return parsed;
 }
 
-function toBillingMethod(value: string): EngineQuote["billingMethod"] {
-  const known = ["automatic_bank", "credit_card", "mail"] as const;
-  return known.includes(value as (typeof known)[number])
-    ? (value as (typeof known)[number])
-    : undefined;
+function toBillingMethods(
+  values: string[] | undefined | null,
+): EngineQuote["insurer"]["billingMethods"] {
+  if (!values) return [];
+  const parsed: EngineQuote["insurer"]["billingMethods"] = [];
+  for (const value of values) {
+    const result = BillingMethod.safeParse(value);
+    if (result.success) parsed.push(result.data);
+  }
+  return parsed;
 }
 
 function formatZodIssues(
@@ -117,6 +127,11 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
         }
       : undefined;
 
+  const rawCoverage: QuoteComponent["rawCoverage"] =
+    ((row.raw_coverage ?? row.coverage) as Record<string, unknown> | undefined) ?? {};
+  const fieldProvenance: QuoteComponent["fieldProvenance"] =
+    (row.field_provenance as QuoteComponent["fieldProvenance"]) ?? {};
+
   if (validationStatus !== "valid") {
     return {
       quoteId: undefined,
@@ -143,6 +158,8 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
       annualPremiumCents: c.annual_premium_cents,
       auto: parsed.data,
       property: null,
+      rawCoverage,
+      fieldProvenance,
       validationStatus,
       validationErrors,
       provenance,
@@ -165,6 +182,8 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
     annualPremiumCents: c.annual_premium_cents,
     auto: null,
     property: parsed.data,
+    rawCoverage,
+    fieldProvenance,
     validationStatus,
     validationErrors,
     provenance,
@@ -181,20 +200,21 @@ export function toEngineQuote(q: DbQuote): EngineQuote | QuoteCoverageError {
     components.push(result);
   }
 
-  const insurer = q.insurers;
-  const paymentFrequency = first(insurer?.payment_frequencies);
-  const billingMethod = first(insurer?.billing_methods);
-  const distributionChannel =
-    insurer?.distribution === "broker"
-      ? "broker"
-      : insurer?.distribution === "direct"
-        ? "direct"
-        : undefined;
+  const dbInsurer = q.insurers;
+  if (!dbInsurer) {
+    return {
+      quoteId: q.id,
+      message: "Quote insurer metadata is missing",
+    };
+  }
+
+  const distribution =
+    dbInsurer.distribution === null
+      ? null
+      : (BrokerDirectPreference.safeParse(dbInsurer.distribution).data ?? null);
 
   return {
     id: q.id,
-    insurerId: q.insurer_id,
-    insurerName: insurer?.name ?? "Unknown insurer",
     state: q.state as EngineQuote["state"],
     isIncumbent: q.is_incumbent,
     policyFeesCents: q.policy_fees_cents,
@@ -204,13 +224,15 @@ export function toEngineQuote(q: DbQuote): EngineQuote | QuoteCoverageError {
     underwritingConditions: q.underwriting_conditions,
     components,
     expiresAt: q.expires_at,
-    paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : undefined,
-    billingMethod: billingMethod ? toBillingMethod(billingMethod) : undefined,
-    distributionChannel,
-    insurerFinancialRating: insurer
-      ? toFinancialRating(insurer.financial_strength_rating)
-      : "unknown",
-    insurerVersion: insurer?.version,
+    insurer: {
+      id: q.insurer_id,
+      name: dbInsurer.name,
+      financialStrengthRating: toFinancialRating(dbInsurer.financial_strength_rating),
+      paymentFrequencies: toPaymentFrequencies(dbInsurer.payment_frequencies),
+      billingMethods: toBillingMethods(dbInsurer.billing_methods),
+      distribution,
+      version: dbInsurer.version,
+    },
   };
 }
 

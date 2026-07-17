@@ -324,6 +324,18 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
     },
   });
 
+  const { data: readinessByQuote } = useQuery({
+    queryKey: ["quote-readiness", caseRow.id],
+    queryFn: async () => {
+      const { data, error } = await supabaseBrowser()
+        .from("quote_readiness")
+        .select("quote_id, readiness_status")
+        .eq("case_id", caseRow.id);
+      if (error) throw error;
+      return new Map((data ?? []).map((r) => [r.quote_id, r.readiness_status as string]));
+    },
+  });
+
   const { data: insurers } = useQuery({
     queryKey: ["insurers-all"],
     queryFn: async () => {
@@ -364,7 +376,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
 
   const { register, handleSubmit, reset, watch, formState, setValue } = useForm<QuoteForm>({
     resolver: zodResolver(QuoteForm),
-    defaultValues: { state: "estimate", isIncumbent: false, dataSource: "manual_entry" },
+    defaultValues: { state: "conditional", isIncumbent: false, dataSource: "manual_entry" },
   });
 
   const selectedAutoAssetId = watch("autoAssetId");
@@ -641,12 +653,19 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
     },
     onSuccess: (response, variables) => {
       queryClient.invalidateQueries({ queryKey: ["quotes", caseRow.id] });
-      setQuoteStatus(variables.requireValid ? "valid" : (response.aggregateStatus ?? "saved"));
+      queryClient.invalidateQueries({ queryKey: ["quote-readiness", caseRow.id] });
       if (variables.requireValid) {
+        setQuoteStatus(response.aggregateStatus ?? "valid");
         reset();
         setEditingQuote(null);
         setMessage(editingQuote ? "Quote updated and validated." : "Quote validated and saved.");
       } else {
+        const quoteId = response.quoteId ?? editingQuote?.id;
+        const version = response.version ?? (editingQuote ? editingQuote.version + 1 : 1);
+        if (quoteId) {
+          setEditingQuote({ id: quoteId, version });
+        }
+        setQuoteStatus(response.aggregateStatus ?? "draft");
         setMessage(editingQuote ? "Draft updated." : "Quote draft saved.");
       }
     },
@@ -719,40 +738,28 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
               <Th>Lines / validation</Th>
               <Th>Premiums</Th>
               <Th>Bundle discount</Th>
-              <Th>Quote state</Th>
+              <Th>Readiness</Th>
               <Th>Conditions</Th>
               <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
             {(quotes ?? []).map((q) => {
-              const aggregateStatus =
-                q.quote_policy_components.length === 0
-                  ? "incomplete"
-                  : q.quote_policy_components.every((c) =>
-                        c.quote_coverages?.some((r) => r.validation_status === "valid"),
-                      )
-                    ? "valid"
-                    : q.quote_policy_components.some((c) =>
-                          c.quote_coverages?.some((r) => r.validation_status === "invalid"),
-                        )
-                      ? "invalid"
-                      : "incomplete";
+              const aggregateStatus = readinessByQuote?.get(q.id) ?? "unknown";
+              const tone =
+                aggregateStatus === "ready"
+                  ? "accent"
+                  : aggregateStatus === "invalid" ||
+                      aggregateStatus === "unusable" ||
+                      aggregateStatus === "expired"
+                    ? "danger"
+                    : "warning";
               return (
                 <tr key={q.id}>
                   <Td className="font-medium">
                     {q.insurers?.name}
                     {q.is_incumbent ? " (incumbent)" : ""}
-                    <Badge
-                      tone={
-                        aggregateStatus === "valid"
-                          ? "accent"
-                          : aggregateStatus === "invalid"
-                            ? "danger"
-                            : "warning"
-                      }
-                      className="ml-2"
-                    >
+                    <Badge tone={tone} className="ml-2">
                       {titleCase(aggregateStatus)}
                     </Badge>
                   </Td>
@@ -796,9 +803,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
                   </Td>
                   <Td>{q.bundle_discount_cents > 0 ? formatCad(q.bundle_discount_cents) : "—"}</Td>
                   <Td>
-                    <Badge tone={q.state === "bindable" ? "accent" : "neutral"}>
-                      {titleCase(q.state)}
-                    </Badge>
+                    <Badge tone={tone}>{titleCase(aggregateStatus)}</Badge>
                   </Td>
                   <Td>{q.underwriting_conditions.length}</Td>
                   <Td>

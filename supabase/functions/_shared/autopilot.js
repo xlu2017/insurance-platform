@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: 54c10c70394dbb4ead89f92b9ec0035351bfffe7c2bdb95828334e2f187a9bcd
+// source-hash: 5f25f4e7c9a867511b8a9a908c06a6d663da156e7089a13b5a11919d76b38e23
 
 
 // ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
@@ -63,9 +63,9 @@ var util;
 })(util || (util = {}));
 var objectUtil;
 (function(objectUtil2) {
-  objectUtil2.mergeShapes = (first2, second) => {
+  objectUtil2.mergeShapes = (first, second) => {
     return {
-      ...first2,
+      ...first,
       ...second
       // second overwrites first
     };
@@ -2984,10 +2984,10 @@ var ZodRecord = class _ZodRecord extends ZodType {
   get element() {
     return this._def.valueType;
   }
-  static create(first2, second, third) {
+  static create(first, second, third) {
     if (second instanceof ZodType) {
       return new _ZodRecord({
-        keyType: first2,
+        keyType: first,
         valueType: second,
         typeName: ZodFirstPartyTypeKind.ZodRecord,
         ...processCreateParams(third)
@@ -2995,7 +2995,7 @@ var ZodRecord = class _ZodRecord extends ZodType {
     }
     return new _ZodRecord({
       keyType: ZodString.create(),
-      valueType: first2,
+      valueType: first,
       typeName: ZodFirstPartyTypeKind.ZodRecord,
       ...processCreateParams(second)
     });
@@ -4713,6 +4713,13 @@ var PropertyCoverageDetails = z.object({
   shortTermRentalPermissionIncluded: z.boolean(),
   claimsForgivenessIncluded: z.boolean()
 });
+var FieldProvenance = z.object({
+  dataSource: QuoteDataSource,
+  validatedAt: z.string().datetime({ offset: true }).optional(),
+  validatedBy: z.string().uuid().optional(),
+  coverageSchemaVersion: z.number().int().nonnegative().optional()
+});
+var ComponentFieldProvenance = z.record(z.string(), FieldProvenance);
 var ComponentProvenance = z.object({
   dataSource: QuoteDataSource.optional(),
   validatedAt: z.string().datetime({ offset: true }).optional(),
@@ -4727,6 +4734,8 @@ var QuoteComponent = z.object({
   annualPremiumCents: NonNegativeCents,
   auto: AutoCoverageDetails.nullable(),
   property: PropertyCoverageDetails.nullable(),
+  rawCoverage: z.record(z.unknown()).optional(),
+  fieldProvenance: ComponentFieldProvenance.optional(),
   validationStatus: QuoteValidationStatus,
   validationErrors: z.array(
     z.object({
@@ -4737,10 +4746,17 @@ var QuoteComponent = z.object({
   ),
   provenance: ComponentProvenance
 });
+var EngineQuoteInsurer = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  financialStrengthRating: InsurerFinancialRating,
+  paymentFrequencies: z.array(PaymentFrequency).default([]),
+  billingMethods: z.array(BillingMethod).default([]),
+  distribution: BrokerDirectPreference.nullable(),
+  version: z.number().int().nonnegative()
+});
 var EngineQuote = z.object({
   id: z.string(),
-  insurerId: z.string(),
-  insurerName: z.string(),
   state: QuoteState,
   isIncumbent: z.boolean(),
   policyFeesCents: NonNegativeCents,
@@ -4752,11 +4768,7 @@ var EngineQuote = z.object({
   underwritingConditions: z.array(z.string()),
   components: z.array(QuoteComponent).min(1),
   expiresAt: z.string().datetime().nullable(),
-  paymentFrequency: PaymentFrequency.optional(),
-  billingMethod: BillingMethod.optional(),
-  distributionChannel: BrokerDirectPreference.optional(),
-  insurerFinancialRating: InsurerFinancialRating.optional(),
-  insurerVersion: z.number().int().nonnegative().optional()
+  insurer: EngineQuoteInsurer
 });
 var QuoteValidationIssue = z.object({
   path: z.array(z.string()),
@@ -4826,19 +4838,40 @@ var QuoteSnapshotSchema = z.object({
   version: z.number().int().nonnegative(),
   is_incumbent: z.boolean()
 }).strict();
+var CanonicalAutoCoverageSnapshot = AutoCoverageDetails.strict();
+var CanonicalPropertyCoverageSnapshot = PropertyCoverageDetails.strict();
 var CanonicalComponentSnapshotSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
   productLine: z.enum(["auto", "property"]),
   assetId: z.string().uuid(),
-  annualPremiumCents: z.number().int().nonnegative()
+  annualPremiumCents: NonNegativeCents,
+  auto: CanonicalAutoCoverageSnapshot.nullable(),
+  property: CanonicalPropertyCoverageSnapshot.nullable(),
+  rawCoverage: z.record(z.unknown()),
+  fieldProvenance: ComponentFieldProvenance,
+  validationStatus: z.literal("valid"),
+  validationErrors: z.array(
+    z.object({
+      path: z.array(z.string()),
+      code: z.string(),
+      message: z.string()
+    })
+  ).default([]),
+  provenance: z.object({
+    dataSource: QuoteDataSource,
+    validatedAt: z.string().datetime({ offset: true }).optional(),
+    validatedBy: z.string().uuid().optional(),
+    coverageSchemaVersion: z.number().int().nonnegative()
+  })
 }).strict();
 var CanonicalInsurerMetadataSnapshotSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1),
   name: z.string(),
-  financialStrengthRating: z.string(),
-  paymentFrequencies: z.array(z.string()),
-  billingMethods: z.array(z.string()),
-  distribution: z.string()
+  financialStrengthRating: InsurerFinancialRating,
+  paymentFrequencies: z.array(PaymentFrequency),
+  billingMethods: z.array(BillingMethod),
+  distribution: BrokerDirectPreference.nullable(),
+  version: z.number().int().nonnegative()
 }).strict();
 var CanonicalReasonDetailSchema = z.object({
   scope: z.string(),
@@ -4889,15 +4922,18 @@ var PersistedRecommendationOptionSchema = z.object({
   deductible_total_cents: z.number().int().nonnegative(),
   underwriting_condition_count: z.number().int().nonnegative()
 }).strict();
-var CanonicalAutoCoverageSnapshot = AutoCoverageDetails.strict();
-var CanonicalPropertyCoverageSnapshot = PropertyCoverageDetails.strict();
-var CanonicalQuoteComponentSnapshot = QuoteComponent.extend({
-  auto: CanonicalAutoCoverageSnapshot.nullable(),
-  property: CanonicalPropertyCoverageSnapshot.nullable()
-}).strict();
 var CanonicalQuoteSnapshot = z.object({
-  ...EngineQuote.shape,
-  components: z.array(CanonicalQuoteComponentSnapshot).min(1)
+  id: z.string().uuid(),
+  state: QuoteState,
+  isIncumbent: z.boolean(),
+  policyFeesCents: NonNegativeCents,
+  paymentFeesCents: NonNegativeCents,
+  bundleDiscountCents: NonNegativeCents,
+  cancellationChargeCents: NonNegativeCents,
+  underwritingConditions: z.array(z.string()),
+  components: z.array(CanonicalComponentSnapshotSchema).min(1),
+  expiresAt: z.string().datetime().nullable(),
+  insurer: CanonicalInsurerMetadataSnapshotSchema
 }).strict();
 var CanonicalRecommendationInputSnapshotSchema = z.object({
   caseId: z.string().uuid(),
@@ -5304,9 +5340,12 @@ function evaluatePreferenceAlignment(input, config) {
       record(detail, outcome);
     }
   }
-  const paymentFreq = autoQuote.paymentFrequency ?? propertyQuote.paymentFrequency;
-  if (switching.preferredPaymentFrequency && paymentFreq !== void 0 && paymentFreq !== null) {
-    if (paymentFreq === switching.preferredPaymentFrequency) {
+  const paymentFreqs = [
+    ...autoQuote.insurer.paymentFrequencies ?? [],
+    ...propertyQuote.insurer.paymentFrequencies ?? []
+  ];
+  if (switching.preferredPaymentFrequency && paymentFreqs.length > 0) {
+    if (paymentFreqs.includes(switching.preferredPaymentFrequency)) {
       details.push({ scope: "switching", item: "paymentFrequency", outcome: "satisfied" });
       satisfiedCount++;
     } else {
@@ -5317,9 +5356,12 @@ function evaluatePreferenceAlignment(input, config) {
     details.push({ scope: "switching", item: "paymentFrequency", outcome: "unknown" });
     notEvaluableCount++;
   }
-  const billingMethod = autoQuote.billingMethod ?? propertyQuote.billingMethod;
-  if (switching.preferredBillingMethod && billingMethod !== void 0 && billingMethod !== null) {
-    if (billingMethod === switching.preferredBillingMethod) {
+  const billingMethods2 = [
+    ...autoQuote.insurer.billingMethods ?? [],
+    ...propertyQuote.insurer.billingMethods ?? []
+  ];
+  if (switching.preferredBillingMethod && billingMethods2.length > 0) {
+    if (billingMethods2.includes(switching.preferredBillingMethod)) {
       details.push({ scope: "switching", item: "billingMethod", outcome: "satisfied" });
       satisfiedCount++;
     } else {
@@ -5331,7 +5373,7 @@ function evaluatePreferenceAlignment(input, config) {
     notEvaluableCount++;
   }
   if (switching.brokerDirectPreference && switching.brokerDirectPreference !== "indifferent") {
-    const distribution = autoQuote.distributionChannel ?? propertyQuote.distributionChannel;
+    const distribution = autoQuote.insurer.distribution ?? propertyQuote.insurer.distribution;
     if (distribution === void 0 || distribution === null) {
       details.push({ scope: "switching", item: "brokerDirectPreference", outcome: "unknown" });
       notEvaluableCount++;
@@ -5404,8 +5446,8 @@ function componentsFor(quote, line) {
 function selection(quote, component) {
   return {
     quoteId: quote.id,
-    insurerId: quote.insurerId,
-    insurerName: quote.insurerName,
+    insurerId: quote.insurer.id,
+    insurerName: quote.insurer.name,
     component,
     isIncumbent: quote.isIncumbent
   };
@@ -5435,7 +5477,7 @@ function buildConfigurations(input) {
         id,
         auto: selection(auto.quote, auto.component),
         property: selection(property.quote, property.component),
-        bundled: auto.quote.insurerId === property.quote.insurerId,
+        bundled: auto.quote.insurer.id === property.quote.insurer.id,
         isIncumbentConfiguration: auto.quote.isIncumbent && property.quote.isIncumbent
       });
     }
@@ -6162,7 +6204,7 @@ function evaluateHousehold(input) {
       eligible = false;
       reasonCodes.push("SPLIT_INSURERS_PROHIBITED");
     }
-    const incumbentBundled = input.incumbentAuto.quote.insurerId === input.incumbentProperty.quote.insurerId;
+    const incumbentBundled = input.incumbentAuto.quote.insurer.id === input.incumbentProperty.quote.insurer.id;
     if (!config.isIncumbentConfiguration && !mandate.switching.allowBundleBreakup && incumbentBundled && !config.bundled) {
       eligible = false;
       reasonCodes.push("BUNDLE_BREAKUP_PROHIBITED");
@@ -6178,7 +6220,7 @@ function evaluateHousehold(input) {
       const requiredRank = financialRatingRank[mandate.switching.minimumInsurerFinancialRating];
       if (requiredRank !== void 0) {
         for (const q of [autoQuote, propertyQuote]) {
-          const quoteRating = q.insurerFinancialRating;
+          const quoteRating = q.insurer.financialStrengthRating;
           if (quoteRating === void 0 || financialRatingRank[quoteRating] === void 0) {
             eligible = false;
             reasonCodes.push("INSURER_RATING_UNKNOWN");
@@ -6434,21 +6476,21 @@ function canonicalizeForDigest(value) {
     const canonicalized = value.map(canonicalizeForDigest).filter((x) => x !== void 0);
     if (canonicalized.length === 0) return [];
     if (isRecordArray(canonicalized)) {
-      const first2 = canonicalized[0];
-      if ("rank" in first2) {
+      const first = canonicalized[0];
+      if ("rank" in first) {
         return sortByRank(canonicalized).map(
           canonicalizeForDigest
         );
       }
-      if ("id" in first2) {
+      if ("id" in first) {
         return sortByKey(canonicalized, "id").map(canonicalizeForDigest);
       }
-      if ("path" in first2) {
+      if ("path" in first) {
         return sortByPath(
           canonicalized
         ).map(canonicalizeForDigest);
       }
-      if ("scope" in first2 && "item" in first2) {
+      if ("scope" in first && "item" in first) {
         return [...canonicalized].sort((a, b) => {
           const scopeA = String(a.scope);
           const scopeB = String(b.scope);
@@ -6664,20 +6706,27 @@ async function loadCurrentV2Mandate(supabase, householdId) {
 }
 
 // ../database/src/quote-normalizer.ts
-function first(arr) {
-  return arr && arr.length > 0 ? arr[0] : void 0;
-}
 function toFinancialRating(value) {
   const known = ["unknown", "A_plus", "A", "A_minus", "B_plus", "B_or_lower"];
   return known.includes(value) ? value : "unknown";
 }
-function toPaymentFrequency(value) {
-  const known = ["monthly", "quarterly", "semi_annual", "annual"];
-  return known.includes(value) ? value : void 0;
+function toPaymentFrequencies(values) {
+  if (!values) return [];
+  const parsed = [];
+  for (const value of values) {
+    const result = PaymentFrequency.safeParse(value);
+    if (result.success) parsed.push(result.data);
+  }
+  return parsed;
 }
-function toBillingMethod(value) {
-  const known = ["automatic_bank", "credit_card", "mail"];
-  return known.includes(value) ? value : void 0;
+function toBillingMethods(values) {
+  if (!values) return [];
+  const parsed = [];
+  for (const value of values) {
+    const result = BillingMethod.safeParse(value);
+    if (result.success) parsed.push(result.data);
+  }
+  return parsed;
 }
 function formatZodIssues(basePath, issues) {
   return issues.map((issue) => `${basePath}.${issue.path.join(".")}: ${issue.message}`).join("; ");
@@ -6704,6 +6753,8 @@ function toComponent(c) {
     validatedBy: row.validated_by ?? void 0,
     coverageSchemaVersion: row.coverage_schema_version ?? void 0
   } : void 0;
+  const rawCoverage = row.raw_coverage ?? row.coverage ?? {};
+  const fieldProvenance = row.field_provenance ?? {};
   if (validationStatus !== "valid") {
     return {
       quoteId: void 0,
@@ -6729,6 +6780,8 @@ function toComponent(c) {
       annualPremiumCents: c.annual_premium_cents,
       auto: parsed2.data,
       property: null,
+      rawCoverage,
+      fieldProvenance,
       validationStatus,
       validationErrors,
       provenance
@@ -6750,6 +6803,8 @@ function toComponent(c) {
     annualPremiumCents: c.annual_premium_cents,
     auto: null,
     property: parsed.data,
+    rawCoverage,
+    fieldProvenance,
     validationStatus,
     validationErrors,
     provenance
@@ -6764,14 +6819,16 @@ function toEngineQuote(q) {
     }
     components.push(result);
   }
-  const insurer = q.insurers;
-  const paymentFrequency = first(insurer?.payment_frequencies);
-  const billingMethod = first(insurer?.billing_methods);
-  const distributionChannel = insurer?.distribution === "broker" ? "broker" : insurer?.distribution === "direct" ? "direct" : void 0;
+  const dbInsurer = q.insurers;
+  if (!dbInsurer) {
+    return {
+      quoteId: q.id,
+      message: "Quote insurer metadata is missing"
+    };
+  }
+  const distribution = dbInsurer.distribution === null ? null : BrokerDirectPreference.safeParse(dbInsurer.distribution).data ?? null;
   return {
     id: q.id,
-    insurerId: q.insurer_id,
-    insurerName: insurer?.name ?? "Unknown insurer",
     state: q.state,
     isIncumbent: q.is_incumbent,
     policyFeesCents: q.policy_fees_cents,
@@ -6781,11 +6838,15 @@ function toEngineQuote(q) {
     underwritingConditions: q.underwriting_conditions,
     components,
     expiresAt: q.expires_at,
-    paymentFrequency: paymentFrequency ? toPaymentFrequency(paymentFrequency) : void 0,
-    billingMethod: billingMethod ? toBillingMethod(billingMethod) : void 0,
-    distributionChannel,
-    insurerFinancialRating: insurer ? toFinancialRating(insurer.financial_strength_rating) : "unknown",
-    insurerVersion: insurer?.version
+    insurer: {
+      id: q.insurer_id,
+      name: dbInsurer.name,
+      financialStrengthRating: toFinancialRating(dbInsurer.financial_strength_rating),
+      paymentFrequencies: toPaymentFrequencies(dbInsurer.payment_frequencies),
+      billingMethods: toBillingMethods(dbInsurer.billing_methods),
+      distribution,
+      version: dbInsurer.version
+    }
   };
 }
 
@@ -6813,7 +6874,7 @@ async function loadRecommendationInputSnapshot(supabase, caseId) {
     supabase.from("vehicles").select("id").eq("household_id", householdId),
     supabase.from("properties").select("id").eq("household_id", householdId),
     supabase.from("quotes").select(
-      "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, version, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
+      "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, version, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, field_provenance, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))"
     ).eq("case_id", caseId),
     supabase.from("quote_readiness").select("quote_id, readiness_status").eq("case_id", caseId)
   ]);
@@ -6931,4 +6992,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "54c10c70394dbb4ead89f92b9ec0035351bfffe7c2bdb95828334e2f187a9bcd";
+export const __AUTOPILOT_SOURCE_HASH__ = "5f25f4e7c9a867511b8a9a908c06a6d663da156e7089a13b5a11919d76b38e23";
