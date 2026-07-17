@@ -5,42 +5,34 @@ export type OnboardingSessionDecision =
   | "skip";
 
 export type OnboardingReviewFreshness = "unreviewed" | "confirmed" | "stale";
-
 export type MandatedValueOrigin =
   | "defaulted_from_current"
   | "customer_customized";
 
 export interface IncomingSpecificationReview {
   fieldPath: string;
-  /**
-   * Stable signature of the selected source assertion and normalized current value.
-   * Callers should change this whenever the extracted meaning changes.
-   */
+  /** Change whenever the selected assertion or normalized current value changes. */
   extractionFingerprint: string;
   currentValue: unknown | undefined;
-  /** Defaults to currentValue when omitted. */
+  /** Defaults to currentValue. */
   defaultMandatedValue?: unknown;
 }
 
 export interface IncomingOnboardingCandidate {
-  /** Stable only within this document, such as an asset assertion ID. */
+  /** Stable within this document, such as an extracted asset assertion ID. */
   localCandidateId: string;
   assetType: "property" | "vehicle";
   identityFingerprint: string;
-  /**
-   * Stable signature of all customer-visible identity and review evidence.
-   * It must change whenever reprocessing changes what the customer is asked to approve.
-   */
+  /** Change whenever customer-visible identity or review evidence changes. */
   reviewFingerprint: string;
   specifications: readonly IncomingSpecificationReview[];
 }
 
 export interface IncrementalOnboardingUpload {
-  /** Opaque upload attempt ID used only for audit metadata. */
   uploadId: string;
-  /** Content hash of the source PDF. Equal hashes represent the same document bytes. */
+  /** Content hash of the PDF bytes. */
   documentFingerprint: string;
-  /** Parser/model/prompt revision used for this extraction attempt. */
+  /** Parser/model/prompt revision used for this attempt. */
   extractionRevision: string;
   candidates: readonly IncomingOnboardingCandidate[];
 }
@@ -56,7 +48,7 @@ export interface OnboardingSpecificationDraft {
 }
 
 export interface IncrementalOnboardingCandidateState {
-  /** Stable across upload order and repeated ingestion of the same document. */
+  /** Stable across upload order and repeated ingestion of identical bytes. */
   candidateId: string;
   sourceDocumentFingerprint: string;
   localCandidateId: string;
@@ -77,7 +69,7 @@ export interface IncrementalOnboardingDocumentState {
   latestUploadId: string;
   extractionRevision: string;
   snapshotFingerprint: string;
-  /** Active candidate IDs from the latest extraction of this document. */
+  /** Active candidates in the document's latest extraction. */
   candidateIds: string[];
 }
 
@@ -135,18 +127,15 @@ interface SpecificationReconciliation {
   changed: boolean;
 }
 
-function normalized(value: string): string {
+function clean(value: string): string {
   return value.trim();
 }
 
 function keyPart(value: string): string {
-  return encodeURIComponent(normalized(value));
+  return encodeURIComponent(clean(value));
 }
 
-function candidateIdFor(
-  documentFingerprint: string,
-  localCandidateId: string,
-): string {
+function candidateIdFor(documentFingerprint: string, localCandidateId: string): string {
   return `candidate:${keyPart(documentFingerprint)}:${keyPart(localCandidateId)}`;
 }
 
@@ -170,18 +159,14 @@ function sortedSpecifications(
   specifications: readonly IncomingSpecificationReview[],
 ): IncomingSpecificationReview[] {
   return [...specifications].sort((left, right) =>
-    normalized(left.fieldPath).localeCompare(normalized(right.fieldPath)),
+    clean(left.fieldPath).localeCompare(clean(right.fieldPath)),
   );
 }
 
-function documentSnapshotFingerprint(
-  upload: IncrementalOnboardingUpload,
-): string {
+function documentSnapshotFingerprint(upload: IncrementalOnboardingUpload): string {
   return [...upload.candidates]
     .sort((left, right) =>
-      normalized(left.localCandidateId).localeCompare(
-        normalized(right.localCandidateId),
-      ),
+      clean(left.localCandidateId).localeCompare(clean(right.localCandidateId)),
     )
     .map((candidate) => {
       const specifications = sortedSpecifications(candidate.specifications)
@@ -192,7 +177,6 @@ function documentSnapshotFingerprint(
             )}`,
         )
         .join(",");
-
       return [
         keyPart(candidate.localCandidateId),
         candidate.assetType,
@@ -204,49 +188,46 @@ function documentSnapshotFingerprint(
     .join("||");
 }
 
-function validateUpload(
-  upload: IncrementalOnboardingUpload,
-): IncrementalUploadBlocker[] {
+function validateUpload(upload: IncrementalOnboardingUpload): IncrementalUploadBlocker[] {
   const blockers: IncrementalUploadBlocker[] = [];
-
-  if (!normalized(upload.uploadId)) {
+  if (!clean(upload.uploadId)) {
     blockers.push({
       code: "missing_upload_id",
       message: "Incremental uploads require a non-empty upload ID.",
     });
   }
-  if (!normalized(upload.documentFingerprint)) {
+  if (!clean(upload.documentFingerprint)) {
     blockers.push({
       code: "missing_document_fingerprint",
-      message: "Incremental uploads require a source document content fingerprint.",
+      message: "Incremental uploads require a document content fingerprint.",
     });
   }
-  if (!normalized(upload.extractionRevision)) {
+  if (!clean(upload.extractionRevision)) {
     blockers.push({
       code: "missing_extraction_revision",
-      message: "Incremental uploads require a parser or model extraction revision.",
+      message: "Incremental uploads require an extraction revision.",
     });
   }
 
-  const seenCandidateIds = new Set<string>();
+  const seenCandidates = new Set<string>();
   for (const candidate of upload.candidates) {
-    const localCandidateId = normalized(candidate.localCandidateId);
+    const localCandidateId = clean(candidate.localCandidateId);
     if (!localCandidateId) {
       blockers.push({
         code: "missing_local_candidate_id",
-        localCandidateId: candidate.localCandidateId,
-        message: "Every extracted asset requires a stable document-local candidate ID.",
+        localCandidateId,
+        message: "Every extracted asset requires a stable document-local ID.",
       });
-    } else if (seenCandidateIds.has(localCandidateId)) {
+    } else if (seenCandidates.has(localCandidateId)) {
       blockers.push({
         code: "duplicate_local_candidate_id",
         localCandidateId,
-        message: "Document-local candidate IDs must be unique within one extraction.",
+        message: "Document-local candidate IDs must be unique.",
       });
     }
-    seenCandidateIds.add(localCandidateId);
+    seenCandidates.add(localCandidateId);
 
-    if (!normalized(candidate.reviewFingerprint)) {
+    if (!clean(candidate.reviewFingerprint)) {
       blockers.push({
         code: "missing_candidate_review_fingerprint",
         localCandidateId,
@@ -254,27 +235,27 @@ function validateUpload(
       });
     }
 
-    const seenFieldPaths = new Set<string>();
+    const seenFields = new Set<string>();
     for (const specification of candidate.specifications) {
-      const fieldPath = normalized(specification.fieldPath);
+      const fieldPath = clean(specification.fieldPath);
       if (!fieldPath) {
         blockers.push({
           code: "missing_specification_field_path",
           localCandidateId,
-          fieldPath: specification.fieldPath,
-          message: "Every specification requires a non-empty field path.",
+          fieldPath,
+          message: "Every specification requires a field path.",
         });
-      } else if (seenFieldPaths.has(fieldPath)) {
+      } else if (seenFields.has(fieldPath)) {
         blockers.push({
           code: "duplicate_specification_field_path",
           localCandidateId,
           fieldPath,
-          message: "A candidate may contain each specification field only once.",
+          message: "A candidate may contain each specification only once.",
         });
       }
-      seenFieldPaths.add(fieldPath);
+      seenFields.add(fieldPath);
 
-      if (!normalized(specification.extractionFingerprint)) {
+      if (!clean(specification.extractionFingerprint)) {
         blockers.push({
           code: "missing_specification_extraction_fingerprint",
           localCandidateId,
@@ -284,31 +265,22 @@ function validateUpload(
       }
     }
   }
-
   return blockers;
 }
 
-function cloneCandidate(
-  candidate: IncrementalOnboardingCandidateState,
-): IncrementalOnboardingCandidateState {
-  return {
-    ...candidate,
-    specifications: candidate.specifications.map((specification) => ({
-      ...specification,
-    })),
-  };
-}
-
-function cloneSession(
-  session: IncrementalOnboardingSession,
-): IncrementalOnboardingSession {
+function cloneSession(session: IncrementalOnboardingSession): IncrementalOnboardingSession {
   return {
     ...session,
     documents: session.documents.map((document) => ({
       ...document,
       candidateIds: [...document.candidateIds],
     })),
-    candidates: session.candidates.map(cloneCandidate),
+    candidates: session.candidates.map((candidate) => ({
+      ...candidate,
+      specifications: candidate.specifications.map((specification) => ({
+        ...specification,
+      })),
+    })),
   };
 }
 
@@ -317,24 +289,19 @@ function createCandidate(
   candidate: IncomingOnboardingCandidate,
 ): IncrementalOnboardingCandidateState {
   return {
-    candidateId: candidateIdFor(
-      documentFingerprint,
-      candidate.localCandidateId,
-    ),
-    sourceDocumentFingerprint: normalized(documentFingerprint),
-    localCandidateId: normalized(candidate.localCandidateId),
+    candidateId: candidateIdFor(documentFingerprint, candidate.localCandidateId),
+    sourceDocumentFingerprint: clean(documentFingerprint),
+    localCandidateId: clean(candidate.localCandidateId),
     assetType: candidate.assetType,
-    identityFingerprint: normalized(candidate.identityFingerprint),
-    reviewFingerprint: normalized(candidate.reviewFingerprint),
+    identityFingerprint: clean(candidate.identityFingerprint),
+    reviewFingerprint: clean(candidate.reviewFingerprint),
     decision: "pending",
     existingEntityId: undefined,
     reviewFreshness: "unreviewed",
     specifications: sortedSpecifications(candidate.specifications).map(
       (specification) => ({
-        fieldPath: normalized(specification.fieldPath),
-        extractionFingerprint: normalized(
-          specification.extractionFingerprint,
-        ),
+        fieldPath: clean(specification.fieldPath),
+        extractionFingerprint: clean(specification.extractionFingerprint),
         currentValue: specification.currentValue,
         mandatedValue: defaultMandatedValue(specification),
         mandatedValueOrigin: "defaulted_from_current",
@@ -349,34 +316,32 @@ function createCandidate(
 }
 
 function reconcileSpecifications(
-  existing: IncrementalOnboardingCandidateState,
+  previous: IncrementalOnboardingCandidateState,
   incoming: IncomingOnboardingCandidate,
   forceUnconfirmed: boolean,
 ): SpecificationReconciliation {
-  const existingByField = new Map(
-    existing.specifications.map((specification) => [
-      normalized(specification.fieldPath),
+  const previousByField = new Map(
+    previous.specifications.map((specification) => [
+      clean(specification.fieldPath),
       specification,
     ]),
   );
   const incomingFields = new Set<string>();
-  const reconciled: OnboardingSpecificationDraft[] = [];
+  const specifications: OnboardingSpecificationDraft[] = [];
   let changed = false;
 
-  for (const specification of sortedSpecifications(incoming.specifications)) {
-    const fieldPath = normalized(specification.fieldPath);
+  for (const incomingSpecification of sortedSpecifications(incoming.specifications)) {
+    const fieldPath = clean(incomingSpecification.fieldPath);
     incomingFields.add(fieldPath);
-    const previous = existingByField.get(fieldPath);
+    const existing = previousByField.get(fieldPath);
 
-    if (!previous) {
+    if (!existing) {
       changed = true;
-      reconciled.push({
+      specifications.push({
         fieldPath,
-        extractionFingerprint: normalized(
-          specification.extractionFingerprint,
-        ),
-        currentValue: specification.currentValue,
-        mandatedValue: defaultMandatedValue(specification),
+        extractionFingerprint: clean(incomingSpecification.extractionFingerprint),
+        currentValue: incomingSpecification.currentValue,
+        mandatedValue: defaultMandatedValue(incomingSpecification),
         mandatedValueOrigin: "defaulted_from_current",
         confirmed: false,
         superseded: false,
@@ -385,65 +350,54 @@ function reconcileSpecifications(
     }
 
     const specificationChanged =
-      previous.extractionFingerprint !==
-        normalized(specification.extractionFingerprint) ||
-      previous.superseded;
-    changed ||= specificationChanged;
+      existing.extractionFingerprint !==
+        clean(incomingSpecification.extractionFingerprint) || existing.superseded;
+    if (specificationChanged) changed = true;
 
-    reconciled.push({
+    specifications.push({
       fieldPath,
-      extractionFingerprint: normalized(specification.extractionFingerprint),
-      currentValue: specification.currentValue,
+      extractionFingerprint: clean(incomingSpecification.extractionFingerprint),
+      currentValue: incomingSpecification.currentValue,
       mandatedValue:
-        previous.mandatedValueOrigin === "customer_customized"
-          ? previous.mandatedValue
-          : defaultMandatedValue(specification),
-      mandatedValueOrigin: previous.mandatedValueOrigin,
+        existing.mandatedValueOrigin === "customer_customized"
+          ? existing.mandatedValue
+          : defaultMandatedValue(incomingSpecification),
+      mandatedValueOrigin: existing.mandatedValueOrigin,
       confirmed:
-        forceUnconfirmed || specificationChanged ? false : previous.confirmed,
+        forceUnconfirmed || specificationChanged ? false : existing.confirmed,
       superseded: false,
     });
   }
 
-  for (const previous of existing.specifications) {
-    if (incomingFields.has(normalized(previous.fieldPath))) continue;
+  for (const existing of previous.specifications) {
+    if (incomingFields.has(clean(existing.fieldPath))) continue;
     changed = true;
-    reconciled.push({
-      ...previous,
-      confirmed: false,
-      superseded: true,
-    });
+    specifications.push({ ...existing, confirmed: false, superseded: true });
   }
 
-  reconciled.sort((left, right) =>
-    left.fieldPath.localeCompare(right.fieldPath),
-  );
-
-  return { specifications: reconciled, changed };
+  specifications.sort((left, right) => left.fieldPath.localeCompare(right.fieldPath));
+  return { specifications, changed };
 }
 
 function duplicateGroupsFor(
   candidates: readonly IncrementalOnboardingCandidateState[],
 ): IncrementalDuplicateGroup[] {
-  const candidatesByFingerprint = new Map<string, string[]>();
-
+  const byFingerprint = new Map<string, string[]>();
   for (const candidate of candidates) {
-    const fingerprint = normalized(candidate.identityFingerprint);
+    const fingerprint = clean(candidate.identityFingerprint);
     if (candidate.superseded || !fingerprint) continue;
-    const candidateIds = candidatesByFingerprint.get(fingerprint) ?? [];
+    const candidateIds = byFingerprint.get(fingerprint) ?? [];
     candidateIds.push(candidate.candidateId);
-    candidatesByFingerprint.set(fingerprint, candidateIds);
+    byFingerprint.set(fingerprint, candidateIds);
   }
 
-  return [...candidatesByFingerprint.entries()]
+  return [...byFingerprint.entries()]
     .filter(([, candidateIds]) => candidateIds.length > 1)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([identityFingerprint, candidateIds]) => ({
       duplicateGroupId: duplicateGroupIdFor(identityFingerprint),
       identityFingerprint,
-      candidateIds: [...candidateIds].sort((left, right) =>
-        left.localeCompare(right),
-      ),
+      candidateIds: [...candidateIds].sort((left, right) => left.localeCompare(right)),
     }));
 }
 
@@ -454,18 +408,16 @@ function assignDuplicateGroups(
   duplicateGroups: IncrementalDuplicateGroup[];
 } {
   const duplicateGroups = duplicateGroupsFor(candidates);
-  const groupByCandidateId = new Map<string, string>();
-
+  const groupByCandidate = new Map<string, string>();
   for (const group of duplicateGroups) {
     for (const candidateId of group.candidateIds) {
-      groupByCandidateId.set(candidateId, group.duplicateGroupId);
+      groupByCandidate.set(candidateId, group.duplicateGroupId);
     }
   }
-
   return {
     candidates: candidates.map((candidate) => ({
       ...candidate,
-      duplicateGroupId: groupByCandidateId.get(candidate.candidateId),
+      duplicateGroupId: groupByCandidate.get(candidate.candidateId),
     })),
     duplicateGroups,
   };
@@ -477,241 +429,196 @@ function warningsFor(
   supersededCandidateIds: readonly string[],
 ): string[] {
   const warnings: string[] = [];
-  if (duplicateGroups.length > 0) {
-    warnings.push("potential_duplicate_assets_present");
-  }
-  if (staleCandidateIds.length > 0) {
-    warnings.push("customer_review_became_stale");
-  }
+  if (duplicateGroups.length > 0) warnings.push("potential_duplicate_assets_present");
+  if (staleCandidateIds.length > 0) warnings.push("customer_review_became_stale");
   if (supersededCandidateIds.length > 0) {
     warnings.push("candidates_removed_by_reprocessing");
   }
   return warnings;
 }
 
-export function createEmptyIncrementalOnboardingSession(): IncrementalOnboardingSession {
+function result(
+  outcome: IncrementalMergeOutcome,
+  session: IncrementalOnboardingSession,
+  duplicateGroups: IncrementalDuplicateGroup[],
+  values: Partial<
+    Pick<
+      IncrementalUploadMergeResult,
+      | "blockers"
+      | "addedCandidateIds"
+      | "updatedCandidateIds"
+      | "staleCandidateIds"
+      | "supersededCandidateIds"
+      | "warnings"
+    >
+  > = {},
+): IncrementalUploadMergeResult {
   return {
-    version: 1,
-    revision: 0,
-    documents: [],
-    candidates: [],
+    accepted: outcome !== "blocked",
+    outcome,
+    session,
+    blockers: values.blockers ?? [],
+    addedCandidateIds: values.addedCandidateIds ?? [],
+    updatedCandidateIds: values.updatedCandidateIds ?? [],
+    staleCandidateIds: values.staleCandidateIds ?? [],
+    supersededCandidateIds: values.supersededCandidateIds ?? [],
+    duplicateGroups,
+    warnings: values.warnings ?? [],
   };
 }
 
+export function createEmptyIncrementalOnboardingSession(): IncrementalOnboardingSession {
+  return { version: 1, revision: 0, documents: [], candidates: [] };
+}
+
 /**
- * Reconciles one uploaded document into a serializable onboarding draft.
- *
- * Safety properties:
- * - candidate IDs do not depend on batch order;
- * - uploading identical document bytes is idempotent;
- * - candidates from separate uploads are accumulated, never replaced wholesale;
- * - equal identity fingerprints create a potential-duplicate group, never an auto-merge;
- * - changed extraction semantics make prior review stale;
- * - identity changes reset approve/link/skip decisions and existing-entity links;
- * - customer-customized mandate values survive re-extraction, but require reconfirmation;
- * - removed assertions and candidates remain auditable as superseded records;
- * - invalid uploads are rejected atomically without modifying the session.
- *
- * This function performs no persistence, authorization, entity creation, or mandate writes.
+ * Accumulates documents uploaded together or separately into one review draft.
+ * It never merges entities or writes persistence records.
  */
 export function mergeIncrementalOnboardingUpload(
   session: IncrementalOnboardingSession,
   upload: IncrementalOnboardingUpload,
 ): IncrementalUploadMergeResult {
   const blockers = validateUpload(upload);
-  const currentDuplicateGroups = duplicateGroupsFor(session.candidates);
-
+  const currentGroups = duplicateGroupsFor(session.candidates);
   if (blockers.length > 0) {
-    return {
-      accepted: false,
-      outcome: "blocked",
-      session,
-      blockers,
-      addedCandidateIds: [],
-      updatedCandidateIds: [],
-      staleCandidateIds: [],
-      supersededCandidateIds: [],
-      duplicateGroups: currentDuplicateGroups,
-      warnings: [],
-    };
+    return result("blocked", session, currentGroups, { blockers });
   }
 
-  const documentFingerprint = normalized(upload.documentFingerprint);
+  const documentFingerprint = clean(upload.documentFingerprint);
+  const extractionRevision = clean(upload.extractionRevision);
   const snapshotFingerprint = documentSnapshotFingerprint(upload);
   const existingDocument = session.documents.find(
     (document) => document.documentFingerprint === documentFingerprint,
   );
 
   if (
-    existingDocument &&
-    existingDocument.snapshotFingerprint === snapshotFingerprint &&
-    existingDocument.extractionRevision === normalized(upload.extractionRevision)
+    existingDocument?.snapshotFingerprint === snapshotFingerprint &&
+    existingDocument.extractionRevision === extractionRevision
   ) {
-    return {
-      accepted: true,
-      outcome: "duplicate_document",
-      session,
-      blockers: [],
-      addedCandidateIds: [],
-      updatedCandidateIds: [],
-      staleCandidateIds: [],
-      supersededCandidateIds: [],
-      duplicateGroups: currentDuplicateGroups,
-      warnings:
-        currentDuplicateGroups.length > 0
-          ? ["potential_duplicate_assets_present"]
-          : [],
-    };
+    return result("duplicate_document", session, currentGroups, {
+      warnings: warningsFor(currentGroups, [], []),
+    });
   }
 
-  const nextSession = cloneSession(session);
+  const next = cloneSession(session);
   const addedCandidateIds: string[] = [];
   const updatedCandidateIds: string[] = [];
   const staleCandidateIds: string[] = [];
   const supersededCandidateIds: string[] = [];
 
   if (!existingDocument) {
-    const candidateIds: string[] = [];
-    for (const incomingCandidate of upload.candidates) {
-      const candidate = createCandidate(documentFingerprint, incomingCandidate);
-      nextSession.candidates.push(candidate);
-      candidateIds.push(candidate.candidateId);
+    const candidateIds = upload.candidates.map((incoming) => {
+      const candidate = createCandidate(documentFingerprint, incoming);
+      next.candidates.push(candidate);
       addedCandidateIds.push(candidate.candidateId);
-    }
-
-    nextSession.documents.push({
+      return candidate.candidateId;
+    });
+    next.documents.push({
       documentFingerprint,
-      latestUploadId: normalized(upload.uploadId),
-      extractionRevision: normalized(upload.extractionRevision),
+      latestUploadId: clean(upload.uploadId),
+      extractionRevision,
       snapshotFingerprint,
       candidateIds,
     });
-    nextSession.revision += 1;
-
-    const grouped = assignDuplicateGroups(nextSession.candidates);
-    nextSession.candidates = grouped.candidates;
-
-    return {
-      accepted: true,
-      outcome: "document_added",
-      session: nextSession,
-      blockers: [],
+    next.revision += 1;
+    const grouped = assignDuplicateGroups(next.candidates);
+    next.candidates = grouped.candidates;
+    return result("document_added", next, grouped.duplicateGroups, {
       addedCandidateIds,
-      updatedCandidateIds,
-      staleCandidateIds,
-      supersededCandidateIds,
-      duplicateGroups: grouped.duplicateGroups,
       warnings: warningsFor(grouped.duplicateGroups, [], []),
-    };
+    });
   }
 
-  const documentIndex = nextSession.documents.findIndex(
+  const documentIndex = next.documents.findIndex(
     (document) => document.documentFingerprint === documentFingerprint,
   );
 
   if (existingDocument.snapshotFingerprint === snapshotFingerprint) {
-    nextSession.documents[documentIndex] = {
-      ...nextSession.documents[documentIndex]!,
-      latestUploadId: normalized(upload.uploadId),
-      extractionRevision: normalized(upload.extractionRevision),
+    next.documents[documentIndex] = {
+      ...next.documents[documentIndex]!,
+      latestUploadId: clean(upload.uploadId),
+      extractionRevision,
     };
-    nextSession.revision += 1;
-
-    const grouped = assignDuplicateGroups(nextSession.candidates);
-    nextSession.candidates = grouped.candidates;
-
-    return {
-      accepted: true,
-      outcome: "document_reprocessed_unchanged",
-      session: nextSession,
-      blockers: [],
-      addedCandidateIds,
-      updatedCandidateIds,
-      staleCandidateIds,
-      supersededCandidateIds,
-      duplicateGroups: grouped.duplicateGroups,
+    next.revision += 1;
+    const grouped = assignDuplicateGroups(next.candidates);
+    next.candidates = grouped.candidates;
+    return result("document_reprocessed_unchanged", next, grouped.duplicateGroups, {
       warnings: warningsFor(grouped.duplicateGroups, [], []),
-    };
+    });
   }
 
-  const incomingCandidateIds = new Set(
+  const incomingIds = new Set(
     upload.candidates.map((candidate) =>
       candidateIdFor(documentFingerprint, candidate.localCandidateId),
     ),
   );
 
-  for (let index = 0; index < nextSession.candidates.length; index += 1) {
-    const existingCandidate = nextSession.candidates[index]!;
+  for (let index = 0; index < next.candidates.length; index += 1) {
+    const candidate = next.candidates[index]!;
     if (
-      existingCandidate.sourceDocumentFingerprint !== documentFingerprint ||
-      incomingCandidateIds.has(existingCandidate.candidateId)
+      candidate.sourceDocumentFingerprint !== documentFingerprint ||
+      incomingIds.has(candidate.candidateId)
     ) {
       continue;
     }
-
-    nextSession.candidates[index] = {
-      ...existingCandidate,
+    next.candidates[index] = {
+      ...candidate,
       reviewFreshness: "stale",
-      specifications: existingCandidate.specifications.map((specification) => ({
+      specifications: candidate.specifications.map((specification) => ({
         ...specification,
         confirmed: false,
         superseded: true,
       })),
       duplicateGroupId: undefined,
       superseded: true,
-      revision: existingCandidate.revision + 1,
+      revision: candidate.revision + 1,
     };
-    staleCandidateIds.push(existingCandidate.candidateId);
-    supersededCandidateIds.push(existingCandidate.candidateId);
+    staleCandidateIds.push(candidate.candidateId);
+    supersededCandidateIds.push(candidate.candidateId);
   }
 
   const activeCandidateIds: string[] = [];
-  for (const incomingCandidate of upload.candidates) {
-    const candidateId = candidateIdFor(
-      documentFingerprint,
-      incomingCandidate.localCandidateId,
-    );
+  for (const incoming of upload.candidates) {
+    const candidateId = candidateIdFor(documentFingerprint, incoming.localCandidateId);
     activeCandidateIds.push(candidateId);
-    const candidateIndex = nextSession.candidates.findIndex(
+    const index = next.candidates.findIndex(
       (candidate) => candidate.candidateId === candidateId,
     );
 
-    if (candidateIndex < 0) {
-      nextSession.candidates.push(
-        createCandidate(documentFingerprint, incomingCandidate),
-      );
+    if (index < 0) {
+      next.candidates.push(createCandidate(documentFingerprint, incoming));
       addedCandidateIds.push(candidateId);
       continue;
     }
 
-    const previous = nextSession.candidates[candidateIndex]!;
+    const previous = next.candidates[index]!;
     const identityChanged =
-      previous.assetType !== incomingCandidate.assetType ||
-      normalized(previous.identityFingerprint) !==
-        normalized(incomingCandidate.identityFingerprint);
-    const reconciliation = reconcileSpecifications(
+      previous.assetType !== incoming.assetType ||
+      clean(previous.identityFingerprint) !== clean(incoming.identityFingerprint);
+    const reviewFingerprintChanged =
+      previous.reviewFingerprint !== clean(incoming.reviewFingerprint);
+    const reconciled = reconcileSpecifications(
       previous,
-      incomingCandidate,
-      identityChanged,
+      incoming,
+      identityChanged || reviewFingerprintChanged,
     );
     const candidateChanged =
       identityChanged ||
-      previous.reviewFingerprint !==
-        normalized(incomingCandidate.reviewFingerprint) ||
+      reviewFingerprintChanged ||
       previous.superseded ||
-      reconciliation.changed;
-
+      reconciled.changed;
     if (!candidateChanged) continue;
 
-    nextSession.candidates[candidateIndex] = {
+    next.candidates[index] = {
       ...previous,
-      assetType: incomingCandidate.assetType,
-      identityFingerprint: normalized(incomingCandidate.identityFingerprint),
-      reviewFingerprint: normalized(incomingCandidate.reviewFingerprint),
+      assetType: incoming.assetType,
+      identityFingerprint: clean(incoming.identityFingerprint),
+      reviewFingerprint: clean(incoming.reviewFingerprint),
       decision: identityChanged ? "pending" : previous.decision,
       existingEntityId: identityChanged ? undefined : previous.existingEntityId,
       reviewFreshness: "stale",
-      specifications: reconciliation.specifications,
+      specifications: reconciled.specifications,
       superseded: false,
       revision: previous.revision + 1,
     };
@@ -719,32 +626,26 @@ export function mergeIncrementalOnboardingUpload(
     staleCandidateIds.push(candidateId);
   }
 
-  nextSession.documents[documentIndex] = {
+  next.documents[documentIndex] = {
     documentFingerprint,
-    latestUploadId: normalized(upload.uploadId),
-    extractionRevision: normalized(upload.extractionRevision),
+    latestUploadId: clean(upload.uploadId),
+    extractionRevision,
     snapshotFingerprint,
     candidateIds: activeCandidateIds,
   };
-  nextSession.revision += 1;
+  next.revision += 1;
 
-  const grouped = assignDuplicateGroups(nextSession.candidates);
-  nextSession.candidates = grouped.candidates;
-
-  return {
-    accepted: true,
-    outcome: "document_reprocessed_changed",
-    session: nextSession,
-    blockers: [],
+  const grouped = assignDuplicateGroups(next.candidates);
+  next.candidates = grouped.candidates;
+  return result("document_reprocessed_changed", next, grouped.duplicateGroups, {
     addedCandidateIds,
     updatedCandidateIds,
     staleCandidateIds,
     supersededCandidateIds,
-    duplicateGroups: grouped.duplicateGroups,
     warnings: warningsFor(
       grouped.duplicateGroups,
       staleCandidateIds,
       supersededCandidateIds,
     ),
-  };
+  });
 }
