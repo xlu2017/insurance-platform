@@ -9,6 +9,7 @@ export {
   canonicalSerializeRecommendationInput,
   canonicalSerializeRecommendationOutput,
   verifyCanonicalString,
+  verifyCanonicalPair,
 } from "../src/canonical.ts";
 export type { EngineInput, EngineResult } from "../src/types.ts";
 
@@ -27,7 +28,7 @@ export {
   QuoteSaveIntent,
   SaveCaseQuoteRequest,
 } from "../../schemas/src/quotes.ts";
-export { QuoteDataSource } from "../../schemas/src/enums.ts";
+export { CoveragePresence, QuoteDataSource } from "../../schemas/src/enums.ts";
 
 // Expose the canonical V2 schemas so the public mandate-save Edge Function can
 // validate requests with the same definitions used by the workspace.
@@ -40,6 +41,8 @@ export {
 // and validate the trusted persistence payload before calling the internal RPC.
 export {
   EngineRecommendationPersistencePayloadSchema,
+  CanonicalRecommendationInputSnapshotSchema,
+  CanonicalEngineOutputSchema,
   type EngineRecommendationPersistencePayload,
   type PreferenceAlignment,
   type RankingFactors,

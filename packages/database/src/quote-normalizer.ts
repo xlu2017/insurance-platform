@@ -3,6 +3,7 @@ import {
   type EngineQuote,
   PropertyCoverageDetails,
   type QuoteComponent,
+  type QuoteDataSource,
 } from "@autopilot/schemas";
 
 export interface DbQuote {
@@ -42,6 +43,8 @@ export interface DbQuotePolicyComponent {
     validation_errors?: { path: string[]; code: string; message: string }[];
     coverage_schema_version?: number;
     data_source?: string;
+    validated_at?: string | null;
+    validated_by?: string | null;
   }[];
 }
 
@@ -104,6 +107,15 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
   const coverage = row.normalized_coverage ?? row.coverage;
   const validationStatus = row.validation_status;
   const validationErrors = row.validation_errors ?? [];
+  const provenance: QuoteComponent["provenance"] =
+    row.data_source || row.validated_at || row.validated_by || row.coverage_schema_version
+      ? {
+          dataSource: row.data_source as QuoteDataSource | undefined,
+          validatedAt: row.validated_at ?? undefined,
+          validatedBy: row.validated_by ?? undefined,
+          coverageSchemaVersion: row.coverage_schema_version ?? undefined,
+        }
+      : undefined;
 
   if (validationStatus !== "valid") {
     return {
@@ -133,6 +145,7 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
       property: null,
       validationStatus,
       validationErrors,
+      provenance,
     };
   }
 
@@ -154,6 +167,7 @@ function toComponent(c: DbQuotePolicyComponent): QuoteComponent | QuoteCoverageE
     property: parsed.data,
     validationStatus,
     validationErrors,
+    provenance,
   };
 }
 

@@ -251,6 +251,32 @@ begin
     raise exception 'components must be a non-empty array';
   end if;
 
+  -- Reject duplicate component identities.
+  if exists (
+    select 1
+    from (
+      select value->>'component_id' as cid
+      from jsonb_array_elements(p_components)
+      where value->>'component_id' is not null
+    ) sub
+    group by cid
+    having count(*) > 1
+  ) then
+    raise exception 'duplicate component_id in components payload';
+  end if;
+
+  if exists (
+    select 1
+    from (
+      select value->>'product_line' as pl, nullif(value->>'asset_id', '')::uuid as aid
+      from jsonb_array_elements(p_components)
+    ) sub
+    group by pl, aid
+    having count(*) > 1
+  ) then
+    raise exception 'duplicate product_line and asset_id in components payload';
+  end if;
+
   -- Prevent service role from trusting a stale public request.
   if p_quote_id is not null then
     select id, version into v_quote_id, v_version

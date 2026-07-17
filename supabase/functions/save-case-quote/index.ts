@@ -23,7 +23,6 @@ import {
   QuoteDataSource,
   QuoteSaveIntent,
   SaveCaseQuoteRequest,
-  type QuoteComponentDraft,
 } from "../_shared/autopilot.js";
 
 const COVERAGE_SCHEMA_VERSION = 2;
@@ -46,6 +45,14 @@ interface ClassifiedComponent {
   validation_status: "draft" | "incomplete" | "invalid" | "valid";
   validation_errors: ValidationIssue[];
   coverage_schema_version: number;
+}
+
+interface QuoteComponentDraft {
+  componentId?: string;
+  productLine: "auto" | "property";
+  assetId: string;
+  annualPremiumCents: number;
+  coverage: Record<string, unknown>;
 }
 
 function jsonResponse(body: unknown, status = 200, extraHeaders?: Record<string, string>) {
@@ -95,30 +102,230 @@ function classifyStatus(issues: ValidationIssue[]): ClassifiedComponent["validat
   return incomplete ? "incomplete" : "invalid";
 }
 
+const coveragePresences = ["yes", "no", "unknown", "not_applicable"] as const;
+type CoveragePresence = (typeof coveragePresences)[number];
+
+interface CoverageNormalizationResult {
+  normalized: Record<string, unknown>;
+  issues: ValidationIssue[];
+}
+
+const autoOptionalFlags: Record<string, string[]> = {
+  collisionIncluded: ["collisionDeductibleCents"],
+  comprehensiveIncluded: ["comprehensiveDeductibleCents"],
+  glassCoverageIncluded: [],
+  accidentForgivenessIncluded: [],
+  rentalVehicleCoverageIncluded: [],
+  nonOwnedAutomobileIncluded: [],
+  familyProtectionIncluded: [],
+  depreciationWaiverIncluded: [],
+  oemPartsIncluded: [],
+  roadsideAssistanceIncluded: [],
+  disappearingDeductibleIncluded: [],
+  telematicsRequired: [],
+};
+
+const propertyOptionalFlags: Record<string, string[]> = {
+  windHailIncluded: ["windHailDeductibleCents"],
+  earthquakeIncluded: ["earthquakeDeductibleCents"],
+  sewerBackupIncluded: ["sewerBackupLimitCents", "sewerBackupDeductibleCents"],
+  overlandWaterIncluded: ["overlandWaterLimitCents", "overlandWaterDeductibleCents"],
+  groundwaterIncluded: [],
+  iceDamIncluded: [],
+  equipmentBreakdownIncluded: [],
+  serviceLineIncluded: [],
+  bylawCoverageIncluded: [],
+  homeSystemsIncluded: [],
+  cyberCoverageIncluded: [],
+  scheduledValuablesIncluded: [],
+  homeBusinessIncluded: [],
+  shortTermRentalPermissionIncluded: [],
+  claimsForgivenessIncluded: [],
+  additionalLivingExpensesIncluded: ["additionalLivingExpenseLimitCents"],
+  replacementCostIncluded: [],
+};
+
+const autoNullableFields = [
+  "collisionDeductibleCents",
+  "comprehensiveDeductibleCents",
+  "glassDeductibleCents",
+];
+
+const propertyNullableFields = [
+  "additionalLivingExpenseLimitCents",
+  "waterDeductibleCents",
+  "windHailDeductibleCents",
+  "earthquakeDeductibleCents",
+  "sewerBackupLimitCents",
+  "sewerBackupDeductibleCents",
+  "overlandWaterLimitCents",
+  "overlandWaterDeductibleCents",
+];
+
+function isCoveragePresence(value: unknown): value is CoveragePresence {
+  return typeof value === "string" && coveragePresences.includes(value as CoveragePresence);
+}
+
+function parsePresence(value: unknown): { presence?: CoveragePresence; issue?: ValidationIssue } {
+  if (value === undefined || value === null || value === "") {
+    return { presence: undefined };
+  }
+  if (typeof value === "boolean") {
+    return { presence: value ? "yes" : "no" };
+  }
+  if (isCoveragePresence(value)) {
+    return { presence: value };
+  }
+  return {
+    issue: {
+      path: [],
+      code: "invalid_presence",
+      received: value,
+      message: `Expected one of ${coveragePresences.join(", ")}`,
+    },
+  };
+}
+
+function toCents(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value >= 0 ? Math.round(value) : undefined;
+  }
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 0) return Math.round(n);
+  }
+  return undefined;
+}
+
+function buildNormalizedCoverage(
+  productLine: "auto" | "property",
+  raw: Record<string, unknown>,
+): CoverageNormalizationResult {
+  const normalized: Record<string, unknown> = {};
+  const issues: ValidationIssue[] = [];
+  const optionalFlags = productLine === "auto" ? autoOptionalFlags : propertyOptionalFlags;
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (optionalFlags[key] !== undefined) continue;
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value === "number" || typeof value === "string") {
+      normalized[key] = value;
+    } else {
+      issues.push({
+        path: ["coverage", key],
+        code: "invalid_type",
+        received: value,
+        message: `Field ${key} has an unsupported type.`,
+      });
+    }
+  }
+
+  for (const [flagKey, monetaryKeys] of Object.entries(optionalFlags)) {
+    const rawValue = raw[flagKey];
+    const { presence, issue } = parsePresence(rawValue);
+    if (issue) {
+      issues.push({ ...issue, path: ["coverage", flagKey] });
+      continue;
+    }
+
+    if (presence === undefined || presence === "unknown") {
+      if (presence === "unknown") {
+        issues.push({
+          path: ["coverage", flagKey],
+          code: "unknown_value",
+          received: "unknown",
+          message: `${flagKey} must be answered.`,
+        });
+      }
+      for (const monetaryKey of monetaryKeys) {
+        const monetaryRaw = raw[monetaryKey];
+        if (monetaryRaw !== undefined && monetaryRaw !== null && monetaryRaw !== "") {
+          issues.push({
+            path: ["coverage", monetaryKey],
+            code: "contradictory_value",
+            received: monetaryRaw,
+            message: `${monetaryKey} cannot be supplied when ${flagKey} is unknown or not applicable.`,
+          });
+        }
+      }
+      continue;
+    }
+
+    if (presence === "yes") {
+      normalized[flagKey] = true;
+      for (const monetaryKey of monetaryKeys) {
+        const cents = toCents(raw[monetaryKey]);
+        if (cents === undefined) {
+          issues.push({
+            path: ["coverage", monetaryKey],
+            code: "required",
+            received: raw[monetaryKey],
+            message: `${monetaryKey} is required when ${flagKey} is yes.`,
+          });
+        } else {
+          normalized[monetaryKey] = cents;
+        }
+      }
+      continue;
+    }
+
+    normalized[flagKey] = false;
+    for (const monetaryKey of monetaryKeys) {
+      const monetaryRaw = raw[monetaryKey];
+      if (monetaryRaw !== undefined && monetaryRaw !== null && monetaryRaw !== "") {
+        issues.push({
+          path: ["coverage", monetaryKey],
+          code: "contradictory_value",
+          received: monetaryRaw,
+          message: `${monetaryKey} cannot be supplied when ${flagKey} is ${presence}.`,
+        });
+      }
+      normalized[monetaryKey] = null;
+    }
+  }
+
+  const nullableFields = productLine === "auto" ? autoNullableFields : propertyNullableFields;
+  for (const key of nullableFields) {
+    if (!(key in normalized)) {
+      normalized[key] = null;
+    }
+  }
+
+  return { normalized, issues };
+}
+
 function validateCoverage(
   productLine: "auto" | "property",
   coverage: Record<string, unknown>,
 ): ValidationIssue[] {
+  const { normalized, issues } = buildNormalizedCoverage(productLine, coverage);
   const schema = productLine === "auto" ? AutoCoverageDetails : PropertyCoverageDetails;
-  const parsed = schema.safeParse(coverage);
-  if (parsed.success) return [];
-  return parsed.error.issues.map((issue) =>
-    toValidationIssue({
-      path: ["coverage", ...issue.path],
-      code: issue.code,
-      expected: String(issue.expected),
-      received: issue.received,
-      message: issue.message,
-    }),
-  );
+  const parsed = schema.safeParse(normalized);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      issues.push(
+        toValidationIssue({
+          path: ["coverage", ...issue.path],
+          code: issue.code,
+          expected: String(issue.expected),
+          received: issue.received,
+          message: issue.message,
+        }),
+      );
+    }
+  }
+  return issues;
 }
 
 function normalizeCoverage(
   productLine: "auto" | "property",
   coverage: Record<string, unknown>,
 ): Record<string, unknown> | null {
+  const { normalized, issues } = buildNormalizedCoverage(productLine, coverage);
+  if (issues.length > 0) return null;
   const schema = productLine === "auto" ? AutoCoverageDetails : PropertyCoverageDetails;
-  const parsed = schema.safeParse(coverage);
+  const parsed = schema.safeParse(normalized);
   return parsed.success ? (parsed.data as Record<string, unknown>) : null;
 }
 

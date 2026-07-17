@@ -53,11 +53,25 @@ fi
 
 supabase db reset
 
+# Some Supabase CLI versions stop the Edge runtime container during db reset but do not restart it.
+EDGE_RUNTIME=$(docker ps -aq --filter "name=supabase_edge_runtime" --format "{{.Names}}" | head -n1)
+if [ -n "$EDGE_RUNTIME" ]; then
+  docker start "$EDGE_RUNTIME" >/dev/null 2>&1 || true
+  sleep 3
+fi
+
 # Ensure Playwright Chromium is installed. Do not reinstall system dependencies on every run.
 pnpm --filter @autopilot/admin exec playwright install chromium
 
 pnpm --filter @autopilot/admin exec playwright test
 
 supabase db reset
+
+# Restart Edge runtime if db reset stopped it.
+EDGE_RUNTIME=$(docker ps -aq --filter "name=supabase_edge_runtime" --format "{{.Names}}" | head -n1)
+if [ -n "$EDGE_RUNTIME" ]; then
+  docker start "$EDGE_RUNTIME" >/dev/null 2>&1 || true
+  sleep 3
+fi
 
 node scripts/e2e-v2-mandate-lifecycle.mjs

@@ -878,6 +878,10 @@ function coverageReductionsVsIncumbent(
   if (property.personalLiabilityLimitCents < incumbentProperty.personalLiabilityLimitCents)
     reductions.push("property_personal_liability_limit_reduced");
   if (
+    property.additionalLivingExpenseLimitCents !== null &&
+    property.additionalLivingExpenseLimitCents !== undefined &&
+    incumbentProperty.additionalLivingExpenseLimitCents !== null &&
+    incumbentProperty.additionalLivingExpenseLimitCents !== undefined &&
     property.additionalLivingExpenseLimitCents < incumbentProperty.additionalLivingExpenseLimitCents
   )
     reductions.push("property_ale_limit_reduced");

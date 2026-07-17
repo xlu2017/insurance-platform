@@ -3,6 +3,7 @@ import type {
   RecommendationInputSnapshot,
 } from "@autopilot/schemas";
 import type { EngineResult } from "./types.ts";
+import type { z } from "zod";
 
 interface CanonicalizableObject {
   [key: string]: unknown;
@@ -144,5 +145,29 @@ export function verifyCanonicalString(canonicalJson: string): boolean {
     return recomputed === canonicalJson;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Validate a value against a strict Zod schema, canonicalize the parsed value,
+ * and verify the resulting JSON string matches the supplied canonical string byte-for-byte.
+ */
+export function verifyCanonicalPair<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+  canonicalJson: string,
+): { valid: boolean; error?: string } {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    return { valid: false, error: parsed.error.message };
+  }
+  try {
+    const recomputed = JSON.stringify(canonicalizeForDigest(parsed.data as unknown));
+    if (recomputed !== canonicalJson) {
+      return { valid: false, error: "Canonical string does not match regenerated canonical JSON" };
+    }
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

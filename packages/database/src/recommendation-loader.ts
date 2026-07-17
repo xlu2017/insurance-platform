@@ -7,7 +7,7 @@ import { toEngineQuote, type DbQuote, type QuoteCoverageError } from "./quote-no
 export interface SnapshotLoadError {
   code: string;
   message: string;
-  details?: QuoteCoverageError | { resource?: string; operation?: string };
+  details?: QuoteCoverageError | Record<string, unknown>;
 }
 
 export async function loadRecommendationInputSnapshot(
@@ -30,7 +30,7 @@ export async function loadRecommendationInputSnapshot(
 
   const householdId = caseRow.household_id;
 
-  const [mandateResult, vehiclesRes, propertiesRes, quotesRes] = await Promise.all([
+  const [mandateResult, vehiclesRes, propertiesRes, quotesRes, readinessRes] = await Promise.all([
     loadCurrentV2Mandate(supabase, householdId).catch((err) => {
       if (err && typeof err === "object" && "code" in err) {
         return {
@@ -47,6 +47,24 @@ export async function loadRecommendationInputSnapshot(
       .select(
         "id, updated_at, version, insurer_id, state, is_incumbent, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, expires_at, insurers(name, version, financial_strength_rating, payment_frequencies, billing_methods, distribution), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, coverage_schema_version, data_source, validated_at, validated_by))",
       )
+      .eq("case_id", caseId),
+    (
+      supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: string,
+            ) => Promise<{
+              data: { quote_id: string; readiness_status: string }[] | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      }
+    )
+      .from("quote_readiness")
+      .select("quote_id, readiness_status")
       .eq("case_id", caseId),
   ]);
 
@@ -79,8 +97,32 @@ export async function loadRecommendationInputSnapshot(
       details: { resource: "quotes", operation: "select" },
     };
   }
+  if (readinessRes.error) {
+    return {
+      code: "QUOTE_READINESS_LOAD_FAILED",
+      message: readinessRes.error.message,
+      details: { resource: "quote_readiness", operation: "select" },
+    };
+  }
 
+  const readinessByQuote = new Map(
+    (readinessRes.data ?? []).map((r) => [r.quote_id, r.readiness_status]),
+  );
   const dbQuotes = (quotesRes.data ?? []) as unknown as DbQuote[];
+  const notReady = dbQuotes.filter((q) => readinessByQuote.get(q.id) !== "ready");
+  if (notReady.length > 0) {
+    return {
+      code: "QUOTE_NOT_READY",
+      message: `Quotes are not ready for recommendation: ${notReady
+        .map((q) => `${q.id} (${readinessByQuote.get(q.id) ?? "unknown"})`)
+        .join(", ")}`,
+      details: {
+        quoteIds: notReady.map((q) => q.id),
+        readiness: Object.fromEntries(readinessByQuote),
+      },
+    };
+  }
+
   const engineQuotes: EngineQuote[] = [];
   for (const q of dbQuotes) {
     const result = toEngineQuote(q);

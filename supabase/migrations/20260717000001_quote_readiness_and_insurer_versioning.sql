@@ -18,9 +18,12 @@ select
   case
     when q.state in ('rejected') then 'unusable'
     when q.expires_at is not null and q.expires_at < now() then 'expired'
+    when q.state not in ('bindable', 'conditional', 'estimate') then 'unusable'
+    when q.state = 'estimate' then 'incomplete'
     when count(distinct qpc.id) = 0 then 'no_components'
     when count(distinct qc.id) filter (where qc.validation_status = 'valid') = count(distinct qpc.id)
-         and count(distinct qc.id) filter (where qc.validation_status <> 'valid') = 0 then 'ready'
+         and count(distinct qc.id) filter (where qc.validation_status <> 'valid') = 0
+         and q.state in ('bindable', 'conditional') then 'ready'
     when count(distinct qc.id) filter (where qc.validation_status = 'invalid') > 0 then 'invalid'
     else 'incomplete'
   end as readiness_status
@@ -71,3 +74,35 @@ create trigger insurers_version_bump
 
 comment on column insurers.version is
   'Monotonically increasing version of insurer metadata; changes to rating, payment, billing, distribution or fees bump this value.';
+
+-- Reject licensed review or customer approval if any insurer in the recommendation snapshot
+-- has been versioned since the recommendation was generated.
+create or replace function validate_recommendation_insurer_versions()
+returns trigger as $$
+declare
+  v_quote jsonb;
+begin
+  if NEW.status in ('published','customer_approved','customer_declined')
+     and OLD.status is distinct from NEW.status then
+    for v_quote in select * from jsonb_array_elements(NEW.input_snapshot_json->'quotes') loop
+      if (v_quote->>'insurerVersion') is not null then
+        if exists (
+          select 1
+          from insurers i
+          where i.id = (v_quote->>'insurerId')::uuid
+            and i.version is distinct from (v_quote->>'insurerVersion')::int
+        ) then
+          raise exception 'insurer metadata changed for quote % since recommendation generation', v_quote->>'id';
+        end if;
+      end if;
+    end loop;
+  end if;
+  return NEW;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists recommendations_insurer_staleness on recommendations;
+create trigger recommendations_insurer_staleness
+  before update on recommendations
+  for each row
+  execute function validate_recommendation_insurer_versions();

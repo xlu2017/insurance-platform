@@ -14,6 +14,7 @@ import {
   propertyTypes,
   quoteDataSources,
   vehicleUseClasses,
+  type CoveragePresence,
 } from "@autopilot/schemas";
 import { supabaseBrowser } from "@/lib/supabase";
 import {
@@ -44,15 +45,19 @@ const triStateOptions = [
   { value: "not_applicable", label: "Not applicable" },
 ];
 
-function triStateToBoolean(value: string): boolean | undefined {
-  if (value === "yes") return true;
-  if (value === "no" || value === "not_applicable") return false;
+function triStateToPresence(value: string): CoveragePresence | undefined {
+  if (value === "yes") return "yes";
+  if (value === "no") return "no";
+  if (value === "not_applicable") return "not_applicable";
   return undefined;
 }
 
-function buildCoverageFlag(form: QuoteForm, key: keyof QuoteForm): boolean | undefined {
+function buildCoveragePresence(
+  form: QuoteForm,
+  key: keyof QuoteForm,
+): CoveragePresence | undefined {
   const raw = form[key];
-  return triStateToBoolean(typeof raw === "string" ? raw : "");
+  return triStateToPresence(typeof raw === "string" ? raw : "");
 }
 
 const QuoteForm = z.object({
@@ -133,6 +138,135 @@ const QuoteForm = z.object({
 
 type QuoteForm = z.infer<typeof QuoteForm>;
 
+function toTriState(value: unknown): "" | "yes" | "no" | "not_applicable" {
+  if (value === true || value === "yes") return "yes";
+  if (value === false || value === "no") return "no";
+  if (value === "not_applicable") return "not_applicable";
+  return "";
+}
+
+function toDollars(cents: unknown): number | undefined {
+  if (typeof cents === "number") return cents / 100;
+  return undefined;
+}
+
+function formValuesFromQuote(q: QuoteRow): Partial<QuoteForm> {
+  const autoComponent = q.quote_policy_components.find((c) => c.product_line === "auto");
+  const propertyComponent = q.quote_policy_components.find((c) => c.product_line === "property");
+  const autoCoverage =
+    (autoComponent?.quote_coverages?.find((r) => r.validation_status !== "superseded")
+      ?.raw_coverage as Record<string, unknown>) ?? {};
+  const propertyCoverage =
+    (propertyComponent?.quote_coverages?.find((r) => r.validation_status !== "superseded")
+      ?.raw_coverage as Record<string, unknown>) ?? {};
+  const dataSource =
+    autoComponent?.quote_coverages?.find((r) => r.data_source)?.data_source ??
+    propertyComponent?.quote_coverages?.find((r) => r.data_source)?.data_source ??
+    "manual_entry";
+
+  const values: Partial<QuoteForm> = {
+    insurerId: q.insurer_id,
+    state: q.state as QuoteForm["state"],
+    isIncumbent: q.is_incumbent,
+    dataSource: dataSource as QuoteForm["dataSource"],
+    expiresAt: q.expires_at ? q.expires_at.slice(0, 10) : undefined,
+    policyFeesDollars: toDollars(q.policy_fees_cents) ?? 0,
+    paymentFeesDollars: toDollars(q.payment_fees_cents) ?? 0,
+    bundleDiscountDollars: toDollars(q.bundle_discount_cents) ?? 0,
+    cancellationChargeDollars: toDollars(q.cancellation_charge_cents) ?? 0,
+    underwritingConditions: q.underwriting_conditions.join("\n"),
+    endorsements:
+      typeof autoCoverage.endorsements === "string"
+        ? autoCoverage.endorsements
+        : typeof propertyCoverage.endorsements === "string"
+          ? propertyCoverage.endorsements
+          : "",
+    exclusions:
+      typeof autoCoverage.exclusions === "string"
+        ? autoCoverage.exclusions
+        : typeof propertyCoverage.exclusions === "string"
+          ? propertyCoverage.exclusions
+          : "",
+  };
+
+  if (autoComponent) {
+    values.autoAssetId = autoComponent.asset_id ?? undefined;
+    values.autoPremiumDollars = toDollars(autoComponent.annual_premium_cents) ?? 0;
+    values.autoCoverageForm =
+      (autoCoverage.coverageForm as QuoteForm["autoCoverageForm"]) ?? "unknown";
+    values.vehicleClass = (autoCoverage.vehicleClass as QuoteForm["vehicleClass"]) ?? "unknown";
+    values.financingStatus =
+      (autoCoverage.financingStatus as QuoteForm["financingStatus"]) ?? "unknown";
+    values.liabilityLimitDollars = toDollars(autoCoverage.thirdPartyLiabilityCents);
+    values.collisionDeductibleDollars = toDollars(autoCoverage.collisionDeductibleCents);
+    values.comprehensiveDeductibleDollars = toDollars(autoCoverage.comprehensiveDeductibleCents);
+    values.collisionIncluded = toTriState(autoCoverage.collisionIncluded);
+    values.comprehensiveIncluded = toTriState(autoCoverage.comprehensiveIncluded);
+    values.accidentForgivenessIncluded = toTriState(autoCoverage.accidentForgivenessIncluded);
+    values.rentalVehicleCoverageIncluded = toTriState(autoCoverage.rentalVehicleCoverageIncluded);
+    values.nonOwnedAutomobileIncluded = toTriState(autoCoverage.nonOwnedAutomobileIncluded);
+    values.familyProtectionIncluded = toTriState(autoCoverage.familyProtectionIncluded);
+    values.depreciationWaiverIncluded = toTriState(autoCoverage.depreciationWaiverIncluded);
+    values.oemPartsIncluded = toTriState(autoCoverage.oemPartsIncluded);
+    values.roadsideAssistanceIncluded = toTriState(autoCoverage.roadsideAssistanceIncluded);
+    values.disappearingDeductibleIncluded = toTriState(autoCoverage.disappearingDeductibleIncluded);
+    values.glassCoverageIncluded = toTriState(autoCoverage.glassCoverageIncluded);
+    values.telematicsRequired = toTriState(autoCoverage.telematicsRequired);
+  }
+
+  if (propertyComponent) {
+    values.propertyAssetId = propertyComponent.asset_id ?? undefined;
+    values.propertyPremiumDollars = toDollars(propertyComponent.annual_premium_cents) ?? 0;
+    values.propertyType = (propertyCoverage.propertyType as QuoteForm["propertyType"]) ?? "unknown";
+    values.propertyCoverageForm =
+      (propertyCoverage.coverageForm as QuoteForm["propertyCoverageForm"]) ?? "unknown";
+    values.settlementBasis =
+      (propertyCoverage.settlementBasis as QuoteForm["settlementBasis"]) ?? "unknown";
+    values.dwellingLimitDollars = toDollars(propertyCoverage.dwellingLimitCents);
+    values.contentsLimitDollars = toDollars(propertyCoverage.contentsLimitCents);
+    values.detachedStructuresLimitDollars = toDollars(
+      propertyCoverage.detachedStructuresLimitCents,
+    );
+    values.personalLiabilityLimitDollars = toDollars(propertyCoverage.personalLiabilityLimitCents);
+    values.additionalLivingExpenseLimitDollars = toDollars(
+      propertyCoverage.additionalLivingExpenseLimitCents,
+    );
+    values.baseDeductibleDollars = toDollars(propertyCoverage.baseDeductibleCents);
+    values.waterDeductibleDollars = toDollars(propertyCoverage.waterDeductibleCents);
+    values.windHailDeductibleDollars = toDollars(propertyCoverage.windHailDeductibleCents);
+    values.earthquakeDeductibleDollars = toDollars(propertyCoverage.earthquakeDeductibleCents);
+    values.sewerBackupLimitDollars = toDollars(propertyCoverage.sewerBackupLimitCents);
+    values.sewerBackupDeductibleDollars = toDollars(propertyCoverage.sewerBackupDeductibleCents);
+    values.overlandWaterLimitDollars = toDollars(propertyCoverage.overlandWaterLimitCents);
+    values.overlandWaterDeductibleDollars = toDollars(
+      propertyCoverage.overlandWaterDeductibleCents,
+    );
+    values.windHailIncluded = toTriState(propertyCoverage.windHailIncluded);
+    values.earthquakeIncluded = toTriState(propertyCoverage.earthquakeIncluded);
+    values.sewerBackupIncluded = toTriState(propertyCoverage.sewerBackupIncluded);
+    values.overlandWaterIncluded = toTriState(propertyCoverage.overlandWaterIncluded);
+    values.groundwaterIncluded = toTriState(propertyCoverage.groundwaterIncluded);
+    values.iceDamIncluded = toTriState(propertyCoverage.iceDamIncluded);
+    values.equipmentBreakdownIncluded = toTriState(propertyCoverage.equipmentBreakdownIncluded);
+    values.serviceLineIncluded = toTriState(propertyCoverage.serviceLineIncluded);
+    values.bylawCoverageIncluded = toTriState(propertyCoverage.bylawCoverageIncluded);
+    values.homeSystemsIncluded = toTriState(propertyCoverage.homeSystemsIncluded);
+    values.cyberCoverageIncluded = toTriState(propertyCoverage.cyberCoverageIncluded);
+    values.scheduledValuablesIncluded = toTriState(propertyCoverage.scheduledValuablesIncluded);
+    values.homeBusinessIncluded = toTriState(propertyCoverage.homeBusinessIncluded);
+    values.shortTermRentalPermissionIncluded = toTriState(
+      propertyCoverage.shortTermRentalPermissionIncluded,
+    );
+    values.claimsForgivenessIncluded = toTriState(propertyCoverage.claimsForgivenessIncluded);
+    values.additionalLivingExpensesIncluded = toTriState(
+      propertyCoverage.additionalLivingExpensesIncluded,
+    );
+    values.replacementCostIncluded = toTriState(propertyCoverage.replacementCostIncluded);
+  }
+
+  return values;
+}
+
 interface CoverageRow {
   coverage: Json;
   raw_coverage: Json;
@@ -158,8 +292,12 @@ interface QuoteRow {
   state: string;
   version: number;
   is_incumbent: boolean;
+  insurer_id: string;
+  expires_at: string | null;
   policy_fees_cents: number;
+  payment_fees_cents: number;
   bundle_discount_cents: number;
+  cancellation_charge_cents: number;
   underwriting_conditions: string[];
   insurers: { name: string } | null;
   quote_policy_components: QuoteComponentRow[];
@@ -169,6 +307,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
   const [quoteStatus, setQuoteStatus] = useState<string | null>(null);
+  const [editingQuote, setEditingQuote] = useState<{ id: string; version: number } | null>(null);
 
   const { data: quotes, isLoading } = useQuery({
     queryKey: ["quotes", caseRow.id],
@@ -176,7 +315,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       const { data, error } = await supabaseBrowser()
         .from("quotes")
         .select(
-          "id, state, version, is_incumbent, policy_fees_cents, bundle_discount_cents, underwriting_conditions, insurers(name), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, data_source, validated_at, validated_by, coverage_schema_version))",
+          "id, state, version, is_incumbent, insurer_id, expires_at, policy_fees_cents, payment_fees_cents, bundle_discount_cents, cancellation_charge_cents, underwriting_conditions, insurers(name), quote_policy_components(id, product_line, annual_premium_cents, asset_id, quote_coverages(coverage, raw_coverage, normalized_coverage, validation_status, validation_errors, data_source, validated_at, validated_by, coverage_schema_version))",
         )
         .eq("case_id", caseRow.id)
         .order("created_at");
@@ -241,6 +380,9 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
 
       const autoAssetId = values.autoAssetId ?? householdAssets?.vehicles[0]?.id;
       const propertyAssetId = values.propertyAssetId ?? householdAssets?.properties[0]?.id;
+      const existingQuote = editingQuote
+        ? quotes?.find((q) => q.id === editingQuote.id)
+        : undefined;
 
       function toCents(dollars: number | undefined): number | undefined {
         return typeof dollars === "number" ? Math.round(dollars * 100) : undefined;
@@ -250,6 +392,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       }
 
       const components: {
+        componentId?: string;
         productLine: "auto" | "property";
         assetId: string;
         annualPremiumCents: number;
@@ -258,30 +401,9 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
 
       if (values.autoPremiumDollars && values.autoPremiumDollars > 0) {
         if (!autoAssetId) throw new Error("No vehicle asset found for this household.");
-        const collisionIncluded = buildCoverageFlag(values, "collisionIncluded");
-        const comprehensiveIncluded = buildCoverageFlag(values, "comprehensiveIncluded");
         const coverage: Record<string, unknown> = {};
         setIfDef(coverage, "thirdPartyLiabilityCents", toCents(values.liabilityLimitDollars));
         setIfDef(coverage, "coverageForm", values.autoCoverageForm);
-        if (collisionIncluded === true) {
-          setIfDef(
-            coverage,
-            "collisionDeductibleCents",
-            toCents(values.collisionDeductibleDollars),
-          );
-        } else if (collisionIncluded === false) {
-          coverage.collisionDeductibleCents = null;
-        }
-        if (comprehensiveIncluded === true) {
-          setIfDef(
-            coverage,
-            "comprehensiveDeductibleCents",
-            toCents(values.comprehensiveDeductibleDollars),
-          );
-        } else if (comprehensiveIncluded === false) {
-          coverage.comprehensiveDeductibleCents = null;
-        }
-        coverage.glassDeductibleCents = null;
         setIfDef(coverage, "vehicleClass", values.vehicleClass);
         setIfDef(coverage, "financingStatus", values.financingStatus);
         setIfDef(coverage, "endorsements", values.endorsements || undefined);
@@ -301,10 +423,33 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           ["telematicsRequired", "telematicsRequired"],
         ];
         for (const [formKey, coverageKey] of autoFlags) {
-          const flag = buildCoverageFlag(values, formKey as keyof QuoteForm);
-          if (flag !== undefined) coverage[coverageKey] = flag;
+          const presence = buildCoveragePresence(values, formKey as keyof QuoteForm);
+          if (presence !== undefined) coverage[coverageKey] = presence;
         }
+
+        const collisionIncluded = buildCoveragePresence(values, "collisionIncluded");
+        if (collisionIncluded === "yes") {
+          setIfDef(
+            coverage,
+            "collisionDeductibleCents",
+            toCents(values.collisionDeductibleDollars),
+          );
+        }
+
+        const comprehensiveIncluded = buildCoveragePresence(values, "comprehensiveIncluded");
+        if (comprehensiveIncluded === "yes") {
+          setIfDef(
+            coverage,
+            "comprehensiveDeductibleCents",
+            toCents(values.comprehensiveDeductibleDollars),
+          );
+        }
+
+        const existingAuto = existingQuote?.quote_policy_components.find(
+          (c) => c.product_line === "auto",
+        );
         components.push({
+          componentId: existingAuto?.id,
           productLine: "auto",
           assetId: autoAssetId,
           annualPremiumCents: Math.round(values.autoPremiumDollars * 100),
@@ -330,27 +475,86 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           "personalLiabilityLimitCents",
           toCents(values.personalLiabilityLimitDollars),
         );
-        setIfDef(
-          coverage,
-          "additionalLivingExpenseLimitCents",
-          toCents(values.additionalLivingExpenseLimitDollars),
-        );
         setIfDef(coverage, "baseDeductibleCents", toCents(values.baseDeductibleDollars));
-        coverage.waterDeductibleCents = toCents(values.waterDeductibleDollars) ?? null;
-        coverage.windHailDeductibleCents = toCents(values.windHailDeductibleDollars) ?? null;
-        coverage.earthquakeDeductibleCents = toCents(values.earthquakeDeductibleDollars) ?? null;
-        coverage.sewerBackupLimitCents = toCents(values.sewerBackupLimitDollars) ?? null;
-        coverage.sewerBackupDeductibleCents = toCents(values.sewerBackupDeductibleDollars) ?? null;
-        coverage.overlandWaterLimitCents = toCents(values.overlandWaterLimitDollars) ?? null;
-        coverage.overlandWaterDeductibleCents =
-          toCents(values.overlandWaterDeductibleDollars) ?? null;
+        setIfDef(coverage, "waterDeductibleCents", toCents(values.waterDeductibleDollars));
         setIfDef(coverage, "endorsements", values.endorsements || undefined);
         setIfDef(coverage, "exclusions", values.exclusions || undefined);
+
+        const additionalLivingExpensesIncluded = buildCoveragePresence(
+          values,
+          "additionalLivingExpensesIncluded",
+        );
+        if (additionalLivingExpensesIncluded !== undefined) {
+          coverage.additionalLivingExpensesIncluded = additionalLivingExpensesIncluded;
+          if (additionalLivingExpensesIncluded === "yes") {
+            setIfDef(
+              coverage,
+              "additionalLivingExpenseLimitCents",
+              toCents(values.additionalLivingExpenseLimitDollars),
+            );
+          }
+        }
+
+        const windHailIncluded = buildCoveragePresence(values, "windHailIncluded");
+        if (windHailIncluded !== undefined) {
+          coverage.windHailIncluded = windHailIncluded;
+          if (windHailIncluded === "yes") {
+            setIfDef(
+              coverage,
+              "windHailDeductibleCents",
+              toCents(values.windHailDeductibleDollars),
+            );
+          }
+        }
+
+        const earthquakeIncluded = buildCoveragePresence(values, "earthquakeIncluded");
+        if (earthquakeIncluded !== undefined) {
+          coverage.earthquakeIncluded = earthquakeIncluded;
+          if (earthquakeIncluded === "yes") {
+            setIfDef(
+              coverage,
+              "earthquakeDeductibleCents",
+              toCents(values.earthquakeDeductibleDollars),
+            );
+          }
+        }
+
+        const sewerBackupIncluded = buildCoveragePresence(values, "sewerBackupIncluded");
+        if (sewerBackupIncluded !== undefined) {
+          coverage.sewerBackupIncluded = sewerBackupIncluded;
+          if (sewerBackupIncluded === "yes") {
+            setIfDef(coverage, "sewerBackupLimitCents", toCents(values.sewerBackupLimitDollars));
+            setIfDef(
+              coverage,
+              "sewerBackupDeductibleCents",
+              toCents(values.sewerBackupDeductibleDollars),
+            );
+          }
+        }
+
+        const overlandWaterIncluded = buildCoveragePresence(values, "overlandWaterIncluded");
+        if (overlandWaterIncluded !== undefined) {
+          coverage.overlandWaterIncluded = overlandWaterIncluded;
+          if (overlandWaterIncluded === "yes") {
+            setIfDef(
+              coverage,
+              "overlandWaterLimitCents",
+              toCents(values.overlandWaterLimitDollars),
+            );
+            setIfDef(
+              coverage,
+              "overlandWaterDeductibleCents",
+              toCents(values.overlandWaterDeductibleDollars),
+            );
+          }
+        }
+
+        const replacementCostIncluded = buildCoveragePresence(values, "replacementCostIncluded");
+        if (replacementCostIncluded !== undefined) {
+          coverage.replacementCostIncluded = replacementCostIncluded;
+        }
+
         const propertyFlags: [string, string][] = [
-          ["windHailIncluded", "windHailIncluded"],
-          ["earthquakeIncluded", "earthquakeIncluded"],
-          ["sewerBackupIncluded", "sewerBackupIncluded"],
-          ["overlandWaterIncluded", "overlandWaterIncluded"],
           ["groundwaterIncluded", "groundwaterIncluded"],
           ["iceDamIncluded", "iceDamIncluded"],
           ["equipmentBreakdownIncluded", "equipmentBreakdownIncluded"],
@@ -364,10 +568,14 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           ["claimsForgivenessIncluded", "claimsForgivenessIncluded"],
         ];
         for (const [formKey, coverageKey] of propertyFlags) {
-          const flag = buildCoverageFlag(values, formKey as keyof QuoteForm);
-          if (flag !== undefined) coverage[coverageKey] = flag;
+          const presence = buildCoveragePresence(values, formKey as keyof QuoteForm);
+          if (presence !== undefined) coverage[coverageKey] = presence;
         }
+        const existingProperty = existingQuote?.quote_policy_components.find(
+          (c) => c.product_line === "property",
+        );
         components.push({
+          componentId: existingProperty?.id,
           productLine: "property",
           assetId: propertyAssetId,
           annualPremiumCents: Math.round(values.propertyPremiumDollars * 100),
@@ -394,6 +602,9 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
           underwritingConditions: conditions,
           dataSource: values.dataSource,
           components,
+          ...(editingQuote
+            ? { quoteId: editingQuote.id, expectedVersion: editingQuote.version }
+            : {}),
         },
       });
 
@@ -433,9 +644,10 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       setQuoteStatus(variables.requireValid ? "valid" : (response.aggregateStatus ?? "saved"));
       if (variables.requireValid) {
         reset();
-        setMessage("Quote validated and saved.");
+        setEditingQuote(null);
+        setMessage(editingQuote ? "Quote updated and validated." : "Quote validated and saved.");
       } else {
-        setMessage("Quote draft saved.");
+        setMessage(editingQuote ? "Draft updated." : "Quote draft saved.");
       }
     },
     onError: (e: Error) => {
@@ -509,6 +721,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
               <Th>Bundle discount</Th>
               <Th>Quote state</Th>
               <Th>Conditions</Th>
+              <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -588,6 +801,20 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
                     </Badge>
                   </Td>
                   <Td>{q.underwriting_conditions.length}</Td>
+                  <Td>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingQuote({ id: q.id, version: q.version });
+                        reset(formValuesFromQuote(q));
+                        setMessage(`Editing quote ${q.id.slice(0, 8)}… v${q.version}`);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  </Td>
                 </tr>
               );
             })}
@@ -599,7 +826,7 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
       </div>
 
       <Card>
-        <CardTitle>Enter a quote</CardTitle>
+        <CardTitle>{editingQuote ? "Edit quote" : "Enter a quote"}</CardTitle>
         <form
           className="space-y-3"
           onSubmit={handleSubmit((v) => saveQuote.mutate({ ...v, requireValid: true }))}
@@ -860,8 +1087,26 @@ export function QuotesTab({ caseRow }: { caseRow: CaseDetail }) {
               {saveQuote.isPending ? "Saving…" : "Save draft"}
             </Button>
             <Button type="submit" disabled={saveQuote.isPending}>
-              {saveQuote.isPending ? "Saving…" : "Validate and save"}
+              {saveQuote.isPending
+                ? "Saving…"
+                : editingQuote
+                  ? "Update quote"
+                  : "Validate and save"}
             </Button>
+            {editingQuote ? (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={saveQuote.isPending}
+                onClick={() => {
+                  setEditingQuote(null);
+                  reset();
+                  setMessage(null);
+                }}
+              >
+                Cancel
+              </Button>
+            ) : null}
           </div>
           {message ? <p className="text-sm text-ink-muted">{message}</p> : null}
         </form>

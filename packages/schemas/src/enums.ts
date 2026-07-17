@@ -157,6 +157,10 @@ export const coveragePreferences = ["required", "preferred", "indifferent", "pro
 export const CoveragePreference = z.enum(coveragePreferences);
 export type CoveragePreference = z.infer<typeof CoveragePreference>;
 
+export const coveragePresences = ["yes", "no", "unknown", "not_applicable"] as const;
+export const CoveragePresence = z.enum(coveragePresences);
+export type CoveragePresence = z.infer<typeof CoveragePresence>;
+
 export const limitRules = [
   "minimum",
   "maximum",

@@ -304,6 +304,14 @@ begin
     raise exception 'engine output digest mismatch';
   end if;
 
+  -- Cross-check that the canonical JSON string is the serialization of the JSON value.
+  if p_input_snapshot_canonical::jsonb is distinct from p_input_snapshot_json then
+    raise exception 'input snapshot canonical text does not match jsonb value';
+  end if;
+  if p_engine_output_canonical::jsonb is distinct from p_engine_output_json then
+    raise exception 'engine output canonical text does not match jsonb value';
+  end if;
+
   -- Build sorted list of snapshot quote ids and reject duplicates.
   select array_agg((value->>'id')::uuid order by value->>'id')
   into v_snapshot_quote_ids
@@ -328,6 +336,20 @@ begin
     end if;
     if v_quote_record.updated_at is distinct from (v_snap.value->>'updated_at')::timestamptz then
       raise exception 'quote % changed since evaluation', v_snap.value->>'id';
+    end if;
+  end loop;
+
+  -- Insurer metadata used by the engine must not have changed since the snapshot was built.
+  for v_snap in select * from jsonb_array_elements(p_input_snapshot_json->'quotes') loop
+    if (v_snap.value->>'insurerVersion') is not null then
+      if exists (
+        select 1
+        from insurers i
+        where i.id = (v_snap.value->>'insurerId')::uuid
+          and i.version is distinct from (v_snap.value->>'insurerVersion')::int
+      ) then
+        raise exception 'insurer metadata changed for quote % since evaluation', v_snap.value->>'id';
+      end if;
     end if;
   end loop;
 

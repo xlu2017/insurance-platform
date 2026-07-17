@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { EngineQuote } from "./quotes";
+import {
+  EngineQuote,
+  QuoteComponent,
+  AutoCoverageDetails,
+  PropertyCoverageDetails,
+} from "./quotes";
 import { HouseholdCoverageMandateV2, SwitchingPreferencesV2 } from "./mandate-v2";
 
 export interface HouseholdAssets {
@@ -156,7 +161,18 @@ export const PersistedRecommendationOptionSchema = z
   })
   .strict();
 
-const CanonicalQuoteSnapshot = EngineQuote.strict();
+const CanonicalAutoCoverageSnapshot = AutoCoverageDetails.strict();
+const CanonicalPropertyCoverageSnapshot = PropertyCoverageDetails.strict();
+const CanonicalQuoteComponentSnapshot = QuoteComponent.extend({
+  auto: CanonicalAutoCoverageSnapshot.nullable(),
+  property: CanonicalPropertyCoverageSnapshot.nullable(),
+}).strict();
+const CanonicalQuoteSnapshot = z
+  .object({
+    ...EngineQuote.shape,
+    components: z.array(CanonicalQuoteComponentSnapshot).min(1),
+  })
+  .strict();
 
 export const CanonicalRecommendationInputSnapshotSchema = z
   .object({

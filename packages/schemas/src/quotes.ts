@@ -48,7 +48,9 @@ export const PropertyCoverageDetails = z.object({
   contentsLimitCents: NonNegativeCents,
   detachedStructuresLimitCents: NonNegativeCents,
   personalLiabilityLimitCents: NonNegativeCents,
-  additionalLivingExpenseLimitCents: NonNegativeCents,
+  additionalLivingExpenseLimitCents: NonNegativeCents.nullable(),
+  additionalLivingExpensesIncluded: z.boolean(),
+  replacementCostIncluded: z.boolean(),
   baseDeductibleCents: NonNegativeCents,
   waterDeductibleCents: NonNegativeCents.nullable(),
   windHailIncluded: z.boolean(),
@@ -75,6 +77,15 @@ export const PropertyCoverageDetails = z.object({
 });
 export type PropertyCoverageDetails = z.infer<typeof PropertyCoverageDetails>;
 
+export const ComponentProvenance = z
+  .object({
+    dataSource: QuoteDataSource.optional(),
+    validatedAt: z.string().datetime({ offset: true }).optional(),
+    validatedBy: z.string().uuid().optional(),
+    coverageSchemaVersion: z.number().int().nonnegative().optional(),
+  })
+  .optional();
+
 export const QuoteComponent = z.object({
   id: z.string().uuid().optional(),
   productLine: ProductLine,
@@ -91,6 +102,7 @@ export const QuoteComponent = z.object({
       message: z.string(),
     }),
   ),
+  provenance: ComponentProvenance,
 });
 export type QuoteComponent = z.infer<typeof QuoteComponent>;
 
@@ -140,14 +152,14 @@ export const QuoteComponentDraft = z.discriminatedUnion("productLine", [
     productLine: z.literal("auto"),
     assetId: z.string().uuid(),
     annualPremiumCents: NonNegativeCents,
-    coverage: AutoCoverageDetailsDraft,
+    coverage: z.record(z.unknown()),
   }),
   z.object({
     componentId: z.string().uuid().optional(),
     productLine: z.literal("property"),
     assetId: z.string().uuid(),
     annualPremiumCents: NonNegativeCents,
-    coverage: PropertyCoverageDetailsDraft,
+    coverage: z.record(z.unknown()),
   }),
 ]);
 export type QuoteComponentDraft = z.infer<typeof QuoteComponentDraft>;
@@ -173,5 +185,25 @@ export const SaveCaseQuoteRequest = z
     dataSource: QuoteDataSource,
     components: z.array(QuoteComponentDraft).min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((val, ctx) => {
+    const componentIds = val.components
+      .map((c) => c.componentId)
+      .filter((id): id is string => id !== undefined);
+    if (new Set(componentIds).size !== componentIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["components"],
+        message: "Duplicate componentId values are not allowed",
+      });
+    }
+    const pairs = val.components.map((c) => `${c.productLine}:${c.assetId}`);
+    if (new Set(pairs).size !== pairs.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["components"],
+        message: "Duplicate productLine and assetId pairs are not allowed",
+      });
+    }
+  });
 export type SaveCaseQuoteRequest = z.infer<typeof SaveCaseQuoteRequest>;

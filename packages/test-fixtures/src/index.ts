@@ -41,6 +41,8 @@ export const standardPropertyCoverage: PropertyCoverageDetails = {
   detachedStructuresLimitCents: 5_000_000,
   personalLiabilityLimitCents: 2_000_000_000,
   additionalLivingExpenseLimitCents: 20_000_000,
+  additionalLivingExpensesIncluded: true,
+  replacementCostIncluded: true,
   baseDeductibleCents: 100_000, // C$1,000
   waterDeductibleCents: 200_000, // C$2,000
   windHailIncluded: false,

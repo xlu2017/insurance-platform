@@ -5,19 +5,19 @@
 //
 // Generation-attempt lifecycle is managed outside the persistence transaction so
 // failed and no-eligible attempts remain durable in the audit log.
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   buildEngineInputFromSnapshot,
   canonicalSerializeRecommendationInput,
   canonicalSerializeRecommendationOutput,
   verifyCanonicalString,
+  verifyCanonicalPair,
   evaluateHousehold,
   loadRecommendationInputSnapshot,
   EngineRecommendationPersistencePayloadSchema,
+  CanonicalRecommendationInputSnapshotSchema,
+  CanonicalEngineOutputSchema,
   __AUTOPILOT_SOURCE_HASH__,
-  type EngineRecommendationPersistencePayload,
-  type EngineResult,
-  type EvaluatedConfiguration,
 } from "../_shared/autopilot.js";
 
 const ENGINE_VERSION = "1.0.0";
@@ -42,7 +42,7 @@ async function sha256Hex(input: string): Promise<string> {
     .join("");
 }
 
-function buildRankingFactors(e: EvaluatedConfiguration) {
+function buildRankingFactors(e: any) {
   return {
     total_cents: e.cost.totalCents,
     coverage_reductions_count: e.coverageReductions.length,
@@ -53,11 +53,11 @@ function buildRankingFactors(e: EvaluatedConfiguration) {
   };
 }
 
-function buildPreferenceAlignment(e: EvaluatedConfiguration) {
+function buildPreferenceAlignment(e: any) {
   return e.preferenceAlignment;
 }
 
-function buildPersistedOption(rank: number, e: EvaluatedConfiguration) {
+function buildPersistedOption(rank: number, e: any) {
   const auto = e.configuration.auto;
   const property = e.configuration.property;
   return {
@@ -81,7 +81,7 @@ function buildPersistedOption(rank: number, e: EvaluatedConfiguration) {
 }
 
 async function startAttempt(
-  client: ReturnType<typeof createClient>,
+  client: SupabaseClient,
   actorProfileId: string,
   caseId: string,
 ): Promise<string> {
@@ -107,7 +107,7 @@ interface CompleteAttemptParams {
 }
 
 async function completeAttempt(
-  client: ReturnType<typeof createClient>,
+  client: SupabaseClient,
   attemptId: string,
   params: CompleteAttemptParams,
 ) {
@@ -130,7 +130,7 @@ async function completeAttempt(
 }
 
 async function failAttempt(
-  client: ReturnType<typeof createClient>,
+  client: SupabaseClient,
   attemptId: string,
   errorCode: string,
   safeErrorMessage: string,
@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const result: EngineResult = evaluateHousehold(engineInput);
+  const result = evaluateHousehold(engineInput);
 
   if (result.rejection) {
     await completeAttempt(serviceClient, attemptId, {
@@ -300,21 +300,25 @@ Deno.serve(async (req) => {
   const { canonical: inputSnapshotJson, canonicalJson: inputSnapshotCanonical } =
     canonicalSerializeRecommendationInput(snapshot, ENGINE_VERSION, __AUTOPILOT_SOURCE_HASH__);
   const inputSnapshotDigest = await sha256Hex(inputSnapshotCanonical);
-  if (!verifyCanonicalString(inputSnapshotCanonical)) {
-    await recordAttempt({
+  const inputVerify = verifyCanonicalPair(
+    CanonicalRecommendationInputSnapshotSchema,
+    inputSnapshotJson,
+    inputSnapshotCanonical,
+  );
+  if (!inputVerify.valid) {
+    await completeAttempt(serviceClient, attemptId, {
       status: "input_rejected",
       mandateId: snapshot.mandateId,
       mandateVersion: snapshot.mandateVersion,
       switchingPreferencesId: snapshot.switchingPreferencesId,
       switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
       errorCode: "CANONICAL_INPUT_UNSTABLE",
-      safeErrorMessage:
-        "Supplied canonical input snapshot does not match regenerated canonical JSON.",
+      safeErrorMessage: inputVerify.error ?? "Canonical input snapshot is not reproducible.",
     });
     return jsonResponse(
       {
         code: "CANONICAL_INPUT_UNSTABLE",
-        message: "Canonical input snapshot is not reproducible.",
+        message: inputVerify.error ?? "Canonical input snapshot is not reproducible.",
       },
       422,
     );
@@ -328,27 +332,28 @@ Deno.serve(async (req) => {
       rejectedOptions,
     );
   const engineOutputDigest = await sha256Hex(engineOutputCanonical);
-  if (!verifyCanonicalString(engineOutputCanonical)) {
-    await recordAttempt({
-      status: "failed",
-      mandateId: snapshot.mandateId,
-      mandateVersion: snapshot.mandateVersion,
-      switchingPreferencesId: snapshot.switchingPreferencesId,
-      switchingPreferencesVersion: snapshot.switchingPreferencesVersion,
-      errorCode: "CANONICAL_OUTPUT_UNSTABLE",
-      safeErrorMessage:
-        "Supplied canonical engine output does not match regenerated canonical JSON.",
-    });
+  const outputVerify = verifyCanonicalPair(
+    CanonicalEngineOutputSchema,
+    engineOutputJson,
+    engineOutputCanonical,
+  );
+  if (!outputVerify.valid) {
+    await failAttempt(
+      serviceClient,
+      attemptId,
+      "CANONICAL_OUTPUT_UNSTABLE",
+      outputVerify.error ?? "Canonical engine output is not reproducible.",
+    );
     return jsonResponse(
       {
         code: "CANONICAL_OUTPUT_UNSTABLE",
-        message: "Canonical engine output is not reproducible.",
+        message: outputVerify.error ?? "Canonical engine output is not reproducible.",
       },
       500,
     );
   }
 
-  const payload: EngineRecommendationPersistencePayload = {
+  const payload = {
     caseId,
     actorProfileId: user.id,
     mandate: {
