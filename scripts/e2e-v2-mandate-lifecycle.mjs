@@ -221,7 +221,7 @@ async function loadQuoteAggregate(quoteId) {
   return { quote, components: components || [] };
 }
 
-async function saveCaseQuote(quoteId, components, dataSource) {
+async function saveCaseQuote(quoteId, components, dataSource, opts = {}) {
   const { quote } = await loadQuoteAggregate(quoteId);
   const payloadComponents = components.map((c) => {
     const coverageRow = c.quote_coverages?.find((r) => r.validation_status !== "superseded");
@@ -237,8 +237,8 @@ async function saveCaseQuote(quoteId, components, dataSource) {
   const res = await invokeEdgeFunction(operationsToken, "save-case-quote", {
     caseId,
     quoteId: quote.id,
-    expectedVersion: quote.version,
-    saveIntent: "validate",
+    expectedVersion: opts.expectedVersion ?? quote.version,
+    saveIntent: opts.saveIntent ?? "validate",
     insurerId: quote.insurer_id,
     state: quote.state,
     isIncumbent: quote.is_incumbent,
@@ -251,8 +251,8 @@ async function saveCaseQuote(quoteId, components, dataSource) {
     dataSource,
     components: payloadComponents,
   });
-  if (res.error) throw new Error(`save-case-quote failed: ${res.error.message}`);
-  return res.data;
+  if (res.error && !opts.expectError) throw new Error(`save-case-quote failed: ${res.error.message}`);
+  return res;
 }
 
 async function updateAutoLiabilityForCase(cents) {
@@ -364,6 +364,31 @@ async function main() {
   // 2. Update auto quote coverages to meet the new 2.5M liability requirement.
   await updateAutoLiabilityForCase(250000000);
   console.log("2. Updated auto quote coverages to 2.5M");
+
+  // 2b. Exercise draft save, validate, and stale quote edit rejection.
+  const { data: caseQuotes } = await serviceClient.from("quotes").select("id").eq("case_id", caseId);
+  if (caseQuotes && caseQuotes.length > 0) {
+    const editQuoteId = caseQuotes[0].id;
+    const { components: editComponents } = await loadQuoteAggregate(editQuoteId);
+
+    const draftRes = await saveCaseQuote(editQuoteId, editComponents, "manual_entry", { saveIntent: "draft" });
+    assert(draftRes.data && draftRes.data.success, "draft save should succeed");
+    assert(draftRes.data.aggregateStatus === "draft", "draft save should leave quote in draft status");
+    console.log("2b. Quote draft edit saved");
+
+    const { components: draftComponents } = await loadQuoteAggregate(editQuoteId);
+    const validateRes = await saveCaseQuote(editQuoteId, draftComponents, "manual_entry", { saveIntent: "validate" });
+    assert(validateRes.data && validateRes.data.success, "validate save after draft should succeed");
+    assert(validateRes.data.aggregateStatus === "valid", "validate save should restore quote to valid");
+    console.log("2c. Quote validated after draft");
+
+    const staleRes = await saveCaseQuote(editQuoteId, draftComponents, "manual_entry", {
+      expectedVersion: 1,
+      expectError: true,
+    });
+    assert(staleRes.error, "stale quote edit should be rejected");
+    console.log("2d. Stale quote edit rejected");
+  }
 
   // 3. Operations generates a recommendation via the Edge Function.
   const recResult = await invokeGenerateRecommendation();
