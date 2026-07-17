@@ -225,12 +225,7 @@ export function buildVehicleIdentity(input: VehicleIdentityInput): VehicleIdenti
   const modelYear = input.modelYear && Number.isInteger(input.modelYear) ? input.modelYear : null;
   const possibleMatchHint =
     modelYear && make && model
-      ? `vehicle-hint:${joinFingerprintParts([
-          modelYear.toString(),
-          make,
-          model,
-          trim,
-        ])}`
+      ? `vehicle-hint:${joinFingerprintParts([modelYear.toString(), make, model, trim])}`
       : null;
 
   if (!modelYear) reasons.push("model_year_missing_or_invalid");

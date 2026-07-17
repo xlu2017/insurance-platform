@@ -1,9 +1,11 @@
 // Extract text and parse an uploaded policy document into stable asset candidates.
 //
-// The PDF is downloaded from the private policy-documents bucket, parsed locally
-// with pdfjs-dist, and the resulting assertions and candidates are persisted in
-// document_extraction_sessions, extracted_documents, asset_candidates,
-// extracted_fact_assertions, and candidate_conflicts.
+// The PDF is downloaded from the private policy-documents bucket. When LLM_API_URL
+// and LLM_API_KEY are configured, the extraction uses a provider-neutral LLM
+// pipeline; otherwise it falls back to the local pdfjs-dist + TD parsers. The
+// resulting assertions and candidates are persisted in document_extraction_sessions,
+// extracted_documents, asset_candidates, extracted_fact_assertions, and
+// candidate_conflicts.
 //
 // Duplicate file digests are ignored after the first extraction. Candidates are
 // matched across sessions by normalized identity fingerprint (VIN for vehicles,
@@ -11,9 +13,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   extractPdfText,
+  HttpLlmProvider,
   parseDocument,
+  projectLlmRunToParsedDocument,
+  resolveLlmAssetIdentity,
+  runLlmExtraction,
   type ExtractedFactAssertion,
   type ParsedAssetAssertion,
+  type ParsedInsuranceDocument,
 } from "../_shared/document-extraction.js";
 
 const corsHeaders = {
@@ -400,8 +407,27 @@ Deno.serve(async (req) => {
     }
   }
 
-  const extracted = await extractPdfText(bytes, docRow.file_name);
-  const parsed = parseDocument(extracted);
+  const extracted = await extractPdfText(bytes, policyDocumentId);
+
+  let parsed: ParsedInsuranceDocument;
+  const llmApiUrl = Deno.env.get("LLM_API_URL");
+  const llmApiKey = Deno.env.get("LLM_API_KEY");
+  const llmModel = Deno.env.get("LLM_MODEL") ?? "gpt-4o";
+
+  if (llmApiUrl && llmApiKey) {
+    const provider = new HttpLlmProvider({
+      apiUrl: llmApiUrl,
+      apiKey: llmApiKey,
+      model: llmModel,
+    });
+    const run = await runLlmExtraction(extracted, provider);
+    const projected = await projectLlmRunToParsedDocument(run, {
+      resolveAssetIdentity: resolveLlmAssetIdentity,
+    });
+    parsed = projected.document;
+  } else {
+    parsed = parseDocument(extracted);
+  }
 
   const { data: extractedDoc, error: extractedErr } = await admin
     .from("extracted_documents")

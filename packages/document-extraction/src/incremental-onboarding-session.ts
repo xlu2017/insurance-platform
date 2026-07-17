@@ -1,13 +1,7 @@
-export type OnboardingSessionDecision =
-  | "pending"
-  | "approve_new"
-  | "link_existing"
-  | "skip";
+export type OnboardingSessionDecision = "pending" | "approve_new" | "link_existing" | "skip";
 
 export type OnboardingReviewFreshness = "unreviewed" | "confirmed" | "stale";
-export type MandatedValueOrigin =
-  | "defaulted_from_current"
-  | "customer_customized";
+export type MandatedValueOrigin = "defaulted_from_current" | "customer_customized";
 
 export interface IncomingSpecificationReview {
   fieldPath: string;
@@ -147,9 +141,7 @@ function hasValue(value: unknown): boolean {
   return value !== undefined && value !== null;
 }
 
-function defaultMandatedValue(
-  specification: IncomingSpecificationReview,
-): unknown | undefined {
+function defaultMandatedValue(specification: IncomingSpecificationReview): unknown | undefined {
   return hasValue(specification.defaultMandatedValue)
     ? specification.defaultMandatedValue
     : specification.currentValue;
@@ -172,9 +164,7 @@ function documentSnapshotFingerprint(upload: IncrementalOnboardingUpload): strin
       const specifications = sortedSpecifications(candidate.specifications)
         .map(
           (specification) =>
-            `${keyPart(specification.fieldPath)}=${keyPart(
-              specification.extractionFingerprint,
-            )}`,
+            `${keyPart(specification.fieldPath)}=${keyPart(specification.extractionFingerprint)}`,
         )
         .join(",");
       return [
@@ -298,17 +288,15 @@ function createCandidate(
     decision: "pending",
     existingEntityId: undefined,
     reviewFreshness: "unreviewed",
-    specifications: sortedSpecifications(candidate.specifications).map(
-      (specification) => ({
-        fieldPath: clean(specification.fieldPath),
-        extractionFingerprint: clean(specification.extractionFingerprint),
-        currentValue: specification.currentValue,
-        mandatedValue: defaultMandatedValue(specification),
-        mandatedValueOrigin: "defaulted_from_current",
-        confirmed: false,
-        superseded: false,
-      }),
-    ),
+    specifications: sortedSpecifications(candidate.specifications).map((specification) => ({
+      fieldPath: clean(specification.fieldPath),
+      extractionFingerprint: clean(specification.extractionFingerprint),
+      currentValue: specification.currentValue,
+      mandatedValue: defaultMandatedValue(specification),
+      mandatedValueOrigin: "defaulted_from_current",
+      confirmed: false,
+      superseded: false,
+    })),
     duplicateGroupId: undefined,
     superseded: false,
     revision: 1,
@@ -321,10 +309,7 @@ function reconcileSpecifications(
   forceUnconfirmed: boolean,
 ): SpecificationReconciliation {
   const previousByField = new Map(
-    previous.specifications.map((specification) => [
-      clean(specification.fieldPath),
-      specification,
-    ]),
+    previous.specifications.map((specification) => [clean(specification.fieldPath), specification]),
   );
   const incomingFields = new Set<string>();
   const specifications: OnboardingSpecificationDraft[] = [];
@@ -350,8 +335,8 @@ function reconcileSpecifications(
     }
 
     const specificationChanged =
-      existing.extractionFingerprint !==
-        clean(incomingSpecification.extractionFingerprint) || existing.superseded;
+      existing.extractionFingerprint !== clean(incomingSpecification.extractionFingerprint) ||
+      existing.superseded;
     if (specificationChanged) changed = true;
 
     specifications.push({
@@ -363,8 +348,7 @@ function reconcileSpecifications(
           ? existing.mandatedValue
           : defaultMandatedValue(incomingSpecification),
       mandatedValueOrigin: existing.mandatedValueOrigin,
-      confirmed:
-        forceUnconfirmed || specificationChanged ? false : existing.confirmed,
+      confirmed: forceUnconfirmed || specificationChanged ? false : existing.confirmed,
       superseded: false,
     });
   }
@@ -401,9 +385,7 @@ function duplicateGroupsFor(
     }));
 }
 
-function assignDuplicateGroups(
-  candidates: readonly IncrementalOnboardingCandidateState[],
-): {
+function assignDuplicateGroups(candidates: readonly IncrementalOnboardingCandidateState[]): {
   candidates: IncrementalOnboardingCandidateState[];
   duplicateGroups: IncrementalDuplicateGroup[];
 } {
@@ -582,9 +564,7 @@ export function mergeIncrementalOnboardingUpload(
   for (const incoming of upload.candidates) {
     const candidateId = candidateIdFor(documentFingerprint, incoming.localCandidateId);
     activeCandidateIds.push(candidateId);
-    const index = next.candidates.findIndex(
-      (candidate) => candidate.candidateId === candidateId,
-    );
+    const index = next.candidates.findIndex((candidate) => candidate.candidateId === candidateId);
 
     if (index < 0) {
       next.candidates.push(createCandidate(documentFingerprint, incoming));
@@ -604,10 +584,7 @@ export function mergeIncrementalOnboardingUpload(
       identityChanged || reviewFingerprintChanged,
     );
     const candidateChanged =
-      identityChanged ||
-      reviewFingerprintChanged ||
-      previous.superseded ||
-      reconciled.changed;
+      identityChanged || reviewFingerprintChanged || previous.superseded || reconciled.changed;
     if (!candidateChanged) continue;
 
     next.candidates[index] = {
@@ -642,10 +619,6 @@ export function mergeIncrementalOnboardingUpload(
     updatedCandidateIds,
     staleCandidateIds,
     supersededCandidateIds,
-    warnings: warningsFor(
-      grouped.duplicateGroups,
-      staleCandidateIds,
-      supersededCandidateIds,
-    ),
+    warnings: warningsFor(grouped.duplicateGroups, staleCandidateIds, supersededCandidateIds),
   });
 }

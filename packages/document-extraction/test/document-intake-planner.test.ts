@@ -10,10 +10,7 @@ function digest(character: string): string {
   return character.repeat(64);
 }
 
-function upload(
-  uploadId: string,
-  fileDigest: string,
-): IncomingPolicyDocument {
+function upload(uploadId: string, fileDigest: string): IncomingPolicyDocument {
   return { uploadId, fileDigest, fileName: `${uploadId}.pdf` };
 }
 
@@ -48,9 +45,7 @@ describe("planDocumentIntake", () => {
       "rental-2",
       "vehicle",
     ]);
-    expect(
-      plan.acceptedUploads.every((document) => document.session === plan.session),
-    ).toBe(true);
+    expect(plan.acceptedUploads.every((document) => document.session === plan.session)).toBe(true);
     expect(plan.duplicateUploads).toEqual([]);
   });
 
@@ -77,10 +72,7 @@ describe("planDocumentIntake", () => {
 
   it("accepts one canonical upload for repeated digests in the same batch", () => {
     const plan = planDocumentIntake({
-      incoming: [
-        upload("upload-z", digest("a")),
-        upload("upload-a", digest("a")),
-      ],
+      incoming: [upload("upload-z", digest("a")), upload("upload-a", digest("a"))],
     });
 
     expect(plan.ready).toBe(true);

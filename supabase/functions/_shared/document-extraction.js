@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 18b1024bc5595e88daea2287b000c82f78738b35c5cada05e2581a6d7a63295d
+// source-hash: cabc25d7c9138bac00d11c6aece96d1bfc3d758b0779baa999decf90d046e94f
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -1971,9 +1971,9 @@ var init_pdf = __esm({
         module.exports = function(Constructor, list, $length) {
           var index = 0;
           var length = arguments.length > 2 ? $length : lengthOfArrayLike(list);
-          var result = new Constructor(length);
-          while (length > index) result[index] = list[index++];
-          return result;
+          var result2 = new Constructor(length);
+          while (length > index) result2[index] = list[index++];
+          return result2;
         };
       },
       /***/
@@ -2041,10 +2041,10 @@ var init_pdf = __esm({
         var base64Alphabet = commonAlphabet + "+/";
         var base64UrlAlphabet = commonAlphabet + "-_";
         var inverse = function(characters) {
-          var result = {};
+          var result2 = {};
           var index = 0;
-          for (; index < 64; index++) result[characters.charAt(index)] = index;
-          return result;
+          for (; index < 64; index++) result2[characters.charAt(index)] = index;
+          return result2;
         };
         module.exports = {
           i2c: base64Alphabet,
@@ -2092,8 +2092,8 @@ var init_pdf = __esm({
           }
         };
         module.exports = TO_STRING_TAG_SUPPORT ? classofRaw : function(it) {
-          var O, tag, result;
-          return it === void 0 ? "Undefined" : it === null ? "Null" : typeof (tag = tryGet(O = $Object(it), TO_STRING_TAG)) == "string" ? tag : CORRECT_ARGUMENTS ? classofRaw(O) : (result = classofRaw(O)) === "Object" && isCallable(O.callee) ? "Arguments" : result;
+          var O, tag, result2;
+          return it === void 0 ? "Undefined" : it === null ? "Null" : typeof (tag = tryGet(O = $Object(it), TO_STRING_TAG)) == "string" ? tag : CORRECT_ARGUMENTS ? classofRaw(O) : (result2 = classofRaw(O)) === "Object" && isCallable(O.callee) ? "Arguments" : result2;
         };
       },
       /***/
@@ -2844,10 +2844,10 @@ var init_pdf = __esm({
         module.exports = function(record, fn, ITERATOR_INSTEAD_OF_RECORD) {
           var iterator = ITERATOR_INSTEAD_OF_RECORD ? record : record.iterator;
           var next = record.next;
-          var step, result;
+          var step, result2;
           while (!(step = call(next, iterator)).done) {
-            result = fn(step.value);
-            if (result !== void 0) return result;
+            result2 = fn(step.value);
+            if (result2 !== void 0) return result2;
           }
         };
       },
@@ -2864,9 +2864,9 @@ var init_pdf = __esm({
         var getIteratorMethod = __webpack_require__2(851);
         var iteratorClose = __webpack_require__2(9539);
         var $TypeError = TypeError;
-        var Result = function(stopped, result) {
+        var Result = function(stopped, result2) {
           this.stopped = stopped;
-          this.result = result;
+          this.result = result2;
         };
         var ResultPrototype = Result.prototype;
         module.exports = function(iterable, unboundFunction, options) {
@@ -2876,7 +2876,7 @@ var init_pdf = __esm({
           var IS_ITERATOR = !!(options && options.IS_ITERATOR);
           var INTERRUPTED = !!(options && options.INTERRUPTED);
           var fn = bind(unboundFunction, that);
-          var iterator, iterFn, index, length, result, next, step;
+          var iterator, iterFn, index, length, result2, next, step;
           var stop = function(condition) {
             var $iterator = iterator;
             iterator = void 0;
@@ -2899,8 +2899,8 @@ var init_pdf = __esm({
             if (!iterFn) throw new $TypeError(tryToString(iterable) + " is not iterable");
             if (isArrayIteratorMethod(iterFn)) {
               for (index = 0, length = lengthOfArrayLike(iterable); length > index; index++) {
-                result = callFn(iterable[index]);
-                if (result && isPrototypeOf(ResultPrototype, result)) return result;
+                result2 = callFn(iterable[index]);
+                if (result2 && isPrototypeOf(ResultPrototype, result2)) return result2;
               }
               return new Result(false);
             }
@@ -2910,12 +2910,12 @@ var init_pdf = __esm({
           while (!(step = call(next, iterator)).done) {
             var value = step.value;
             try {
-              result = callFn(value);
+              result2 = callFn(value);
             } catch (error) {
               if (iterator) iteratorClose(iterator, "throw", error);
               else throw error;
             }
-            if (typeof result == "object" && result && isPrototypeOf(ResultPrototype, result)) return result;
+            if (typeof result2 == "object" && result2 && isPrototypeOf(ResultPrototype, result2)) return result2;
           }
           return new Result(false);
         };
@@ -2989,8 +2989,8 @@ var init_pdf = __esm({
               if (IS_ITERATOR) return state.nextHandler();
               if (state.done) return createIterResultObject(void 0, true);
               try {
-                var result = state.nextHandler();
-                return state.returnHandlerResult ? result : createIterResultObject(result, state.done);
+                var result2 = state.nextHandler();
+                return state.returnHandlerResult ? result2 : createIterResultObject(result2, state.done);
               } catch (error) {
                 state.done = true;
                 throw error;
@@ -3292,14 +3292,14 @@ var init_pdf = __esm({
         };
         hiddenKeys[IE_PROTO] = true;
         module.exports = Object.create || function create(O, Properties) {
-          var result;
+          var result2;
           if (O !== null) {
             EmptyConstructor[PROTOTYPE] = anObject(O);
-            result = new EmptyConstructor();
+            result2 = new EmptyConstructor();
             EmptyConstructor[PROTOTYPE] = null;
-            result[IE_PROTO] = O;
-          } else result = NullProtoObject();
-          return Properties === void 0 ? result : definePropertiesModule.f(result, Properties);
+            result2[IE_PROTO] = O;
+          } else result2 = NullProtoObject();
+          return Properties === void 0 ? result2 : definePropertiesModule.f(result2, Properties);
         };
       },
       /***/
@@ -3433,13 +3433,13 @@ var init_pdf = __esm({
         module.exports = function(object, names) {
           var O = toIndexedObject(object);
           var i = 0;
-          var result = [];
+          var result2 = [];
           var key;
-          for (key in O) !hasOwn(hiddenKeys, key) && hasOwn(O, key) && push(result, key);
+          for (key in O) !hasOwn(hiddenKeys, key) && hasOwn(O, key) && push(result2, key);
           while (names.length > i) if (hasOwn(O, key = names[i++])) {
-            ~indexOf(result, key) || push(result, key);
+            ~indexOf(result2, key) || push(result2, key);
           }
-          return result;
+          return result2;
         };
       },
       /***/
@@ -3593,11 +3593,11 @@ var init_pdf = __esm({
         var Set2 = SetHelpers.Set;
         var add = SetHelpers.add;
         module.exports = function(set) {
-          var result = new Set2();
+          var result2 = new Set2();
           iterate(set, function(it) {
-            add(result, it);
+            add(result2, it);
           });
-          return result;
+          return result2;
         };
       },
       /***/
@@ -3614,14 +3614,14 @@ var init_pdf = __esm({
         module.exports = function difference(other) {
           var O = aSet(this);
           var otherRec = getSetRecord(other);
-          var result = clone(O);
-          if (size(result) <= otherRec.size) iterateSet(result, function(e) {
-            if (otherRec.includes(e)) remove(result, e);
+          var result2 = clone(O);
+          if (size(result2) <= otherRec.size) iterateSet(result2, function(e) {
+            if (otherRec.includes(e)) remove(result2, e);
           });
           else iterateSimple(otherRec.getIterator(), function(e) {
-            if (has(result, e)) remove(result, e);
+            if (has(result2, e)) remove(result2, e);
           });
-          return result;
+          return result2;
         };
       },
       /***/
@@ -3651,17 +3651,17 @@ var init_pdf = __esm({
         module.exports = function intersection(other) {
           var O = aSet(this);
           var otherRec = getSetRecord(other);
-          var result = new Set2();
+          var result2 = new Set2();
           if (size(O) > otherRec.size) {
             iterateSimple(otherRec.getIterator(), function(e) {
-              if (has(O, e)) add(result, e);
+              if (has(O, e)) add(result2, e);
             });
           } else {
             iterateSet(O, function(e) {
-              if (otherRec.includes(e)) add(result, e);
+              if (otherRec.includes(e)) add(result2, e);
             });
           }
-          return result;
+          return result2;
         };
       },
       /***/
@@ -3805,8 +3805,8 @@ var init_pdf = __esm({
                 });
               }
             };
-            var result = baseSet[METHOD_NAME](setLike);
-            return result.size === 1 && result.values().next().value === 4;
+            var result2 = baseSet[METHOD_NAME](setLike);
+            return result2.size === 1 && result2.values().next().value === 4;
           } catch (error) {
             return false;
           }
@@ -3833,12 +3833,12 @@ var init_pdf = __esm({
         module.exports = function symmetricDifference(other) {
           var O = aSet(this);
           var keysIter = getSetRecord(other).getIterator();
-          var result = clone(O);
+          var result2 = clone(O);
           iterateSimple(keysIter, function(e) {
-            if (has(O, e)) remove(result, e);
-            else add(result, e);
+            if (has(O, e)) remove(result2, e);
+            else add(result2, e);
           });
-          return result;
+          return result2;
         };
       },
       /***/
@@ -3851,11 +3851,11 @@ var init_pdf = __esm({
         module.exports = function union(other) {
           var O = aSet(this);
           var keysIter = getSetRecord(other).getIterator();
-          var result = clone(O);
+          var result2 = clone(O);
           iterateSimple(keysIter, function(it) {
-            add(result, it);
+            add(result2, it);
           });
-          return result;
+          return result2;
         };
       },
       /***/
@@ -3959,9 +3959,9 @@ var init_pdf = __esm({
         var toIntegerOrInfinity = __webpack_require__2(1291);
         var $RangeError = RangeError;
         module.exports = function(it) {
-          var result = toIntegerOrInfinity(it);
-          if (result < 0) throw new $RangeError("The argument can't be less than 0");
-          return result;
+          var result2 = toIntegerOrInfinity(it);
+          if (result2 < 0) throw new $RangeError("The argument can't be less than 0");
+          return result2;
         };
       },
       /***/
@@ -3977,11 +3977,11 @@ var init_pdf = __esm({
         module.exports = function(input, pref) {
           if (!isObject(input) || isSymbol(input)) return input;
           var exoticToPrim = getMethod(input, TO_PRIMITIVE);
-          var result;
+          var result2;
           if (exoticToPrim) {
             if (pref === void 0) pref = "default";
-            result = call(exoticToPrim, input, pref);
-            if (!isObject(result) || isSymbol(result)) return result;
+            result2 = call(exoticToPrim, input, pref);
+            if (!isObject(result2) || isSymbol(result2)) return result2;
             throw new $TypeError("Can't convert object to primitive value");
           }
           if (pref === void 0) pref = "number";
@@ -4187,11 +4187,11 @@ var init_pdf = __esm({
           var segments = stringMatch(string, /.{2}/g);
           var written = 0;
           for (; written < maxLength; written++) {
-            var result = +("0x" + segments[written] + "0");
-            if (result !== result) {
+            var result2 = +("0x" + segments[written] + "0");
+            if (result2 !== result2) {
               throw new SyntaxError2("String should only contain hex characters");
             }
-            bytes[written] = result >> 4;
+            bytes[written] = result2 >> 4;
           }
           return { bytes, read: written << 1 };
         };
@@ -4207,15 +4207,15 @@ var init_pdf = __esm({
           var url = new URL("b?a=1&b=2&c=3", "https://a");
           var params = url.searchParams;
           var params2 = new URLSearchParams("a=1&a=2&b=3");
-          var result = "";
+          var result2 = "";
           url.pathname = "c%20d";
           params.forEach(function(value, key) {
             params["delete"]("b");
-            result += key + value;
+            result2 += key + value;
           });
           params2["delete"]("a", 2);
           params2["delete"]("b", void 0);
-          return IS_PURE && (!url.toJSON || !params2.has("a", 1) || params2.has("a", 2) || !params2.has("a", void 0) || params2.has("b")) || !params.size && (IS_PURE || !DESCRIPTORS) || !params.sort || url.href !== "https://a/c%20d?a=1&c=3" || params.get("c") !== "3" || String(new URLSearchParams("?a=1")) !== "a=1" || !params[ITERATOR] || new URL("https://a@b").username !== "a" || new URLSearchParams(new URLSearchParams("a=b")).get("a") !== "b" || new URL("https://\u0442\u0435\u0441\u0442").host !== "xn--e1aybc" || new URL("https://a#\u0431").hash !== "#%D0%B1" || result !== "a1c3" || new URL("https://x", void 0).host !== "x";
+          return IS_PURE && (!url.toJSON || !params2.has("a", 1) || params2.has("a", 2) || !params2.has("a", void 0) || params2.has("b")) || !params.size && (IS_PURE || !DESCRIPTORS) || !params.sort || url.href !== "https://a/c%20d?a=1&c=3" || params.get("c") !== "3" || String(new URLSearchParams("?a=1")) !== "a=1" || !params[ITERATOR] || new URL("https://a@b").username !== "a" || new URLSearchParams(new URLSearchParams("a=b")).get("a") !== "b" || new URL("https://\u0442\u0435\u0441\u0442").host !== "xn--e1aybc" || new URL("https://a#\u0431").hash !== "#%D0%B1" || result2 !== "a1c3" || new URL("https://x", void 0).host !== "x";
         });
       },
       /***/
@@ -4407,16 +4407,16 @@ var init_pdf = __esm({
         var IteratorProxy = createIteratorProxy(function() {
           var iterator = this.iterator;
           var next = this.next;
-          var result, done;
+          var result2, done;
           while (this.remaining) {
             this.remaining--;
-            result = anObject(call(next, iterator));
-            done = this.done = !!result.done;
+            result2 = anObject(call(next, iterator));
+            done = this.done = !!result2.done;
             if (done) return;
           }
-          result = anObject(call(next, iterator));
-          done = this.done = !!result.done;
-          if (!done) return result.value;
+          result2 = anObject(call(next, iterator));
+          done = this.done = !!result2.done;
+          if (!done) return result2.value;
         });
         $({ target: "Iterator", proto: true, real: true, forced: FORCED }, {
           drop: function drop(limit) {
@@ -4483,12 +4483,12 @@ var init_pdf = __esm({
           var iterator = this.iterator;
           var predicate = this.predicate;
           var next = this.next;
-          var result, done, value;
+          var result2, done, value;
           while (true) {
-            result = anObject(call(next, iterator));
-            done = this.done = !!result.done;
+            result2 = anObject(call(next, iterator));
+            done = this.done = !!result2.done;
             if (done) return;
-            value = result.value;
+            value = result2.value;
             if (callWithSafeIterationClosing(iterator, predicate, [value, this.counter++], true)) return value;
           }
         });
@@ -4566,19 +4566,19 @@ var init_pdf = __esm({
         var IteratorProxy = createIteratorProxy(function() {
           var iterator = this.iterator;
           var mapper = this.mapper;
-          var result, inner;
+          var result2, inner;
           while (true) {
             if (inner = this.inner) try {
-              result = anObject(call(inner.next, inner.iterator));
-              if (!result.done) return result.value;
+              result2 = anObject(call(inner.next, inner.iterator));
+              if (!result2.done) return result2.value;
               this.inner = null;
             } catch (error) {
               iteratorClose(iterator, "throw", error);
             }
-            result = anObject(call(this.next, iterator));
-            if (this.done = !!result.done) return;
+            result2 = anObject(call(this.next, iterator));
+            if (this.done = !!result2.done) return;
             try {
-              this.inner = getIteratorFlattenable(mapper(result.value, this.counter++), false);
+              this.inner = getIteratorFlattenable(mapper(result2.value, this.counter++), false);
             } catch (error) {
               iteratorClose(iterator, "throw", error);
             }
@@ -4647,9 +4647,9 @@ var init_pdf = __esm({
         var FORCED = IS_PURE || MAP_WITHOUT_THROWING_ON_INVALID_ITERATOR || mapWithoutClosingOnEarlyError;
         var IteratorProxy = createIteratorProxy(function() {
           var iterator = this.iterator;
-          var result = anObject(call(this.next, iterator));
-          var done = this.done = !!result.done;
-          if (!done) return callWithSafeIterationClosing(iterator, this.mapper, [result.value, this.counter++], true);
+          var result2 = anObject(call(this.next, iterator));
+          var done = this.done = !!result2.done;
+          if (!done) return callWithSafeIterationClosing(iterator, this.mapper, [result2.value, this.counter++], true);
         });
         $({ target: "Iterator", proto: true, real: true, forced: FORCED }, {
           map: function map(mapper) {
@@ -4716,9 +4716,9 @@ var init_pdf = __esm({
             this.done = true;
             return iteratorClose(iterator, "normal", void 0);
           }
-          var result = anObject(call(this.next, iterator));
-          var done = this.done = !!result.done;
-          if (!done) return result.value;
+          var result2 = anObject(call(this.next, iterator));
+          var done = this.done = !!result2.done;
+          if (!done) return result2.value;
         });
         $({ target: "Iterator", proto: true, real: true, forced: FORCED }, {
           take: function take(limit) {
@@ -4867,15 +4867,15 @@ var init_pdf = __esm({
                 closed = true;
                 break;
               }
-              var result = this.fork(i).string();
-              var key = result.value;
-              i = result.end;
+              var result2 = this.fork(i).string();
+              var key = result2.value;
+              i = result2.end;
               i = this.until([":"], i) + 1;
               i = this.skip(IS_WHITESPACE, i);
-              result = this.fork(i).parse();
-              createProperty(nodes, key, result);
-              createProperty(object, key, result.value);
-              i = this.until([",", "}"], result.end);
+              result2 = this.fork(i).parse();
+              createProperty(nodes, key, result2);
+              createProperty(object, key, result2.value);
+              i = this.until([",", "}"], result2.end);
               var chr = at(source, i);
               if (chr === ",") {
                 expectKeypair = true;
@@ -4903,10 +4903,10 @@ var init_pdf = __esm({
                 closed = true;
                 break;
               }
-              var result = this.fork(i).parse();
-              push(nodes, result);
-              push(array, result.value);
-              i = this.until([",", "]"], result.end);
+              var result2 = this.fork(i).parse();
+              push(nodes, result2);
+              push(array, result2.value);
+              i = this.until([",", "]"], result2.end);
               if (at(source, i) === ",") {
                 expectElement = true;
                 i++;
@@ -5072,18 +5072,18 @@ var init_pdf = __esm({
             if (typeof json != "string") return json;
             if (ILL_FORMED_UNICODE) json = replace(json, surrogates, fixIllFormedJSON);
             if (NATIVE_RAW_JSON) return json;
-            var result = "";
+            var result2 = "";
             var length = json.length;
             for (var i = 0; i < length; i++) {
               var chr = charAt(json, i);
               if (chr === '"') {
                 var end = parseJSONString(json, ++i).end - 1;
                 var string = slice(json, i, end);
-                result += slice(string, 0, MARK_LENGTH) === MARK ? rawStrings[slice(string, MARK_LENGTH)] : '"' + string + '"';
+                result2 += slice(string, 0, MARK_LENGTH) === MARK ? rawStrings[slice(string, MARK_LENGTH)] : '"' + string + '"';
                 i = end;
-              } else result += chr;
+              } else result2 += chr;
             }
-            return result;
+            return result2;
           }
         });
       },
@@ -5274,10 +5274,10 @@ var init_pdf = __esm({
           "try": function(callbackfn) {
             var args = arguments.length > 1 ? slice(arguments, 1) : [];
             var promiseCapability = newPromiseCapabilityModule.f(this);
-            var result = perform(function() {
+            var result2 = perform(function() {
               return apply(aCallable(callbackfn), void 0, args);
             });
-            (result.error ? promiseCapability.reject : promiseCapability.resolve)(result.value);
+            (result2.error ? promiseCapability.reject : promiseCapability.resolve)(result2.value);
             return promiseCapability.promise;
           }
         });
@@ -5303,8 +5303,8 @@ var init_pdf = __esm({
         var difference = __webpack_require__2(3440);
         var fails = __webpack_require__2(9039);
         var setMethodAcceptSetLike = __webpack_require__2(4916);
-        var SET_LIKE_INCORRECT_BEHAVIOR = !setMethodAcceptSetLike("difference", function(result) {
-          return result.size === 0;
+        var SET_LIKE_INCORRECT_BEHAVIOR = !setMethodAcceptSetLike("difference", function(result2) {
+          return result2.size === 0;
         });
         var FORCED = SET_LIKE_INCORRECT_BEHAVIOR || fails(function() {
           var setLike = {
@@ -5336,8 +5336,8 @@ var init_pdf = __esm({
         var fails = __webpack_require__2(9039);
         var intersection = __webpack_require__2(8750);
         var setMethodAcceptSetLike = __webpack_require__2(4916);
-        var INCORRECT = !setMethodAcceptSetLike("intersection", function(result) {
-          return result.size === 2 && result.has(1) && result.has(2);
+        var INCORRECT = !setMethodAcceptSetLike("intersection", function(result2) {
+          return result2.size === 2 && result2.has(1) && result2.has(2);
         }) || fails(function() {
           return String(Array.from((/* @__PURE__ */ new Set([1, 2, 3])).intersection(/* @__PURE__ */ new Set([3, 2])))) !== "3,2";
         });
@@ -5350,8 +5350,8 @@ var init_pdf = __esm({
         var $ = __webpack_require__2(6518);
         var isDisjointFrom = __webpack_require__2(4449);
         var setMethodAcceptSetLike = __webpack_require__2(4916);
-        var INCORRECT = !setMethodAcceptSetLike("isDisjointFrom", function(result) {
-          return !result;
+        var INCORRECT = !setMethodAcceptSetLike("isDisjointFrom", function(result2) {
+          return !result2;
         });
         $({ target: "Set", proto: true, real: true, forced: INCORRECT }, {
           isDisjointFrom
@@ -5362,8 +5362,8 @@ var init_pdf = __esm({
         var $ = __webpack_require__2(6518);
         var isSubsetOf = __webpack_require__2(3838);
         var setMethodAcceptSetLike = __webpack_require__2(4916);
-        var INCORRECT = !setMethodAcceptSetLike("isSubsetOf", function(result) {
-          return result;
+        var INCORRECT = !setMethodAcceptSetLike("isSubsetOf", function(result2) {
+          return result2;
         });
         $({ target: "Set", proto: true, real: true, forced: INCORRECT }, {
           isSubsetOf
@@ -5374,8 +5374,8 @@ var init_pdf = __esm({
         var $ = __webpack_require__2(6518);
         var isSupersetOf = __webpack_require__2(8527);
         var setMethodAcceptSetLike = __webpack_require__2(4916);
-        var INCORRECT = !setMethodAcceptSetLike("isSupersetOf", function(result) {
-          return !result;
+        var INCORRECT = !setMethodAcceptSetLike("isSupersetOf", function(result2) {
+          return !result2;
         });
         $({ target: "Set", proto: true, real: true, forced: INCORRECT }, {
           isSupersetOf
@@ -5464,8 +5464,8 @@ var init_pdf = __esm({
         })();
         if (Uint8Array2) $({ target: "Uint8Array", stat: true, forced: INCORRECT_BEHAVIOR_OR_DOESNT_EXISTS }, {
           fromBase64: function fromBase64(string) {
-            var result = $fromBase64(string, arguments.length > 1 ? arguments[1] : void 0, null, 9007199254740991);
-            return arrayFromConstructorAndList(Uint8Array2, result.bytes);
+            var result2 = $fromBase64(string, arguments.length > 1 ? arguments[1] : void 0, null, 9007199254740991);
+            return arrayFromConstructorAndList(Uint8Array2, result2.bytes);
           }
         });
       },
@@ -5497,8 +5497,8 @@ var init_pdf = __esm({
         if (Uint8Array2) $({ target: "Uint8Array", proto: true, forced: INCORRECT_BEHAVIOR_OR_DOESNT_EXISTS }, {
           setFromBase64: function setFromBase64(string) {
             anUint8Array(this);
-            var result = $fromBase64(string, arguments.length > 1 ? arguments[1] : void 0, this, this.length);
-            return { read: result.read, written: result.written };
+            var result2 = $fromBase64(string, arguments.length > 1 ? arguments[1] : void 0, this, this.length);
+            return { read: result2.read, written: result2.written };
           }
         });
       },
@@ -5557,7 +5557,7 @@ var init_pdf = __esm({
             var alphabet = getAlphabetOption(options) === "base64" ? base64Alphabet : base64UrlAlphabet;
             var omitPadding = !!options && !!options.omitPadding;
             notDetached(this.buffer);
-            var result = "";
+            var result2 = "";
             var i = 0;
             var length = array.length;
             var triplet;
@@ -5566,16 +5566,16 @@ var init_pdf = __esm({
             };
             for (; i + 2 < length; i += 3) {
               triplet = (array[i] << 16) + (array[i + 1] << 8) + array[i + 2];
-              result += at(3) + at(2) + at(1) + at(0);
+              result2 += at(3) + at(2) + at(1) + at(0);
             }
             if (i + 2 === length) {
               triplet = (array[i] << 16) + (array[i + 1] << 8);
-              result += at(3) + at(2) + at(1) + (omitPadding ? "" : "=");
+              result2 += at(3) + at(2) + at(1) + (omitPadding ? "" : "=");
             } else if (i + 1 === length) {
               triplet = array[i] << 16;
-              result += at(3) + at(2) + (omitPadding ? "" : "==");
+              result2 += at(3) + at(2) + (omitPadding ? "" : "==");
             }
-            return result;
+            return result2;
           }
         });
       },
@@ -5602,12 +5602,12 @@ var init_pdf = __esm({
           toHex: function toHex() {
             anUint8Array(this);
             notDetached(this.buffer);
-            var result = $Array(this.length);
+            var result2 = $Array(this.length);
             for (var i = 0, length = this.length; i < length; i++) {
               var hex = numberToString(this[i], 16);
-              result[i] = hex.length === 1 ? "0" + hex : hex;
+              result2[i] = hex.length === 1 ? "0" + hex : hex;
             }
-            return join(result, "");
+            return join(result2, "");
           }
         });
       },
@@ -7475,7 +7475,7 @@ var init_pdf = __esm({
         }
       }
       static #parseShortcut(value) {
-        let keyPart = null;
+        let keyPart2 = null;
         let modifiers = 0;
         for (let part of value.split("+")) {
           part = part.trim();
@@ -7488,16 +7488,16 @@ var init_pdf = __esm({
             modifiers |= modifier;
             continue;
           }
-          if (keyPart !== null) {
+          if (keyPart2 !== null) {
             warn(`KeyboardManager: multiple keys in shortcut "${value}"`);
             break;
           }
-          keyPart = upper === "SPACE" ? " " : part;
+          keyPart2 = upper === "SPACE" ? " " : part;
         }
-        if (keyPart === null) {
+        if (keyPart2 === null) {
           warn(`KeyboardManager: no key found in shortcut "${value}"`);
         }
-        return [keyPart, modifiers];
+        return [keyPart2, modifiers];
       }
       static #codeToKey(code) {
         const match = /^(?:Key([A-Z])|(?:Digit|Numpad)(\d))$/.exec(code);
@@ -13531,13 +13531,13 @@ var init_pdf = __esm({
         }
         if (data.callbackId) {
           const sourceName = this.sourceName, targetName = data.sourceName, comObj = this.comObj;
-          Promise.try(action, data.data).then(function(result) {
+          Promise.try(action, data.data).then(function(result2) {
             comObj.postMessage({
               sourceName,
               targetName,
               callback: CallbackKind.DATA,
               callbackId: data.callbackId,
-              data: result
+              data: result2
             });
           }, function(reason) {
             comObj.postMessage({
@@ -17283,9 +17283,9 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
         let imgToPaint;
         let inlineImgCanvas = null;
         if (imgData.bitmap) {
-          const result = this.applyTransferMapsToBitmap(imgData);
-          imgToPaint = result.img;
-          inlineImgCanvas = result.canvasEntry;
+          const result2 = this.applyTransferMapsToBitmap(imgData);
+          imgToPaint = result2.img;
+          inlineImgCanvas = result2.canvasEntry;
         } else {
           const tmpCanvas = this.canvasFactory.create(width, height);
           putBinaryImageData(tmpCanvas.context, imgData);
@@ -27656,7 +27656,7 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
         }
         this.endDrawing(false);
       }
-      static endDrawing(isAborted) {
+      static endDrawing(isAborted2) {
         const parent = this._currentParent;
         if (!parent) {
           return null;
@@ -27675,7 +27675,7 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
             drawId: this._currentDrawId,
             drawOutlines: _DrawingEditor.#currentDraw.getOutlines(pageWidth * scale, pageHeight * scale, scale, this._INNER_MARGIN),
             drawingOptions: _DrawingEditor.#currentDrawingOptions,
-            mustBeCommitted: !isAborted
+            mustBeCommitted: !isAborted2
           });
           this._cleanup(true);
           return editor;
@@ -30935,7 +30935,7 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
           }, 0);
         }
       }
-      endDrawingSession(isAborted = false) {
+      endDrawingSession(isAborted2 = false) {
         if (!this.#drawingAC) {
           return null;
         }
@@ -30943,7 +30943,7 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
         this.#drawingAC.abort();
         this.#drawingAC = null;
         this.#focusedElement = null;
-        return this.#currentEditorType.endDrawing(isAborted);
+        return this.#currentEditorType.endDrawing(isAborted2);
       }
       findNewParent(editor, x, y) {
         const layer = this.#uiManager.findParent(x, y);
@@ -31896,6 +31896,13 @@ function normalizeProvince(input) {
   const key = input.trim().toUpperCase();
   return map[key];
 }
+function normalizeVin(input) {
+  const stripped = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (stripped.length !== 17) return null;
+  if (/[IOQ]/.test(stripped)) return null;
+  const display = `${stripped.slice(0, 4)}\u2022\u2022\u2022\u2022${stripped.slice(stripped.length - 4)}`;
+  return { normalized: stripped, display };
+}
 function parseMoneyCents(input) {
   const cleaned = input.replace(/[\s,]/g, "").replace(/^\$/, "");
   if (!cleaned || cleaned === "0") return 0;
@@ -31971,25 +31978,25 @@ function stripAddressLabel(line) {
   ).trim();
 }
 function extractAddressBlock(lines) {
-  const result = { redacted: true };
+  const result2 = { redacted: true };
   const regex = /(.+?),?\s*(AB|BC|ON|QC)\s*([A-Z]\d[A-Z]\s?\d[A-Z]\d)/i;
   for (const raw of lines) {
     const line = raw.trim();
     if (line.toLowerCase().startsWith("policy number")) continue;
     const m = line.match(regex);
     if (m) {
-      result.postalCode = normalizePostalCode(m[3]);
-      result.province = normalizeProvince(m[2]) ?? void 0;
-      result.city = "Calgary";
+      result2.postalCode = normalizePostalCode(m[3]);
+      result2.province = normalizeProvince(m[2]) ?? void 0;
+      result2.city = "Calgary";
       const prefix = stripAddressLabel(m[1] ? m[1].trim() : "");
       if (prefix && prefix.toLowerCase() !== "calgary") {
-        result.streetAddress = prefix.replace(/^,\s*/, "").replace(/,\s*$/, "").trim() || void 0;
+        result2.streetAddress = prefix.replace(/^,\s*/, "").replace(/,\s*$/, "").trim() || void 0;
       }
-      result.redacted = !result.streetAddress || /^[NSWE]?$/i.test(result.streetAddress);
+      result2.redacted = !result2.streetAddress || /^[NSWE]?$/i.test(result2.streetAddress);
       break;
     }
   }
-  return result;
+  return result2;
 }
 function canParseHome(document2) {
   const text = document2.pages.map((p) => p.text).join("\n").toLowerCase();
@@ -32824,11 +32831,6660 @@ function parseDocument(document2) {
     parserVersion: "0"
   };
 }
+
+// src/entity-identity.ts
+var STREET_SUFFIXES = {
+  AVENUE: "AVE",
+  BOULEVARD: "BLVD",
+  CIRCLE: "CIR",
+  COURT: "CT",
+  CRESCENT: "CRES",
+  DRIVE: "DR",
+  GARDENS: "GDNS",
+  GATE: "GT",
+  HEIGHTS: "HTS",
+  HIGHWAY: "HWY",
+  LANE: "LN",
+  PLACE: "PL",
+  ROAD: "RD",
+  STREET: "ST",
+  TERRACE: "TER",
+  TRAIL: "TRL"
+};
+var DIRECTIONALS = {
+  NORTH: "N",
+  NORTHEAST: "NE",
+  NORTHWEST: "NW",
+  SOUTH: "S",
+  SOUTHEAST: "SE",
+  SOUTHWEST: "SW",
+  EAST: "E",
+  WEST: "W"
+};
+var REDACTION_MARKERS = [
+  "REDACTED",
+  "WITHHELD",
+  "NOT PROVIDED",
+  "UNKNOWN",
+  "XXXX",
+  "****",
+  "\u2022\u2022\u2022\u2022"
+];
+function normalizeTokenText(input) {
+  return input.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[#.,'’/\\()-]/g, " ").replace(/\s+/g, " ").trim();
+}
+function normalizeAddressTokens(input) {
+  return normalizeTokenText(input).split(" ").filter(Boolean).map((token) => DIRECTIONALS[token] ?? STREET_SUFFIXES[token] ?? token).join(" ");
+}
+function isRedactedOrPlaceholder(input) {
+  if (!input) return true;
+  const normalized = normalizeTokenText(input);
+  if (!normalized) return true;
+  return REDACTION_MARKERS.some((marker) => normalized.includes(marker));
+}
+function normalizeUnit(input) {
+  if (!input || isRedactedOrPlaceholder(input)) return null;
+  const normalized = normalizeTokenText(input).replace(/^(UNIT|SUITE|APT|APARTMENT)\s+/, "");
+  return normalized || null;
+}
+function normalizeOptionalText(input) {
+  if (!input || isRedactedOrPlaceholder(input)) return null;
+  const normalized = normalizeTokenText(input);
+  return normalized || null;
+}
+function joinFingerprintParts(parts) {
+  return parts.map((part) => part ?? "").join("|");
+}
+function buildPropertyIdentity(input) {
+  const reasons = [];
+  const normalizedAddressLine1 = input.addressLine1 && !isRedactedOrPlaceholder(input.addressLine1) ? normalizeAddressTokens(input.addressLine1) : null;
+  const normalizedUnit = normalizeUnit(input.unit);
+  const normalizedCity = normalizeOptionalText(input.city);
+  const normalizedProvince = input.province ? normalizeProvince(input.province) ?? null : null;
+  const normalizedPostalCode = input.postalCode ? normalizePostalCode(input.postalCode) ?? null : null;
+  if (input.isRedacted || !normalizedAddressLine1) {
+    reasons.push("insured_civic_address_missing_or_redacted");
+  }
+  if (!normalizedCity) reasons.push("insured_city_missing");
+  if (!normalizedProvince) reasons.push("insured_province_missing_or_invalid");
+  if (!normalizedPostalCode) reasons.push("insured_postal_code_missing_or_invalid");
+  const completeAddress = normalizedAddressLine1 && normalizedCity && normalizedProvince && normalizedPostalCode;
+  const exactFingerprint = completeAddress ? `property:${joinFingerprintParts([
+    normalizedUnit,
+    normalizedAddressLine1,
+    normalizedCity,
+    normalizedProvince,
+    normalizedPostalCode.replace(/\s/g, "")
+  ])}` : null;
+  const occupancy = input.occupancy ?? "unknown";
+  const possibleMatchHint = normalizedPostalCode ? `property-hint:${normalizedPostalCode.replace(/\s/g, "")}:${occupancy}` : null;
+  if (exactFingerprint) {
+    return {
+      strength: "exact",
+      exactFingerprint,
+      possibleMatchHint,
+      requiresCustomerConfirmation: false,
+      normalizedAddressLine1,
+      normalizedUnit,
+      normalizedCity,
+      normalizedProvince,
+      normalizedPostalCode,
+      reasons
+    };
+  }
+  return {
+    strength: possibleMatchHint ? "confirmation_required" : "possible",
+    exactFingerprint: null,
+    possibleMatchHint,
+    requiresCustomerConfirmation: true,
+    normalizedAddressLine1,
+    normalizedUnit,
+    normalizedCity,
+    normalizedProvince,
+    normalizedPostalCode,
+    reasons
+  };
+}
+function buildVehicleIdentity(input) {
+  const reasons = [];
+  const vin = input.vin ? normalizeVin(input.vin) : null;
+  if (vin) {
+    return {
+      strength: "exact",
+      exactFingerprint: `vehicle:vin:${vin.normalized}`,
+      possibleMatchHint: null,
+      requiresCustomerConfirmation: false,
+      normalizedVin: vin.normalized,
+      maskedVin: vin.display,
+      reasons
+    };
+  }
+  reasons.push(input.vin ? "vin_invalid" : "vin_missing");
+  const make = normalizeOptionalText(input.make);
+  const model = normalizeOptionalText(input.model);
+  const trim = normalizeOptionalText(input.trim);
+  const modelYear = input.modelYear && Number.isInteger(input.modelYear) ? input.modelYear : null;
+  const possibleMatchHint = modelYear && make && model ? `vehicle-hint:${joinFingerprintParts([modelYear.toString(), make, model, trim])}` : null;
+  if (!modelYear) reasons.push("model_year_missing_or_invalid");
+  if (!make) reasons.push("make_missing");
+  if (!model) reasons.push("model_missing");
+  return {
+    strength: possibleMatchHint ? "possible" : "confirmation_required",
+    exactFingerprint: null,
+    possibleMatchHint,
+    requiresCustomerConfirmation: true,
+    normalizedVin: null,
+    maskedVin: null,
+    reasons
+  };
+}
+function canAutoMergeIdentity(left, right) {
+  return Boolean(
+    left.exactFingerprint && right.exactFingerprint && left.exactFingerprint === right.exactFingerprint
+  );
+}
+
+// src/document-intake-planner.ts
+var ACTIVE_SESSION_STATUSES = /* @__PURE__ */ new Set(["collecting", "reviewing"]);
+function normalizeDigest(value) {
+  return value.trim().toLowerCase();
+}
+function normalizeId(value) {
+  return value.trim();
+}
+function stableHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+function compareIncoming(left, right) {
+  const digestDifference = normalizeDigest(left.fileDigest).localeCompare(
+    normalizeDigest(right.fileDigest)
+  );
+  if (digestDifference !== 0) return digestDifference;
+  return normalizeId(left.uploadId).localeCompare(normalizeId(right.uploadId));
+}
+function planDocumentIntake(input) {
+  const existingDocuments = input.existingDocuments ?? [];
+  const existingSessions = input.existingSessions ?? [];
+  const blockers = [];
+  const seenUploadIds = /* @__PURE__ */ new Set();
+  for (const document2 of input.incoming) {
+    const uploadId = normalizeId(document2.uploadId);
+    const fileDigest = normalizeDigest(document2.fileDigest);
+    if (!uploadId) {
+      blockers.push({
+        code: "missing_upload_id",
+        message: "Every incoming document requires a non-empty upload ID."
+      });
+    } else if (seenUploadIds.has(uploadId)) {
+      blockers.push({
+        code: "duplicate_upload_id",
+        uploadId,
+        message: "Upload IDs must be unique within one intake request."
+      });
+    }
+    seenUploadIds.add(uploadId);
+    if (!fileDigest) {
+      blockers.push({
+        code: "missing_file_digest",
+        uploadId: uploadId || void 0,
+        message: "Every incoming document requires a non-empty file digest."
+      });
+    }
+  }
+  const activeSessions = existingSessions.filter((session2) => ACTIVE_SESSION_STATUSES.has(session2.status)).sort((left, right) => left.sessionId.localeCompare(right.sessionId));
+  if (activeSessions.length > 1) {
+    blockers.push({
+      code: "multiple_active_review_sessions",
+      message: "A household may have only one collecting or reviewing policy-import session."
+    });
+  }
+  const existingByDigest = /* @__PURE__ */ new Map();
+  for (const document2 of existingDocuments) {
+    const documentId = normalizeId(document2.documentId);
+    const fileDigest = normalizeDigest(document2.fileDigest);
+    if (!documentId || !fileDigest) {
+      blockers.push({
+        code: "invalid_existing_document",
+        fileDigest: fileDigest || void 0,
+        message: "Existing household documents require non-empty document IDs and file digests."
+      });
+      continue;
+    }
+    const matches = existingByDigest.get(fileDigest) ?? [];
+    matches.push({
+      ...document2,
+      documentId,
+      fileDigest
+    });
+    existingByDigest.set(fileDigest, matches);
+  }
+  for (const [fileDigest, documents] of existingByDigest) {
+    const uniqueDocumentIds = new Set(documents.map((document2) => document2.documentId));
+    if (uniqueDocumentIds.size > 1) {
+      blockers.push({
+        code: "existing_digest_collision",
+        fileDigest,
+        message: "Multiple stored household documents share one digest; reconcile them before intake."
+      });
+    }
+  }
+  if (blockers.length > 0) {
+    return {
+      ready: false,
+      session: { mode: "none" },
+      acceptedUploads: [],
+      duplicateUploads: [],
+      blockers
+    };
+  }
+  const sortedIncoming = [...input.incoming].map((document2) => ({
+    ...document2,
+    uploadId: normalizeId(document2.uploadId),
+    fileDigest: normalizeDigest(document2.fileDigest)
+  })).sort(compareIncoming);
+  const incomingByDigest = /* @__PURE__ */ new Map();
+  for (const document2 of sortedIncoming) {
+    const matches = incomingByDigest.get(document2.fileDigest) ?? [];
+    matches.push(document2);
+    incomingByDigest.set(document2.fileDigest, matches);
+  }
+  const acceptedDrafts = [];
+  const duplicateUploads = [];
+  for (const [fileDigest, documents] of [...incomingByDigest.entries()].sort(
+    ([left], [right]) => left.localeCompare(right)
+  )) {
+    const existing = existingByDigest.get(fileDigest)?.[0];
+    if (existing) {
+      const linkedActiveSession = activeSessions.find(
+        (session2) => session2.documentIds.includes(existing.documentId)
+      );
+      const fallbackSessionId = [...existing.reviewSessionIds ?? []].sort()[0];
+      for (const document2 of documents) {
+        duplicateUploads.push({
+          uploadId: document2.uploadId,
+          fileDigest,
+          reason: "already_exists_in_household",
+          existingDocumentId: existing.documentId,
+          existingReviewSessionId: linkedActiveSession?.sessionId ?? fallbackSessionId
+        });
+      }
+      continue;
+    }
+    const [canonical, ...duplicates] = documents;
+    acceptedDrafts.push({
+      uploadId: canonical.uploadId,
+      fileDigest
+    });
+    for (const duplicate of duplicates) {
+      duplicateUploads.push({
+        uploadId: duplicate.uploadId,
+        fileDigest,
+        reason: "duplicate_in_batch",
+        canonicalUploadId: canonical.uploadId
+      });
+    }
+  }
+  if (acceptedDrafts.length === 0) {
+    return {
+      ready: true,
+      session: { mode: "none" },
+      acceptedUploads: [],
+      duplicateUploads,
+      blockers: []
+    };
+  }
+  const session = activeSessions.length === 1 ? { mode: "reuse", sessionId: activeSessions[0].sessionId } : {
+    mode: "create",
+    provisionalKey: `policy-intake:${stableHash(
+      acceptedDrafts.map((document2) => document2.fileDigest).join("|")
+    )}`
+  };
+  return {
+    ready: true,
+    session,
+    acceptedUploads: acceptedDrafts.map((document2) => ({
+      ...document2,
+      session
+    })),
+    duplicateUploads,
+    blockers: []
+  };
+}
+
+// src/incremental-onboarding-session.ts
+function clean(value) {
+  return value.trim();
+}
+function keyPart(value) {
+  return encodeURIComponent(clean(value)).replace(/%[0-9A-F]{2}/g, (m) => m.toLowerCase());
+}
+function candidateIdFor(documentFingerprint, localCandidateId) {
+  return `candidate:${keyPart(documentFingerprint)}:${keyPart(localCandidateId)}`;
+}
+function duplicateGroupIdFor(identityFingerprint) {
+  return `duplicate:${keyPart(identityFingerprint)}`;
+}
+function hasValue(value) {
+  return value !== void 0 && value !== null;
+}
+function defaultMandatedValue(specification) {
+  return hasValue(specification.defaultMandatedValue) ? specification.defaultMandatedValue : specification.currentValue;
+}
+function sortedSpecifications(specifications) {
+  return [...specifications].sort(
+    (left, right) => clean(left.fieldPath).localeCompare(clean(right.fieldPath))
+  );
+}
+function documentSnapshotFingerprint(upload) {
+  return [...upload.candidates].sort(
+    (left, right) => clean(left.localCandidateId).localeCompare(clean(right.localCandidateId))
+  ).map((candidate) => {
+    const specifications = sortedSpecifications(candidate.specifications).map(
+      (specification) => `${keyPart(specification.fieldPath)}=${keyPart(specification.extractionFingerprint)}`
+    ).join(",");
+    return [
+      keyPart(candidate.localCandidateId),
+      candidate.assetType,
+      keyPart(candidate.identityFingerprint),
+      keyPart(candidate.reviewFingerprint),
+      specifications
+    ].join("|");
+  }).join("||");
+}
+function validateUpload(upload) {
+  const blockers = [];
+  if (!clean(upload.uploadId)) {
+    blockers.push({
+      code: "missing_upload_id",
+      message: "Incremental uploads require a non-empty upload ID."
+    });
+  }
+  if (!clean(upload.documentFingerprint)) {
+    blockers.push({
+      code: "missing_document_fingerprint",
+      message: "Incremental uploads require a document content fingerprint."
+    });
+  }
+  if (!clean(upload.extractionRevision)) {
+    blockers.push({
+      code: "missing_extraction_revision",
+      message: "Incremental uploads require an extraction revision."
+    });
+  }
+  const seenCandidates = /* @__PURE__ */ new Set();
+  for (const candidate of upload.candidates) {
+    const localCandidateId = clean(candidate.localCandidateId);
+    if (!localCandidateId) {
+      blockers.push({
+        code: "missing_local_candidate_id",
+        localCandidateId,
+        message: "Every extracted asset requires a stable document-local ID."
+      });
+    } else if (seenCandidates.has(localCandidateId)) {
+      blockers.push({
+        code: "duplicate_local_candidate_id",
+        localCandidateId,
+        message: "Document-local candidate IDs must be unique."
+      });
+    }
+    seenCandidates.add(localCandidateId);
+    if (!clean(candidate.reviewFingerprint)) {
+      blockers.push({
+        code: "missing_candidate_review_fingerprint",
+        localCandidateId,
+        message: "Every candidate requires a semantic review fingerprint."
+      });
+    }
+    const seenFields = /* @__PURE__ */ new Set();
+    for (const specification of candidate.specifications) {
+      const fieldPath = clean(specification.fieldPath);
+      if (!fieldPath) {
+        blockers.push({
+          code: "missing_specification_field_path",
+          localCandidateId,
+          fieldPath,
+          message: "Every specification requires a field path."
+        });
+      } else if (seenFields.has(fieldPath)) {
+        blockers.push({
+          code: "duplicate_specification_field_path",
+          localCandidateId,
+          fieldPath,
+          message: "A candidate may contain each specification only once."
+        });
+      }
+      seenFields.add(fieldPath);
+      if (!clean(specification.extractionFingerprint)) {
+        blockers.push({
+          code: "missing_specification_extraction_fingerprint",
+          localCandidateId,
+          fieldPath,
+          message: "Every specification requires an extraction fingerprint."
+        });
+      }
+    }
+  }
+  return blockers;
+}
+function cloneSession(session) {
+  return {
+    ...session,
+    documents: session.documents.map((document2) => ({
+      ...document2,
+      candidateIds: [...document2.candidateIds]
+    })),
+    candidates: session.candidates.map((candidate) => ({
+      ...candidate,
+      specifications: candidate.specifications.map((specification) => ({
+        ...specification
+      }))
+    }))
+  };
+}
+function createCandidate(documentFingerprint, candidate) {
+  return {
+    candidateId: candidateIdFor(documentFingerprint, candidate.localCandidateId),
+    sourceDocumentFingerprint: clean(documentFingerprint),
+    localCandidateId: clean(candidate.localCandidateId),
+    assetType: candidate.assetType,
+    identityFingerprint: clean(candidate.identityFingerprint),
+    reviewFingerprint: clean(candidate.reviewFingerprint),
+    decision: "pending",
+    existingEntityId: void 0,
+    reviewFreshness: "unreviewed",
+    specifications: sortedSpecifications(candidate.specifications).map((specification) => ({
+      fieldPath: clean(specification.fieldPath),
+      extractionFingerprint: clean(specification.extractionFingerprint),
+      currentValue: specification.currentValue,
+      mandatedValue: defaultMandatedValue(specification),
+      mandatedValueOrigin: "defaulted_from_current",
+      confirmed: false,
+      superseded: false
+    })),
+    duplicateGroupId: void 0,
+    superseded: false,
+    revision: 1
+  };
+}
+function reconcileSpecifications(previous, incoming, forceUnconfirmed) {
+  const previousByField = new Map(
+    previous.specifications.map((specification) => [clean(specification.fieldPath), specification])
+  );
+  const incomingFields = /* @__PURE__ */ new Set();
+  const specifications = [];
+  let changed = false;
+  for (const incomingSpecification of sortedSpecifications(incoming.specifications)) {
+    const fieldPath = clean(incomingSpecification.fieldPath);
+    incomingFields.add(fieldPath);
+    const existing = previousByField.get(fieldPath);
+    if (!existing) {
+      changed = true;
+      specifications.push({
+        fieldPath,
+        extractionFingerprint: clean(incomingSpecification.extractionFingerprint),
+        currentValue: incomingSpecification.currentValue,
+        mandatedValue: defaultMandatedValue(incomingSpecification),
+        mandatedValueOrigin: "defaulted_from_current",
+        confirmed: false,
+        superseded: false
+      });
+      continue;
+    }
+    const specificationChanged = existing.extractionFingerprint !== clean(incomingSpecification.extractionFingerprint) || existing.superseded;
+    if (specificationChanged) changed = true;
+    specifications.push({
+      fieldPath,
+      extractionFingerprint: clean(incomingSpecification.extractionFingerprint),
+      currentValue: incomingSpecification.currentValue,
+      mandatedValue: existing.mandatedValueOrigin === "customer_customized" ? existing.mandatedValue : defaultMandatedValue(incomingSpecification),
+      mandatedValueOrigin: existing.mandatedValueOrigin,
+      confirmed: forceUnconfirmed || specificationChanged ? false : existing.confirmed,
+      superseded: false
+    });
+  }
+  for (const existing of previous.specifications) {
+    if (incomingFields.has(clean(existing.fieldPath))) continue;
+    changed = true;
+    specifications.push({ ...existing, confirmed: false, superseded: true });
+  }
+  specifications.sort((left, right) => left.fieldPath.localeCompare(right.fieldPath));
+  return { specifications, changed };
+}
+function duplicateGroupsFor(candidates) {
+  const byFingerprint = /* @__PURE__ */ new Map();
+  for (const candidate of candidates) {
+    const fingerprint = clean(candidate.identityFingerprint);
+    if (candidate.superseded || !fingerprint) continue;
+    const candidateIds = byFingerprint.get(fingerprint) ?? [];
+    candidateIds.push(candidate.candidateId);
+    byFingerprint.set(fingerprint, candidateIds);
+  }
+  return [...byFingerprint.entries()].filter(([, candidateIds]) => candidateIds.length > 1).sort(([left], [right]) => left.localeCompare(right)).map(([identityFingerprint, candidateIds]) => ({
+    duplicateGroupId: duplicateGroupIdFor(identityFingerprint),
+    identityFingerprint,
+    candidateIds: [...candidateIds].sort((left, right) => left.localeCompare(right))
+  }));
+}
+function assignDuplicateGroups(candidates) {
+  const duplicateGroups = duplicateGroupsFor(candidates);
+  const groupByCandidate = /* @__PURE__ */ new Map();
+  for (const group of duplicateGroups) {
+    for (const candidateId of group.candidateIds) {
+      groupByCandidate.set(candidateId, group.duplicateGroupId);
+    }
+  }
+  return {
+    candidates: candidates.map((candidate) => ({
+      ...candidate,
+      duplicateGroupId: groupByCandidate.get(candidate.candidateId)
+    })),
+    duplicateGroups
+  };
+}
+function warningsFor(duplicateGroups, staleCandidateIds, supersededCandidateIds) {
+  const warnings = [];
+  if (duplicateGroups.length > 0) warnings.push("potential_duplicate_assets_present");
+  if (staleCandidateIds.length > 0) warnings.push("customer_review_became_stale");
+  if (supersededCandidateIds.length > 0) {
+    warnings.push("candidates_removed_by_reprocessing");
+  }
+  return warnings;
+}
+function result(outcome, session, duplicateGroups, values = {}) {
+  return {
+    accepted: outcome !== "blocked",
+    outcome,
+    session,
+    blockers: values.blockers ?? [],
+    addedCandidateIds: values.addedCandidateIds ?? [],
+    updatedCandidateIds: values.updatedCandidateIds ?? [],
+    staleCandidateIds: values.staleCandidateIds ?? [],
+    supersededCandidateIds: values.supersededCandidateIds ?? [],
+    duplicateGroups,
+    warnings: values.warnings ?? []
+  };
+}
+function createEmptyIncrementalOnboardingSession() {
+  return { version: 1, revision: 0, documents: [], candidates: [] };
+}
+function mergeIncrementalOnboardingUpload(session, upload) {
+  const blockers = validateUpload(upload);
+  const currentGroups = duplicateGroupsFor(session.candidates);
+  if (blockers.length > 0) {
+    return result("blocked", session, currentGroups, { blockers });
+  }
+  const documentFingerprint = clean(upload.documentFingerprint);
+  const extractionRevision = clean(upload.extractionRevision);
+  const snapshotFingerprint = documentSnapshotFingerprint(upload);
+  const existingDocument = session.documents.find(
+    (document2) => document2.documentFingerprint === documentFingerprint
+  );
+  if (existingDocument?.snapshotFingerprint === snapshotFingerprint && existingDocument.extractionRevision === extractionRevision) {
+    return result("duplicate_document", session, currentGroups, {
+      warnings: warningsFor(currentGroups, [], [])
+    });
+  }
+  const next = cloneSession(session);
+  const addedCandidateIds = [];
+  const updatedCandidateIds = [];
+  const staleCandidateIds = [];
+  const supersededCandidateIds = [];
+  if (!existingDocument) {
+    const candidateIds = upload.candidates.map((incoming) => {
+      const candidate = createCandidate(documentFingerprint, incoming);
+      next.candidates.push(candidate);
+      addedCandidateIds.push(candidate.candidateId);
+      return candidate.candidateId;
+    });
+    next.documents.push({
+      documentFingerprint,
+      latestUploadId: clean(upload.uploadId),
+      extractionRevision,
+      snapshotFingerprint,
+      candidateIds
+    });
+    next.revision += 1;
+    const grouped2 = assignDuplicateGroups(next.candidates);
+    next.candidates = grouped2.candidates;
+    return result("document_added", next, grouped2.duplicateGroups, {
+      addedCandidateIds,
+      warnings: warningsFor(grouped2.duplicateGroups, [], [])
+    });
+  }
+  const documentIndex = next.documents.findIndex(
+    (document2) => document2.documentFingerprint === documentFingerprint
+  );
+  if (existingDocument.snapshotFingerprint === snapshotFingerprint) {
+    next.documents[documentIndex] = {
+      ...next.documents[documentIndex],
+      latestUploadId: clean(upload.uploadId),
+      extractionRevision
+    };
+    next.revision += 1;
+    const grouped2 = assignDuplicateGroups(next.candidates);
+    next.candidates = grouped2.candidates;
+    return result("document_reprocessed_unchanged", next, grouped2.duplicateGroups, {
+      warnings: warningsFor(grouped2.duplicateGroups, [], [])
+    });
+  }
+  const incomingIds = new Set(
+    upload.candidates.map(
+      (candidate) => candidateIdFor(documentFingerprint, candidate.localCandidateId)
+    )
+  );
+  for (let index = 0; index < next.candidates.length; index += 1) {
+    const candidate = next.candidates[index];
+    if (candidate.sourceDocumentFingerprint !== documentFingerprint || incomingIds.has(candidate.candidateId)) {
+      continue;
+    }
+    next.candidates[index] = {
+      ...candidate,
+      reviewFreshness: "stale",
+      specifications: candidate.specifications.map((specification) => ({
+        ...specification,
+        confirmed: false,
+        superseded: true
+      })),
+      duplicateGroupId: void 0,
+      superseded: true,
+      revision: candidate.revision + 1
+    };
+    staleCandidateIds.push(candidate.candidateId);
+    supersededCandidateIds.push(candidate.candidateId);
+  }
+  const activeCandidateIds = [];
+  for (const incoming of upload.candidates) {
+    const candidateId = candidateIdFor(documentFingerprint, incoming.localCandidateId);
+    activeCandidateIds.push(candidateId);
+    const index = next.candidates.findIndex((candidate) => candidate.candidateId === candidateId);
+    if (index < 0) {
+      next.candidates.push(createCandidate(documentFingerprint, incoming));
+      addedCandidateIds.push(candidateId);
+      continue;
+    }
+    const previous = next.candidates[index];
+    const identityChanged = previous.assetType !== incoming.assetType || clean(previous.identityFingerprint) !== clean(incoming.identityFingerprint);
+    const reviewFingerprintChanged = previous.reviewFingerprint !== clean(incoming.reviewFingerprint);
+    const reconciled = reconcileSpecifications(
+      previous,
+      incoming,
+      identityChanged || reviewFingerprintChanged
+    );
+    const candidateChanged = identityChanged || reviewFingerprintChanged || previous.superseded || reconciled.changed;
+    if (!candidateChanged) continue;
+    next.candidates[index] = {
+      ...previous,
+      assetType: incoming.assetType,
+      identityFingerprint: clean(incoming.identityFingerprint),
+      reviewFingerprint: clean(incoming.reviewFingerprint),
+      decision: identityChanged ? "pending" : previous.decision,
+      existingEntityId: identityChanged ? void 0 : previous.existingEntityId,
+      reviewFreshness: "stale",
+      specifications: reconciled.specifications,
+      superseded: false,
+      revision: previous.revision + 1
+    };
+    updatedCandidateIds.push(candidateId);
+    staleCandidateIds.push(candidateId);
+  }
+  next.documents[documentIndex] = {
+    documentFingerprint,
+    latestUploadId: clean(upload.uploadId),
+    extractionRevision,
+    snapshotFingerprint,
+    candidateIds: activeCandidateIds
+  };
+  next.revision += 1;
+  const grouped = assignDuplicateGroups(next.candidates);
+  next.candidates = grouped.candidates;
+  return result("document_reprocessed_changed", next, grouped.duplicateGroups, {
+    addedCandidateIds,
+    updatedCandidateIds,
+    staleCandidateIds,
+    supersededCandidateIds,
+    warnings: warningsFor(grouped.duplicateGroups, staleCandidateIds, supersededCandidateIds)
+  });
+}
+
+// ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
+var util;
+(function(util2) {
+  util2.assertEqual = (val) => val;
+  function assertIs(_arg) {
+  }
+  util2.assertIs = assertIs;
+  function assertNever(_x) {
+    throw new Error();
+  }
+  util2.assertNever = assertNever;
+  util2.arrayToEnum = (items) => {
+    const obj = {};
+    for (const item of items) {
+      obj[item] = item;
+    }
+    return obj;
+  };
+  util2.getValidEnumValues = (obj) => {
+    const validKeys = util2.objectKeys(obj).filter((k) => typeof obj[obj[k]] !== "number");
+    const filtered = {};
+    for (const k of validKeys) {
+      filtered[k] = obj[k];
+    }
+    return util2.objectValues(filtered);
+  };
+  util2.objectValues = (obj) => {
+    return util2.objectKeys(obj).map(function(e) {
+      return obj[e];
+    });
+  };
+  util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object) => {
+    const keys = [];
+    for (const key in object) {
+      if (Object.prototype.hasOwnProperty.call(object, key)) {
+        keys.push(key);
+      }
+    }
+    return keys;
+  };
+  util2.find = (arr, checker) => {
+    for (const item of arr) {
+      if (checker(item))
+        return item;
+    }
+    return void 0;
+  };
+  util2.isInteger = typeof Number.isInteger === "function" ? (val) => Number.isInteger(val) : (val) => typeof val === "number" && isFinite(val) && Math.floor(val) === val;
+  function joinValues(array, separator = " | ") {
+    return array.map((val) => typeof val === "string" ? `'${val}'` : val).join(separator);
+  }
+  util2.joinValues = joinValues;
+  util2.jsonStringifyReplacer = (_, value) => {
+    if (typeof value === "bigint") {
+      return value.toString();
+    }
+    return value;
+  };
+})(util || (util = {}));
+var objectUtil;
+(function(objectUtil2) {
+  objectUtil2.mergeShapes = (first, second) => {
+    return {
+      ...first,
+      ...second
+      // second overwrites first
+    };
+  };
+})(objectUtil || (objectUtil = {}));
+var ZodParsedType = util.arrayToEnum([
+  "string",
+  "nan",
+  "number",
+  "integer",
+  "float",
+  "boolean",
+  "date",
+  "bigint",
+  "symbol",
+  "function",
+  "undefined",
+  "null",
+  "array",
+  "object",
+  "unknown",
+  "promise",
+  "void",
+  "never",
+  "map",
+  "set"
+]);
+var getParsedType = (data) => {
+  const t = typeof data;
+  switch (t) {
+    case "undefined":
+      return ZodParsedType.undefined;
+    case "string":
+      return ZodParsedType.string;
+    case "number":
+      return isNaN(data) ? ZodParsedType.nan : ZodParsedType.number;
+    case "boolean":
+      return ZodParsedType.boolean;
+    case "function":
+      return ZodParsedType.function;
+    case "bigint":
+      return ZodParsedType.bigint;
+    case "symbol":
+      return ZodParsedType.symbol;
+    case "object":
+      if (Array.isArray(data)) {
+        return ZodParsedType.array;
+      }
+      if (data === null) {
+        return ZodParsedType.null;
+      }
+      if (data.then && typeof data.then === "function" && data.catch && typeof data.catch === "function") {
+        return ZodParsedType.promise;
+      }
+      if (typeof Map !== "undefined" && data instanceof Map) {
+        return ZodParsedType.map;
+      }
+      if (typeof Set !== "undefined" && data instanceof Set) {
+        return ZodParsedType.set;
+      }
+      if (typeof Date !== "undefined" && data instanceof Date) {
+        return ZodParsedType.date;
+      }
+      return ZodParsedType.object;
+    default:
+      return ZodParsedType.unknown;
+  }
+};
+var ZodIssueCode = util.arrayToEnum([
+  "invalid_type",
+  "invalid_literal",
+  "custom",
+  "invalid_union",
+  "invalid_union_discriminator",
+  "invalid_enum_value",
+  "unrecognized_keys",
+  "invalid_arguments",
+  "invalid_return_type",
+  "invalid_date",
+  "invalid_string",
+  "too_small",
+  "too_big",
+  "invalid_intersection_types",
+  "not_multiple_of",
+  "not_finite"
+]);
+var quotelessJson = (obj) => {
+  const json = JSON.stringify(obj, null, 2);
+  return json.replace(/"([^"]+)":/g, "$1:");
+};
+var ZodError = class _ZodError extends Error {
+  get errors() {
+    return this.issues;
+  }
+  constructor(issues) {
+    super();
+    this.issues = [];
+    this.addIssue = (sub) => {
+      this.issues = [...this.issues, sub];
+    };
+    this.addIssues = (subs = []) => {
+      this.issues = [...this.issues, ...subs];
+    };
+    const actualProto = new.target.prototype;
+    if (Object.setPrototypeOf) {
+      Object.setPrototypeOf(this, actualProto);
+    } else {
+      this.__proto__ = actualProto;
+    }
+    this.name = "ZodError";
+    this.issues = issues;
+  }
+  format(_mapper) {
+    const mapper = _mapper || function(issue) {
+      return issue.message;
+    };
+    const fieldErrors = { _errors: [] };
+    const processError = (error) => {
+      for (const issue of error.issues) {
+        if (issue.code === "invalid_union") {
+          issue.unionErrors.map(processError);
+        } else if (issue.code === "invalid_return_type") {
+          processError(issue.returnTypeError);
+        } else if (issue.code === "invalid_arguments") {
+          processError(issue.argumentsError);
+        } else if (issue.path.length === 0) {
+          fieldErrors._errors.push(mapper(issue));
+        } else {
+          let curr = fieldErrors;
+          let i = 0;
+          while (i < issue.path.length) {
+            const el = issue.path[i];
+            const terminal = i === issue.path.length - 1;
+            if (!terminal) {
+              curr[el] = curr[el] || { _errors: [] };
+            } else {
+              curr[el] = curr[el] || { _errors: [] };
+              curr[el]._errors.push(mapper(issue));
+            }
+            curr = curr[el];
+            i++;
+          }
+        }
+      }
+    };
+    processError(this);
+    return fieldErrors;
+  }
+  static assert(value) {
+    if (!(value instanceof _ZodError)) {
+      throw new Error(`Not a ZodError: ${value}`);
+    }
+  }
+  toString() {
+    return this.message;
+  }
+  get message() {
+    return JSON.stringify(this.issues, util.jsonStringifyReplacer, 2);
+  }
+  get isEmpty() {
+    return this.issues.length === 0;
+  }
+  flatten(mapper = (issue) => issue.message) {
+    const fieldErrors = {};
+    const formErrors = [];
+    for (const sub of this.issues) {
+      if (sub.path.length > 0) {
+        fieldErrors[sub.path[0]] = fieldErrors[sub.path[0]] || [];
+        fieldErrors[sub.path[0]].push(mapper(sub));
+      } else {
+        formErrors.push(mapper(sub));
+      }
+    }
+    return { formErrors, fieldErrors };
+  }
+  get formErrors() {
+    return this.flatten();
+  }
+};
+ZodError.create = (issues) => {
+  const error = new ZodError(issues);
+  return error;
+};
+var errorMap = (issue, _ctx) => {
+  let message;
+  switch (issue.code) {
+    case ZodIssueCode.invalid_type:
+      if (issue.received === ZodParsedType.undefined) {
+        message = "Required";
+      } else {
+        message = `Expected ${issue.expected}, received ${issue.received}`;
+      }
+      break;
+    case ZodIssueCode.invalid_literal:
+      message = `Invalid literal value, expected ${JSON.stringify(issue.expected, util.jsonStringifyReplacer)}`;
+      break;
+    case ZodIssueCode.unrecognized_keys:
+      message = `Unrecognized key(s) in object: ${util.joinValues(issue.keys, ", ")}`;
+      break;
+    case ZodIssueCode.invalid_union:
+      message = `Invalid input`;
+      break;
+    case ZodIssueCode.invalid_union_discriminator:
+      message = `Invalid discriminator value. Expected ${util.joinValues(issue.options)}`;
+      break;
+    case ZodIssueCode.invalid_enum_value:
+      message = `Invalid enum value. Expected ${util.joinValues(issue.options)}, received '${issue.received}'`;
+      break;
+    case ZodIssueCode.invalid_arguments:
+      message = `Invalid function arguments`;
+      break;
+    case ZodIssueCode.invalid_return_type:
+      message = `Invalid function return type`;
+      break;
+    case ZodIssueCode.invalid_date:
+      message = `Invalid date`;
+      break;
+    case ZodIssueCode.invalid_string:
+      if (typeof issue.validation === "object") {
+        if ("includes" in issue.validation) {
+          message = `Invalid input: must include "${issue.validation.includes}"`;
+          if (typeof issue.validation.position === "number") {
+            message = `${message} at one or more positions greater than or equal to ${issue.validation.position}`;
+          }
+        } else if ("startsWith" in issue.validation) {
+          message = `Invalid input: must start with "${issue.validation.startsWith}"`;
+        } else if ("endsWith" in issue.validation) {
+          message = `Invalid input: must end with "${issue.validation.endsWith}"`;
+        } else {
+          util.assertNever(issue.validation);
+        }
+      } else if (issue.validation !== "regex") {
+        message = `Invalid ${issue.validation}`;
+      } else {
+        message = "Invalid";
+      }
+      break;
+    case ZodIssueCode.too_small:
+      if (issue.type === "array")
+        message = `Array must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `more than`} ${issue.minimum} element(s)`;
+      else if (issue.type === "string")
+        message = `String must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `over`} ${issue.minimum} character(s)`;
+      else if (issue.type === "number")
+        message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
+      else if (issue.type === "date")
+        message = `Date must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${new Date(Number(issue.minimum))}`;
+      else
+        message = "Invalid input";
+      break;
+    case ZodIssueCode.too_big:
+      if (issue.type === "array")
+        message = `Array must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `less than`} ${issue.maximum} element(s)`;
+      else if (issue.type === "string")
+        message = `String must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `under`} ${issue.maximum} character(s)`;
+      else if (issue.type === "number")
+        message = `Number must be ${issue.exact ? `exactly` : issue.inclusive ? `less than or equal to` : `less than`} ${issue.maximum}`;
+      else if (issue.type === "bigint")
+        message = `BigInt must be ${issue.exact ? `exactly` : issue.inclusive ? `less than or equal to` : `less than`} ${issue.maximum}`;
+      else if (issue.type === "date")
+        message = `Date must be ${issue.exact ? `exactly` : issue.inclusive ? `smaller than or equal to` : `smaller than`} ${new Date(Number(issue.maximum))}`;
+      else
+        message = "Invalid input";
+      break;
+    case ZodIssueCode.custom:
+      message = `Invalid input`;
+      break;
+    case ZodIssueCode.invalid_intersection_types:
+      message = `Intersection results could not be merged`;
+      break;
+    case ZodIssueCode.not_multiple_of:
+      message = `Number must be a multiple of ${issue.multipleOf}`;
+      break;
+    case ZodIssueCode.not_finite:
+      message = "Number must be finite";
+      break;
+    default:
+      message = _ctx.defaultError;
+      util.assertNever(issue);
+  }
+  return { message };
+};
+var overrideErrorMap = errorMap;
+function setErrorMap(map) {
+  overrideErrorMap = map;
+}
+function getErrorMap() {
+  return overrideErrorMap;
+}
+var makeIssue = (params) => {
+  const { data, path, errorMaps, issueData } = params;
+  const fullPath = [...path, ...issueData.path || []];
+  const fullIssue = {
+    ...issueData,
+    path: fullPath
+  };
+  if (issueData.message !== void 0) {
+    return {
+      ...issueData,
+      path: fullPath,
+      message: issueData.message
+    };
+  }
+  let errorMessage = "";
+  const maps = errorMaps.filter((m) => !!m).slice().reverse();
+  for (const map of maps) {
+    errorMessage = map(fullIssue, { data, defaultError: errorMessage }).message;
+  }
+  return {
+    ...issueData,
+    path: fullPath,
+    message: errorMessage
+  };
+};
+var EMPTY_PATH = [];
+function addIssueToContext(ctx, issueData) {
+  const overrideMap = getErrorMap();
+  const issue = makeIssue({
+    issueData,
+    data: ctx.data,
+    path: ctx.path,
+    errorMaps: [
+      ctx.common.contextualErrorMap,
+      // contextual error map is first priority
+      ctx.schemaErrorMap,
+      // then schema-bound map if available
+      overrideMap,
+      // then global override map
+      overrideMap === errorMap ? void 0 : errorMap
+      // then global default map
+    ].filter((x) => !!x)
+  });
+  ctx.common.issues.push(issue);
+}
+var ParseStatus = class _ParseStatus {
+  constructor() {
+    this.value = "valid";
+  }
+  dirty() {
+    if (this.value === "valid")
+      this.value = "dirty";
+  }
+  abort() {
+    if (this.value !== "aborted")
+      this.value = "aborted";
+  }
+  static mergeArray(status, results) {
+    const arrayValue = [];
+    for (const s of results) {
+      if (s.status === "aborted")
+        return INVALID;
+      if (s.status === "dirty")
+        status.dirty();
+      arrayValue.push(s.value);
+    }
+    return { status: status.value, value: arrayValue };
+  }
+  static async mergeObjectAsync(status, pairs) {
+    const syncPairs = [];
+    for (const pair of pairs) {
+      const key = await pair.key;
+      const value = await pair.value;
+      syncPairs.push({
+        key,
+        value
+      });
+    }
+    return _ParseStatus.mergeObjectSync(status, syncPairs);
+  }
+  static mergeObjectSync(status, pairs) {
+    const finalObject = {};
+    for (const pair of pairs) {
+      const { key, value } = pair;
+      if (key.status === "aborted")
+        return INVALID;
+      if (value.status === "aborted")
+        return INVALID;
+      if (key.status === "dirty")
+        status.dirty();
+      if (value.status === "dirty")
+        status.dirty();
+      if (key.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
+        finalObject[key.value] = value.value;
+      }
+    }
+    return { status: status.value, value: finalObject };
+  }
+};
+var INVALID = Object.freeze({
+  status: "aborted"
+});
+var DIRTY = (value) => ({ status: "dirty", value });
+var OK = (value) => ({ status: "valid", value });
+var isAborted = (x) => x.status === "aborted";
+var isDirty = (x) => x.status === "dirty";
+var isValid = (x) => x.status === "valid";
+var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
+function __classPrivateFieldGet(receiver, state, kind, f) {
+  if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+  return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+}
+function __classPrivateFieldSet(receiver, state, value, kind, f) {
+  if (kind === "m") throw new TypeError("Private method is not writable");
+  if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+  return kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value), value;
+}
+var errorUtil;
+(function(errorUtil2) {
+  errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
+  errorUtil2.toString = (message) => typeof message === "string" ? message : message === null || message === void 0 ? void 0 : message.message;
+})(errorUtil || (errorUtil = {}));
+var _ZodEnum_cache;
+var _ZodNativeEnum_cache;
+var ParseInputLazyPath = class {
+  constructor(parent, value, path, key) {
+    this._cachedPath = [];
+    this.parent = parent;
+    this.data = value;
+    this._path = path;
+    this._key = key;
+  }
+  get path() {
+    if (!this._cachedPath.length) {
+      if (this._key instanceof Array) {
+        this._cachedPath.push(...this._path, ...this._key);
+      } else {
+        this._cachedPath.push(...this._path, this._key);
+      }
+    }
+    return this._cachedPath;
+  }
+};
+var handleResult = (ctx, result2) => {
+  if (isValid(result2)) {
+    return { success: true, data: result2.value };
+  } else {
+    if (!ctx.common.issues.length) {
+      throw new Error("Validation failed but no issues detected.");
+    }
+    return {
+      success: false,
+      get error() {
+        if (this._error)
+          return this._error;
+        const error = new ZodError(ctx.common.issues);
+        this._error = error;
+        return this._error;
+      }
+    };
+  }
+};
+function processCreateParams(params) {
+  if (!params)
+    return {};
+  const { errorMap: errorMap2, invalid_type_error, required_error, description } = params;
+  if (errorMap2 && (invalid_type_error || required_error)) {
+    throw new Error(`Can't use "invalid_type_error" or "required_error" in conjunction with custom error map.`);
+  }
+  if (errorMap2)
+    return { errorMap: errorMap2, description };
+  const customMap = (iss, ctx) => {
+    var _a, _b;
+    const { message } = params;
+    if (iss.code === "invalid_enum_value") {
+      return { message: message !== null && message !== void 0 ? message : ctx.defaultError };
+    }
+    if (typeof ctx.data === "undefined") {
+      return { message: (_a = message !== null && message !== void 0 ? message : required_error) !== null && _a !== void 0 ? _a : ctx.defaultError };
+    }
+    if (iss.code !== "invalid_type")
+      return { message: ctx.defaultError };
+    return { message: (_b = message !== null && message !== void 0 ? message : invalid_type_error) !== null && _b !== void 0 ? _b : ctx.defaultError };
+  };
+  return { errorMap: customMap, description };
+}
+var ZodType = class {
+  get description() {
+    return this._def.description;
+  }
+  _getType(input) {
+    return getParsedType(input.data);
+  }
+  _getOrReturnCtx(input, ctx) {
+    return ctx || {
+      common: input.parent.common,
+      data: input.data,
+      parsedType: getParsedType(input.data),
+      schemaErrorMap: this._def.errorMap,
+      path: input.path,
+      parent: input.parent
+    };
+  }
+  _processInputParams(input) {
+    return {
+      status: new ParseStatus(),
+      ctx: {
+        common: input.parent.common,
+        data: input.data,
+        parsedType: getParsedType(input.data),
+        schemaErrorMap: this._def.errorMap,
+        path: input.path,
+        parent: input.parent
+      }
+    };
+  }
+  _parseSync(input) {
+    const result2 = this._parse(input);
+    if (isAsync(result2)) {
+      throw new Error("Synchronous parse encountered promise.");
+    }
+    return result2;
+  }
+  _parseAsync(input) {
+    const result2 = this._parse(input);
+    return Promise.resolve(result2);
+  }
+  parse(data, params) {
+    const result2 = this.safeParse(data, params);
+    if (result2.success)
+      return result2.data;
+    throw result2.error;
+  }
+  safeParse(data, params) {
+    var _a;
+    const ctx = {
+      common: {
+        issues: [],
+        async: (_a = params === null || params === void 0 ? void 0 : params.async) !== null && _a !== void 0 ? _a : false,
+        contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap
+      },
+      path: (params === null || params === void 0 ? void 0 : params.path) || [],
+      schemaErrorMap: this._def.errorMap,
+      parent: null,
+      data,
+      parsedType: getParsedType(data)
+    };
+    const result2 = this._parseSync({ data, path: ctx.path, parent: ctx });
+    return handleResult(ctx, result2);
+  }
+  "~validate"(data) {
+    var _a, _b;
+    const ctx = {
+      common: {
+        issues: [],
+        async: !!this["~standard"].async
+      },
+      path: [],
+      schemaErrorMap: this._def.errorMap,
+      parent: null,
+      data,
+      parsedType: getParsedType(data)
+    };
+    if (!this["~standard"].async) {
+      try {
+        const result2 = this._parseSync({ data, path: [], parent: ctx });
+        return isValid(result2) ? {
+          value: result2.value
+        } : {
+          issues: ctx.common.issues
+        };
+      } catch (err) {
+        if ((_b = (_a = err === null || err === void 0 ? void 0 : err.message) === null || _a === void 0 ? void 0 : _a.toLowerCase()) === null || _b === void 0 ? void 0 : _b.includes("encountered")) {
+          this["~standard"].async = true;
+        }
+        ctx.common = {
+          issues: [],
+          async: true
+        };
+      }
+    }
+    return this._parseAsync({ data, path: [], parent: ctx }).then((result2) => isValid(result2) ? {
+      value: result2.value
+    } : {
+      issues: ctx.common.issues
+    });
+  }
+  async parseAsync(data, params) {
+    const result2 = await this.safeParseAsync(data, params);
+    if (result2.success)
+      return result2.data;
+    throw result2.error;
+  }
+  async safeParseAsync(data, params) {
+    const ctx = {
+      common: {
+        issues: [],
+        contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap,
+        async: true
+      },
+      path: (params === null || params === void 0 ? void 0 : params.path) || [],
+      schemaErrorMap: this._def.errorMap,
+      parent: null,
+      data,
+      parsedType: getParsedType(data)
+    };
+    const maybeAsyncResult = this._parse({ data, path: ctx.path, parent: ctx });
+    const result2 = await (isAsync(maybeAsyncResult) ? maybeAsyncResult : Promise.resolve(maybeAsyncResult));
+    return handleResult(ctx, result2);
+  }
+  refine(check, message) {
+    const getIssueProperties = (val) => {
+      if (typeof message === "string" || typeof message === "undefined") {
+        return { message };
+      } else if (typeof message === "function") {
+        return message(val);
+      } else {
+        return message;
+      }
+    };
+    return this._refinement((val, ctx) => {
+      const result2 = check(val);
+      const setError = () => ctx.addIssue({
+        code: ZodIssueCode.custom,
+        ...getIssueProperties(val)
+      });
+      if (typeof Promise !== "undefined" && result2 instanceof Promise) {
+        return result2.then((data) => {
+          if (!data) {
+            setError();
+            return false;
+          } else {
+            return true;
+          }
+        });
+      }
+      if (!result2) {
+        setError();
+        return false;
+      } else {
+        return true;
+      }
+    });
+  }
+  refinement(check, refinementData) {
+    return this._refinement((val, ctx) => {
+      if (!check(val)) {
+        ctx.addIssue(typeof refinementData === "function" ? refinementData(val, ctx) : refinementData);
+        return false;
+      } else {
+        return true;
+      }
+    });
+  }
+  _refinement(refinement) {
+    return new ZodEffects({
+      schema: this,
+      typeName: ZodFirstPartyTypeKind.ZodEffects,
+      effect: { type: "refinement", refinement }
+    });
+  }
+  superRefine(refinement) {
+    return this._refinement(refinement);
+  }
+  constructor(def) {
+    this.spa = this.safeParseAsync;
+    this._def = def;
+    this.parse = this.parse.bind(this);
+    this.safeParse = this.safeParse.bind(this);
+    this.parseAsync = this.parseAsync.bind(this);
+    this.safeParseAsync = this.safeParseAsync.bind(this);
+    this.spa = this.spa.bind(this);
+    this.refine = this.refine.bind(this);
+    this.refinement = this.refinement.bind(this);
+    this.superRefine = this.superRefine.bind(this);
+    this.optional = this.optional.bind(this);
+    this.nullable = this.nullable.bind(this);
+    this.nullish = this.nullish.bind(this);
+    this.array = this.array.bind(this);
+    this.promise = this.promise.bind(this);
+    this.or = this.or.bind(this);
+    this.and = this.and.bind(this);
+    this.transform = this.transform.bind(this);
+    this.brand = this.brand.bind(this);
+    this.default = this.default.bind(this);
+    this.catch = this.catch.bind(this);
+    this.describe = this.describe.bind(this);
+    this.pipe = this.pipe.bind(this);
+    this.readonly = this.readonly.bind(this);
+    this.isNullable = this.isNullable.bind(this);
+    this.isOptional = this.isOptional.bind(this);
+    this["~standard"] = {
+      version: 1,
+      vendor: "zod",
+      validate: (data) => this["~validate"](data)
+    };
+  }
+  optional() {
+    return ZodOptional.create(this, this._def);
+  }
+  nullable() {
+    return ZodNullable.create(this, this._def);
+  }
+  nullish() {
+    return this.nullable().optional();
+  }
+  array() {
+    return ZodArray.create(this);
+  }
+  promise() {
+    return ZodPromise.create(this, this._def);
+  }
+  or(option) {
+    return ZodUnion.create([this, option], this._def);
+  }
+  and(incoming) {
+    return ZodIntersection.create(this, incoming, this._def);
+  }
+  transform(transform) {
+    return new ZodEffects({
+      ...processCreateParams(this._def),
+      schema: this,
+      typeName: ZodFirstPartyTypeKind.ZodEffects,
+      effect: { type: "transform", transform }
+    });
+  }
+  default(def) {
+    const defaultValueFunc = typeof def === "function" ? def : () => def;
+    return new ZodDefault({
+      ...processCreateParams(this._def),
+      innerType: this,
+      defaultValue: defaultValueFunc,
+      typeName: ZodFirstPartyTypeKind.ZodDefault
+    });
+  }
+  brand() {
+    return new ZodBranded({
+      typeName: ZodFirstPartyTypeKind.ZodBranded,
+      type: this,
+      ...processCreateParams(this._def)
+    });
+  }
+  catch(def) {
+    const catchValueFunc = typeof def === "function" ? def : () => def;
+    return new ZodCatch({
+      ...processCreateParams(this._def),
+      innerType: this,
+      catchValue: catchValueFunc,
+      typeName: ZodFirstPartyTypeKind.ZodCatch
+    });
+  }
+  describe(description) {
+    const This = this.constructor;
+    return new This({
+      ...this._def,
+      description
+    });
+  }
+  pipe(target) {
+    return ZodPipeline.create(this, target);
+  }
+  readonly() {
+    return ZodReadonly.create(this);
+  }
+  isOptional() {
+    return this.safeParse(void 0).success;
+  }
+  isNullable() {
+    return this.safeParse(null).success;
+  }
+};
+var cuidRegex = /^c[^\s-]{8,}$/i;
+var cuid2Regex = /^[0-9a-z]+$/;
+var ulidRegex = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
+var uuidRegex = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
+var nanoidRegex = /^[a-z0-9_-]{21}$/i;
+var jwtRegex = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/;
+var durationRegex = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
+var emailRegex = /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
+var _emojiRegex = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
+var emojiRegex;
+var ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/;
+var ipv4CidrRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/;
+var ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+var ipv6CidrRegex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
+var base64Regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
+var base64urlRegex = /^([0-9a-zA-Z-_]{4})*(([0-9a-zA-Z-_]{2}(==)?)|([0-9a-zA-Z-_]{3}(=)?))?$/;
+var dateRegexSource = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
+var dateRegex = new RegExp(`^${dateRegexSource}$`);
+function timeRegexSource(args) {
+  let regex = `([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d`;
+  if (args.precision) {
+    regex = `${regex}\\.\\d{${args.precision}}`;
+  } else if (args.precision == null) {
+    regex = `${regex}(\\.\\d+)?`;
+  }
+  return regex;
+}
+function timeRegex(args) {
+  return new RegExp(`^${timeRegexSource(args)}$`);
+}
+function datetimeRegex(args) {
+  let regex = `${dateRegexSource}T${timeRegexSource(args)}`;
+  const opts = [];
+  opts.push(args.local ? `Z?` : `Z`);
+  if (args.offset)
+    opts.push(`([+-]\\d{2}:?\\d{2})`);
+  regex = `${regex}(${opts.join("|")})`;
+  return new RegExp(`^${regex}$`);
+}
+function isValidIP(ip, version2) {
+  if ((version2 === "v4" || !version2) && ipv4Regex.test(ip)) {
+    return true;
+  }
+  if ((version2 === "v6" || !version2) && ipv6Regex.test(ip)) {
+    return true;
+  }
+  return false;
+}
+function isValidJWT(jwt, alg) {
+  if (!jwtRegex.test(jwt))
+    return false;
+  try {
+    const [header] = jwt.split(".");
+    const base64 = header.replace(/-/g, "+").replace(/_/g, "/").padEnd(header.length + (4 - header.length % 4) % 4, "=");
+    const decoded = JSON.parse(atob(base64));
+    if (typeof decoded !== "object" || decoded === null)
+      return false;
+    if (!decoded.typ || !decoded.alg)
+      return false;
+    if (alg && decoded.alg !== alg)
+      return false;
+    return true;
+  } catch (_a) {
+    return false;
+  }
+}
+function isValidCidr(ip, version2) {
+  if ((version2 === "v4" || !version2) && ipv4CidrRegex.test(ip)) {
+    return true;
+  }
+  if ((version2 === "v6" || !version2) && ipv6CidrRegex.test(ip)) {
+    return true;
+  }
+  return false;
+}
+var ZodString = class _ZodString extends ZodType {
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = String(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.string) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext(ctx2, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.string,
+        received: ctx2.parsedType
+      });
+      return INVALID;
+    }
+    const status = new ParseStatus();
+    let ctx = void 0;
+    for (const check of this._def.checks) {
+      if (check.kind === "min") {
+        if (input.data.length < check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_small,
+            minimum: check.value,
+            type: "string",
+            inclusive: true,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        if (input.data.length > check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_big,
+            maximum: check.value,
+            type: "string",
+            inclusive: true,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "length") {
+        const tooBig = input.data.length > check.value;
+        const tooSmall = input.data.length < check.value;
+        if (tooBig || tooSmall) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          if (tooBig) {
+            addIssueToContext(ctx, {
+              code: ZodIssueCode.too_big,
+              maximum: check.value,
+              type: "string",
+              inclusive: true,
+              exact: true,
+              message: check.message
+            });
+          } else if (tooSmall) {
+            addIssueToContext(ctx, {
+              code: ZodIssueCode.too_small,
+              minimum: check.value,
+              type: "string",
+              inclusive: true,
+              exact: true,
+              message: check.message
+            });
+          }
+          status.dirty();
+        }
+      } else if (check.kind === "email") {
+        if (!emailRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "email",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "emoji") {
+        if (!emojiRegex) {
+          emojiRegex = new RegExp(_emojiRegex, "u");
+        }
+        if (!emojiRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "emoji",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "uuid") {
+        if (!uuidRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "uuid",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "nanoid") {
+        if (!nanoidRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "nanoid",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "cuid") {
+        if (!cuidRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "cuid",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "cuid2") {
+        if (!cuid2Regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "cuid2",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "ulid") {
+        if (!ulidRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "ulid",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "url") {
+        try {
+          new URL(input.data);
+        } catch (_a) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "url",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "regex") {
+        check.regex.lastIndex = 0;
+        const testResult = check.regex.test(input.data);
+        if (!testResult) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "regex",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "trim") {
+        input.data = input.data.trim();
+      } else if (check.kind === "includes") {
+        if (!input.data.includes(check.value, check.position)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_string,
+            validation: { includes: check.value, position: check.position },
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "toLowerCase") {
+        input.data = input.data.toLowerCase();
+      } else if (check.kind === "toUpperCase") {
+        input.data = input.data.toUpperCase();
+      } else if (check.kind === "startsWith") {
+        if (!input.data.startsWith(check.value)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_string,
+            validation: { startsWith: check.value },
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "endsWith") {
+        if (!input.data.endsWith(check.value)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_string,
+            validation: { endsWith: check.value },
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "datetime") {
+        const regex = datetimeRegex(check);
+        if (!regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_string,
+            validation: "datetime",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "date") {
+        const regex = dateRegex;
+        if (!regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_string,
+            validation: "date",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "time") {
+        const regex = timeRegex(check);
+        if (!regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_string,
+            validation: "time",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "duration") {
+        if (!durationRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "duration",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "ip") {
+        if (!isValidIP(input.data, check.version)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "ip",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "jwt") {
+        if (!isValidJWT(input.data, check.alg)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "jwt",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "cidr") {
+        if (!isValidCidr(input.data, check.version)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "cidr",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "base64") {
+        if (!base64Regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "base64",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "base64url") {
+        if (!base64urlRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "base64url",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else {
+        util.assertNever(check);
+      }
+    }
+    return { status: status.value, value: input.data };
+  }
+  _regex(regex, validation, message) {
+    return this.refinement((data) => regex.test(data), {
+      validation,
+      code: ZodIssueCode.invalid_string,
+      ...errorUtil.errToObj(message)
+    });
+  }
+  _addCheck(check) {
+    return new _ZodString({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  email(message) {
+    return this._addCheck({ kind: "email", ...errorUtil.errToObj(message) });
+  }
+  url(message) {
+    return this._addCheck({ kind: "url", ...errorUtil.errToObj(message) });
+  }
+  emoji(message) {
+    return this._addCheck({ kind: "emoji", ...errorUtil.errToObj(message) });
+  }
+  uuid(message) {
+    return this._addCheck({ kind: "uuid", ...errorUtil.errToObj(message) });
+  }
+  nanoid(message) {
+    return this._addCheck({ kind: "nanoid", ...errorUtil.errToObj(message) });
+  }
+  cuid(message) {
+    return this._addCheck({ kind: "cuid", ...errorUtil.errToObj(message) });
+  }
+  cuid2(message) {
+    return this._addCheck({ kind: "cuid2", ...errorUtil.errToObj(message) });
+  }
+  ulid(message) {
+    return this._addCheck({ kind: "ulid", ...errorUtil.errToObj(message) });
+  }
+  base64(message) {
+    return this._addCheck({ kind: "base64", ...errorUtil.errToObj(message) });
+  }
+  base64url(message) {
+    return this._addCheck({
+      kind: "base64url",
+      ...errorUtil.errToObj(message)
+    });
+  }
+  jwt(options) {
+    return this._addCheck({ kind: "jwt", ...errorUtil.errToObj(options) });
+  }
+  ip(options) {
+    return this._addCheck({ kind: "ip", ...errorUtil.errToObj(options) });
+  }
+  cidr(options) {
+    return this._addCheck({ kind: "cidr", ...errorUtil.errToObj(options) });
+  }
+  datetime(options) {
+    var _a, _b;
+    if (typeof options === "string") {
+      return this._addCheck({
+        kind: "datetime",
+        precision: null,
+        offset: false,
+        local: false,
+        message: options
+      });
+    }
+    return this._addCheck({
+      kind: "datetime",
+      precision: typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined" ? null : options === null || options === void 0 ? void 0 : options.precision,
+      offset: (_a = options === null || options === void 0 ? void 0 : options.offset) !== null && _a !== void 0 ? _a : false,
+      local: (_b = options === null || options === void 0 ? void 0 : options.local) !== null && _b !== void 0 ? _b : false,
+      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
+    });
+  }
+  date(message) {
+    return this._addCheck({ kind: "date", message });
+  }
+  time(options) {
+    if (typeof options === "string") {
+      return this._addCheck({
+        kind: "time",
+        precision: null,
+        message: options
+      });
+    }
+    return this._addCheck({
+      kind: "time",
+      precision: typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined" ? null : options === null || options === void 0 ? void 0 : options.precision,
+      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
+    });
+  }
+  duration(message) {
+    return this._addCheck({ kind: "duration", ...errorUtil.errToObj(message) });
+  }
+  regex(regex, message) {
+    return this._addCheck({
+      kind: "regex",
+      regex,
+      ...errorUtil.errToObj(message)
+    });
+  }
+  includes(value, options) {
+    return this._addCheck({
+      kind: "includes",
+      value,
+      position: options === null || options === void 0 ? void 0 : options.position,
+      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
+    });
+  }
+  startsWith(value, message) {
+    return this._addCheck({
+      kind: "startsWith",
+      value,
+      ...errorUtil.errToObj(message)
+    });
+  }
+  endsWith(value, message) {
+    return this._addCheck({
+      kind: "endsWith",
+      value,
+      ...errorUtil.errToObj(message)
+    });
+  }
+  min(minLength, message) {
+    return this._addCheck({
+      kind: "min",
+      value: minLength,
+      ...errorUtil.errToObj(message)
+    });
+  }
+  max(maxLength, message) {
+    return this._addCheck({
+      kind: "max",
+      value: maxLength,
+      ...errorUtil.errToObj(message)
+    });
+  }
+  length(len, message) {
+    return this._addCheck({
+      kind: "length",
+      value: len,
+      ...errorUtil.errToObj(message)
+    });
+  }
+  /**
+   * Equivalent to `.min(1)`
+   */
+  nonempty(message) {
+    return this.min(1, errorUtil.errToObj(message));
+  }
+  trim() {
+    return new _ZodString({
+      ...this._def,
+      checks: [...this._def.checks, { kind: "trim" }]
+    });
+  }
+  toLowerCase() {
+    return new _ZodString({
+      ...this._def,
+      checks: [...this._def.checks, { kind: "toLowerCase" }]
+    });
+  }
+  toUpperCase() {
+    return new _ZodString({
+      ...this._def,
+      checks: [...this._def.checks, { kind: "toUpperCase" }]
+    });
+  }
+  get isDatetime() {
+    return !!this._def.checks.find((ch) => ch.kind === "datetime");
+  }
+  get isDate() {
+    return !!this._def.checks.find((ch) => ch.kind === "date");
+  }
+  get isTime() {
+    return !!this._def.checks.find((ch) => ch.kind === "time");
+  }
+  get isDuration() {
+    return !!this._def.checks.find((ch) => ch.kind === "duration");
+  }
+  get isEmail() {
+    return !!this._def.checks.find((ch) => ch.kind === "email");
+  }
+  get isURL() {
+    return !!this._def.checks.find((ch) => ch.kind === "url");
+  }
+  get isEmoji() {
+    return !!this._def.checks.find((ch) => ch.kind === "emoji");
+  }
+  get isUUID() {
+    return !!this._def.checks.find((ch) => ch.kind === "uuid");
+  }
+  get isNANOID() {
+    return !!this._def.checks.find((ch) => ch.kind === "nanoid");
+  }
+  get isCUID() {
+    return !!this._def.checks.find((ch) => ch.kind === "cuid");
+  }
+  get isCUID2() {
+    return !!this._def.checks.find((ch) => ch.kind === "cuid2");
+  }
+  get isULID() {
+    return !!this._def.checks.find((ch) => ch.kind === "ulid");
+  }
+  get isIP() {
+    return !!this._def.checks.find((ch) => ch.kind === "ip");
+  }
+  get isCIDR() {
+    return !!this._def.checks.find((ch) => ch.kind === "cidr");
+  }
+  get isBase64() {
+    return !!this._def.checks.find((ch) => ch.kind === "base64");
+  }
+  get isBase64url() {
+    return !!this._def.checks.find((ch) => ch.kind === "base64url");
+  }
+  get minLength() {
+    let min = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "min") {
+        if (min === null || ch.value > min)
+          min = ch.value;
+      }
+    }
+    return min;
+  }
+  get maxLength() {
+    let max = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "max") {
+        if (max === null || ch.value < max)
+          max = ch.value;
+      }
+    }
+    return max;
+  }
+};
+ZodString.create = (params) => {
+  var _a;
+  return new ZodString({
+    checks: [],
+    typeName: ZodFirstPartyTypeKind.ZodString,
+    coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+    ...processCreateParams(params)
+  });
+};
+function floatSafeRemainder(val, step) {
+  const valDecCount = (val.toString().split(".")[1] || "").length;
+  const stepDecCount = (step.toString().split(".")[1] || "").length;
+  const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
+  const valInt = parseInt(val.toFixed(decCount).replace(".", ""));
+  const stepInt = parseInt(step.toFixed(decCount).replace(".", ""));
+  return valInt % stepInt / Math.pow(10, decCount);
+}
+var ZodNumber = class _ZodNumber extends ZodType {
+  constructor() {
+    super(...arguments);
+    this.min = this.gte;
+    this.max = this.lte;
+    this.step = this.multipleOf;
+  }
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = Number(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.number) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext(ctx2, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.number,
+        received: ctx2.parsedType
+      });
+      return INVALID;
+    }
+    let ctx = void 0;
+    const status = new ParseStatus();
+    for (const check of this._def.checks) {
+      if (check.kind === "int") {
+        if (!util.isInteger(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_type,
+            expected: "integer",
+            received: "float",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "min") {
+        const tooSmall = check.inclusive ? input.data < check.value : input.data <= check.value;
+        if (tooSmall) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_small,
+            minimum: check.value,
+            type: "number",
+            inclusive: check.inclusive,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        const tooBig = check.inclusive ? input.data > check.value : input.data >= check.value;
+        if (tooBig) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_big,
+            maximum: check.value,
+            type: "number",
+            inclusive: check.inclusive,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "multipleOf") {
+        if (floatSafeRemainder(input.data, check.value) !== 0) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.not_multiple_of,
+            multipleOf: check.value,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "finite") {
+        if (!Number.isFinite(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.not_finite,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else {
+        util.assertNever(check);
+      }
+    }
+    return { status: status.value, value: input.data };
+  }
+  gte(value, message) {
+    return this.setLimit("min", value, true, errorUtil.toString(message));
+  }
+  gt(value, message) {
+    return this.setLimit("min", value, false, errorUtil.toString(message));
+  }
+  lte(value, message) {
+    return this.setLimit("max", value, true, errorUtil.toString(message));
+  }
+  lt(value, message) {
+    return this.setLimit("max", value, false, errorUtil.toString(message));
+  }
+  setLimit(kind, value, inclusive, message) {
+    return new _ZodNumber({
+      ...this._def,
+      checks: [
+        ...this._def.checks,
+        {
+          kind,
+          value,
+          inclusive,
+          message: errorUtil.toString(message)
+        }
+      ]
+    });
+  }
+  _addCheck(check) {
+    return new _ZodNumber({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  int(message) {
+    return this._addCheck({
+      kind: "int",
+      message: errorUtil.toString(message)
+    });
+  }
+  positive(message) {
+    return this._addCheck({
+      kind: "min",
+      value: 0,
+      inclusive: false,
+      message: errorUtil.toString(message)
+    });
+  }
+  negative(message) {
+    return this._addCheck({
+      kind: "max",
+      value: 0,
+      inclusive: false,
+      message: errorUtil.toString(message)
+    });
+  }
+  nonpositive(message) {
+    return this._addCheck({
+      kind: "max",
+      value: 0,
+      inclusive: true,
+      message: errorUtil.toString(message)
+    });
+  }
+  nonnegative(message) {
+    return this._addCheck({
+      kind: "min",
+      value: 0,
+      inclusive: true,
+      message: errorUtil.toString(message)
+    });
+  }
+  multipleOf(value, message) {
+    return this._addCheck({
+      kind: "multipleOf",
+      value,
+      message: errorUtil.toString(message)
+    });
+  }
+  finite(message) {
+    return this._addCheck({
+      kind: "finite",
+      message: errorUtil.toString(message)
+    });
+  }
+  safe(message) {
+    return this._addCheck({
+      kind: "min",
+      inclusive: true,
+      value: Number.MIN_SAFE_INTEGER,
+      message: errorUtil.toString(message)
+    })._addCheck({
+      kind: "max",
+      inclusive: true,
+      value: Number.MAX_SAFE_INTEGER,
+      message: errorUtil.toString(message)
+    });
+  }
+  get minValue() {
+    let min = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "min") {
+        if (min === null || ch.value > min)
+          min = ch.value;
+      }
+    }
+    return min;
+  }
+  get maxValue() {
+    let max = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "max") {
+        if (max === null || ch.value < max)
+          max = ch.value;
+      }
+    }
+    return max;
+  }
+  get isInt() {
+    return !!this._def.checks.find((ch) => ch.kind === "int" || ch.kind === "multipleOf" && util.isInteger(ch.value));
+  }
+  get isFinite() {
+    let max = null, min = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "finite" || ch.kind === "int" || ch.kind === "multipleOf") {
+        return true;
+      } else if (ch.kind === "min") {
+        if (min === null || ch.value > min)
+          min = ch.value;
+      } else if (ch.kind === "max") {
+        if (max === null || ch.value < max)
+          max = ch.value;
+      }
+    }
+    return Number.isFinite(min) && Number.isFinite(max);
+  }
+};
+ZodNumber.create = (params) => {
+  return new ZodNumber({
+    checks: [],
+    typeName: ZodFirstPartyTypeKind.ZodNumber,
+    coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+    ...processCreateParams(params)
+  });
+};
+var ZodBigInt = class _ZodBigInt extends ZodType {
+  constructor() {
+    super(...arguments);
+    this.min = this.gte;
+    this.max = this.lte;
+  }
+  _parse(input) {
+    if (this._def.coerce) {
+      try {
+        input.data = BigInt(input.data);
+      } catch (_a) {
+        return this._getInvalidInput(input);
+      }
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.bigint) {
+      return this._getInvalidInput(input);
+    }
+    let ctx = void 0;
+    const status = new ParseStatus();
+    for (const check of this._def.checks) {
+      if (check.kind === "min") {
+        const tooSmall = check.inclusive ? input.data < check.value : input.data <= check.value;
+        if (tooSmall) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_small,
+            type: "bigint",
+            minimum: check.value,
+            inclusive: check.inclusive,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        const tooBig = check.inclusive ? input.data > check.value : input.data >= check.value;
+        if (tooBig) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_big,
+            type: "bigint",
+            maximum: check.value,
+            inclusive: check.inclusive,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "multipleOf") {
+        if (input.data % check.value !== BigInt(0)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.not_multiple_of,
+            multipleOf: check.value,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else {
+        util.assertNever(check);
+      }
+    }
+    return { status: status.value, value: input.data };
+  }
+  _getInvalidInput(input) {
+    const ctx = this._getOrReturnCtx(input);
+    addIssueToContext(ctx, {
+      code: ZodIssueCode.invalid_type,
+      expected: ZodParsedType.bigint,
+      received: ctx.parsedType
+    });
+    return INVALID;
+  }
+  gte(value, message) {
+    return this.setLimit("min", value, true, errorUtil.toString(message));
+  }
+  gt(value, message) {
+    return this.setLimit("min", value, false, errorUtil.toString(message));
+  }
+  lte(value, message) {
+    return this.setLimit("max", value, true, errorUtil.toString(message));
+  }
+  lt(value, message) {
+    return this.setLimit("max", value, false, errorUtil.toString(message));
+  }
+  setLimit(kind, value, inclusive, message) {
+    return new _ZodBigInt({
+      ...this._def,
+      checks: [
+        ...this._def.checks,
+        {
+          kind,
+          value,
+          inclusive,
+          message: errorUtil.toString(message)
+        }
+      ]
+    });
+  }
+  _addCheck(check) {
+    return new _ZodBigInt({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  positive(message) {
+    return this._addCheck({
+      kind: "min",
+      value: BigInt(0),
+      inclusive: false,
+      message: errorUtil.toString(message)
+    });
+  }
+  negative(message) {
+    return this._addCheck({
+      kind: "max",
+      value: BigInt(0),
+      inclusive: false,
+      message: errorUtil.toString(message)
+    });
+  }
+  nonpositive(message) {
+    return this._addCheck({
+      kind: "max",
+      value: BigInt(0),
+      inclusive: true,
+      message: errorUtil.toString(message)
+    });
+  }
+  nonnegative(message) {
+    return this._addCheck({
+      kind: "min",
+      value: BigInt(0),
+      inclusive: true,
+      message: errorUtil.toString(message)
+    });
+  }
+  multipleOf(value, message) {
+    return this._addCheck({
+      kind: "multipleOf",
+      value,
+      message: errorUtil.toString(message)
+    });
+  }
+  get minValue() {
+    let min = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "min") {
+        if (min === null || ch.value > min)
+          min = ch.value;
+      }
+    }
+    return min;
+  }
+  get maxValue() {
+    let max = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "max") {
+        if (max === null || ch.value < max)
+          max = ch.value;
+      }
+    }
+    return max;
+  }
+};
+ZodBigInt.create = (params) => {
+  var _a;
+  return new ZodBigInt({
+    checks: [],
+    typeName: ZodFirstPartyTypeKind.ZodBigInt,
+    coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+    ...processCreateParams(params)
+  });
+};
+var ZodBoolean = class extends ZodType {
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = Boolean(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.boolean) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.boolean,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    return OK(input.data);
+  }
+};
+ZodBoolean.create = (params) => {
+  return new ZodBoolean({
+    typeName: ZodFirstPartyTypeKind.ZodBoolean,
+    coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+    ...processCreateParams(params)
+  });
+};
+var ZodDate = class _ZodDate extends ZodType {
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = new Date(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.date) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext(ctx2, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.date,
+        received: ctx2.parsedType
+      });
+      return INVALID;
+    }
+    if (isNaN(input.data.getTime())) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext(ctx2, {
+        code: ZodIssueCode.invalid_date
+      });
+      return INVALID;
+    }
+    const status = new ParseStatus();
+    let ctx = void 0;
+    for (const check of this._def.checks) {
+      if (check.kind === "min") {
+        if (input.data.getTime() < check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_small,
+            message: check.message,
+            inclusive: true,
+            exact: false,
+            minimum: check.value,
+            type: "date"
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        if (input.data.getTime() > check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.too_big,
+            message: check.message,
+            inclusive: true,
+            exact: false,
+            maximum: check.value,
+            type: "date"
+          });
+          status.dirty();
+        }
+      } else {
+        util.assertNever(check);
+      }
+    }
+    return {
+      status: status.value,
+      value: new Date(input.data.getTime())
+    };
+  }
+  _addCheck(check) {
+    return new _ZodDate({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  min(minDate, message) {
+    return this._addCheck({
+      kind: "min",
+      value: minDate.getTime(),
+      message: errorUtil.toString(message)
+    });
+  }
+  max(maxDate, message) {
+    return this._addCheck({
+      kind: "max",
+      value: maxDate.getTime(),
+      message: errorUtil.toString(message)
+    });
+  }
+  get minDate() {
+    let min = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "min") {
+        if (min === null || ch.value > min)
+          min = ch.value;
+      }
+    }
+    return min != null ? new Date(min) : null;
+  }
+  get maxDate() {
+    let max = null;
+    for (const ch of this._def.checks) {
+      if (ch.kind === "max") {
+        if (max === null || ch.value < max)
+          max = ch.value;
+      }
+    }
+    return max != null ? new Date(max) : null;
+  }
+};
+ZodDate.create = (params) => {
+  return new ZodDate({
+    checks: [],
+    coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+    typeName: ZodFirstPartyTypeKind.ZodDate,
+    ...processCreateParams(params)
+  });
+};
+var ZodSymbol = class extends ZodType {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.symbol) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.symbol,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    return OK(input.data);
+  }
+};
+ZodSymbol.create = (params) => {
+  return new ZodSymbol({
+    typeName: ZodFirstPartyTypeKind.ZodSymbol,
+    ...processCreateParams(params)
+  });
+};
+var ZodUndefined = class extends ZodType {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.undefined) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.undefined,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    return OK(input.data);
+  }
+};
+ZodUndefined.create = (params) => {
+  return new ZodUndefined({
+    typeName: ZodFirstPartyTypeKind.ZodUndefined,
+    ...processCreateParams(params)
+  });
+};
+var ZodNull = class extends ZodType {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.null) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.null,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    return OK(input.data);
+  }
+};
+ZodNull.create = (params) => {
+  return new ZodNull({
+    typeName: ZodFirstPartyTypeKind.ZodNull,
+    ...processCreateParams(params)
+  });
+};
+var ZodAny = class extends ZodType {
+  constructor() {
+    super(...arguments);
+    this._any = true;
+  }
+  _parse(input) {
+    return OK(input.data);
+  }
+};
+ZodAny.create = (params) => {
+  return new ZodAny({
+    typeName: ZodFirstPartyTypeKind.ZodAny,
+    ...processCreateParams(params)
+  });
+};
+var ZodUnknown = class extends ZodType {
+  constructor() {
+    super(...arguments);
+    this._unknown = true;
+  }
+  _parse(input) {
+    return OK(input.data);
+  }
+};
+ZodUnknown.create = (params) => {
+  return new ZodUnknown({
+    typeName: ZodFirstPartyTypeKind.ZodUnknown,
+    ...processCreateParams(params)
+  });
+};
+var ZodNever = class extends ZodType {
+  _parse(input) {
+    const ctx = this._getOrReturnCtx(input);
+    addIssueToContext(ctx, {
+      code: ZodIssueCode.invalid_type,
+      expected: ZodParsedType.never,
+      received: ctx.parsedType
+    });
+    return INVALID;
+  }
+};
+ZodNever.create = (params) => {
+  return new ZodNever({
+    typeName: ZodFirstPartyTypeKind.ZodNever,
+    ...processCreateParams(params)
+  });
+};
+var ZodVoid = class extends ZodType {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.undefined) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.void,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    return OK(input.data);
+  }
+};
+ZodVoid.create = (params) => {
+  return new ZodVoid({
+    typeName: ZodFirstPartyTypeKind.ZodVoid,
+    ...processCreateParams(params)
+  });
+};
+var ZodArray = class _ZodArray extends ZodType {
+  _parse(input) {
+    const { ctx, status } = this._processInputParams(input);
+    const def = this._def;
+    if (ctx.parsedType !== ZodParsedType.array) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.array,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    if (def.exactLength !== null) {
+      const tooBig = ctx.data.length > def.exactLength.value;
+      const tooSmall = ctx.data.length < def.exactLength.value;
+      if (tooBig || tooSmall) {
+        addIssueToContext(ctx, {
+          code: tooBig ? ZodIssueCode.too_big : ZodIssueCode.too_small,
+          minimum: tooSmall ? def.exactLength.value : void 0,
+          maximum: tooBig ? def.exactLength.value : void 0,
+          type: "array",
+          inclusive: true,
+          exact: true,
+          message: def.exactLength.message
+        });
+        status.dirty();
+      }
+    }
+    if (def.minLength !== null) {
+      if (ctx.data.length < def.minLength.value) {
+        addIssueToContext(ctx, {
+          code: ZodIssueCode.too_small,
+          minimum: def.minLength.value,
+          type: "array",
+          inclusive: true,
+          exact: false,
+          message: def.minLength.message
+        });
+        status.dirty();
+      }
+    }
+    if (def.maxLength !== null) {
+      if (ctx.data.length > def.maxLength.value) {
+        addIssueToContext(ctx, {
+          code: ZodIssueCode.too_big,
+          maximum: def.maxLength.value,
+          type: "array",
+          inclusive: true,
+          exact: false,
+          message: def.maxLength.message
+        });
+        status.dirty();
+      }
+    }
+    if (ctx.common.async) {
+      return Promise.all([...ctx.data].map((item, i) => {
+        return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+      })).then((result3) => {
+        return ParseStatus.mergeArray(status, result3);
+      });
+    }
+    const result2 = [...ctx.data].map((item, i) => {
+      return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+    });
+    return ParseStatus.mergeArray(status, result2);
+  }
+  get element() {
+    return this._def.type;
+  }
+  min(minLength, message) {
+    return new _ZodArray({
+      ...this._def,
+      minLength: { value: minLength, message: errorUtil.toString(message) }
+    });
+  }
+  max(maxLength, message) {
+    return new _ZodArray({
+      ...this._def,
+      maxLength: { value: maxLength, message: errorUtil.toString(message) }
+    });
+  }
+  length(len, message) {
+    return new _ZodArray({
+      ...this._def,
+      exactLength: { value: len, message: errorUtil.toString(message) }
+    });
+  }
+  nonempty(message) {
+    return this.min(1, message);
+  }
+};
+ZodArray.create = (schema, params) => {
+  return new ZodArray({
+    type: schema,
+    minLength: null,
+    maxLength: null,
+    exactLength: null,
+    typeName: ZodFirstPartyTypeKind.ZodArray,
+    ...processCreateParams(params)
+  });
+};
+function deepPartialify(schema) {
+  if (schema instanceof ZodObject) {
+    const newShape = {};
+    for (const key in schema.shape) {
+      const fieldSchema = schema.shape[key];
+      newShape[key] = ZodOptional.create(deepPartialify(fieldSchema));
+    }
+    return new ZodObject({
+      ...schema._def,
+      shape: () => newShape
+    });
+  } else if (schema instanceof ZodArray) {
+    return new ZodArray({
+      ...schema._def,
+      type: deepPartialify(schema.element)
+    });
+  } else if (schema instanceof ZodOptional) {
+    return ZodOptional.create(deepPartialify(schema.unwrap()));
+  } else if (schema instanceof ZodNullable) {
+    return ZodNullable.create(deepPartialify(schema.unwrap()));
+  } else if (schema instanceof ZodTuple) {
+    return ZodTuple.create(schema.items.map((item) => deepPartialify(item)));
+  } else {
+    return schema;
+  }
+}
+var ZodObject = class _ZodObject extends ZodType {
+  constructor() {
+    super(...arguments);
+    this._cached = null;
+    this.nonstrict = this.passthrough;
+    this.augment = this.extend;
+  }
+  _getCached() {
+    if (this._cached !== null)
+      return this._cached;
+    const shape = this._def.shape();
+    const keys = util.objectKeys(shape);
+    return this._cached = { shape, keys };
+  }
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.object) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext(ctx2, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.object,
+        received: ctx2.parsedType
+      });
+      return INVALID;
+    }
+    const { status, ctx } = this._processInputParams(input);
+    const { shape, keys: shapeKeys } = this._getCached();
+    const extraKeys = [];
+    if (!(this._def.catchall instanceof ZodNever && this._def.unknownKeys === "strip")) {
+      for (const key in ctx.data) {
+        if (!shapeKeys.includes(key)) {
+          extraKeys.push(key);
+        }
+      }
+    }
+    const pairs = [];
+    for (const key of shapeKeys) {
+      const keyValidator = shape[key];
+      const value = ctx.data[key];
+      pairs.push({
+        key: { status: "valid", value: key },
+        value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key)),
+        alwaysSet: key in ctx.data
+      });
+    }
+    if (this._def.catchall instanceof ZodNever) {
+      const unknownKeys = this._def.unknownKeys;
+      if (unknownKeys === "passthrough") {
+        for (const key of extraKeys) {
+          pairs.push({
+            key: { status: "valid", value: key },
+            value: { status: "valid", value: ctx.data[key] }
+          });
+        }
+      } else if (unknownKeys === "strict") {
+        if (extraKeys.length > 0) {
+          addIssueToContext(ctx, {
+            code: ZodIssueCode.unrecognized_keys,
+            keys: extraKeys
+          });
+          status.dirty();
+        }
+      } else if (unknownKeys === "strip") ;
+      else {
+        throw new Error(`Internal ZodObject error: invalid unknownKeys value.`);
+      }
+    } else {
+      const catchall = this._def.catchall;
+      for (const key of extraKeys) {
+        const value = ctx.data[key];
+        pairs.push({
+          key: { status: "valid", value: key },
+          value: catchall._parse(
+            new ParseInputLazyPath(ctx, value, ctx.path, key)
+            //, ctx.child(key), value, getParsedType(value)
+          ),
+          alwaysSet: key in ctx.data
+        });
+      }
+    }
+    if (ctx.common.async) {
+      return Promise.resolve().then(async () => {
+        const syncPairs = [];
+        for (const pair of pairs) {
+          const key = await pair.key;
+          const value = await pair.value;
+          syncPairs.push({
+            key,
+            value,
+            alwaysSet: pair.alwaysSet
+          });
+        }
+        return syncPairs;
+      }).then((syncPairs) => {
+        return ParseStatus.mergeObjectSync(status, syncPairs);
+      });
+    } else {
+      return ParseStatus.mergeObjectSync(status, pairs);
+    }
+  }
+  get shape() {
+    return this._def.shape();
+  }
+  strict(message) {
+    errorUtil.errToObj;
+    return new _ZodObject({
+      ...this._def,
+      unknownKeys: "strict",
+      ...message !== void 0 ? {
+        errorMap: (issue, ctx) => {
+          var _a, _b, _c, _d;
+          const defaultError = (_c = (_b = (_a = this._def).errorMap) === null || _b === void 0 ? void 0 : _b.call(_a, issue, ctx).message) !== null && _c !== void 0 ? _c : ctx.defaultError;
+          if (issue.code === "unrecognized_keys")
+            return {
+              message: (_d = errorUtil.errToObj(message).message) !== null && _d !== void 0 ? _d : defaultError
+            };
+          return {
+            message: defaultError
+          };
+        }
+      } : {}
+    });
+  }
+  strip() {
+    return new _ZodObject({
+      ...this._def,
+      unknownKeys: "strip"
+    });
+  }
+  passthrough() {
+    return new _ZodObject({
+      ...this._def,
+      unknownKeys: "passthrough"
+    });
+  }
+  // const AugmentFactory =
+  //   <Def extends ZodObjectDef>(def: Def) =>
+  //   <Augmentation extends ZodRawShape>(
+  //     augmentation: Augmentation
+  //   ): ZodObject<
+  //     extendShape<ReturnType<Def["shape"]>, Augmentation>,
+  //     Def["unknownKeys"],
+  //     Def["catchall"]
+  //   > => {
+  //     return new ZodObject({
+  //       ...def,
+  //       shape: () => ({
+  //         ...def.shape(),
+  //         ...augmentation,
+  //       }),
+  //     }) as any;
+  //   };
+  extend(augmentation) {
+    return new _ZodObject({
+      ...this._def,
+      shape: () => ({
+        ...this._def.shape(),
+        ...augmentation
+      })
+    });
+  }
+  /**
+   * Prior to zod@1.0.12 there was a bug in the
+   * inferred type of merged objects. Please
+   * upgrade if you are experiencing issues.
+   */
+  merge(merging) {
+    const merged = new _ZodObject({
+      unknownKeys: merging._def.unknownKeys,
+      catchall: merging._def.catchall,
+      shape: () => ({
+        ...this._def.shape(),
+        ...merging._def.shape()
+      }),
+      typeName: ZodFirstPartyTypeKind.ZodObject
+    });
+    return merged;
+  }
+  // merge<
+  //   Incoming extends AnyZodObject,
+  //   Augmentation extends Incoming["shape"],
+  //   NewOutput extends {
+  //     [k in keyof Augmentation | keyof Output]: k extends keyof Augmentation
+  //       ? Augmentation[k]["_output"]
+  //       : k extends keyof Output
+  //       ? Output[k]
+  //       : never;
+  //   },
+  //   NewInput extends {
+  //     [k in keyof Augmentation | keyof Input]: k extends keyof Augmentation
+  //       ? Augmentation[k]["_input"]
+  //       : k extends keyof Input
+  //       ? Input[k]
+  //       : never;
+  //   }
+  // >(
+  //   merging: Incoming
+  // ): ZodObject<
+  //   extendShape<T, ReturnType<Incoming["_def"]["shape"]>>,
+  //   Incoming["_def"]["unknownKeys"],
+  //   Incoming["_def"]["catchall"],
+  //   NewOutput,
+  //   NewInput
+  // > {
+  //   const merged: any = new ZodObject({
+  //     unknownKeys: merging._def.unknownKeys,
+  //     catchall: merging._def.catchall,
+  //     shape: () =>
+  //       objectUtil.mergeShapes(this._def.shape(), merging._def.shape()),
+  //     typeName: ZodFirstPartyTypeKind.ZodObject,
+  //   }) as any;
+  //   return merged;
+  // }
+  setKey(key, schema) {
+    return this.augment({ [key]: schema });
+  }
+  // merge<Incoming extends AnyZodObject>(
+  //   merging: Incoming
+  // ): //ZodObject<T & Incoming["_shape"], UnknownKeys, Catchall> = (merging) => {
+  // ZodObject<
+  //   extendShape<T, ReturnType<Incoming["_def"]["shape"]>>,
+  //   Incoming["_def"]["unknownKeys"],
+  //   Incoming["_def"]["catchall"]
+  // > {
+  //   // const mergedShape = objectUtil.mergeShapes(
+  //   //   this._def.shape(),
+  //   //   merging._def.shape()
+  //   // );
+  //   const merged: any = new ZodObject({
+  //     unknownKeys: merging._def.unknownKeys,
+  //     catchall: merging._def.catchall,
+  //     shape: () =>
+  //       objectUtil.mergeShapes(this._def.shape(), merging._def.shape()),
+  //     typeName: ZodFirstPartyTypeKind.ZodObject,
+  //   }) as any;
+  //   return merged;
+  // }
+  catchall(index) {
+    return new _ZodObject({
+      ...this._def,
+      catchall: index
+    });
+  }
+  pick(mask) {
+    const shape = {};
+    util.objectKeys(mask).forEach((key) => {
+      if (mask[key] && this.shape[key]) {
+        shape[key] = this.shape[key];
+      }
+    });
+    return new _ZodObject({
+      ...this._def,
+      shape: () => shape
+    });
+  }
+  omit(mask) {
+    const shape = {};
+    util.objectKeys(this.shape).forEach((key) => {
+      if (!mask[key]) {
+        shape[key] = this.shape[key];
+      }
+    });
+    return new _ZodObject({
+      ...this._def,
+      shape: () => shape
+    });
+  }
+  /**
+   * @deprecated
+   */
+  deepPartial() {
+    return deepPartialify(this);
+  }
+  partial(mask) {
+    const newShape = {};
+    util.objectKeys(this.shape).forEach((key) => {
+      const fieldSchema = this.shape[key];
+      if (mask && !mask[key]) {
+        newShape[key] = fieldSchema;
+      } else {
+        newShape[key] = fieldSchema.optional();
+      }
+    });
+    return new _ZodObject({
+      ...this._def,
+      shape: () => newShape
+    });
+  }
+  required(mask) {
+    const newShape = {};
+    util.objectKeys(this.shape).forEach((key) => {
+      if (mask && !mask[key]) {
+        newShape[key] = this.shape[key];
+      } else {
+        const fieldSchema = this.shape[key];
+        let newField = fieldSchema;
+        while (newField instanceof ZodOptional) {
+          newField = newField._def.innerType;
+        }
+        newShape[key] = newField;
+      }
+    });
+    return new _ZodObject({
+      ...this._def,
+      shape: () => newShape
+    });
+  }
+  keyof() {
+    return createZodEnum(util.objectKeys(this.shape));
+  }
+};
+ZodObject.create = (shape, params) => {
+  return new ZodObject({
+    shape: () => shape,
+    unknownKeys: "strip",
+    catchall: ZodNever.create(),
+    typeName: ZodFirstPartyTypeKind.ZodObject,
+    ...processCreateParams(params)
+  });
+};
+ZodObject.strictCreate = (shape, params) => {
+  return new ZodObject({
+    shape: () => shape,
+    unknownKeys: "strict",
+    catchall: ZodNever.create(),
+    typeName: ZodFirstPartyTypeKind.ZodObject,
+    ...processCreateParams(params)
+  });
+};
+ZodObject.lazycreate = (shape, params) => {
+  return new ZodObject({
+    shape,
+    unknownKeys: "strip",
+    catchall: ZodNever.create(),
+    typeName: ZodFirstPartyTypeKind.ZodObject,
+    ...processCreateParams(params)
+  });
+};
+var ZodUnion = class extends ZodType {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const options = this._def.options;
+    function handleResults(results) {
+      for (const result2 of results) {
+        if (result2.result.status === "valid") {
+          return result2.result;
+        }
+      }
+      for (const result2 of results) {
+        if (result2.result.status === "dirty") {
+          ctx.common.issues.push(...result2.ctx.common.issues);
+          return result2.result;
+        }
+      }
+      const unionErrors = results.map((result2) => new ZodError(result2.ctx.common.issues));
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_union,
+        unionErrors
+      });
+      return INVALID;
+    }
+    if (ctx.common.async) {
+      return Promise.all(options.map(async (option) => {
+        const childCtx = {
+          ...ctx,
+          common: {
+            ...ctx.common,
+            issues: []
+          },
+          parent: null
+        };
+        return {
+          result: await option._parseAsync({
+            data: ctx.data,
+            path: ctx.path,
+            parent: childCtx
+          }),
+          ctx: childCtx
+        };
+      })).then(handleResults);
+    } else {
+      let dirty = void 0;
+      const issues = [];
+      for (const option of options) {
+        const childCtx = {
+          ...ctx,
+          common: {
+            ...ctx.common,
+            issues: []
+          },
+          parent: null
+        };
+        const result2 = option._parseSync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: childCtx
+        });
+        if (result2.status === "valid") {
+          return result2;
+        } else if (result2.status === "dirty" && !dirty) {
+          dirty = { result: result2, ctx: childCtx };
+        }
+        if (childCtx.common.issues.length) {
+          issues.push(childCtx.common.issues);
+        }
+      }
+      if (dirty) {
+        ctx.common.issues.push(...dirty.ctx.common.issues);
+        return dirty.result;
+      }
+      const unionErrors = issues.map((issues2) => new ZodError(issues2));
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_union,
+        unionErrors
+      });
+      return INVALID;
+    }
+  }
+  get options() {
+    return this._def.options;
+  }
+};
+ZodUnion.create = (types, params) => {
+  return new ZodUnion({
+    options: types,
+    typeName: ZodFirstPartyTypeKind.ZodUnion,
+    ...processCreateParams(params)
+  });
+};
+var getDiscriminator = (type) => {
+  if (type instanceof ZodLazy) {
+    return getDiscriminator(type.schema);
+  } else if (type instanceof ZodEffects) {
+    return getDiscriminator(type.innerType());
+  } else if (type instanceof ZodLiteral) {
+    return [type.value];
+  } else if (type instanceof ZodEnum) {
+    return type.options;
+  } else if (type instanceof ZodNativeEnum) {
+    return util.objectValues(type.enum);
+  } else if (type instanceof ZodDefault) {
+    return getDiscriminator(type._def.innerType);
+  } else if (type instanceof ZodUndefined) {
+    return [void 0];
+  } else if (type instanceof ZodNull) {
+    return [null];
+  } else if (type instanceof ZodOptional) {
+    return [void 0, ...getDiscriminator(type.unwrap())];
+  } else if (type instanceof ZodNullable) {
+    return [null, ...getDiscriminator(type.unwrap())];
+  } else if (type instanceof ZodBranded) {
+    return getDiscriminator(type.unwrap());
+  } else if (type instanceof ZodReadonly) {
+    return getDiscriminator(type.unwrap());
+  } else if (type instanceof ZodCatch) {
+    return getDiscriminator(type._def.innerType);
+  } else {
+    return [];
+  }
+};
+var ZodDiscriminatedUnion = class _ZodDiscriminatedUnion extends ZodType {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType.object) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.object,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    const discriminator = this.discriminator;
+    const discriminatorValue = ctx.data[discriminator];
+    const option = this.optionsMap.get(discriminatorValue);
+    if (!option) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_union_discriminator,
+        options: Array.from(this.optionsMap.keys()),
+        path: [discriminator]
+      });
+      return INVALID;
+    }
+    if (ctx.common.async) {
+      return option._parseAsync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      });
+    } else {
+      return option._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      });
+    }
+  }
+  get discriminator() {
+    return this._def.discriminator;
+  }
+  get options() {
+    return this._def.options;
+  }
+  get optionsMap() {
+    return this._def.optionsMap;
+  }
+  /**
+   * The constructor of the discriminated union schema. Its behaviour is very similar to that of the normal z.union() constructor.
+   * However, it only allows a union of objects, all of which need to share a discriminator property. This property must
+   * have a different value for each object in the union.
+   * @param discriminator the name of the discriminator property
+   * @param types an array of object schemas
+   * @param params
+   */
+  static create(discriminator, options, params) {
+    const optionsMap = /* @__PURE__ */ new Map();
+    for (const type of options) {
+      const discriminatorValues = getDiscriminator(type.shape[discriminator]);
+      if (!discriminatorValues.length) {
+        throw new Error(`A discriminator value for key \`${discriminator}\` could not be extracted from all schema options`);
+      }
+      for (const value of discriminatorValues) {
+        if (optionsMap.has(value)) {
+          throw new Error(`Discriminator property ${String(discriminator)} has duplicate value ${String(value)}`);
+        }
+        optionsMap.set(value, type);
+      }
+    }
+    return new _ZodDiscriminatedUnion({
+      typeName: ZodFirstPartyTypeKind.ZodDiscriminatedUnion,
+      discriminator,
+      options,
+      optionsMap,
+      ...processCreateParams(params)
+    });
+  }
+};
+function mergeValues(a, b) {
+  const aType = getParsedType(a);
+  const bType = getParsedType(b);
+  if (a === b) {
+    return { valid: true, data: a };
+  } else if (aType === ZodParsedType.object && bType === ZodParsedType.object) {
+    const bKeys = util.objectKeys(b);
+    const sharedKeys = util.objectKeys(a).filter((key) => bKeys.indexOf(key) !== -1);
+    const newObj = { ...a, ...b };
+    for (const key of sharedKeys) {
+      const sharedValue = mergeValues(a[key], b[key]);
+      if (!sharedValue.valid) {
+        return { valid: false };
+      }
+      newObj[key] = sharedValue.data;
+    }
+    return { valid: true, data: newObj };
+  } else if (aType === ZodParsedType.array && bType === ZodParsedType.array) {
+    if (a.length !== b.length) {
+      return { valid: false };
+    }
+    const newArray = [];
+    for (let index = 0; index < a.length; index++) {
+      const itemA = a[index];
+      const itemB = b[index];
+      const sharedValue = mergeValues(itemA, itemB);
+      if (!sharedValue.valid) {
+        return { valid: false };
+      }
+      newArray.push(sharedValue.data);
+    }
+    return { valid: true, data: newArray };
+  } else if (aType === ZodParsedType.date && bType === ZodParsedType.date && +a === +b) {
+    return { valid: true, data: a };
+  } else {
+    return { valid: false };
+  }
+}
+var ZodIntersection = class extends ZodType {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    const handleParsed = (parsedLeft, parsedRight) => {
+      if (isAborted(parsedLeft) || isAborted(parsedRight)) {
+        return INVALID;
+      }
+      const merged = mergeValues(parsedLeft.value, parsedRight.value);
+      if (!merged.valid) {
+        addIssueToContext(ctx, {
+          code: ZodIssueCode.invalid_intersection_types
+        });
+        return INVALID;
+      }
+      if (isDirty(parsedLeft) || isDirty(parsedRight)) {
+        status.dirty();
+      }
+      return { status: status.value, value: merged.data };
+    };
+    if (ctx.common.async) {
+      return Promise.all([
+        this._def.left._parseAsync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        }),
+        this._def.right._parseAsync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        })
+      ]).then(([left, right]) => handleParsed(left, right));
+    } else {
+      return handleParsed(this._def.left._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      }), this._def.right._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      }));
+    }
+  }
+};
+ZodIntersection.create = (left, right, params) => {
+  return new ZodIntersection({
+    left,
+    right,
+    typeName: ZodFirstPartyTypeKind.ZodIntersection,
+    ...processCreateParams(params)
+  });
+};
+var ZodTuple = class _ZodTuple extends ZodType {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType.array) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.array,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    if (ctx.data.length < this._def.items.length) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.too_small,
+        minimum: this._def.items.length,
+        inclusive: true,
+        exact: false,
+        type: "array"
+      });
+      return INVALID;
+    }
+    const rest = this._def.rest;
+    if (!rest && ctx.data.length > this._def.items.length) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.too_big,
+        maximum: this._def.items.length,
+        inclusive: true,
+        exact: false,
+        type: "array"
+      });
+      status.dirty();
+    }
+    const items = [...ctx.data].map((item, itemIndex) => {
+      const schema = this._def.items[itemIndex] || this._def.rest;
+      if (!schema)
+        return null;
+      return schema._parse(new ParseInputLazyPath(ctx, item, ctx.path, itemIndex));
+    }).filter((x) => !!x);
+    if (ctx.common.async) {
+      return Promise.all(items).then((results) => {
+        return ParseStatus.mergeArray(status, results);
+      });
+    } else {
+      return ParseStatus.mergeArray(status, items);
+    }
+  }
+  get items() {
+    return this._def.items;
+  }
+  rest(rest) {
+    return new _ZodTuple({
+      ...this._def,
+      rest
+    });
+  }
+};
+ZodTuple.create = (schemas, params) => {
+  if (!Array.isArray(schemas)) {
+    throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
+  }
+  return new ZodTuple({
+    items: schemas,
+    typeName: ZodFirstPartyTypeKind.ZodTuple,
+    rest: null,
+    ...processCreateParams(params)
+  });
+};
+var ZodRecord = class _ZodRecord extends ZodType {
+  get keySchema() {
+    return this._def.keyType;
+  }
+  get valueSchema() {
+    return this._def.valueType;
+  }
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType.object) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.object,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    const pairs = [];
+    const keyType = this._def.keyType;
+    const valueType = this._def.valueType;
+    for (const key in ctx.data) {
+      pairs.push({
+        key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, key)),
+        value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key], ctx.path, key)),
+        alwaysSet: key in ctx.data
+      });
+    }
+    if (ctx.common.async) {
+      return ParseStatus.mergeObjectAsync(status, pairs);
+    } else {
+      return ParseStatus.mergeObjectSync(status, pairs);
+    }
+  }
+  get element() {
+    return this._def.valueType;
+  }
+  static create(first, second, third) {
+    if (second instanceof ZodType) {
+      return new _ZodRecord({
+        keyType: first,
+        valueType: second,
+        typeName: ZodFirstPartyTypeKind.ZodRecord,
+        ...processCreateParams(third)
+      });
+    }
+    return new _ZodRecord({
+      keyType: ZodString.create(),
+      valueType: first,
+      typeName: ZodFirstPartyTypeKind.ZodRecord,
+      ...processCreateParams(second)
+    });
+  }
+};
+var ZodMap = class extends ZodType {
+  get keySchema() {
+    return this._def.keyType;
+  }
+  get valueSchema() {
+    return this._def.valueType;
+  }
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType.map) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.map,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    const keyType = this._def.keyType;
+    const valueType = this._def.valueType;
+    const pairs = [...ctx.data.entries()].map(([key, value], index) => {
+      return {
+        key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, [index, "key"])),
+        value: valueType._parse(new ParseInputLazyPath(ctx, value, ctx.path, [index, "value"]))
+      };
+    });
+    if (ctx.common.async) {
+      const finalMap = /* @__PURE__ */ new Map();
+      return Promise.resolve().then(async () => {
+        for (const pair of pairs) {
+          const key = await pair.key;
+          const value = await pair.value;
+          if (key.status === "aborted" || value.status === "aborted") {
+            return INVALID;
+          }
+          if (key.status === "dirty" || value.status === "dirty") {
+            status.dirty();
+          }
+          finalMap.set(key.value, value.value);
+        }
+        return { status: status.value, value: finalMap };
+      });
+    } else {
+      const finalMap = /* @__PURE__ */ new Map();
+      for (const pair of pairs) {
+        const key = pair.key;
+        const value = pair.value;
+        if (key.status === "aborted" || value.status === "aborted") {
+          return INVALID;
+        }
+        if (key.status === "dirty" || value.status === "dirty") {
+          status.dirty();
+        }
+        finalMap.set(key.value, value.value);
+      }
+      return { status: status.value, value: finalMap };
+    }
+  }
+};
+ZodMap.create = (keyType, valueType, params) => {
+  return new ZodMap({
+    valueType,
+    keyType,
+    typeName: ZodFirstPartyTypeKind.ZodMap,
+    ...processCreateParams(params)
+  });
+};
+var ZodSet = class _ZodSet extends ZodType {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType.set) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.set,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    const def = this._def;
+    if (def.minSize !== null) {
+      if (ctx.data.size < def.minSize.value) {
+        addIssueToContext(ctx, {
+          code: ZodIssueCode.too_small,
+          minimum: def.minSize.value,
+          type: "set",
+          inclusive: true,
+          exact: false,
+          message: def.minSize.message
+        });
+        status.dirty();
+      }
+    }
+    if (def.maxSize !== null) {
+      if (ctx.data.size > def.maxSize.value) {
+        addIssueToContext(ctx, {
+          code: ZodIssueCode.too_big,
+          maximum: def.maxSize.value,
+          type: "set",
+          inclusive: true,
+          exact: false,
+          message: def.maxSize.message
+        });
+        status.dirty();
+      }
+    }
+    const valueType = this._def.valueType;
+    function finalizeSet(elements2) {
+      const parsedSet = /* @__PURE__ */ new Set();
+      for (const element of elements2) {
+        if (element.status === "aborted")
+          return INVALID;
+        if (element.status === "dirty")
+          status.dirty();
+        parsedSet.add(element.value);
+      }
+      return { status: status.value, value: parsedSet };
+    }
+    const elements = [...ctx.data.values()].map((item, i) => valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i)));
+    if (ctx.common.async) {
+      return Promise.all(elements).then((elements2) => finalizeSet(elements2));
+    } else {
+      return finalizeSet(elements);
+    }
+  }
+  min(minSize, message) {
+    return new _ZodSet({
+      ...this._def,
+      minSize: { value: minSize, message: errorUtil.toString(message) }
+    });
+  }
+  max(maxSize, message) {
+    return new _ZodSet({
+      ...this._def,
+      maxSize: { value: maxSize, message: errorUtil.toString(message) }
+    });
+  }
+  size(size, message) {
+    return this.min(size, message).max(size, message);
+  }
+  nonempty(message) {
+    return this.min(1, message);
+  }
+};
+ZodSet.create = (valueType, params) => {
+  return new ZodSet({
+    valueType,
+    minSize: null,
+    maxSize: null,
+    typeName: ZodFirstPartyTypeKind.ZodSet,
+    ...processCreateParams(params)
+  });
+};
+var ZodFunction = class _ZodFunction extends ZodType {
+  constructor() {
+    super(...arguments);
+    this.validate = this.implement;
+  }
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType.function) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.function,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    function makeArgsIssue(args, error) {
+      return makeIssue({
+        data: args,
+        path: ctx.path,
+        errorMaps: [
+          ctx.common.contextualErrorMap,
+          ctx.schemaErrorMap,
+          getErrorMap(),
+          errorMap
+        ].filter((x) => !!x),
+        issueData: {
+          code: ZodIssueCode.invalid_arguments,
+          argumentsError: error
+        }
+      });
+    }
+    function makeReturnsIssue(returns, error) {
+      return makeIssue({
+        data: returns,
+        path: ctx.path,
+        errorMaps: [
+          ctx.common.contextualErrorMap,
+          ctx.schemaErrorMap,
+          getErrorMap(),
+          errorMap
+        ].filter((x) => !!x),
+        issueData: {
+          code: ZodIssueCode.invalid_return_type,
+          returnTypeError: error
+        }
+      });
+    }
+    const params = { errorMap: ctx.common.contextualErrorMap };
+    const fn = ctx.data;
+    if (this._def.returns instanceof ZodPromise) {
+      const me = this;
+      return OK(async function(...args) {
+        const error = new ZodError([]);
+        const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
+          error.addIssue(makeArgsIssue(args, e));
+          throw error;
+        });
+        const result2 = await Reflect.apply(fn, this, parsedArgs);
+        const parsedReturns = await me._def.returns._def.type.parseAsync(result2, params).catch((e) => {
+          error.addIssue(makeReturnsIssue(result2, e));
+          throw error;
+        });
+        return parsedReturns;
+      });
+    } else {
+      const me = this;
+      return OK(function(...args) {
+        const parsedArgs = me._def.args.safeParse(args, params);
+        if (!parsedArgs.success) {
+          throw new ZodError([makeArgsIssue(args, parsedArgs.error)]);
+        }
+        const result2 = Reflect.apply(fn, this, parsedArgs.data);
+        const parsedReturns = me._def.returns.safeParse(result2, params);
+        if (!parsedReturns.success) {
+          throw new ZodError([makeReturnsIssue(result2, parsedReturns.error)]);
+        }
+        return parsedReturns.data;
+      });
+    }
+  }
+  parameters() {
+    return this._def.args;
+  }
+  returnType() {
+    return this._def.returns;
+  }
+  args(...items) {
+    return new _ZodFunction({
+      ...this._def,
+      args: ZodTuple.create(items).rest(ZodUnknown.create())
+    });
+  }
+  returns(returnType) {
+    return new _ZodFunction({
+      ...this._def,
+      returns: returnType
+    });
+  }
+  implement(func) {
+    const validatedFunc = this.parse(func);
+    return validatedFunc;
+  }
+  strictImplement(func) {
+    const validatedFunc = this.parse(func);
+    return validatedFunc;
+  }
+  static create(args, returns, params) {
+    return new _ZodFunction({
+      args: args ? args : ZodTuple.create([]).rest(ZodUnknown.create()),
+      returns: returns || ZodUnknown.create(),
+      typeName: ZodFirstPartyTypeKind.ZodFunction,
+      ...processCreateParams(params)
+    });
+  }
+};
+var ZodLazy = class extends ZodType {
+  get schema() {
+    return this._def.getter();
+  }
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const lazySchema = this._def.getter();
+    return lazySchema._parse({ data: ctx.data, path: ctx.path, parent: ctx });
+  }
+};
+ZodLazy.create = (getter, params) => {
+  return new ZodLazy({
+    getter,
+    typeName: ZodFirstPartyTypeKind.ZodLazy,
+    ...processCreateParams(params)
+  });
+};
+var ZodLiteral = class extends ZodType {
+  _parse(input) {
+    if (input.data !== this._def.value) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        received: ctx.data,
+        code: ZodIssueCode.invalid_literal,
+        expected: this._def.value
+      });
+      return INVALID;
+    }
+    return { status: "valid", value: input.data };
+  }
+  get value() {
+    return this._def.value;
+  }
+};
+ZodLiteral.create = (value, params) => {
+  return new ZodLiteral({
+    value,
+    typeName: ZodFirstPartyTypeKind.ZodLiteral,
+    ...processCreateParams(params)
+  });
+};
+function createZodEnum(values, params) {
+  return new ZodEnum({
+    values,
+    typeName: ZodFirstPartyTypeKind.ZodEnum,
+    ...processCreateParams(params)
+  });
+}
+var ZodEnum = class _ZodEnum extends ZodType {
+  constructor() {
+    super(...arguments);
+    _ZodEnum_cache.set(this, void 0);
+  }
+  _parse(input) {
+    if (typeof input.data !== "string") {
+      const ctx = this._getOrReturnCtx(input);
+      const expectedValues = this._def.values;
+      addIssueToContext(ctx, {
+        expected: util.joinValues(expectedValues),
+        received: ctx.parsedType,
+        code: ZodIssueCode.invalid_type
+      });
+      return INVALID;
+    }
+    if (!__classPrivateFieldGet(this, _ZodEnum_cache, "f")) {
+      __classPrivateFieldSet(this, _ZodEnum_cache, new Set(this._def.values), "f");
+    }
+    if (!__classPrivateFieldGet(this, _ZodEnum_cache, "f").has(input.data)) {
+      const ctx = this._getOrReturnCtx(input);
+      const expectedValues = this._def.values;
+      addIssueToContext(ctx, {
+        received: ctx.data,
+        code: ZodIssueCode.invalid_enum_value,
+        options: expectedValues
+      });
+      return INVALID;
+    }
+    return OK(input.data);
+  }
+  get options() {
+    return this._def.values;
+  }
+  get enum() {
+    const enumValues = {};
+    for (const val of this._def.values) {
+      enumValues[val] = val;
+    }
+    return enumValues;
+  }
+  get Values() {
+    const enumValues = {};
+    for (const val of this._def.values) {
+      enumValues[val] = val;
+    }
+    return enumValues;
+  }
+  get Enum() {
+    const enumValues = {};
+    for (const val of this._def.values) {
+      enumValues[val] = val;
+    }
+    return enumValues;
+  }
+  extract(values, newDef = this._def) {
+    return _ZodEnum.create(values, {
+      ...this._def,
+      ...newDef
+    });
+  }
+  exclude(values, newDef = this._def) {
+    return _ZodEnum.create(this.options.filter((opt) => !values.includes(opt)), {
+      ...this._def,
+      ...newDef
+    });
+  }
+};
+_ZodEnum_cache = /* @__PURE__ */ new WeakMap();
+ZodEnum.create = createZodEnum;
+var ZodNativeEnum = class extends ZodType {
+  constructor() {
+    super(...arguments);
+    _ZodNativeEnum_cache.set(this, void 0);
+  }
+  _parse(input) {
+    const nativeEnumValues = util.getValidEnumValues(this._def.values);
+    const ctx = this._getOrReturnCtx(input);
+    if (ctx.parsedType !== ZodParsedType.string && ctx.parsedType !== ZodParsedType.number) {
+      const expectedValues = util.objectValues(nativeEnumValues);
+      addIssueToContext(ctx, {
+        expected: util.joinValues(expectedValues),
+        received: ctx.parsedType,
+        code: ZodIssueCode.invalid_type
+      });
+      return INVALID;
+    }
+    if (!__classPrivateFieldGet(this, _ZodNativeEnum_cache, "f")) {
+      __classPrivateFieldSet(this, _ZodNativeEnum_cache, new Set(util.getValidEnumValues(this._def.values)), "f");
+    }
+    if (!__classPrivateFieldGet(this, _ZodNativeEnum_cache, "f").has(input.data)) {
+      const expectedValues = util.objectValues(nativeEnumValues);
+      addIssueToContext(ctx, {
+        received: ctx.data,
+        code: ZodIssueCode.invalid_enum_value,
+        options: expectedValues
+      });
+      return INVALID;
+    }
+    return OK(input.data);
+  }
+  get enum() {
+    return this._def.values;
+  }
+};
+_ZodNativeEnum_cache = /* @__PURE__ */ new WeakMap();
+ZodNativeEnum.create = (values, params) => {
+  return new ZodNativeEnum({
+    values,
+    typeName: ZodFirstPartyTypeKind.ZodNativeEnum,
+    ...processCreateParams(params)
+  });
+};
+var ZodPromise = class extends ZodType {
+  unwrap() {
+    return this._def.type;
+  }
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType.promise && ctx.common.async === false) {
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.promise,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    const promisified = ctx.parsedType === ZodParsedType.promise ? ctx.data : Promise.resolve(ctx.data);
+    return OK(promisified.then((data) => {
+      return this._def.type.parseAsync(data, {
+        path: ctx.path,
+        errorMap: ctx.common.contextualErrorMap
+      });
+    }));
+  }
+};
+ZodPromise.create = (schema, params) => {
+  return new ZodPromise({
+    type: schema,
+    typeName: ZodFirstPartyTypeKind.ZodPromise,
+    ...processCreateParams(params)
+  });
+};
+var ZodEffects = class extends ZodType {
+  innerType() {
+    return this._def.schema;
+  }
+  sourceType() {
+    return this._def.schema._def.typeName === ZodFirstPartyTypeKind.ZodEffects ? this._def.schema.sourceType() : this._def.schema;
+  }
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    const effect = this._def.effect || null;
+    const checkCtx = {
+      addIssue: (arg) => {
+        addIssueToContext(ctx, arg);
+        if (arg.fatal) {
+          status.abort();
+        } else {
+          status.dirty();
+        }
+      },
+      get path() {
+        return ctx.path;
+      }
+    };
+    checkCtx.addIssue = checkCtx.addIssue.bind(checkCtx);
+    if (effect.type === "preprocess") {
+      const processed = effect.transform(ctx.data, checkCtx);
+      if (ctx.common.async) {
+        return Promise.resolve(processed).then(async (processed2) => {
+          if (status.value === "aborted")
+            return INVALID;
+          const result2 = await this._def.schema._parseAsync({
+            data: processed2,
+            path: ctx.path,
+            parent: ctx
+          });
+          if (result2.status === "aborted")
+            return INVALID;
+          if (result2.status === "dirty")
+            return DIRTY(result2.value);
+          if (status.value === "dirty")
+            return DIRTY(result2.value);
+          return result2;
+        });
+      } else {
+        if (status.value === "aborted")
+          return INVALID;
+        const result2 = this._def.schema._parseSync({
+          data: processed,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (result2.status === "aborted")
+          return INVALID;
+        if (result2.status === "dirty")
+          return DIRTY(result2.value);
+        if (status.value === "dirty")
+          return DIRTY(result2.value);
+        return result2;
+      }
+    }
+    if (effect.type === "refinement") {
+      const executeRefinement = (acc) => {
+        const result2 = effect.refinement(acc, checkCtx);
+        if (ctx.common.async) {
+          return Promise.resolve(result2);
+        }
+        if (result2 instanceof Promise) {
+          throw new Error("Async refinement encountered during synchronous parse operation. Use .parseAsync instead.");
+        }
+        return acc;
+      };
+      if (ctx.common.async === false) {
+        const inner = this._def.schema._parseSync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (inner.status === "aborted")
+          return INVALID;
+        if (inner.status === "dirty")
+          status.dirty();
+        executeRefinement(inner.value);
+        return { status: status.value, value: inner.value };
+      } else {
+        return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
+          if (inner.status === "aborted")
+            return INVALID;
+          if (inner.status === "dirty")
+            status.dirty();
+          return executeRefinement(inner.value).then(() => {
+            return { status: status.value, value: inner.value };
+          });
+        });
+      }
+    }
+    if (effect.type === "transform") {
+      if (ctx.common.async === false) {
+        const base = this._def.schema._parseSync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (!isValid(base))
+          return base;
+        const result2 = effect.transform(base.value, checkCtx);
+        if (result2 instanceof Promise) {
+          throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
+        }
+        return { status: status.value, value: result2 };
+      } else {
+        return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
+          if (!isValid(base))
+            return base;
+          return Promise.resolve(effect.transform(base.value, checkCtx)).then((result2) => ({ status: status.value, value: result2 }));
+        });
+      }
+    }
+    util.assertNever(effect);
+  }
+};
+ZodEffects.create = (schema, effect, params) => {
+  return new ZodEffects({
+    schema,
+    typeName: ZodFirstPartyTypeKind.ZodEffects,
+    effect,
+    ...processCreateParams(params)
+  });
+};
+ZodEffects.createWithPreprocess = (preprocess, schema, params) => {
+  return new ZodEffects({
+    schema,
+    effect: { type: "preprocess", transform: preprocess },
+    typeName: ZodFirstPartyTypeKind.ZodEffects,
+    ...processCreateParams(params)
+  });
+};
+var ZodOptional = class extends ZodType {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType === ZodParsedType.undefined) {
+      return OK(void 0);
+    }
+    return this._def.innerType._parse(input);
+  }
+  unwrap() {
+    return this._def.innerType;
+  }
+};
+ZodOptional.create = (type, params) => {
+  return new ZodOptional({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind.ZodOptional,
+    ...processCreateParams(params)
+  });
+};
+var ZodNullable = class extends ZodType {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType === ZodParsedType.null) {
+      return OK(null);
+    }
+    return this._def.innerType._parse(input);
+  }
+  unwrap() {
+    return this._def.innerType;
+  }
+};
+ZodNullable.create = (type, params) => {
+  return new ZodNullable({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind.ZodNullable,
+    ...processCreateParams(params)
+  });
+};
+var ZodDefault = class extends ZodType {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    let data = ctx.data;
+    if (ctx.parsedType === ZodParsedType.undefined) {
+      data = this._def.defaultValue();
+    }
+    return this._def.innerType._parse({
+      data,
+      path: ctx.path,
+      parent: ctx
+    });
+  }
+  removeDefault() {
+    return this._def.innerType;
+  }
+};
+ZodDefault.create = (type, params) => {
+  return new ZodDefault({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind.ZodDefault,
+    defaultValue: typeof params.default === "function" ? params.default : () => params.default,
+    ...processCreateParams(params)
+  });
+};
+var ZodCatch = class extends ZodType {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const newCtx = {
+      ...ctx,
+      common: {
+        ...ctx.common,
+        issues: []
+      }
+    };
+    const result2 = this._def.innerType._parse({
+      data: newCtx.data,
+      path: newCtx.path,
+      parent: {
+        ...newCtx
+      }
+    });
+    if (isAsync(result2)) {
+      return result2.then((result3) => {
+        return {
+          status: "valid",
+          value: result3.status === "valid" ? result3.value : this._def.catchValue({
+            get error() {
+              return new ZodError(newCtx.common.issues);
+            },
+            input: newCtx.data
+          })
+        };
+      });
+    } else {
+      return {
+        status: "valid",
+        value: result2.status === "valid" ? result2.value : this._def.catchValue({
+          get error() {
+            return new ZodError(newCtx.common.issues);
+          },
+          input: newCtx.data
+        })
+      };
+    }
+  }
+  removeCatch() {
+    return this._def.innerType;
+  }
+};
+ZodCatch.create = (type, params) => {
+  return new ZodCatch({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind.ZodCatch,
+    catchValue: typeof params.catch === "function" ? params.catch : () => params.catch,
+    ...processCreateParams(params)
+  });
+};
+var ZodNaN = class extends ZodType {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType.nan) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        code: ZodIssueCode.invalid_type,
+        expected: ZodParsedType.nan,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    return { status: "valid", value: input.data };
+  }
+};
+ZodNaN.create = (params) => {
+  return new ZodNaN({
+    typeName: ZodFirstPartyTypeKind.ZodNaN,
+    ...processCreateParams(params)
+  });
+};
+var BRAND = /* @__PURE__ */ Symbol("zod_brand");
+var ZodBranded = class extends ZodType {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const data = ctx.data;
+    return this._def.type._parse({
+      data,
+      path: ctx.path,
+      parent: ctx
+    });
+  }
+  unwrap() {
+    return this._def.type;
+  }
+};
+var ZodPipeline = class _ZodPipeline extends ZodType {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.common.async) {
+      const handleAsync = async () => {
+        const inResult = await this._def.in._parseAsync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (inResult.status === "aborted")
+          return INVALID;
+        if (inResult.status === "dirty") {
+          status.dirty();
+          return DIRTY(inResult.value);
+        } else {
+          return this._def.out._parseAsync({
+            data: inResult.value,
+            path: ctx.path,
+            parent: ctx
+          });
+        }
+      };
+      return handleAsync();
+    } else {
+      const inResult = this._def.in._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      });
+      if (inResult.status === "aborted")
+        return INVALID;
+      if (inResult.status === "dirty") {
+        status.dirty();
+        return {
+          status: "dirty",
+          value: inResult.value
+        };
+      } else {
+        return this._def.out._parseSync({
+          data: inResult.value,
+          path: ctx.path,
+          parent: ctx
+        });
+      }
+    }
+  }
+  static create(a, b) {
+    return new _ZodPipeline({
+      in: a,
+      out: b,
+      typeName: ZodFirstPartyTypeKind.ZodPipeline
+    });
+  }
+};
+var ZodReadonly = class extends ZodType {
+  _parse(input) {
+    const result2 = this._def.innerType._parse(input);
+    const freeze = (data) => {
+      if (isValid(data)) {
+        data.value = Object.freeze(data.value);
+      }
+      return data;
+    };
+    return isAsync(result2) ? result2.then((data) => freeze(data)) : freeze(result2);
+  }
+  unwrap() {
+    return this._def.innerType;
+  }
+};
+ZodReadonly.create = (type, params) => {
+  return new ZodReadonly({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind.ZodReadonly,
+    ...processCreateParams(params)
+  });
+};
+function custom(check, params = {}, fatal) {
+  if (check)
+    return ZodAny.create().superRefine((data, ctx) => {
+      var _a, _b;
+      if (!check(data)) {
+        const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
+        const _fatal = (_b = (_a = p.fatal) !== null && _a !== void 0 ? _a : fatal) !== null && _b !== void 0 ? _b : true;
+        const p2 = typeof p === "string" ? { message: p } : p;
+        ctx.addIssue({ code: "custom", ...p2, fatal: _fatal });
+      }
+    });
+  return ZodAny.create();
+}
+var late = {
+  object: ZodObject.lazycreate
+};
+var ZodFirstPartyTypeKind;
+(function(ZodFirstPartyTypeKind2) {
+  ZodFirstPartyTypeKind2["ZodString"] = "ZodString";
+  ZodFirstPartyTypeKind2["ZodNumber"] = "ZodNumber";
+  ZodFirstPartyTypeKind2["ZodNaN"] = "ZodNaN";
+  ZodFirstPartyTypeKind2["ZodBigInt"] = "ZodBigInt";
+  ZodFirstPartyTypeKind2["ZodBoolean"] = "ZodBoolean";
+  ZodFirstPartyTypeKind2["ZodDate"] = "ZodDate";
+  ZodFirstPartyTypeKind2["ZodSymbol"] = "ZodSymbol";
+  ZodFirstPartyTypeKind2["ZodUndefined"] = "ZodUndefined";
+  ZodFirstPartyTypeKind2["ZodNull"] = "ZodNull";
+  ZodFirstPartyTypeKind2["ZodAny"] = "ZodAny";
+  ZodFirstPartyTypeKind2["ZodUnknown"] = "ZodUnknown";
+  ZodFirstPartyTypeKind2["ZodNever"] = "ZodNever";
+  ZodFirstPartyTypeKind2["ZodVoid"] = "ZodVoid";
+  ZodFirstPartyTypeKind2["ZodArray"] = "ZodArray";
+  ZodFirstPartyTypeKind2["ZodObject"] = "ZodObject";
+  ZodFirstPartyTypeKind2["ZodUnion"] = "ZodUnion";
+  ZodFirstPartyTypeKind2["ZodDiscriminatedUnion"] = "ZodDiscriminatedUnion";
+  ZodFirstPartyTypeKind2["ZodIntersection"] = "ZodIntersection";
+  ZodFirstPartyTypeKind2["ZodTuple"] = "ZodTuple";
+  ZodFirstPartyTypeKind2["ZodRecord"] = "ZodRecord";
+  ZodFirstPartyTypeKind2["ZodMap"] = "ZodMap";
+  ZodFirstPartyTypeKind2["ZodSet"] = "ZodSet";
+  ZodFirstPartyTypeKind2["ZodFunction"] = "ZodFunction";
+  ZodFirstPartyTypeKind2["ZodLazy"] = "ZodLazy";
+  ZodFirstPartyTypeKind2["ZodLiteral"] = "ZodLiteral";
+  ZodFirstPartyTypeKind2["ZodEnum"] = "ZodEnum";
+  ZodFirstPartyTypeKind2["ZodEffects"] = "ZodEffects";
+  ZodFirstPartyTypeKind2["ZodNativeEnum"] = "ZodNativeEnum";
+  ZodFirstPartyTypeKind2["ZodOptional"] = "ZodOptional";
+  ZodFirstPartyTypeKind2["ZodNullable"] = "ZodNullable";
+  ZodFirstPartyTypeKind2["ZodDefault"] = "ZodDefault";
+  ZodFirstPartyTypeKind2["ZodCatch"] = "ZodCatch";
+  ZodFirstPartyTypeKind2["ZodPromise"] = "ZodPromise";
+  ZodFirstPartyTypeKind2["ZodBranded"] = "ZodBranded";
+  ZodFirstPartyTypeKind2["ZodPipeline"] = "ZodPipeline";
+  ZodFirstPartyTypeKind2["ZodReadonly"] = "ZodReadonly";
+})(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
+var instanceOfType = (cls, params = {
+  message: `Input not instance of ${cls.name}`
+}) => custom((data) => data instanceof cls, params);
+var stringType = ZodString.create;
+var numberType = ZodNumber.create;
+var nanType = ZodNaN.create;
+var bigIntType = ZodBigInt.create;
+var booleanType = ZodBoolean.create;
+var dateType = ZodDate.create;
+var symbolType = ZodSymbol.create;
+var undefinedType = ZodUndefined.create;
+var nullType = ZodNull.create;
+var anyType = ZodAny.create;
+var unknownType = ZodUnknown.create;
+var neverType = ZodNever.create;
+var voidType = ZodVoid.create;
+var arrayType = ZodArray.create;
+var objectType = ZodObject.create;
+var strictObjectType = ZodObject.strictCreate;
+var unionType = ZodUnion.create;
+var discriminatedUnionType = ZodDiscriminatedUnion.create;
+var intersectionType = ZodIntersection.create;
+var tupleType = ZodTuple.create;
+var recordType = ZodRecord.create;
+var mapType = ZodMap.create;
+var setType = ZodSet.create;
+var functionType = ZodFunction.create;
+var lazyType = ZodLazy.create;
+var literalType = ZodLiteral.create;
+var enumType = ZodEnum.create;
+var nativeEnumType = ZodNativeEnum.create;
+var promiseType = ZodPromise.create;
+var effectsType = ZodEffects.create;
+var optionalType = ZodOptional.create;
+var nullableType = ZodNullable.create;
+var preprocessType = ZodEffects.createWithPreprocess;
+var pipelineType = ZodPipeline.create;
+var ostring = () => stringType().optional();
+var onumber = () => numberType().optional();
+var oboolean = () => booleanType().optional();
+var coerce = {
+  string: ((arg) => ZodString.create({ ...arg, coerce: true })),
+  number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
+  boolean: ((arg) => ZodBoolean.create({
+    ...arg,
+    coerce: true
+  })),
+  bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
+  date: ((arg) => ZodDate.create({ ...arg, coerce: true }))
+};
+var NEVER = INVALID;
+var z = /* @__PURE__ */ Object.freeze({
+  __proto__: null,
+  defaultErrorMap: errorMap,
+  setErrorMap,
+  getErrorMap,
+  makeIssue,
+  EMPTY_PATH,
+  addIssueToContext,
+  ParseStatus,
+  INVALID,
+  DIRTY,
+  OK,
+  isAborted,
+  isDirty,
+  isValid,
+  isAsync,
+  get util() {
+    return util;
+  },
+  get objectUtil() {
+    return objectUtil;
+  },
+  ZodParsedType,
+  getParsedType,
+  ZodType,
+  datetimeRegex,
+  ZodString,
+  ZodNumber,
+  ZodBigInt,
+  ZodBoolean,
+  ZodDate,
+  ZodSymbol,
+  ZodUndefined,
+  ZodNull,
+  ZodAny,
+  ZodUnknown,
+  ZodNever,
+  ZodVoid,
+  ZodArray,
+  ZodObject,
+  ZodUnion,
+  ZodDiscriminatedUnion,
+  ZodIntersection,
+  ZodTuple,
+  ZodRecord,
+  ZodMap,
+  ZodSet,
+  ZodFunction,
+  ZodLazy,
+  ZodLiteral,
+  ZodEnum,
+  ZodNativeEnum,
+  ZodPromise,
+  ZodEffects,
+  ZodTransformer: ZodEffects,
+  ZodOptional,
+  ZodNullable,
+  ZodDefault,
+  ZodCatch,
+  ZodNaN,
+  BRAND,
+  ZodBranded,
+  ZodPipeline,
+  ZodReadonly,
+  custom,
+  Schema: ZodType,
+  ZodSchema: ZodType,
+  late,
+  get ZodFirstPartyTypeKind() {
+    return ZodFirstPartyTypeKind;
+  },
+  coerce,
+  any: anyType,
+  array: arrayType,
+  bigint: bigIntType,
+  boolean: booleanType,
+  date: dateType,
+  discriminatedUnion: discriminatedUnionType,
+  effect: effectsType,
+  "enum": enumType,
+  "function": functionType,
+  "instanceof": instanceOfType,
+  intersection: intersectionType,
+  lazy: lazyType,
+  literal: literalType,
+  map: mapType,
+  nan: nanType,
+  nativeEnum: nativeEnumType,
+  never: neverType,
+  "null": nullType,
+  nullable: nullableType,
+  number: numberType,
+  object: objectType,
+  oboolean,
+  onumber,
+  optional: optionalType,
+  ostring,
+  pipeline: pipelineType,
+  preprocess: preprocessType,
+  promise: promiseType,
+  record: recordType,
+  set: setType,
+  strictObject: strictObjectType,
+  string: stringType,
+  symbol: symbolType,
+  transformer: effectsType,
+  tuple: tupleType,
+  "undefined": undefinedType,
+  union: unionType,
+  unknown: unknownType,
+  "void": voidType,
+  NEVER,
+  ZodIssueCode,
+  quotelessJson,
+  ZodError
+});
+
+// src/llm-contract.ts
+var LLM_EXTRACTION_SCHEMA_VERSION = 1;
+var LLM_EXTRACTION_PROMPT_VERSION = "insurance-document-v1";
+var JsonValueSchema = z.lazy(
+  () => z.union([
+    z.null(),
+    z.boolean(),
+    z.number().finite(),
+    z.string(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema)
+  ])
+);
+var LlmFactStatusSchema = z.enum([
+  "known",
+  "unknown",
+  "not_applicable",
+  "conflicting",
+  "requires_confirmation"
+]);
+var LlmTemporalApplicabilitySchema = z.enum([
+  "current_term",
+  "future_term",
+  "historical",
+  "general_information",
+  "unknown"
+]);
+var LlmCoverageActivitySchema = z.enum([
+  "active",
+  "explicitly_absent",
+  "offered_not_active",
+  "future_change",
+  "general_description",
+  "unknown"
+]);
+var LlmSourceAuthoritySchema = z.enum([
+  "coverage_summary",
+  "insurance_certificate",
+  "active_endorsement",
+  "invoice",
+  "renewal_overview",
+  "informational_notice",
+  "policy_wording",
+  "header_footer",
+  "unknown"
+]);
+var LlmEvidenceSchema = z.object({
+  documentId: z.string().min(1),
+  pageNumber: z.number().int().positive(),
+  evidenceText: z.string().trim().min(1).max(1500),
+  authority: LlmSourceAuthoritySchema,
+  boundingBox: z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().finite().nonnegative(),
+    height: z.number().finite().nonnegative()
+  }).strict().optional()
+}).strict();
+var LlmAlternativeValueSchema = z.object({
+  value: JsonValueSchema,
+  normalizedValue: JsonValueSchema.optional(),
+  evidence: z.array(LlmEvidenceSchema).min(1)
+}).strict();
+var LocalIdSchema = z.string().min(1).max(160).regex(/^[A-Za-z0-9._:-]+$/, "Use a stable local identifier without whitespace");
+var LlmAssertionSchema = z.object({
+  id: LocalIdSchema,
+  entityRef: LocalIdSchema,
+  fieldPath: z.string().min(1).max(240).regex(/^[A-Za-z][A-Za-z0-9_.[\]-]*$/, "Use a dotted field path"),
+  factKind: z.enum(["identity", "policy", "coverage", "premium", "notice", "underwriting"]),
+  status: LlmFactStatusSchema,
+  value: JsonValueSchema.optional(),
+  normalizedValue: JsonValueSchema.optional(),
+  confidence: z.number().min(0).max(1),
+  temporalApplicability: LlmTemporalApplicabilitySchema,
+  coverageActivity: LlmCoverageActivitySchema.optional(),
+  evidence: z.array(LlmEvidenceSchema),
+  alternatives: z.array(LlmAlternativeValueSchema).optional(),
+  explanation: z.string().trim().min(1).max(1e3).optional()
+}).strict().superRefine((assertion3, ctx) => {
+  const hasValue2 = assertion3.value !== void 0 || assertion3.normalizedValue !== void 0;
+  if ((assertion3.status === "known" || assertion3.status === "requires_confirmation") && !hasValue2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["value"],
+      message: `${assertion3.status} assertions require a value`
+    });
+  }
+  if ((assertion3.status === "known" || assertion3.status === "not_applicable" || assertion3.status === "requires_confirmation") && assertion3.evidence.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["evidence"],
+      message: `${assertion3.status} assertions require page evidence`
+    });
+  }
+  if (assertion3.status === "unknown" && hasValue2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["value"],
+      message: "unknown assertions must not contain a guessed value"
+    });
+  }
+  if (assertion3.status === "conflicting" && (assertion3.alternatives?.length ?? 0) < 2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["alternatives"],
+      message: "conflicting assertions require at least two evidenced alternatives"
+    });
+  }
+});
+var LlmAssetCandidateBase = {
+  localId: LocalIdSchema,
+  displayLabel: z.string().trim().min(1).max(240),
+  identityAssertionIds: z.array(LocalIdSchema).min(1),
+  proposedMatchClassification: z.enum([
+    "new",
+    "possible_existing_match",
+    "exact_existing_match_proposed",
+    "identity_confirmation_required"
+  ]),
+  autoMergeAllowed: z.literal(false).default(false),
+  rationale: z.string().trim().min(1).max(1e3)
+};
+var LlmPropertyCandidateSchema = z.object({
+  ...LlmAssetCandidateBase,
+  assetType: z.literal("property"),
+  occupancy: z.enum(["principal_residence", "rental", "seasonal", "vacant", "unknown"]),
+  insuredLocationStatus: z.enum(["complete", "partial", "redacted", "unknown"])
+}).strict();
+var LlmVehicleCandidateSchema = z.object({
+  ...LlmAssetCandidateBase,
+  assetType: z.literal("vehicle"),
+  vinStatus: z.enum(["valid_appearing", "partial", "redacted", "missing", "invalid_appearing"])
+}).strict();
+var LlmAssetCandidateSchema = z.discriminatedUnion("assetType", [
+  LlmPropertyCandidateSchema,
+  LlmVehicleCandidateSchema
+]);
+var LlmPolicyTermSchema = z.object({
+  localId: LocalIdSchema,
+  policyNumberAssertionId: LocalIdSchema.optional(),
+  insurerAssertionId: LocalIdSchema.optional(),
+  effectiveDateAssertionId: LocalIdSchema.optional(),
+  expiryDateAssertionId: LocalIdSchema.optional(),
+  premiumAssertionId: LocalIdSchema.optional(),
+  insuredAssetRefs: z.array(LocalIdSchema).min(1)
+}).strict();
+var LlmConflictSchema = z.object({
+  fieldPath: z.string().min(1),
+  entityRef: LocalIdSchema,
+  assertionIds: z.array(LocalIdSchema).min(2),
+  explanation: z.string().trim().min(1).max(1e3),
+  requiresHumanResolution: z.boolean()
+}).strict();
+var LlmModelIdentitySchema = z.object({
+  provider: z.string().trim().min(1).max(100),
+  model: z.string().trim().min(1).max(160),
+  modelVersion: z.string().trim().min(1).max(160).optional(),
+  promptVersion: z.literal(LLM_EXTRACTION_PROMPT_VERSION)
+}).strict();
+var LlmExtractionResultSchema = z.object({
+  schemaVersion: z.literal(LLM_EXTRACTION_SCHEMA_VERSION),
+  documentId: z.string().min(1),
+  pass: z.enum(["discovery", "asset_coverage"]),
+  classification: z.enum([
+    "home_policy",
+    "auto_policy",
+    "combined_policy",
+    "endorsement",
+    "invoice",
+    "proof_of_insurance",
+    "unsupported",
+    "unknown"
+  ]),
+  model: LlmModelIdentitySchema,
+  assets: z.array(LlmAssetCandidateSchema),
+  policyTerms: z.array(LlmPolicyTermSchema),
+  assertions: z.array(LlmAssertionSchema),
+  conflicts: z.array(LlmConflictSchema),
+  warnings: z.array(z.string().trim().min(1).max(1e3))
+}).strict().superRefine((result2, ctx) => {
+  const assertionIds = new Set(result2.assertions.map((assertion3) => assertion3.id));
+  const assetIds = new Set(result2.assets.map((asset) => asset.localId));
+  if (assertionIds.size !== result2.assertions.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["assertions"],
+      message: "assertion IDs must be unique"
+    });
+  }
+  if (assetIds.size !== result2.assets.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["assets"],
+      message: "asset local IDs must be unique"
+    });
+  }
+  for (const [assetIndex, asset] of result2.assets.entries()) {
+    for (const assertionId of asset.identityAssertionIds) {
+      if (!assertionIds.has(assertionId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["assets", assetIndex, "identityAssertionIds"],
+          message: `unknown identity assertion ID: ${assertionId}`
+        });
+      }
+    }
+  }
+  for (const [termIndex, term] of result2.policyTerms.entries()) {
+    for (const assetRef of term.insuredAssetRefs) {
+      if (!assetIds.has(assetRef)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["policyTerms", termIndex, "insuredAssetRefs"],
+          message: `unknown insured asset reference: ${assetRef}`
+        });
+      }
+    }
+    const assertionReferences = [
+      term.policyNumberAssertionId,
+      term.insurerAssertionId,
+      term.effectiveDateAssertionId,
+      term.expiryDateAssertionId,
+      term.premiumAssertionId
+    ].filter((value) => value !== void 0);
+    for (const assertionId of assertionReferences) {
+      if (!assertionIds.has(assertionId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["policyTerms", termIndex],
+          message: `unknown policy-term assertion ID: ${assertionId}`
+        });
+      }
+    }
+  }
+  for (const [conflictIndex, conflict] of result2.conflicts.entries()) {
+    for (const assertionId of conflict.assertionIds) {
+      if (!assertionIds.has(assertionId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["conflicts", conflictIndex, "assertionIds"],
+          message: `unknown conflict assertion ID: ${assertionId}`
+        });
+      }
+    }
+  }
+});
+var LlmPageInputSchema = z.object({
+  pageNumber: z.number().int().positive(),
+  text: z.string(),
+  imageRef: z.string().min(1).optional()
+}).strict();
+var LlmExtractionPassSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("discovery")
+  }).strict(),
+  z.object({
+    kind: z.literal("asset_coverage"),
+    targetAssetLocalId: LocalIdSchema,
+    relevantPageNumbers: z.array(z.number().int().positive()).min(1)
+  }).strict()
+]);
+var LlmExtractionRequestSchema = z.object({
+  documentId: z.string().min(1),
+  fileDigest: z.string().regex(/^[a-f0-9]{64}$/i),
+  pages: z.array(LlmPageInputSchema).min(1),
+  pass: LlmExtractionPassSchema,
+  requestedModel: z.string().min(1).optional()
+}).strict();
+function parseLlmExtractionResult(raw, request) {
+  const parsedRequest = LlmExtractionRequestSchema.parse(request);
+  const result2 = LlmExtractionResultSchema.parse(raw);
+  if (result2.documentId !== parsedRequest.documentId) {
+    throw new Error("LLM extraction result documentId does not match the request");
+  }
+  const pageNumbers = new Set(parsedRequest.pages.map((page) => page.pageNumber));
+  for (const assertion3 of result2.assertions) {
+    for (const evidence of assertion3.evidence) {
+      if (evidence.documentId !== parsedRequest.documentId) {
+        throw new Error(`Assertion ${assertion3.id} cites a different document`);
+      }
+      if (!pageNumbers.has(evidence.pageNumber)) {
+        throw new Error(
+          `Assertion ${assertion3.id} cites page ${evidence.pageNumber}, which was not provided`
+        );
+      }
+    }
+  }
+  const expectedPass = parsedRequest.pass.kind;
+  if (result2.pass !== expectedPass) {
+    throw new Error(`LLM extraction result pass ${result2.pass} does not match ${expectedPass}`);
+  }
+  return result2;
+}
+var BASE_INSTRUCTIONS = `You extract structured facts from Canadian insurance documents.
+
+Return only one JSON object matching schemaVersion 1. Do not return markdown, prose outside JSON, or invented fields.
+
+Non-negotiable rules:
+1. Never guess a value to complete the schema. Use status "unknown" when the document does not establish a fact.
+2. Every known, not-applicable, or confirmation-required fact must cite the exact document page and a short evidenceText excerpt.
+3. Distinguish the insured property location from the customer's mailing or correspondence address.
+4. Treat policy number as a policy-term identifier, never as conclusive property or vehicle identity.
+5. Treat a complete VIN as a vehicle identity fact, but do not decide automatic merging.
+6. Set autoMergeAllowed to false for every asset. The application performs deterministic matching later.
+7. Distinguish active current coverage from advertisements, eligibility statements, optional offers, general policy wording, and future changes.
+8. Phrases such as "eligible", "available", "to purchase", "consider", or "contact us to add" do not establish active coverage.
+9. Prefer an applicable coverage summary or automobile certificate over an overview, invoice, notice, header, or footer. Preserve material conflicts instead of silently choosing one.
+10. Preserve explicit absence separately from unknown and not applicable.
+11. Do not infer zero from a blank cell. Do not infer false from an omitted field.
+12. Preserve monetary values as exact integer cents in normalizedValue when the currency amount is clear.
+13. Preserve dates as YYYY-MM-DD in normalizedValue when the date is clear.
+14. Use stable local IDs that contain no whitespace and are unique inside the response.
+15. Keep customer names, addresses, policy numbers, account numbers, and VINs only in factual values required by the extraction result; never repeat them in warnings or explanations.
+16. A redacted or partial property address requires customer confirmation and cannot be proposed as an exact match.
+17. A year/make/model combination without a valid complete VIN is only a possible vehicle match.
+18. If two pages materially disagree, emit evidenced assertions for both and add a conflict requiring human resolution.
+19. Evidence must come from pages supplied in the request.
+20. Do not perform database writes, mandate generation, recommendation logic, or customer authorization decisions.`;
+var DISCOVERY_INSTRUCTIONS = `
+
+This is the discovery pass. Identify document classification, policy terms, insured assets, and identity facts. Determine which page ranges appear relevant to each asset. Extract only enough coverage information to distinguish assets and route a later asset-specific coverage pass. A document may contain multiple assets. Do not assume one document equals one policy or one asset.`;
+var ASSET_COVERAGE_INSTRUCTIONS = `
+
+This is the asset_coverage pass. Extract current-term coverage, limits, deductibles, premiums, endorsements, exclusions, and material underwriting facts for the specified asset using the supplied relevant pages. Preserve active-versus-offered status and all page evidence. Do not emit facts for a different asset merely because they share a policyholder or mailing address.`;
+function buildInsuranceExtractionSystemPrompt(pass) {
+  return `${BASE_INSTRUCTIONS}${pass === "discovery" ? DISCOVERY_INSTRUCTIONS : ASSET_COVERAGE_INSTRUCTIONS}`;
+}
+
+// src/llm-extraction-runner.ts
+function allPageNumbers(document2) {
+  return document2.pages.map((page) => page.pageNumber);
+}
+function defaultCoveragePages(discovery, asset, document2) {
+  const identityAssertionIds = new Set(asset.identityAssertionIds);
+  const relevant = /* @__PURE__ */ new Set();
+  for (const assertion3 of discovery.assertions) {
+    if (assertion3.entityRef !== asset.localId && !identityAssertionIds.has(assertion3.id)) {
+      continue;
+    }
+    for (const evidence of assertion3.evidence) {
+      relevant.add(evidence.pageNumber);
+    }
+  }
+  for (const term of discovery.policyTerms) {
+    if (!term.insuredAssetRefs.includes(asset.localId)) {
+      continue;
+    }
+    const referencedAssertionIds = new Set(
+      [
+        term.policyNumberAssertionId,
+        term.insurerAssertionId,
+        term.effectiveDateAssertionId,
+        term.expiryDateAssertionId,
+        term.premiumAssertionId
+      ].filter((value) => value !== void 0)
+    );
+    for (const assertion3 of discovery.assertions) {
+      if (!referencedAssertionIds.has(assertion3.id)) {
+        continue;
+      }
+      for (const evidence of assertion3.evidence) {
+        relevant.add(evidence.pageNumber);
+      }
+    }
+  }
+  return relevant.size > 0 ? [...relevant].sort((a, b) => a - b) : allPageNumbers(document2);
+}
+function buildRequest(document2, pass, requestedModel) {
+  return {
+    documentId: document2.documentId,
+    fileDigest: document2.fileDigest,
+    pages: document2.pages.map((page) => ({
+      pageNumber: page.pageNumber,
+      text: page.text
+    })),
+    pass,
+    requestedModel
+  };
+}
+function assertCoverageResultMatchesAsset(result2, assetLocalId) {
+  if (result2.pass !== "asset_coverage") {
+    throw new Error(`Expected asset_coverage result for ${assetLocalId}`);
+  }
+  const returnedAsset = result2.assets.find((asset) => asset.localId === assetLocalId);
+  if (!returnedAsset) {
+    throw new Error(`Coverage result omitted target asset ${assetLocalId}`);
+  }
+  const foreignAssertions = result2.assertions.filter(
+    (assertion3) => assertion3.entityRef !== assetLocalId && assertion3.factKind !== "policy" && assertion3.factKind !== "premium" && assertion3.factKind !== "notice"
+  );
+  if (foreignAssertions.length > 0) {
+    throw new Error(
+      `Coverage result for ${assetLocalId} contains assertions for another asset: ${foreignAssertions.map((assertion3) => assertion3.entityRef).join(", ")}`
+    );
+  }
+}
+async function runLlmExtraction(document2, provider, options = {}) {
+  if (document2.pages.length === 0) {
+    throw new Error("Cannot run LLM extraction for a document with no pages");
+  }
+  const discoveryRequest = buildRequest(document2, { kind: "discovery" }, options.requestedModel);
+  const discoveryPrompt = options.systemPrompt ?? buildInsuranceExtractionSystemPrompt("discovery");
+  const discoveryRaw = await provider.extract(discoveryRequest, discoveryPrompt);
+  const discovery = parseLlmExtractionResult(discoveryRaw, discoveryRequest);
+  if (discovery.pass !== "discovery") {
+    throw new Error("Expected discovery result from discovery pass");
+  }
+  if (discovery.classification === "unsupported" || discovery.assets.length === 0) {
+    return {
+      discovery,
+      coverageByAssetLocalId: /* @__PURE__ */ new Map(),
+      skippedAssetLocalIds: discovery.assets.map((asset) => asset.localId)
+    };
+  }
+  const requestedLimit = options.maxCoveragePasses ?? discovery.assets.length;
+  const maxCoveragePasses = Math.max(0, Math.min(requestedLimit, discovery.assets.length));
+  const selectedAssets = discovery.assets.slice(0, maxCoveragePasses);
+  const skippedAssetLocalIds = discovery.assets.slice(maxCoveragePasses).map((asset) => asset.localId);
+  const coverageByAssetLocalId = /* @__PURE__ */ new Map();
+  for (const asset of selectedAssets) {
+    const selectedPageNumbers = options.selectCoveragePages?.(discovery, asset, document2) ?? defaultCoveragePages(discovery, asset, document2);
+    const availablePageNumbers = new Set(allPageNumbers(document2));
+    const relevantPageNumbers = [...new Set(selectedPageNumbers)].filter((pageNumber) => availablePageNumbers.has(pageNumber)).sort((a, b) => a - b);
+    if (relevantPageNumbers.length === 0) {
+      throw new Error(`No valid coverage pages selected for asset ${asset.localId}`);
+    }
+    const coverageRequest = buildRequest(
+      document2,
+      {
+        kind: "asset_coverage",
+        targetAssetLocalId: asset.localId,
+        relevantPageNumbers
+      },
+      options.requestedModel
+    );
+    const coveragePrompt = options.systemPrompt ?? buildInsuranceExtractionSystemPrompt("asset_coverage");
+    const coverageRaw = await provider.extract(coverageRequest, coveragePrompt);
+    const coverage = parseLlmExtractionResult(coverageRaw, coverageRequest);
+    assertCoverageResultMatchesAsset(coverage, asset.localId);
+    coverageByAssetLocalId.set(asset.localId, coverage);
+  }
+  return {
+    discovery,
+    coverageByAssetLocalId,
+    skippedAssetLocalIds
+  };
+}
+
+// src/llm-semantic-validation.ts
+var LLM_SEMANTIC_VALIDATION_VERSION = 1;
+var LlmSemanticValidationError = class extends Error {
+  issues;
+  constructor(issues) {
+    super(
+      `LLM extraction failed semantic validation with ${issues.filter((issue) => issue.severity === "error").length} error(s)`
+    );
+    this.name = "LlmSemanticValidationError";
+    this.issues = issues;
+  }
+};
+function canonicalText(value) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function valuesEqual(left, right) {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]));
+  }
+  if (isRecord(left) && isRecord(right)) {
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && valuesEqual(left[key], right[key]));
+  }
+  return false;
+}
+function knownComparableValue(assertion3) {
+  return assertion3.normalizedValue !== void 0 ? assertion3.normalizedValue : assertion3.value;
+}
+function isMoneyCentsField(fieldPath) {
+  return /(?:^|\.)(?:annualPremiumCents|premiumCents|feeCents|amountCents|limitCents|deductibleCents)$/i.test(
+    fieldPath
+  );
+}
+function isDateField(fieldPath) {
+  return /(?:^|\.)(?:effectiveDate|expiryDate|renewalDate|date)$/i.test(fieldPath);
+}
+function isVinField(fieldPath) {
+  return /(?:^|\.)vin$/i.test(fieldPath);
+}
+function isPostalCodeField(fieldPath) {
+  return /(?:^|\.)postalCode$/i.test(fieldPath);
+}
+function isValidIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = parseDateIso(value);
+  if (parsed !== value) return false;
+  const date = /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}
+function addIssue(issues, issue) {
+  issues.push({ ...issue, severity: issue.severity ?? "error" });
+}
+function validateEvidence(result2, request, issues) {
+  const pages = new Map(request.pages.map((page) => [page.pageNumber, canonicalText(page.text)]));
+  result2.assertions.forEach((assertion3, assertionIndex) => {
+    assertion3.evidence.forEach((evidence, evidenceIndex) => {
+      const pageText = pages.get(evidence.pageNumber);
+      if (pageText === void 0) {
+        addIssue(issues, {
+          code: "EVIDENCE_PAGE_NOT_PROVIDED",
+          path: ["assertions", assertionIndex, "evidence", evidenceIndex, "pageNumber"],
+          assertionId: assertion3.id,
+          entityRef: assertion3.entityRef,
+          message: `Evidence cites page ${evidence.pageNumber}, which was not supplied to the model`
+        });
+        return;
+      }
+      const excerpt = canonicalText(evidence.evidenceText);
+      if (excerpt.length < 3 || !pageText.includes(excerpt)) {
+        addIssue(issues, {
+          code: "EVIDENCE_TEXT_NOT_FOUND",
+          path: ["assertions", assertionIndex, "evidence", evidenceIndex, "evidenceText"],
+          assertionId: assertion3.id,
+          entityRef: assertion3.entityRef,
+          message: `Evidence excerpt for ${assertion3.fieldPath} was not found on supplied page ${evidence.pageNumber}`
+        });
+      }
+    });
+  });
+}
+function validateFieldValues(result2, issues) {
+  result2.assertions.forEach((assertion3, assertionIndex) => {
+    const value = knownComparableValue(assertion3);
+    if (assertion3.status === "not_applicable" && value !== void 0 && value !== null && value !== false) {
+      addIssue(issues, {
+        code: "NOT_APPLICABLE_HAS_VALUE",
+        path: ["assertions", assertionIndex, "normalizedValue"],
+        assertionId: assertion3.id,
+        entityRef: assertion3.entityRef,
+        message: `${assertion3.fieldPath} is not applicable but contains a substantive value`
+      });
+    }
+    if (value !== void 0 && isMoneyCentsField(assertion3.fieldPath)) {
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+        addIssue(issues, {
+          code: "INVALID_MONEY_CENTS",
+          path: ["assertions", assertionIndex, "normalizedValue"],
+          assertionId: assertion3.id,
+          entityRef: assertion3.entityRef,
+          message: `${assertion3.fieldPath} must be a non-negative safe integer number of cents`
+        });
+      }
+    }
+    if (value !== void 0 && isDateField(assertion3.fieldPath)) {
+      if (typeof value !== "string" || !isValidIsoDate(value)) {
+        addIssue(issues, {
+          code: "INVALID_ISO_DATE",
+          path: ["assertions", assertionIndex, "normalizedValue"],
+          assertionId: assertion3.id,
+          entityRef: assertion3.entityRef,
+          message: `${assertion3.fieldPath} must be a real ISO calendar date in YYYY-MM-DD form`
+        });
+      }
+    }
+    if (value !== void 0 && isVinField(assertion3.fieldPath)) {
+      if (typeof value !== "string") {
+        addIssue(issues, {
+          code: "INVALID_VIN",
+          path: ["assertions", assertionIndex, "normalizedValue"],
+          assertionId: assertion3.id,
+          entityRef: assertion3.entityRef,
+          message: `${assertion3.fieldPath} is not a string VIN`
+        });
+      } else {
+        const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const normalized = normalizeVin(value);
+        if (!normalized || normalized.normalized !== compact) {
+          addIssue(issues, {
+            code: "INVALID_VIN",
+            path: ["assertions", assertionIndex, "normalizedValue"],
+            assertionId: assertion3.id,
+            entityRef: assertion3.entityRef,
+            message: `${assertion3.fieldPath} is not a valid normalized 17-character VIN`
+          });
+        }
+      }
+    }
+    if (value !== void 0 && isPostalCodeField(assertion3.fieldPath)) {
+      if (typeof value !== "string") {
+        addIssue(issues, {
+          code: "INVALID_POSTAL_CODE",
+          path: ["assertions", assertionIndex, "normalizedValue"],
+          assertionId: assertion3.id,
+          entityRef: assertion3.entityRef,
+          message: `${assertion3.fieldPath} is not a string postal code`
+        });
+      } else {
+        const normalized = normalizePostalCode(value);
+        if (!normalized || normalized !== value.toUpperCase()) {
+          addIssue(issues, {
+            code: "INVALID_POSTAL_CODE",
+            path: ["assertions", assertionIndex, "normalizedValue"],
+            assertionId: assertion3.id,
+            entityRef: assertion3.entityRef,
+            message: `${assertion3.fieldPath} must be a normalized Canadian postal code such as T3A 0G9`
+          });
+        }
+      }
+    }
+    if (assertion3.coverageActivity === "future_change" && assertion3.temporalApplicability === "current_term") {
+      addIssue(issues, {
+        code: "TEMPORAL_ACTIVITY_CONTRADICTION",
+        path: ["assertions", assertionIndex],
+        assertionId: assertion3.id,
+        entityRef: assertion3.entityRef,
+        message: "A future coverage change cannot apply to the current term"
+      });
+    }
+    if (assertion3.coverageActivity === "active" && assertion3.temporalApplicability !== "current_term") {
+      addIssue(issues, {
+        code: "ACTIVE_COVERAGE_WITHOUT_CURRENT_TERM",
+        path: ["assertions", assertionIndex],
+        assertionId: assertion3.id,
+        entityRef: assertion3.entityRef,
+        message: "Active coverage must be identified as applying to the current term"
+      });
+    }
+  });
+}
+function validateIdentityReferences(result2, issues) {
+  const assertions = new Map(result2.assertions.map((assertion3) => [assertion3.id, assertion3]));
+  result2.assets.forEach((asset, assetIndex) => {
+    asset.identityAssertionIds.forEach((assertionId, referenceIndex) => {
+      const assertion3 = assertions.get(assertionId);
+      if (!assertion3) return;
+      if (assertion3.factKind !== "identity") {
+        addIssue(issues, {
+          code: "IDENTITY_ASSERTION_KIND_MISMATCH",
+          path: ["assets", assetIndex, "identityAssertionIds", referenceIndex],
+          assertionId,
+          entityRef: asset.localId,
+          message: `Asset identity reference ${assertionId} points to a ${assertion3.factKind} assertion`
+        });
+      }
+      if (assertion3.entityRef !== asset.localId) {
+        addIssue(issues, {
+          code: "IDENTITY_ASSERTION_ENTITY_MISMATCH",
+          path: ["assets", assetIndex, "identityAssertionIds", referenceIndex],
+          assertionId,
+          entityRef: asset.localId,
+          message: `Identity assertion ${assertionId} belongs to ${assertion3.entityRef}, not ${asset.localId}`
+        });
+      }
+    });
+    if (asset.proposedMatchClassification === "exact_existing_match_proposed" && asset.identityAssertionIds.some((id) => (assertions.get(id)?.confidence ?? 0) < 0.95)) {
+      addIssue(issues, {
+        severity: "warning",
+        code: "LOW_CONFIDENCE_EXACT_MATCH_PROPOSAL",
+        path: ["assets", assetIndex, "proposedMatchClassification"],
+        entityRef: asset.localId,
+        message: "An exact-match proposal contains an identity assertion below 0.95 confidence"
+      });
+    }
+  });
+}
+function validateDuplicateAndConflictSemantics(result2, issues) {
+  const grouped = /* @__PURE__ */ new Map();
+  result2.assertions.forEach((assertion3, index) => {
+    const key = `${assertion3.entityRef}|${assertion3.fieldPath}|${assertion3.temporalApplicability}`;
+    const group = grouped.get(key) ?? [];
+    group.push({ assertion: assertion3, index });
+    grouped.set(key, group);
+  });
+  const declaredConflictAssertions = new Set(
+    result2.conflicts.flatMap((conflict) => conflict.assertionIds)
+  );
+  for (const group of grouped.values()) {
+    if (group.length < 2) continue;
+    const known = group.filter(
+      ({ assertion: assertion3 }) => ["known", "requires_confirmation"].includes(assertion3.status)
+    );
+    if (known.length < 2) continue;
+    const [firstKnown] = known;
+    if (!firstKnown) continue;
+    const firstValue = knownComparableValue(firstKnown.assertion);
+    const allEqual = known.every(
+      ({ assertion: assertion3 }) => valuesEqual(firstValue, knownComparableValue(assertion3))
+    );
+    if (allEqual) {
+      known.slice(1).forEach(({ assertion: assertion3, index }) => {
+        addIssue(issues, {
+          severity: "warning",
+          code: "DUPLICATE_FIELD_ASSERTION",
+          path: ["assertions", index],
+          assertionId: assertion3.id,
+          entityRef: assertion3.entityRef,
+          message: `Duplicate assertion for ${assertion3.fieldPath} should be represented as additional evidence on one assertion`
+        });
+      });
+      continue;
+    }
+    const allDeclared = known.every(
+      ({ assertion: assertion3 }) => declaredConflictAssertions.has(assertion3.id)
+    );
+    if (!allDeclared) {
+      addIssue(issues, {
+        code: "UNDECLARED_CONFLICT",
+        path: ["assertions", firstKnown.index],
+        assertionId: firstKnown.assertion.id,
+        entityRef: firstKnown.assertion.entityRef,
+        message: `Different values for ${firstKnown.assertion.fieldPath} require an explicit conflict`
+      });
+    }
+  }
+  const assertionById = new Map(result2.assertions.map((assertion3) => [assertion3.id, assertion3]));
+  result2.conflicts.forEach((conflict, conflictIndex) => {
+    const referenced = conflict.assertionIds.map((id) => assertionById.get(id)).filter((assertion3) => assertion3 !== void 0);
+    if (referenced.length !== conflict.assertionIds.length) {
+      addIssue(issues, {
+        code: "INVALID_CONFLICT_REFERENCE",
+        path: ["conflicts", conflictIndex, "assertionIds"],
+        entityRef: conflict.entityRef,
+        message: "Conflict references an assertion that does not exist"
+      });
+      return;
+    }
+    if (referenced.some((assertion3) => assertion3.fieldPath !== conflict.fieldPath)) {
+      addIssue(issues, {
+        code: "CONFLICT_FIELD_MISMATCH",
+        path: ["conflicts", conflictIndex, "fieldPath"],
+        entityRef: conflict.entityRef,
+        message: "Every assertion in a conflict must use the conflict fieldPath"
+      });
+    }
+    if (referenced.some((assertion3) => assertion3.entityRef !== conflict.entityRef)) {
+      addIssue(issues, {
+        code: "CONFLICT_ENTITY_MISMATCH",
+        path: ["conflicts", conflictIndex, "entityRef"],
+        entityRef: conflict.entityRef,
+        message: "Every assertion in a conflict must belong to the same entity"
+      });
+    }
+  });
+}
+function validatePolicyTermDates(result2, issues) {
+  const assertions = new Map(result2.assertions.map((assertion3) => [assertion3.id, assertion3]));
+  result2.policyTerms.forEach((term, termIndex) => {
+    const effective = term.effectiveDateAssertionId ? assertions.get(term.effectiveDateAssertionId) : void 0;
+    const expiry = term.expiryDateAssertionId ? assertions.get(term.expiryDateAssertionId) : void 0;
+    const effectiveValue = effective ? knownComparableValue(effective) : void 0;
+    const expiryValue = expiry ? knownComparableValue(expiry) : void 0;
+    if (typeof effectiveValue === "string" && typeof expiryValue === "string" && isValidIsoDate(effectiveValue) && isValidIsoDate(expiryValue) && effectiveValue >= expiryValue) {
+      addIssue(issues, {
+        code: "POLICY_TERM_DATE_ORDER",
+        path: ["policyTerms", termIndex],
+        entityRef: term.localId,
+        message: `Policy effective date ${effectiveValue} must be before expiry date ${expiryValue}`
+      });
+    }
+  });
+}
+function validatePassScope(result2, request, issues) {
+  if (request.pass.kind !== "asset_coverage") return;
+  const target = request.pass.targetAssetLocalId;
+  const assetIds = new Set(result2.assets.map((asset) => asset.localId));
+  if (!assetIds.has(target)) {
+    addIssue(issues, {
+      code: "ASSET_COVERAGE_TARGET_MISSING",
+      path: ["assets"],
+      entityRef: target,
+      message: `Asset-coverage result does not include target asset ${target}`
+    });
+  }
+  result2.assets.forEach((asset, index) => {
+    if (asset.localId !== target) {
+      addIssue(issues, {
+        code: "ASSET_COVERAGE_OTHER_ASSET_INCLUDED",
+        path: ["assets", index],
+        entityRef: asset.localId,
+        message: `Asset-coverage pass for ${target} must not emit another asset ${asset.localId}`
+      });
+    }
+  });
+  const declaredEntities = /* @__PURE__ */ new Set([
+    ...result2.assets.map((asset) => asset.localId),
+    ...result2.policyTerms.map((term) => term.localId)
+  ]);
+  result2.assertions.forEach((assertion3, index) => {
+    if (!declaredEntities.has(assertion3.entityRef)) {
+      addIssue(issues, {
+        code: "UNREFERENCED_ASSERTION_ENTITY",
+        path: ["assertions", index, "entityRef"],
+        assertionId: assertion3.id,
+        entityRef: assertion3.entityRef,
+        message: `Assertion entityRef ${assertion3.entityRef} is not declared in the extraction result`
+      });
+    }
+  });
+}
+function validateLlmExtractionSemantics(raw, request) {
+  const result2 = parseLlmExtractionResult(raw, request);
+  const issues = [];
+  validateEvidence(result2, request, issues);
+  validateFieldValues(result2, issues);
+  validateIdentityReferences(result2, issues);
+  validateDuplicateAndConflictSemantics(result2, issues);
+  validatePolicyTermDates(result2, issues);
+  validatePassScope(result2, request, issues);
+  return {
+    validationVersion: LLM_SEMANTIC_VALIDATION_VERSION,
+    valid: !issues.some((issue) => issue.severity === "error"),
+    issues
+  };
+}
+function assertLlmExtractionSemantics(raw, request) {
+  const result2 = parseLlmExtractionResult(raw, request);
+  const validation = validateLlmExtractionSemantics(result2, request);
+  if (!validation.valid) throw new LlmSemanticValidationError(validation.issues);
+  return result2;
+}
+
+// src/types.ts
+var ExtractedPdfPage = z.object({
+  pageNumber: z.number().int().positive(),
+  text: z.string(),
+  items: z.array(
+    z.object({
+      text: z.string(),
+      x: z.number().optional(),
+      y: z.number().optional()
+    })
+  ).optional()
+});
+var ExtractedPdf = z.object({
+  documentId: z.string(),
+  fileDigest: z.string(),
+  pageCount: z.number().int().nonnegative(),
+  pages: z.array(ExtractedPdfPage)
+});
+var AuthorityLevel = z.enum([
+  "coverage_summary",
+  "insurance_certificate",
+  "invoice",
+  "renewal_overview",
+  "endorsement",
+  "notice",
+  "header_footer"
+]);
+var ExtractedFactAssertion = z.object({
+  id: z.string().uuid(),
+  documentId: z.string(),
+  pageNumber: z.number().int().positive(),
+  entityScope: z.enum(["policy", "property", "vehicle", "coverage", "premium", "notice"]),
+  fieldPath: z.string(),
+  rawText: z.string(),
+  parsedValue: z.unknown(),
+  normalizedValue: z.unknown(),
+  parserId: z.string(),
+  parserVersion: z.string(),
+  confidence: z.number().min(0).max(1),
+  authority: AuthorityLevel
+});
+var ParsedInsurer = z.object({
+  name: z.string(),
+  address: z.string().optional()
+});
+var ParsedAgency = z.object({
+  name: z.string(),
+  address: z.string().optional(),
+  phone: z.string().optional()
+});
+var ParsedPolicyTerm = z.object({
+  effectiveDate: z.string().optional(),
+  expiryDate: z.string().optional(),
+  policyNumber: z.string().optional(),
+  annualPremiumCents: z.number().int().nonnegative().optional()
+});
+var ParsedAssetAssertion = z.object({
+  assetType: z.enum(["property", "vehicle"]),
+  identityFingerprint: z.string(),
+  displayLabel: z.string(),
+  matchClassification: z.enum([
+    "new",
+    "exact_existing_match",
+    "possible_existing_match",
+    "new_identity_confirmation_required"
+  ]).optional(),
+  occupancy: z.enum(["principal_residence", "rental", "unknown"]).optional(),
+  assertions: z.array(ExtractedFactAssertion)
+});
+var ParsedCoverageAssertion = ExtractedFactAssertion;
+var ParsedConflict = z.object({
+  fieldPath: z.string(),
+  assertionIds: z.array(z.string().uuid()),
+  selectedAssertionId: z.string().uuid().optional(),
+  reason: z.string()
+});
+var ParsedInsuranceDocument = z.object({
+  classification: z.enum(["home_policy_renewal", "auto_policy_renewal", "unsupported"]),
+  insurer: ParsedInsurer.optional(),
+  agency: ParsedAgency.optional(),
+  policyTerms: z.array(ParsedPolicyTerm).default([]),
+  assetAssertions: z.array(ParsedAssetAssertion).default([]),
+  coverageAssertions: z.array(ParsedCoverageAssertion).default([]),
+  notices: z.array(ExtractedFactAssertion).default([]),
+  conflicts: z.array(ParsedConflict).default([]),
+  parserId: z.string(),
+  parserVersion: z.string()
+});
+
+// src/llm-parsed-document-projection.ts
+var LLM_PARSED_DOCUMENT_PROJECTION_VERSION = 1;
+var AUTHORITY_MAP = {
+  coverage_summary: "coverage_summary",
+  insurance_certificate: "insurance_certificate",
+  active_endorsement: "endorsement",
+  invoice: "invoice",
+  renewal_overview: "renewal_overview",
+  informational_notice: "notice",
+  policy_wording: "notice",
+  header_footer: "header_footer",
+  unknown: "header_footer"
+};
+function sourceKey(scope, localAssertionId) {
+  return `${scope}:${localAssertionId}`;
+}
+function comparableValue(assertion3) {
+  return assertion3.normalizedValue !== void 0 ? assertion3.normalizedValue : assertion3.value;
+}
+function assertionParserId(result2) {
+  return `llm:${result2.model.provider}:${result2.model.model}`;
+}
+function assertionParserVersion(result2) {
+  return [
+    `schema-${result2.schemaVersion}`,
+    `prompt-${result2.model.promptVersion}`,
+    `projection-${LLM_PARSED_DOCUMENT_PROJECTION_VERSION}`,
+    result2.model.modelVersion ? `model-${result2.model.modelVersion}` : void 0
+  ].filter((value) => value !== void 0).join(":");
+}
+function flattenResult(source, warnings) {
+  const flattened = [];
+  const parserId = assertionParserId(source.result);
+  const parserVersion = assertionParserVersion(source.result);
+  for (const assertion3 of source.result.assertions) {
+    const key = sourceKey(source.scope, assertion3.id);
+    if (assertion3.status === "conflicting") {
+      for (const [alternativeIndex, alternative] of (assertion3.alternatives ?? []).entries()) {
+        for (const [evidenceIndex, evidence] of alternative.evidence.entries()) {
+          flattened.push({
+            sourceKey: key,
+            sourceLocalId: assertion3.id,
+            entityRef: assertion3.entityRef,
+            factKind: assertion3.factKind,
+            fieldPath: assertion3.fieldPath,
+            parsedValue: alternative.value,
+            normalizedValue: alternative.normalizedValue ?? alternative.value,
+            confidence: assertion3.confidence,
+            evidence,
+            evidenceIndex,
+            alternativeIndex,
+            parserId,
+            parserVersion
+          });
+        }
+      }
+      continue;
+    }
+    if (assertion3.evidence.length === 0) {
+      warnings.push(`omitted_assertion_without_evidence:${key}`);
+      continue;
+    }
+    const value = comparableValue(assertion3);
+    for (const [evidenceIndex, evidence] of assertion3.evidence.entries()) {
+      flattened.push({
+        sourceKey: key,
+        sourceLocalId: assertion3.id,
+        entityRef: assertion3.entityRef,
+        factKind: assertion3.factKind,
+        fieldPath: assertion3.fieldPath,
+        parsedValue: assertion3.value ?? null,
+        normalizedValue: value ?? null,
+        confidence: assertion3.confidence,
+        evidence,
+        evidenceIndex,
+        parserId,
+        parserVersion
+      });
+    }
+  }
+  return flattened;
+}
+async function deterministicUuid(seed) {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed))
+  ).slice(0, 16);
+  digest[6] = digest[6] & 15 | 80;
+  digest[8] = digest[8] & 63 | 128;
+  const hex = [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+function entityScopeFor(assertion3, assetTypeByLocalId) {
+  if (assertion3.factKind === "policy" || assertion3.factKind === "coverage" || assertion3.factKind === "premium" || assertion3.factKind === "notice") {
+    return assertion3.factKind;
+  }
+  return assetTypeByLocalId.get(assertion3.entityRef) ?? "policy";
+}
+function mapProposedMatch(proposed) {
+  switch (proposed) {
+    case "new":
+      return "new";
+    case "possible_existing_match":
+    case "exact_existing_match_proposed":
+      return "possible_existing_match";
+    case "identity_confirmation_required":
+      return "new_identity_confirmation_required";
+  }
+}
+function mapOccupancy(asset) {
+  if (asset.assetType !== "property") return void 0;
+  if (asset.occupancy === "principal_residence" || asset.occupancy === "rental") {
+    return asset.occupancy;
+  }
+  return "unknown";
+}
+function mapClassification(discovery, warnings) {
+  if (discovery.classification === "home_policy") return "home_policy_renewal";
+  if (discovery.classification === "auto_policy") return "auto_policy_renewal";
+  if (discovery.classification === "combined_policy") {
+    const assetTypes = new Set(discovery.assets.map((asset) => asset.assetType));
+    if (assetTypes.size === 1 && assetTypes.has("property")) {
+      return "home_policy_renewal";
+    }
+    if (assetTypes.size === 1 && assetTypes.has("vehicle")) {
+      return "auto_policy_renewal";
+    }
+    warnings.push("combined_home_auto_document_projected_as_unsupported");
+  }
+  return "unsupported";
+}
+function assertionValueById(result2, assertionId) {
+  if (!assertionId) return void 0;
+  const assertion3 = result2.assertions.find((candidate) => candidate.id === assertionId);
+  return assertion3 ? comparableValue(assertion3) : void 0;
+}
+function stringValue(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function nonNegativeCents(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : void 0;
+}
+function findStringAssertion(sources, patterns) {
+  for (const source of sources) {
+    for (const assertion3 of source.result.assertions) {
+      if (!patterns.some((pattern) => pattern.test(assertion3.fieldPath))) continue;
+      const value = stringValue(comparableValue(assertion3));
+      if (value) return value;
+    }
+  }
+  return void 0;
+}
+function stableValue(value) {
+  if (value === void 0) return "undefined";
+  if (value === null) return "null";
+  if (typeof value !== "object") return JSON.stringify(value) ?? String(value);
+  if (Array.isArray(value)) return `[${value.map(stableValue).join(",")}]`;
+  return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${JSON.stringify(key)}:${stableValue(entry)}`).join(",")}}`;
+}
+function collectSources(run) {
+  return [
+    { scope: "discovery", result: run.discovery },
+    ...[...run.coverageByAssetLocalId.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([assetLocalId, result2]) => ({
+      scope: `coverage:${assetLocalId}`,
+      result: result2
+    }))
+  ];
+}
+async function projectLlmRunToParsedDocument(run, options = {}) {
+  const warnings = [
+    ...run.discovery.warnings.map((warning) => `discovery:${warning}`),
+    ...[...run.coverageByAssetLocalId.entries()].flatMap(
+      ([assetLocalId, result2]) => result2.warnings.map((warning) => `coverage:${assetLocalId}:${warning}`)
+    ),
+    ...run.skippedAssetLocalIds.map((assetLocalId) => `coverage_pass_skipped:${assetLocalId}`)
+  ];
+  const sources = collectSources(run);
+  for (const source of sources) {
+    if (source.result.documentId !== run.discovery.documentId) {
+      throw new Error(`Projection received a foreign document in ${source.scope}`);
+    }
+  }
+  const assetTypeByLocalId = new Map(
+    run.discovery.assets.map((asset) => [asset.localId, asset.assetType])
+  );
+  const flatAssertions = sources.flatMap((source) => flattenResult(source, warnings));
+  const projectedAssertions = await Promise.all(
+    flatAssertions.map(async (assertion3) => {
+      const idSeed = [
+        run.discovery.documentId,
+        assertion3.sourceKey,
+        assertion3.fieldPath,
+        assertion3.alternativeIndex ?? "direct",
+        assertion3.evidenceIndex,
+        assertion3.evidence.pageNumber,
+        assertion3.evidence.evidenceText
+      ].join("|");
+      return {
+        id: await deterministicUuid(idSeed),
+        documentId: run.discovery.documentId,
+        pageNumber: assertion3.evidence.pageNumber,
+        entityScope: entityScopeFor(assertion3, assetTypeByLocalId),
+        fieldPath: assertion3.fieldPath,
+        rawText: assertion3.evidence.evidenceText,
+        parsedValue: assertion3.parsedValue,
+        normalizedValue: assertion3.normalizedValue,
+        parserId: assertion3.parserId,
+        parserVersion: assertion3.parserVersion,
+        confidence: assertion3.confidence,
+        authority: AUTHORITY_MAP[assertion3.evidence.authority]
+      };
+    })
+  );
+  const assertionIdsBySourceKeyMutable = /* @__PURE__ */ new Map();
+  flatAssertions.forEach((assertion3, index) => {
+    const projected = projectedAssertions[index];
+    if (!projected) return;
+    const ids = assertionIdsBySourceKeyMutable.get(assertion3.sourceKey) ?? [];
+    ids.push(projected.id);
+    assertionIdsBySourceKeyMutable.set(assertion3.sourceKey, ids);
+  });
+  const originalAssertionsByAsset = /* @__PURE__ */ new Map();
+  for (const source of sources) {
+    for (const assertion3 of source.result.assertions) {
+      if (!assetTypeByLocalId.has(assertion3.entityRef)) continue;
+      const assertions = originalAssertionsByAsset.get(assertion3.entityRef) ?? [];
+      assertions.push(assertion3);
+      originalAssertionsByAsset.set(assertion3.entityRef, assertions);
+    }
+  }
+  const assets = [];
+  for (const asset of run.discovery.assets) {
+    const allAssetAssertions = originalAssertionsByAsset.get(asset.localId) ?? [];
+    const identityAssertions = allAssetAssertions.filter(
+      (assertion3) => assertion3.factKind === "identity"
+    );
+    const resolved = options.resolveAssetIdentity ? await options.resolveAssetIdentity({
+      documentId: run.discovery.documentId,
+      asset,
+      identityAssertions,
+      allAssetAssertions
+    }) : {};
+    const fingerprint = resolved.identityFingerprint?.trim() ?? "";
+    if (!fingerprint) warnings.push(`identity_unresolved:${asset.localId}`);
+    assets.push({
+      assetType: asset.assetType,
+      identityFingerprint: fingerprint,
+      displayLabel: asset.displayLabel,
+      matchClassification: fingerprint ? resolved.matchClassification ?? mapProposedMatch(asset.proposedMatchClassification) : "new_identity_confirmation_required",
+      occupancy: mapOccupancy(asset),
+      assertions: flatAssertions.map((assertion3, index) => ({ assertion: assertion3, projected: projectedAssertions[index] })).filter(
+        (entry) => entry.projected !== void 0 && entry.assertion.entityRef === asset.localId
+      ).map((entry) => entry.projected)
+    });
+  }
+  const policyTerms = [];
+  const seenPolicyTerms = /* @__PURE__ */ new Set();
+  for (const source of sources) {
+    for (const term of source.result.policyTerms) {
+      const projectedTerm = {
+        effectiveDate: stringValue(
+          assertionValueById(source.result, term.effectiveDateAssertionId)
+        ),
+        expiryDate: stringValue(assertionValueById(source.result, term.expiryDateAssertionId)),
+        policyNumber: stringValue(assertionValueById(source.result, term.policyNumberAssertionId)),
+        annualPremiumCents: nonNegativeCents(
+          assertionValueById(source.result, term.premiumAssertionId)
+        )
+      };
+      const key = stableValue(projectedTerm);
+      if (seenPolicyTerms.has(key)) continue;
+      seenPolicyTerms.add(key);
+      policyTerms.push(projectedTerm);
+    }
+  }
+  const conflicts = [];
+  const conflictKeys = /* @__PURE__ */ new Set();
+  const addConflict = (fieldPath, assertionIds, reason) => {
+    const uniqueIds = [...new Set(assertionIds)];
+    if (uniqueIds.length < 2) return;
+    const key = `${fieldPath}|${[...uniqueIds].sort().join("|")}`;
+    if (conflictKeys.has(key)) return;
+    conflictKeys.add(key);
+    conflicts.push({ fieldPath, assertionIds: uniqueIds, reason });
+  };
+  for (const source of sources) {
+    for (const conflict of source.result.conflicts) {
+      addConflict(
+        conflict.fieldPath,
+        conflict.assertionIds.flatMap(
+          (assertionId) => assertionIdsBySourceKeyMutable.get(sourceKey(source.scope, assertionId)) ?? []
+        ),
+        conflict.explanation
+      );
+    }
+    for (const assertion3 of source.result.assertions) {
+      if (assertion3.status !== "conflicting") continue;
+      addConflict(
+        assertion3.fieldPath,
+        assertionIdsBySourceKeyMutable.get(sourceKey(source.scope, assertion3.id)) ?? [],
+        assertion3.explanation ?? "The document contains conflicting evidenced values."
+      );
+    }
+  }
+  const projectedByFieldAndEntity = /* @__PURE__ */ new Map();
+  flatAssertions.forEach((assertion3, index) => {
+    const projected = projectedAssertions[index];
+    if (!projected) return;
+    const key = `${assertion3.entityRef}|${assertion3.fieldPath}`;
+    const values = projectedByFieldAndEntity.get(key) ?? [];
+    values.push({ id: projected.id, value: projected.normalizedValue });
+    projectedByFieldAndEntity.set(key, values);
+  });
+  for (const [key, assertions] of projectedByFieldAndEntity) {
+    const distinctValues = new Set(assertions.map((assertion3) => stableValue(assertion3.value)));
+    if (distinctValues.size < 2) continue;
+    const fieldPath = key.slice(key.indexOf("|") + 1);
+    addConflict(
+      fieldPath,
+      assertions.map((assertion3) => assertion3.id),
+      "Discovery and asset-coverage passes produced different evidenced values."
+    );
+  }
+  const insurerName = findStringAssertion(sources, [
+    /(?:^|\.)insurer\.name$/i,
+    /(?:^|\.)carrierName$/i
+  ]);
+  const agencyName = findStringAssertion(sources, [
+    /(?:^|\.)agency\.name$/i,
+    /(?:^|\.)brokerName$/i
+  ]);
+  const parserId = assertionParserId(run.discovery);
+  const parserVersion = assertionParserVersion(run.discovery);
+  const document2 = ParsedInsuranceDocument.parse({
+    classification: mapClassification(run.discovery, warnings),
+    insurer: insurerName ? { name: insurerName } : void 0,
+    agency: agencyName ? { name: agencyName } : void 0,
+    policyTerms,
+    assetAssertions: assets,
+    coverageAssertions: flatAssertions.map((assertion3, index) => ({ assertion: assertion3, projected: projectedAssertions[index] })).filter(
+      (entry) => entry.projected !== void 0 && (entry.assertion.factKind === "coverage" || entry.assertion.factKind === "premium")
+    ).map((entry) => entry.projected),
+    notices: flatAssertions.map((assertion3, index) => ({ assertion: assertion3, projected: projectedAssertions[index] })).filter(
+      (entry) => entry.projected !== void 0 && entry.assertion.factKind === "notice"
+    ).map((entry) => entry.projected),
+    conflicts,
+    parserId,
+    parserVersion
+  });
+  return {
+    document: document2,
+    warnings,
+    assertionIdsBySourceKey: Object.fromEntries(
+      [...assertionIdsBySourceKeyMutable.entries()].map(([key, ids]) => [
+        key,
+        Object.freeze([...ids])
+      ])
+    )
+  };
+}
+
+// src/llm-identity-resolver.ts
+function stringValue2(assertion3) {
+  const raw = assertion3.normalizedValue ?? assertion3.value;
+  if (typeof raw === "string") return raw;
+  if (raw == null) return void 0;
+  return String(raw);
+}
+function numberValue(assertion3) {
+  const raw = assertion3.normalizedValue ?? assertion3.value;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : void 0;
+  if (typeof raw === "string") {
+    const parsed = Number(raw.replace(/[,\s]/g, ""));
+    return Number.isFinite(parsed) ? parsed : void 0;
+  }
+  return void 0;
+}
+function fieldHint(fieldPath) {
+  return fieldPath.toLowerCase().replace(/[_.[\]]/g, "");
+}
+function isMailingOrCorrespondence(fieldPath) {
+  const hint = fieldHint(fieldPath);
+  return hint.includes("mail") || hint.includes("correspondence") || hint.includes("broker") || hint.includes("agent");
+}
+function isAddressLine1Field(fieldPath) {
+  const hint = fieldHint(fieldPath);
+  return (hint.includes("address") || hint.includes("civic") || hint.includes("street")) && !isMailingOrCorrespondence(fieldPath);
+}
+function extractPropertyInput(asset, assertions) {
+  const input = {};
+  for (const assertion3 of assertions) {
+    const hint = fieldHint(assertion3.fieldPath);
+    if (isAddressLine1Field(assertion3.fieldPath)) {
+      input.addressLine1 = stringValue2(assertion3);
+    } else if (hint.includes("unit") || hint.includes("apartment") || hint.includes("suite")) {
+      input.unit = stringValue2(assertion3);
+    } else if (hint.includes("city")) {
+      input.city = stringValue2(assertion3);
+    } else if (hint.includes("province") || hint.includes("state")) {
+      input.province = stringValue2(assertion3);
+    } else if (hint.includes("postal") || hint.includes("zip")) {
+      input.postalCode = stringValue2(assertion3);
+    } else if (hint.includes("occupancy") || hint.includes("occupant")) {
+      const value = stringValue2(assertion3);
+      if (value === "principal_residence" || value === "rental") {
+        input.occupancy = value;
+      } else if (value === "seasonal") {
+        input.occupancy = "principal_residence";
+      } else if (value === "vacant") {
+        input.occupancy = "rental";
+      } else {
+        input.occupancy = "unknown";
+      }
+    }
+  }
+  if (asset.assetType === "property") {
+    input.occupancy = asset.occupancy === "principal_residence" || asset.occupancy === "rental" ? asset.occupancy : "unknown";
+    input.isRedacted = asset.insuredLocationStatus === "redacted" || asset.insuredLocationStatus === "partial";
+  }
+  return input;
+}
+function extractVehicleInput(asset, assertions) {
+  const input = {};
+  for (const assertion3 of assertions) {
+    const hint = fieldHint(assertion3.fieldPath);
+    if (hint.includes("vin") && !hint.includes("equipment")) {
+      input.vin = stringValue2(assertion3);
+    } else if (hint.includes("modelyear") || hint.includes("year")) {
+      input.modelYear = numberValue(assertion3);
+    } else if (hint.includes("make")) {
+      input.make = stringValue2(assertion3);
+    } else if (hint.includes("model") && !hint.includes("modelyear") && !hint.includes("model_year")) {
+      input.model = stringValue2(assertion3);
+    } else if (hint.includes("trim")) {
+      input.trim = stringValue2(assertion3);
+    }
+  }
+  if (asset.assetType === "vehicle" && (asset.vinStatus === "redacted" || asset.vinStatus === "partial")) {
+    input.vin = void 0;
+  }
+  return input;
+}
+function matchClassificationFromStrength(strength) {
+  switch (strength) {
+    case "exact":
+      return "new";
+    case "possible":
+      return "possible_existing_match";
+    case "confirmation_required":
+      return "new_identity_confirmation_required";
+  }
+}
+function resolveLlmAssetIdentity(input) {
+  const { asset, identityAssertions } = input;
+  if (asset.assetType === "property") {
+    const propertyInput = extractPropertyInput(asset, identityAssertions);
+    const result3 = buildPropertyIdentity(propertyInput);
+    const fingerprint2 = result3.exactFingerprint ?? result3.possibleMatchHint ?? "";
+    return {
+      identityFingerprint: fingerprint2,
+      matchClassification: result3.strength === "exact" ? "new" : matchClassificationFromStrength(result3.strength)
+    };
+  }
+  const vehicleInput = extractVehicleInput(asset, identityAssertions);
+  const result2 = buildVehicleIdentity(vehicleInput);
+  const fingerprint = result2.exactFingerprint ?? result2.possibleMatchHint ?? "";
+  return {
+    identityFingerprint: fingerprint,
+    matchClassification: result2.strength === "exact" ? "new" : matchClassificationFromStrength(result2.strength)
+  };
+}
+
+// src/llm-pipeline.ts
+var LLM_PIPELINE_VERSION = 1;
+var DEFAULT_MAX_ATTEMPTS = 2;
+var DEFAULT_ASSET_CONCURRENCY = 2;
+function boundedInteger(value, fallback, minimum, maximum) {
+  if (value === void 0 || !Number.isInteger(value)) return fallback;
+  return Math.max(minimum, Math.min(maximum, value));
+}
+function assertValidDocument(document2) {
+  if (!/^[a-f0-9]{64}$/i.test(document2.fileDigest)) {
+    throw new Error("Extracted PDF fileDigest must be a SHA-256 hex digest");
+  }
+  if (document2.pages.length === 0) {
+    throw new Error("Extracted PDF must contain at least one page");
+  }
+  if (document2.pageCount !== document2.pages.length) {
+    throw new Error("Extracted PDF pageCount does not match its pages");
+  }
+  const pageNumbers = /* @__PURE__ */ new Set();
+  for (const page of document2.pages) {
+    if (pageNumbers.has(page.pageNumber)) {
+      throw new Error(`Extracted PDF contains duplicate page ${page.pageNumber}`);
+    }
+    pageNumbers.add(page.pageNumber);
+  }
+}
+async function emit(handler, event) {
+  if (handler) await handler(event);
+}
+function summarizeRequest(request) {
+  if (request.pass.kind === "asset_coverage") {
+    return {
+      pass: request.pass.kind,
+      assetLocalId: request.pass.targetAssetLocalId,
+      pageNumbers: request.pages.map((page) => page.pageNumber)
+    };
+  }
+  return {
+    pass: request.pass.kind,
+    pageNumbers: request.pages.map((page) => page.pageNumber)
+  };
+}
+function requestAssetLocalId(request) {
+  return request.pass.kind === "asset_coverage" ? request.pass.targetAssetLocalId : void 0;
+}
+function safeErrorName(error) {
+  return error instanceof Error && error.name ? error.name : "UnknownError";
+}
+function repairPrompt(basePrompt, reason, issues) {
+  const issueList = issues.filter((issue) => issue.severity === "error").slice(0, 20).map((issue) => `${issue.code}@${issue.path.join(".")}`).join(", ");
+  return `${basePrompt}
+
+The prior response was rejected. Return a complete replacement JSON object, not a patch. Failure category: ${reason}.${issueList ? ` Correct these deterministic validation failures: ${issueList}.` : ""} Do not repeat private values in warnings or explanations.`;
+}
+function providerIdentityMatches(result2, provider) {
+  return result2.model.provider === provider.providerId && result2.model.model === provider.modelId;
+}
+function buildAssetCoveragePrompt(discovery, asset) {
+  const identityAssertionIds = new Set(asset.identityAssertionIds);
+  const identityFacts = discovery.assertions.filter((assertion3) => identityAssertionIds.has(assertion3.id)).map((assertion3) => ({
+    id: assertion3.id,
+    fieldPath: assertion3.fieldPath,
+    status: assertion3.status,
+    value: assertion3.value,
+    normalizedValue: assertion3.normalizedValue,
+    confidence: assertion3.confidence,
+    pageNumbers: assertion3.evidence.map((evidence) => evidence.pageNumber)
+  }));
+  const policyTermIds = discovery.policyTerms.filter((term) => term.insuredAssetRefs.includes(asset.localId)).map((term) => term.localId);
+  const context = JSON.stringify({
+    asset: {
+      localId: asset.localId,
+      assetType: asset.assetType,
+      displayLabel: asset.displayLabel,
+      identityFacts,
+      policyTermIds
+    }
+  });
+  return `${buildInsuranceExtractionSystemPrompt("asset_coverage")}
+
+Target asset context from the validated discovery pass:
+${context}
+
+Preserve this exact localId and assetType. Return exactly one asset: the target asset. Use the identity facts only to distinguish this asset from other properties or vehicles in the document; re-read the supplied pages for every coverage fact. Do not copy coverage from another asset that shares a policyholder, mailing address, or policy package.`;
+}
+async function executePass(input) {
+  const { provider, request, systemPrompt, maxAttempts, enforceProviderIdentity, onEvent } = input;
+  let prompt = systemPrompt;
+  let lastValidation;
+  let lastFailure;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const assetLocalId = requestAssetLocalId(request);
+    await emit(onEvent, {
+      type: "pass_started",
+      documentId: request.documentId,
+      pass: request.pass.kind,
+      assetLocalId,
+      attempt
+    });
+    let raw;
+    try {
+      raw = await provider.extract(request, prompt);
+    } catch (error) {
+      lastFailure = {
+        code: "PROVIDER_ERROR",
+        message: `LLM provider call failed (${safeErrorName(error)})`
+      };
+      if (attempt < maxAttempts) {
+        await emit(onEvent, {
+          type: "pass_retrying",
+          documentId: request.documentId,
+          pass: request.pass.kind,
+          assetLocalId,
+          attempt,
+          reason: "provider_error"
+        });
+        prompt = repairPrompt(systemPrompt, "provider_error", []);
+        continue;
+      }
+      break;
+    }
+    try {
+      const validation = validateLlmExtractionSemantics(raw, request);
+      lastValidation = validation;
+      if (!validation.valid) {
+        lastFailure = {
+          code: "INVALID_MODEL_OUTPUT",
+          message: "LLM output failed deterministic semantic validation"
+        };
+        if (attempt < maxAttempts) {
+          await emit(onEvent, {
+            type: "pass_retrying",
+            documentId: request.documentId,
+            pass: request.pass.kind,
+            assetLocalId,
+            attempt,
+            reason: "validation_error"
+          });
+          prompt = repairPrompt(systemPrompt, "validation_error", validation.issues);
+          continue;
+        }
+        break;
+      }
+      const result2 = parseLlmExtractionResult(raw, request);
+      if (enforceProviderIdentity && !providerIdentityMatches(result2, provider)) {
+        lastFailure = {
+          code: "MODEL_IDENTITY_MISMATCH",
+          message: "LLM output model identity does not match the configured provider"
+        };
+        if (attempt < maxAttempts) {
+          await emit(onEvent, {
+            type: "pass_retrying",
+            documentId: request.documentId,
+            pass: request.pass.kind,
+            assetLocalId,
+            attempt,
+            reason: "model_identity_mismatch"
+          });
+          prompt = repairPrompt(systemPrompt, "model_identity_mismatch", []);
+          continue;
+        }
+        break;
+      }
+      await emit(onEvent, {
+        type: "pass_completed",
+        documentId: request.documentId,
+        pass: request.pass.kind,
+        assetLocalId,
+        attempt,
+        warningCount: validation.issues.filter((issue) => issue.severity === "warning").length
+      });
+      return {
+        status: "completed",
+        attempts: attempt,
+        request: summarizeRequest(request),
+        result: result2,
+        validation
+      };
+    } catch (error) {
+      lastFailure = {
+        code: "INVALID_MODEL_OUTPUT",
+        message: `LLM output did not match the extraction contract (${safeErrorName(error)})`
+      };
+      if (attempt < maxAttempts) {
+        await emit(onEvent, {
+          type: "pass_retrying",
+          documentId: request.documentId,
+          pass: request.pass.kind,
+          assetLocalId,
+          attempt,
+          reason: "validation_error"
+        });
+        prompt = repairPrompt(systemPrompt, "validation_error", []);
+        continue;
+      }
+    }
+  }
+  return {
+    status: lastFailure?.code === "PROVIDER_ERROR" ? "provider_error" : "invalid_output",
+    attempts: maxAttempts,
+    request: summarizeRequest(request),
+    validation: lastValidation,
+    failure: lastFailure ?? {
+      code: "INVALID_MODEL_OUTPUT",
+      message: "LLM extraction pass did not produce a valid result"
+    }
+  };
+}
+async function toPageInputs(document2, pages, resolver) {
+  return Promise.all(
+    pages.map(async (page) => {
+      const imageRef = resolver ? await resolver(document2.documentId, page.pageNumber) : void 0;
+      return imageRef ? { pageNumber: page.pageNumber, text: page.text, imageRef } : { pageNumber: page.pageNumber, text: page.text };
+    })
+  );
+}
+function selectPages(document2, pageNumbers) {
+  const unique = [...new Set(pageNumbers)];
+  if (unique.length === 0) {
+    throw new Error("Coverage page selector returned no pages");
+  }
+  const pagesByNumber = new Map(document2.pages.map((page) => [page.pageNumber, page]));
+  return unique.map((pageNumber) => {
+    const page = pagesByNumber.get(pageNumber);
+    if (!page) {
+      throw new Error(`Coverage page selector returned unknown page ${pageNumber}`);
+    }
+    return page;
+  }).sort((left, right) => left.pageNumber - right.pageNumber);
+}
+async function mapInBatches(values, concurrency, mapper) {
+  const output = [];
+  for (let index = 0; index < values.length; index += concurrency) {
+    const batch = values.slice(index, index + concurrency);
+    output.push(...await Promise.all(batch.map(mapper)));
+  }
+  return output;
+}
+function assetTypeChanged(asset, pass) {
+  const returned = pass.result?.assets.find((candidate) => candidate.localId === asset.localId);
+  return Boolean(returned && returned.assetType !== asset.assetType);
+}
+function pipelineFailure(asset, pageNumbers, error) {
+  return {
+    asset,
+    pass: {
+      status: "pipeline_error",
+      attempts: 0,
+      request: {
+        pass: "asset_coverage",
+        assetLocalId: asset.localId,
+        pageNumbers
+      },
+      failure: {
+        code: "PIPELINE_ERROR",
+        message: `Asset coverage pipeline failed before a valid result (${safeErrorName(error)})`
+      }
+    }
+  };
+}
+function withRequestedModel(request, requestedModel) {
+  return requestedModel ? { ...request, requestedModel } : request;
+}
+async function runInsuranceLlmPipeline(document2, provider, options = {}) {
+  assertValidDocument(document2);
+  const maxAttempts = boundedInteger(options.maxAttempts, DEFAULT_MAX_ATTEMPTS, 1, 3);
+  const concurrency = boundedInteger(
+    options.maxConcurrentAssetPasses,
+    DEFAULT_ASSET_CONCURRENCY,
+    1,
+    4
+  );
+  const enforceProviderIdentity = options.enforceProviderIdentity ?? true;
+  const orderedPages = [...document2.pages].sort(
+    (left, right) => left.pageNumber - right.pageNumber
+  );
+  const discoveryPages = await toPageInputs(document2, orderedPages, options.resolvePageImageRef);
+  const discoveryRequest = withRequestedModel(
+    {
+      documentId: document2.documentId,
+      fileDigest: document2.fileDigest,
+      pages: discoveryPages,
+      pass: { kind: "discovery" }
+    },
+    options.requestedModel
+  );
+  const discovery = await executePass({
+    provider,
+    request: discoveryRequest,
+    systemPrompt: buildInsuranceExtractionSystemPrompt("discovery"),
+    maxAttempts,
+    enforceProviderIdentity,
+    onEvent: options.onEvent
+  });
+  if (discovery.status !== "completed" || !discovery.result) {
+    return {
+      pipelineVersion: LLM_PIPELINE_VERSION,
+      documentId: document2.documentId,
+      fileDigest: document2.fileDigest,
+      providerId: provider.providerId,
+      modelId: provider.modelId,
+      discovery,
+      assetCoverage: [],
+      complete: false,
+      requiresManualReview: true,
+      warnings: ["Document discovery failed; coverage extraction was not attempted"]
+    };
+  }
+  const discoveryResult = discovery.result;
+  if (["unsupported", "unknown"].includes(discoveryResult.classification)) {
+    return {
+      pipelineVersion: LLM_PIPELINE_VERSION,
+      documentId: document2.documentId,
+      fileDigest: document2.fileDigest,
+      providerId: provider.providerId,
+      modelId: provider.modelId,
+      discovery,
+      assetCoverage: [],
+      complete: false,
+      requiresManualReview: true,
+      warnings: ["Document classification requires manual review"]
+    };
+  }
+  const assetCoverage = await mapInBatches(
+    discoveryResult.assets,
+    concurrency,
+    async (asset) => {
+      let selectedNumbers = orderedPages.map((page) => page.pageNumber);
+      try {
+        if (options.selectCoveragePageNumbers) {
+          selectedNumbers = await options.selectCoveragePageNumbers({
+            document: document2,
+            discovery: discoveryResult,
+            asset
+          });
+        }
+        const selected = selectPages(document2, selectedNumbers);
+        const pages = await toPageInputs(document2, selected, options.resolvePageImageRef);
+        const request = withRequestedModel(
+          {
+            documentId: document2.documentId,
+            fileDigest: document2.fileDigest,
+            pages,
+            pass: {
+              kind: "asset_coverage",
+              targetAssetLocalId: asset.localId,
+              relevantPageNumbers: selected.map((page) => page.pageNumber)
+            }
+          },
+          options.requestedModel
+        );
+        const pass = await executePass({
+          provider,
+          request,
+          systemPrompt: buildAssetCoveragePrompt(discoveryResult, asset),
+          maxAttempts,
+          enforceProviderIdentity,
+          onEvent: options.onEvent
+        });
+        if (assetTypeChanged(asset, pass)) {
+          return {
+            asset,
+            pass: {
+              ...pass,
+              status: "invalid_output",
+              failure: {
+                code: "ASSET_TYPE_CHANGED",
+                message: "Coverage extraction changed the discovered asset type"
+              }
+            }
+          };
+        }
+        return { asset, pass };
+      } catch (error) {
+        return pipelineFailure(asset, selectedNumbers, error);
+      }
+    }
+  );
+  const hasAssets = discoveryResult.assets.length > 0;
+  const complete = hasAssets && assetCoverage.every((entry) => entry.pass.status === "completed");
+  const executions = [discovery, ...assetCoverage.map((entry) => entry.pass)];
+  const validationWarnings = executions.reduce(
+    (total, execution) => total + (execution.validation?.issues.filter((issue) => issue.severity === "warning").length ?? 0),
+    0
+  );
+  const uncertainIdentity = discoveryResult.assets.some(
+    (asset) => asset.proposedMatchClassification !== "new" || asset.assetType === "property" && asset.insuredLocationStatus !== "complete" || asset.assetType === "vehicle" && asset.vinStatus !== "valid_appearing"
+  );
+  return {
+    pipelineVersion: LLM_PIPELINE_VERSION,
+    documentId: document2.documentId,
+    fileDigest: document2.fileDigest,
+    providerId: provider.providerId,
+    modelId: provider.modelId,
+    discovery,
+    assetCoverage,
+    complete,
+    requiresManualReview: !complete || !hasAssets || validationWarnings > 0 || uncertainIdentity,
+    warnings: [
+      ...!hasAssets ? ["Discovery returned no insured assets"] : [],
+      ...!complete && hasAssets ? ["One or more asset coverage passes failed"] : [],
+      ...validationWarnings > 0 ? [`Deterministic validation produced ${validationWarnings} warning(s)`] : [],
+      ...uncertainIdentity ? ["At least one asset identity requires review"] : []
+    ]
+  };
+}
+
+// src/llm-providers/http.ts
+function stripMarkdownJsonFence(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("```")) {
+    const lines = trimmed.split("\n");
+    if (lines.length > 1 && lines[0].trim().toLowerCase().startsWith("```json")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+    if (lines.length > 1 && lines[0].trim().startsWith("```")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+  }
+  return trimmed;
+}
+var HttpLlmProvider = class {
+  providerId;
+  modelId;
+  apiUrl;
+  apiKey;
+  constructor(options) {
+    const url = options.apiUrl.replace(/\/+$/, "");
+    this.apiUrl = `${url}/chat/completions`;
+    this.apiKey = options.apiKey;
+    this.modelId = options.model;
+    this.providerId = options.providerId ?? "http-llm-provider";
+  }
+  async extract(request, systemPrompt) {
+    const response = await fetch(this.apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        temperature: 0,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: JSON.stringify(request) }
+        ]
+      })
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`LLM request failed: ${response.status} ${text.slice(0, 200)}`);
+    }
+    const body = await response.json();
+    const content = body.choices?.[0]?.message?.content;
+    if (typeof content !== "string") {
+      throw new Error("LLM response did not contain a text completion");
+    }
+    const jsonText = stripMarkdownJsonFence(content);
+    return JSON.parse(jsonText);
+  }
+};
 export {
+  HttpLlmProvider,
+  JsonValueSchema,
+  LLM_EXTRACTION_PROMPT_VERSION,
+  LLM_EXTRACTION_SCHEMA_VERSION,
+  LLM_PARSED_DOCUMENT_PROJECTION_VERSION,
+  LLM_PIPELINE_VERSION,
+  LLM_SEMANTIC_VALIDATION_VERSION,
+  LlmAlternativeValueSchema,
+  LlmAssertionSchema,
+  LlmAssetCandidateSchema,
+  LlmConflictSchema,
+  LlmCoverageActivitySchema,
+  LlmEvidenceSchema,
+  LlmExtractionPassSchema,
+  LlmExtractionRequestSchema,
+  LlmExtractionResultSchema,
+  LlmFactStatusSchema,
+  LlmModelIdentitySchema,
+  LlmPageInputSchema,
+  LlmPolicyTermSchema,
+  LlmPropertyCandidateSchema,
+  LlmSemanticValidationError,
+  LlmSourceAuthoritySchema,
+  LlmTemporalApplicabilitySchema,
+  LlmVehicleCandidateSchema,
+  assertLlmExtractionSemantics,
+  buildInsuranceExtractionSystemPrompt,
+  buildPropertyIdentity,
+  buildVehicleIdentity,
+  canAutoMergeIdentity,
+  createEmptyIncrementalOnboardingSession,
   extractPdfText,
-  parseDocument
+  mergeIncrementalOnboardingUpload,
+  parseDocument,
+  parseLlmExtractionResult,
+  planDocumentIntake,
+  projectLlmRunToParsedDocument,
+  resolveLlmAssetIdentity,
+  runInsuranceLlmPipeline,
+  runLlmExtraction,
+  validateLlmExtractionSemantics
 };
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "18b1024bc5595e88daea2287b000c82f78738b35c5cada05e2581a6d7a63295d";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "cabc25d7c9138bac00d11c6aece96d1bfc3d758b0779baa999decf90d046e94f";

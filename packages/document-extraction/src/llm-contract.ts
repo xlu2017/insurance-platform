@@ -101,7 +101,7 @@ export const LlmAssertionSchema = z
       .string()
       .min(1)
       .max(240)
-      .regex(/^[A-Za-z][A-Za-z0-9_.\[\]-]*$/, "Use a dotted field path"),
+      .regex(/^[A-Za-z][A-Za-z0-9_.[\]-]*$/, "Use a dotted field path"),
     factKind: z.enum(["identity", "policy", "coverage", "premium", "notice", "underwriting"]),
     status: LlmFactStatusSchema,
     value: JsonValueSchema.optional(),

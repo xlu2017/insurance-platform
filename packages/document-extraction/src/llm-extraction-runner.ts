@@ -94,10 +94,7 @@ function buildRequest(
   };
 }
 
-function assertCoverageResultMatchesAsset(
-  result: LlmExtractionResult,
-  assetLocalId: string,
-): void {
+function assertCoverageResultMatchesAsset(result: LlmExtractionResult, assetLocalId: string): void {
   if (result.pass !== "asset_coverage") {
     throw new Error(`Expected asset_coverage result for ${assetLocalId}`);
   }
@@ -133,13 +130,8 @@ export async function runLlmExtraction(
     throw new Error("Cannot run LLM extraction for a document with no pages");
   }
 
-  const discoveryRequest = buildRequest(
-    document,
-    { kind: "discovery" },
-    options.requestedModel,
-  );
-  const discoveryPrompt =
-    options.systemPrompt ?? buildInsuranceExtractionSystemPrompt("discovery");
+  const discoveryRequest = buildRequest(document, { kind: "discovery" }, options.requestedModel);
+  const discoveryPrompt = options.systemPrompt ?? buildInsuranceExtractionSystemPrompt("discovery");
   const discoveryRaw = await provider.extract(discoveryRequest, discoveryPrompt);
   const discovery = parseLlmExtractionResult(discoveryRaw, discoveryRequest);
 

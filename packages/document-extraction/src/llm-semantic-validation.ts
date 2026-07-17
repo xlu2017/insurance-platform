@@ -78,8 +78,7 @@ function valuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (Array.isArray(left) && Array.isArray(right)) {
     return (
-      left.length === right.length &&
-      left.every((value, index) => valuesEqual(value, right[index]))
+      left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]))
     );
   }
   if (isRecord(left) && isRecord(right)) {
@@ -87,9 +86,7 @@ function valuesEqual(left: unknown, right: unknown): boolean {
     const rightKeys = Object.keys(right).sort();
     return (
       leftKeys.length === rightKeys.length &&
-      leftKeys.every(
-        (key, index) => key === rightKeys[index] && valuesEqual(left[key], right[key]),
-      )
+      leftKeys.every((key, index) => key === rightKeys[index] && valuesEqual(left[key], right[key]))
     );
   }
   return false;
@@ -285,10 +282,7 @@ function validateFieldValues(result: LlmExtractionResult, issues: LlmSemanticIss
   });
 }
 
-function validateIdentityReferences(
-  result: LlmExtractionResult,
-  issues: LlmSemanticIssue[],
-): void {
+function validateIdentityReferences(result: LlmExtractionResult, issues: LlmSemanticIssue[]): void {
   const assertions = new Map(result.assertions.map((assertion) => [assertion.id, assertion]));
 
   result.assets.forEach((asset, assetIndex) => {

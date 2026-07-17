@@ -24,13 +24,7 @@ function candidate(
     assetType: "property",
     identityFingerprint: "property:123-main-st-calgary-ab",
     reviewFingerprint: "candidate-review:v1",
-    specifications: [
-      specification(
-        "coverage.liability.limitCents",
-        200_000_000,
-        "liability:v1",
-      ),
-    ],
+    specifications: [specification("coverage.liability.limitCents", 200_000_000, "liability:v1")],
     ...overrides,
   };
 }
@@ -61,15 +55,9 @@ function add(
 describe("mergeIncrementalOnboardingUpload", () => {
   it("accumulates four documents uploaded separately with order-independent candidate IDs", () => {
     const uploads = [
-      upload("doc-primary", [
-        candidate({ identityFingerprint: "property:primary" }),
-      ]),
-      upload("doc-rental-1", [
-        candidate({ identityFingerprint: "property:rental-1" }),
-      ]),
-      upload("doc-rental-2", [
-        candidate({ identityFingerprint: "property:rental-2" }),
-      ]),
+      upload("doc-primary", [candidate({ identityFingerprint: "property:primary" })]),
+      upload("doc-rental-1", [candidate({ identityFingerprint: "property:rental-1" })]),
+      upload("doc-rental-2", [candidate({ identityFingerprint: "property:rental-2" })]),
       upload("doc-vehicle", [
         candidate({
           assetType: "vehicle",
@@ -79,15 +67,11 @@ describe("mergeIncrementalOnboardingUpload", () => {
     ];
 
     const forward = uploads.reduce(add, createEmptyIncrementalOnboardingSession());
-    const reverse = [...uploads]
-      .reverse()
-      .reduce(add, createEmptyIncrementalOnboardingSession());
+    const reverse = [...uploads].reverse().reduce(add, createEmptyIncrementalOnboardingSession());
 
     expect(forward.documents).toHaveLength(4);
     expect(forward.candidates).toHaveLength(4);
-    expect(forward.candidates.every((item) => item.decision === "pending")).toBe(
-      true,
-    );
+    expect(forward.candidates.every((item) => item.decision === "pending")).toBe(true);
     expect(forward.candidates.every((item) => !item.superseded)).toBe(true);
     expect(forward.candidates.map((item) => item.candidateId).sort()).toEqual(
       reverse.candidates.map((item) => item.candidateId).sort(),
@@ -136,16 +120,8 @@ describe("mergeIncrementalOnboardingUpload", () => {
   it("marks changed extraction stale, refreshes defaults, and preserves custom mandates", () => {
     const initialCandidate = candidate({
       specifications: [
-        specification(
-          "coverage.collision.deductibleCents",
-          100_000,
-          "collision:v1",
-        ),
-        specification(
-          "coverage.liability.limitCents",
-          200_000_000,
-          "liability:v1",
-        ),
+        specification("coverage.collision.deductibleCents", 100_000, "collision:v1"),
+        specification("coverage.liability.limitCents", 200_000_000, "liability:v1"),
       ],
     });
     const initial = mergeIncrementalOnboardingUpload(
@@ -172,16 +148,8 @@ describe("mergeIncrementalOnboardingUpload", () => {
           candidate({
             reviewFingerprint: "candidate-review:v2",
             specifications: [
-              specification(
-                "coverage.collision.deductibleCents",
-                150_000,
-                "collision:v2",
-              ),
-              specification(
-                "coverage.liability.limitCents",
-                300_000_000,
-                "liability:v2",
-              ),
+              specification("coverage.collision.deductibleCents", 150_000, "collision:v2"),
+              specification("coverage.liability.limitCents", 300_000_000, "liability:v2"),
             ],
           }),
         ],
@@ -270,12 +238,8 @@ describe("mergeIncrementalOnboardingUpload", () => {
       ),
     );
 
-    const removed = changed.session.candidates.find(
-      (item) => item.localCandidateId === "asset-b",
-    )!;
-    const added = changed.session.candidates.find(
-      (item) => item.localCandidateId === "asset-c",
-    )!;
+    const removed = changed.session.candidates.find((item) => item.localCandidateId === "asset-b")!;
+    const added = changed.session.candidates.find((item) => item.localCandidateId === "asset-c")!;
 
     expect(removed.superseded).toBe(true);
     expect(removed.reviewFreshness).toBe("stale");
@@ -283,9 +247,7 @@ describe("mergeIncrementalOnboardingUpload", () => {
     expect(added.superseded).toBe(false);
     expect(added.reviewFreshness).toBe("unreviewed");
     expect(changed.supersededCandidateIds).toEqual([removed.candidateId]);
-    expect(changed.session.documents[0]?.candidateIds).not.toContain(
-      removed.candidateId,
-    );
+    expect(changed.session.documents[0]?.candidateIds).not.toContain(removed.candidateId);
     expect(changed.warnings).toContain("candidates_removed_by_reprocessing");
   });
 
@@ -293,23 +255,17 @@ describe("mergeIncrementalOnboardingUpload", () => {
     let session = createEmptyIncrementalOnboardingSession();
     session = add(
       session,
-      upload("doc-one", [
-        candidate({ identityFingerprint: "property:same-address" }),
-      ]),
+      upload("doc-one", [candidate({ identityFingerprint: "property:same-address" })]),
     );
     const second = mergeIncrementalOnboardingUpload(
       session,
-      upload("doc-two", [
-        candidate({ identityFingerprint: "property:same-address" }),
-      ]),
+      upload("doc-two", [candidate({ identityFingerprint: "property:same-address" })]),
     );
 
     expect(second.session.candidates).toHaveLength(2);
     expect(second.duplicateGroups).toHaveLength(1);
     expect(second.duplicateGroups[0]?.candidateIds).toHaveLength(2);
-    expect(
-      new Set(second.session.candidates.map((item) => item.duplicateGroupId)).size,
-    ).toBe(1);
+    expect(new Set(second.session.candidates.map((item) => item.duplicateGroupId)).size).toBe(1);
     expect(second.warnings).toContain("potential_duplicate_assets_present");
   });
 
@@ -334,9 +290,7 @@ describe("mergeIncrementalOnboardingUpload", () => {
     expect(blocked.accepted).toBe(false);
     expect(blocked.outcome).toBe("blocked");
     expect(blocked.session).toBe(session);
-    expect(blocked.blockers.map((item) => item.code)).toContain(
-      "duplicate_local_candidate_id",
-    );
+    expect(blocked.blockers.map((item) => item.code)).toContain("duplicate_local_candidate_id");
     expect(blocked.blockers.map((item) => item.code)).toContain(
       "duplicate_specification_field_path",
     );

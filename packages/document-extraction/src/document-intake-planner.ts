@@ -1,8 +1,4 @@
-export type ReviewSessionStatus =
-  | "collecting"
-  | "reviewing"
-  | "approved"
-  | "abandoned";
+export type ReviewSessionStatus = "collecting" | "reviewing" | "approved" | "abandoned";
 
 export interface IncomingPolicyDocument {
   uploadId: string;
@@ -63,10 +59,7 @@ export interface DocumentIntakePlan {
   blockers: DocumentIntakeBlocker[];
 }
 
-const ACTIVE_SESSION_STATUSES = new Set<ReviewSessionStatus>([
-  "collecting",
-  "reviewing",
-]);
+const ACTIVE_SESSION_STATUSES = new Set<ReviewSessionStatus>(["collecting", "reviewing"]);
 
 function normalizeDigest(value: string): string {
   return value.trim().toLowerCase();
@@ -85,10 +78,7 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function compareIncoming(
-  left: IncomingPolicyDocument,
-  right: IncomingPolicyDocument,
-): number {
+function compareIncoming(left: IncomingPolicyDocument, right: IncomingPolicyDocument): number {
   const digestDifference = normalizeDigest(left.fileDigest).localeCompare(
     normalizeDigest(right.fileDigest),
   );
@@ -154,8 +144,7 @@ export function planDocumentIntake(input: {
   if (activeSessions.length > 1) {
     blockers.push({
       code: "multiple_active_review_sessions",
-      message:
-        "A household may have only one collecting or reviewing policy-import session.",
+      message: "A household may have only one collecting or reviewing policy-import session.",
     });
   }
 
@@ -168,8 +157,7 @@ export function planDocumentIntake(input: {
       blockers.push({
         code: "invalid_existing_document",
         fileDigest: fileDigest || undefined,
-        message:
-          "Existing household documents require non-empty document IDs and file digests.",
+        message: "Existing household documents require non-empty document IDs and file digests.",
       });
       continue;
     }
@@ -223,8 +211,8 @@ export function planDocumentIntake(input: {
   const acceptedDrafts: Array<Omit<AcceptedPolicyUpload, "session">> = [];
   const duplicateUploads: DuplicatePolicyUpload[] = [];
 
-  for (const [fileDigest, documents] of [...incomingByDigest.entries()].sort(
-    ([left], [right]) => left.localeCompare(right),
+  for (const [fileDigest, documents] of [...incomingByDigest.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
   )) {
     const existing = existingByDigest.get(fileDigest)?.[0];
 
@@ -240,8 +228,7 @@ export function planDocumentIntake(input: {
           fileDigest,
           reason: "already_exists_in_household",
           existingDocumentId: existing.documentId,
-          existingReviewSessionId:
-            linkedActiveSession?.sessionId ?? fallbackSessionId,
+          existingReviewSessionId: linkedActiveSession?.sessionId ?? fallbackSessionId,
         });
       }
       continue;

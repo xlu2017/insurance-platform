@@ -61,10 +61,7 @@ interface FlatAssertion {
   parserVersion: string;
 }
 
-const AUTHORITY_MAP: Record<
-  LlmEvidence["authority"],
-  ExtractedFactAssertion["authority"]
-> = {
+const AUTHORITY_MAP: Record<LlmEvidence["authority"], ExtractedFactAssertion["authority"]> = {
   coverage_summary: "coverage_summary",
   insurance_certificate: "insurance_certificate",
   active_endorsement: "endorsement",
@@ -81,9 +78,7 @@ function sourceKey(scope: string, localAssertionId: string): string {
 }
 
 function comparableValue(assertion: LlmAssertion): unknown {
-  return assertion.normalizedValue !== undefined
-    ? assertion.normalizedValue
-    : assertion.value;
+  return assertion.normalizedValue !== undefined ? assertion.normalizedValue : assertion.value;
 }
 
 function assertionParserId(result: LlmExtractionResult): string {
@@ -201,9 +196,7 @@ function mapProposedMatch(
   }
 }
 
-function mapOccupancy(
-  asset: LlmAssetCandidate,
-): ParsedAssetAssertion["occupancy"] {
+function mapOccupancy(asset: LlmAssetCandidate): ParsedAssetAssertion["occupancy"] {
   if (asset.assetType !== "property") return undefined;
   if (asset.occupancy === "principal_residence" || asset.occupancy === "rental") {
     return asset.occupancy;
@@ -232,10 +225,7 @@ function mapClassification(
   return "unsupported";
 }
 
-function assertionValueById(
-  result: LlmExtractionResult,
-  assertionId: string | undefined,
-): unknown {
+function assertionValueById(result: LlmExtractionResult, assertionId: string | undefined): unknown {
   if (!assertionId) return undefined;
   const assertion = result.assertions.find((candidate) => candidate.id === assertionId);
   return assertion ? comparableValue(assertion) : undefined;
@@ -246,9 +236,7 @@ function stringValue(value: unknown): string | undefined {
 }
 
 function nonNegativeCents(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : undefined;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 function findStringAssertion(
@@ -309,9 +297,7 @@ export async function projectLlmRunToParsedDocument(
     ...[...run.coverageByAssetLocalId.entries()].flatMap(([assetLocalId, result]) =>
       result.warnings.map((warning) => `coverage:${assetLocalId}:${warning}`),
     ),
-    ...run.skippedAssetLocalIds.map((assetLocalId) =>
-      `coverage_pass_skipped:${assetLocalId}`,
-    ),
+    ...run.skippedAssetLocalIds.map((assetLocalId) => `coverage_pass_skipped:${assetLocalId}`),
   ];
   const sources = collectSources(run);
 
@@ -417,12 +403,8 @@ export async function projectLlmRunToParsedDocument(
         effectiveDate: stringValue(
           assertionValueById(source.result, term.effectiveDateAssertionId),
         ),
-        expiryDate: stringValue(
-          assertionValueById(source.result, term.expiryDateAssertionId),
-        ),
-        policyNumber: stringValue(
-          assertionValueById(source.result, term.policyNumberAssertionId),
-        ),
+        expiryDate: stringValue(assertionValueById(source.result, term.expiryDateAssertionId)),
+        policyNumber: stringValue(assertionValueById(source.result, term.policyNumberAssertionId)),
         annualPremiumCents: nonNegativeCents(
           assertionValueById(source.result, term.premiumAssertionId),
         ),
@@ -436,11 +418,7 @@ export async function projectLlmRunToParsedDocument(
 
   const conflicts: ParsedInsuranceDocument["conflicts"] = [];
   const conflictKeys = new Set<string>();
-  const addConflict = (
-    fieldPath: string,
-    assertionIds: string[],
-    reason: string,
-  ): void => {
+  const addConflict = (fieldPath: string, assertionIds: string[], reason: string): void => {
     const uniqueIds = [...new Set(assertionIds)];
     if (uniqueIds.length < 2) return;
     const key = `${fieldPath}|${[...uniqueIds].sort().join("|")}`;
@@ -471,10 +449,7 @@ export async function projectLlmRunToParsedDocument(
     }
   }
 
-  const projectedByFieldAndEntity = new Map<
-    string,
-    Array<{ id: string; value: unknown }>
-  >();
+  const projectedByFieldAndEntity = new Map<string, Array<{ id: string; value: unknown }>>();
   flatAssertions.forEach((assertion, index) => {
     const projected = projectedAssertions[index];
     if (!projected) return;
@@ -517,8 +492,7 @@ export async function projectLlmRunToParsedDocument(
       .filter(
         (entry): entry is { assertion: FlatAssertion; projected: ExtractedFactAssertion } =>
           entry.projected !== undefined &&
-          (entry.assertion.factKind === "coverage" ||
-            entry.assertion.factKind === "premium"),
+          (entry.assertion.factKind === "coverage" || entry.assertion.factKind === "premium"),
       )
       .map((entry) => entry.projected),
     notices: flatAssertions
