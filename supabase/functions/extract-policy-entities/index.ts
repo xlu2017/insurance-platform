@@ -11,6 +11,7 @@ import {
   buildPropertyIdentity,
   buildVehicleIdentity,
   createLlmFirstAnalyzer,
+  extractPdfText,
   HttpLlmProvider,
   MemoryDocumentLoader,
 } from "../_shared/document-extraction.js";
@@ -44,6 +45,39 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function computeCanonicalFingerprint(entity: DetectedInsuranceEntity): string {
+  // The analyzer already derives the canonical identity from VIN/address and applies
+  // the LLM resolution result (e.g. matching an existing asset or pending candidate).
+  if (entity.canonicalFingerprint && entity.canonicalFingerprint.length > 0) {
+    return entity.canonicalFingerprint;
+  }
+  if (entity.entityType === "vehicle") {
+    const identity = buildVehicleIdentity({
+      vin: entity.identity.vin ?? undefined,
+      modelYear: entity.identity.year ?? undefined,
+      make: entity.identity.make ?? undefined,
+      model: entity.identity.model ?? undefined,
+      trim: entity.identity.trim ?? undefined,
+    });
+    if (identity.strength === "exact" && identity.exactFingerprint) {
+      return identity.exactFingerprint;
+    }
+    return `possible:${entity.temporaryId}`;
+  }
+  const identity = buildPropertyIdentity({
+    addressLine1: entity.identity.fullAddress ?? undefined,
+    city: entity.identity.city ?? undefined,
+    province: entity.identity.province ?? undefined,
+    postalCode: entity.identity.postalCode ?? undefined,
+    occupancy: entity.identity.occupancy ?? undefined,
+    isRedacted: false,
+  });
+  if (identity.strength === "exact" && identity.exactFingerprint) {
+    return identity.exactFingerprint;
+  }
+  return `possible:${entity.temporaryId}`;
 }
 
 function mapResolutionStatus(entity: DetectedInsuranceEntity): string {
@@ -128,9 +162,34 @@ async function loadPendingCandidates(
   householdId: string,
   excludeSessionId?: string,
 ): Promise<PendingEntityCandidate[]> {
+  const rows = await loadPendingCandidateRecords(admin, householdId, excludeSessionId);
+  return rows.map((c) => ({
+    id: String(c.id),
+    assetType: c.asset_type as "property" | "vehicle",
+    identityFingerprint: String(c.identity_fingerprint),
+  }));
+}
+
+async function loadPendingCandidateRecords(
+  admin: ReturnType<typeof createClient>,
+  householdId: string,
+  excludeSessionId?: string,
+): Promise<
+  {
+    id: string;
+    asset_type: string;
+    identity_fingerprint: string;
+    session_id: string;
+    source_document_ids: string[];
+    selected_facts_json: Record<string, unknown>;
+    conflicts_json: unknown[];
+  }[]
+> {
   const query = admin
     .from("asset_candidates")
-    .select("id, asset_type, identity_fingerprint, session_id")
+    .select(
+      "id, asset_type, identity_fingerprint, session_id, source_document_ids, selected_facts_json, conflicts_json",
+    )
     .eq("household_id", householdId)
     .in("review_status", ["pending", "reviewing"])
     .in("decision", ["undecided", "not_sure"]);
@@ -141,8 +200,14 @@ async function loadPendingCandidates(
   if (error) throw new Error(error.message);
   return (data ?? []).map((c) => ({
     id: String(c.id),
-    assetType: c.asset_type as "property" | "vehicle",
-    identityFingerprint: String(c.identity_fingerprint),
+    asset_type: String(c.asset_type),
+    identity_fingerprint: String(c.identity_fingerprint),
+    session_id: String(c.session_id),
+    source_document_ids: Array.isArray(c.source_document_ids)
+      ? (c.source_document_ids as string[])
+      : [],
+    selected_facts_json: (c.selected_facts_json as Record<string, unknown>) ?? {},
+    conflicts_json: Array.isArray(c.conflicts_json) ? c.conflicts_json : [],
   }));
 }
 
@@ -328,6 +393,7 @@ Deno.serve(async (req) => {
           apiKey: llmApiKey,
           model: llmModel,
           providerId: llmModel.includes("deepseek") ? "deepseek" : "http-llm-provider",
+          supportsImageInput: false,
         })
       : undefined;
 
@@ -346,10 +412,49 @@ Deno.serve(async (req) => {
     jurisdiction: "AB",
   });
 
-  // Persist new extracted document rows.
+  // Persist the auditable analysis run first.
+  const validatedOutput = { ...analysis };
+  delete (validatedOutput as Record<string, unknown>).rawResponse;
+
+  const { data: analysisRun, error: runErr } = await admin
+    .from("document_analysis_runs")
+    .insert({
+      session_id: sessionId,
+      household_id: householdId,
+      model_provider: analysis.modelProvider,
+      model_id: analysis.modelId,
+      attempted_model_provider: analysis.attemptedModelProvider ?? null,
+      attempted_model_id: analysis.attemptedModelId ?? null,
+      fallback_reason: analysis.fallbackReason ?? null,
+      prompt_version: analysis.promptVersion ?? "1.0.0",
+      output_schema_version: analysis.outputSchemaVersion ?? "1.0.0",
+      attempt_count: analysis.attemptCount ?? 1,
+      raw_response_json: analysis.rawResponse ?? null,
+      validated_output_json: validatedOutput,
+      warnings_json: analysis.warnings,
+    })
+    .select()
+    .single();
+  if (runErr || !analysisRun) {
+    return jsonError(runErr?.message ?? "Failed to record analysis run", 500);
+  }
+  const analysisRunId = analysisRun.id;
+
+  // Persist new extracted document rows, including page-level text for audit.
   const extractedDocRows: { id: string; policy_document_id: string }[] = [];
   for (const analyzedDoc of analysis.documents) {
     const docId = analyzedDoc.documentId;
+    let pagesJson: { pageNumber: number; text: string }[] = [];
+    try {
+      const extracted = await extractPdfText(bytesByReference[docId], docId);
+      pagesJson = extracted.pages.map((page: { pageNumber: number; text: string }) => ({
+        pageNumber: page.pageNumber,
+        text: page.text,
+      }));
+    } catch {
+      // Page text is a best-effort audit field; extraction failure is recorded in warnings.
+    }
+
     const { data: extractedDoc, error: extractedErr } = await admin
       .from("extracted_documents")
       .insert({
@@ -361,7 +466,8 @@ Deno.serve(async (req) => {
         classification: analyzedDoc.classification,
         parser_id: analyzedDoc.parserId,
         parser_version: analyzedDoc.parserVersion,
-        pages_json: [],
+        pages_json: pagesJson,
+        analysis_run_id: analysisRunId,
       })
       .select()
       .single();
@@ -376,48 +482,197 @@ Deno.serve(async (req) => {
     extractedDocIdByInputId.set(row.policy_document_id, row.id);
   }
 
-  // Upsert candidates by identity fingerprint within the session.
-  const candidateRecords: unknown[] = [];
-  for (const entity of analysis.detectedEntities) {
-    const fingerprint = entity.temporaryId;
-    const { data: existing } = await admin
-      .from("asset_candidates")
-      .select("id, source_document_ids")
-      .eq("session_id", sessionId)
-      .eq("asset_type", entity.entityType)
-      .eq("identity_fingerprint", fingerprint)
-      .maybeSingle();
+  // Prepare household-wide lookup tables for canonical identity resolution.
+  const allPendingRecords = await loadPendingCandidateRecords(admin, householdId);
+  const existingById = new Map<string, ExistingHouseholdAsset>();
+  for (const asset of existingAssets) {
+    existingById.set(asset.id, asset);
+  }
+  const pendingById = new Map<string, (typeof allPendingRecords)[number]>();
+  const candidateByFingerprint = new Map<string, (typeof allPendingRecords)[number]>();
+  for (const record of allPendingRecords) {
+    pendingById.set(record.id, record);
+    candidateByFingerprint.set(record.identity_fingerprint, record);
+  }
 
-    const sourceDocIds = new Set<string>(existing?.source_document_ids ?? []);
-    for (const ref of entity.evidence) {
-      const extractedId = extractedDocIdByInputId.get(ref.documentId);
-      if (extractedId) sourceDocIds.add(extractedId);
+  // Group detected entities by canonical identity fingerprint and merge source documents.
+  const canonicalGroups = new Map<
+    string,
+    {
+      fingerprint: string;
+      entityType: "property" | "vehicle";
+      entities: DetectedInsuranceEntity[];
+      sourceDocIds: Set<string>;
+      conflicts: {
+        fieldPath: string;
+        entityRef: string;
+        assertionIds: string[];
+        explanation: string;
+        requiresHumanResolution: boolean;
+      }[];
+      resolution: DetectedInsuranceEntity["resolution"];
+    }
+  >();
+
+  function isExactFingerprint(fingerprint: string): boolean {
+    return (
+      (fingerprint.startsWith("vehicle:vin:") && fingerprint.length > "vehicle:vin:".length) ||
+      (fingerprint.startsWith("property:") && fingerprint.includes("|"))
+    );
+  }
+
+  for (const entity of analysis.detectedEntities) {
+    // Validate the LLM resolution against supplied context; downgrade on mismatch.
+    let resolution = entity.resolution;
+    const matchedExisting = resolution.matchedExistingEntityId
+      ? existingById.get(resolution.matchedExistingEntityId)
+      : undefined;
+    const matchedPending = resolution.matchedPendingCandidateId
+      ? pendingById.get(resolution.matchedPendingCandidateId)
+      : undefined;
+
+    if (resolution.status === "matches_existing" && !matchedExisting) {
+      resolution = {
+        status: "new",
+        confidence: 0,
+        reasoning: "Matched existing asset not found in household",
+      };
+    } else if (resolution.status === "matches_pending_candidate" && !matchedPending) {
+      resolution = {
+        status: "new",
+        confidence: 0,
+        reasoning: "Matched pending candidate not found in household",
+      };
+    } else if (
+      resolution.status === "matches_existing" &&
+      matchedExisting &&
+      matchedExisting.assetType !== entity.entityType
+    ) {
+      resolution = {
+        status: "possible_match_requires_confirmation",
+        confidence: 0,
+        reasoning: "Asset type mismatch with matched existing asset",
+      };
+    } else if (
+      resolution.status === "matches_pending_candidate" &&
+      matchedPending &&
+      matchedPending.asset_type !== entity.entityType
+    ) {
+      resolution = {
+        status: "possible_match_requires_confirmation",
+        confidence: 0,
+        reasoning: "Asset type mismatch with matched pending candidate",
+      };
     }
 
-    const entityConflicts = analysis.unresolvedConflicts.filter(
-      (c) => c.entityRef === entity.temporaryId,
-    );
+    // The analyzer already derives canonical identity from VIN/address and applies the
+    // resolution result. For matches, merge into the matched asset/candidate fingerprint
+    // (upgrading to an exact fingerprint if this document provides one).
+    let fingerprint = computeCanonicalFingerprint(entity);
+    if (resolution.status === "matches_existing" && matchedExisting) {
+      fingerprint =
+        isExactFingerprint(fingerprint) && !isExactFingerprint(matchedExisting.identityFingerprint)
+          ? fingerprint
+          : matchedExisting.identityFingerprint;
+    } else if (resolution.status === "matches_pending_candidate" && matchedPending) {
+      fingerprint =
+        isExactFingerprint(fingerprint) && !isExactFingerprint(matchedPending.identity_fingerprint)
+          ? fingerprint
+          : matchedPending.identity_fingerprint;
+    }
+
+    let group = canonicalGroups.get(fingerprint);
+    if (!group) {
+      group = {
+        fingerprint,
+        entityType: entity.entityType,
+        entities: [],
+        sourceDocIds: new Set(),
+        conflicts: [],
+        resolution,
+      };
+      canonicalGroups.set(fingerprint, group);
+    }
+
+    group.entities.push(entity);
+    for (const ref of entity.evidence) {
+      const extractedId = extractedDocIdByInputId.get(ref.documentId);
+      if (extractedId) group.sourceDocIds.add(extractedId);
+    }
+    for (const cv of Object.values(entity.currentCoverage)) {
+      for (const ref of cv.evidence ?? []) {
+        const extractedId = extractedDocIdByInputId.get(ref.documentId);
+        if (extractedId) group.sourceDocIds.add(extractedId);
+      }
+    }
+    for (const conflict of analysis.unresolvedConflicts) {
+      if (conflict.entityRef === entity.temporaryId) {
+        group.conflicts.push(conflict);
+      }
+    }
+
+    // Prefer existing-asset matches, then pending-candidate matches, then the first seen resolution.
+    const isBetterMatch =
+      resolution.status === "matches_existing" ||
+      (resolution.status === "matches_pending_candidate" &&
+        group.resolution.status !== "matches_existing");
+    if (isBetterMatch) {
+      group.resolution = resolution;
+    }
+  }
+
+  // Upsert candidates by canonical household identity.
+  const candidateRecords: unknown[] = [];
+  for (const group of canonicalGroups.values()) {
+    const representative = group.entities[0];
+    const displayLabel =
+      group.entities.find((e) => e.displayLabel && e.displayLabel.trim().length > 0)
+        ?.displayLabel ?? candidateDisplayLabel(representative);
+    const occupancy =
+      group.entities.map(occupancyForEntity).find((o) => o) ?? occupancyForEntity(representative);
+
     const selectedFacts = {
-      entity,
-      sourceDocuments: Array.from(sourceDocIds),
+      canonicalFingerprint: group.fingerprint,
+      entities: group.entities.map((e) => e.temporaryId),
+      sourceDocuments: Array.from(group.sourceDocIds),
+      resolution: group.resolution,
     };
 
     const payload = {
-      display_label: candidateDisplayLabel(entity),
-      occupancy: occupancyForEntity(entity),
-      match_classification: mapResolutionStatus(entity),
-      source_document_ids: Array.from(sourceDocIds),
+      display_label: displayLabel,
+      occupancy,
+      match_classification: mapResolutionStatus({
+        ...representative,
+        resolution: group.resolution,
+      } as DetectedInsuranceEntity),
+      source_document_ids: Array.from(group.sourceDocIds),
       selected_facts_json: selectedFacts,
-      conflicts_json: entityConflicts,
+      conflicts_json: group.conflicts,
       updated_at: new Date().toISOString(),
+      analysis_run_id: analysisRunId,
     };
 
+    const matchedPendingId =
+      group.resolution.status === "matches_pending_candidate" &&
+      group.resolution.matchedPendingCandidateId
+        ? group.resolution.matchedPendingCandidateId
+        : undefined;
+    const existingCandidate =
+      (matchedPendingId ? pendingById.get(matchedPendingId) : undefined) ??
+      candidateByFingerprint.get(group.fingerprint);
+
     let candidateId: string;
-    if (existing) {
+    if (existingCandidate) {
+      const mergedSourceDocIds = new Set<string>(existingCandidate.source_document_ids);
+      for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
+
       const { data: updated, error: updateErr } = await admin
         .from("asset_candidates")
-        .update(payload)
-        .eq("id", existing.id)
+        .update({
+          ...payload,
+          source_document_ids: Array.from(mergedSourceDocIds),
+        })
+        .eq("id", existingCandidate.id)
         .select()
         .single();
       if (updateErr || !updated) {
@@ -425,20 +680,20 @@ Deno.serve(async (req) => {
       }
       candidateId = updated.id;
       candidateRecords.push(updated);
+      candidateByFingerprint.set(group.fingerprint, {
+        ...existingCandidate,
+        source_document_ids: Array.from(mergedSourceDocIds),
+        selected_facts_json: selectedFacts,
+      });
     } else {
       const { data: inserted, error: insertErr } = await admin
         .from("asset_candidates")
         .insert({
           session_id: sessionId,
           household_id: householdId,
-          asset_type: entity.entityType,
-          identity_fingerprint: fingerprint,
-          display_label: candidateDisplayLabel(entity),
-          occupancy: occupancyForEntity(entity),
-          match_classification: mapResolutionStatus(entity),
-          source_document_ids: Array.from(sourceDocIds),
-          selected_facts_json: selectedFacts,
-          conflicts_json: entityConflicts,
+          asset_type: group.entityType,
+          identity_fingerprint: group.fingerprint,
+          ...payload,
         })
         .select()
         .single();
@@ -447,6 +702,15 @@ Deno.serve(async (req) => {
       }
       candidateId = inserted.id;
       candidateRecords.push(inserted);
+      candidateByFingerprint.set(group.fingerprint, {
+        id: inserted.id,
+        asset_type: group.entityType,
+        identity_fingerprint: group.fingerprint,
+        session_id: sessionId,
+        source_document_ids: Array.from(group.sourceDocIds),
+        selected_facts_json: selectedFacts,
+        conflicts_json: group.conflicts,
+      });
     }
   }
 
@@ -463,6 +727,7 @@ Deno.serve(async (req) => {
       fallbackReason: analysis.fallbackReason,
       warnings: analysis.warnings,
       unresolvedConflicts: analysis.unresolvedConflicts,
+      analysisRunId,
     },
   });
 });

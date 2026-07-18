@@ -6,6 +6,7 @@ export interface HttpLlmProviderOptions {
   apiKey: string;
   model: string;
   providerId?: string;
+  supportsImageInput?: boolean;
 }
 
 interface ChatMessage {
@@ -35,6 +36,7 @@ function stripMarkdownJsonFence(text: string): string {
 export class HttpLlmProvider implements InsuranceLlmProvider {
   readonly providerId: string;
   readonly modelId: string;
+  readonly supportsImageInput: boolean;
   private readonly apiUrl: string;
   private readonly apiKey: string;
 
@@ -44,6 +46,7 @@ export class HttpLlmProvider implements InsuranceLlmProvider {
     this.apiKey = options.apiKey;
     this.modelId = options.model;
     this.providerId = options.providerId ?? "http-llm-provider";
+    this.supportsImageInput = options.supportsImageInput ?? false;
   }
 
   async extract(request: unknown, systemPrompt: string): Promise<unknown> {

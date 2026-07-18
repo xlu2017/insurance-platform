@@ -44,17 +44,6 @@ export default function OnboardingDocuments() {
         source === "document" ? await pickDocument() : await pickImage(source === "camera");
       if (file) {
         const result = await uploadPolicyDocument(household.id, category, file);
-        const { data } = await invokeEdgeFunction<{
-          session_id: string;
-          candidates: unknown[];
-        }>("extract-policy-entities", {
-          household_id: household.id,
-          policy_document_id: result.id,
-          session_id: sessionId ?? undefined,
-        });
-        if (data?.session_id) {
-          setSessionId(data.session_id);
-        }
         setUploaded((u) => [...u, { name: file.name, category, documentId: result.id }]);
       }
     } catch (e) {
@@ -66,31 +55,60 @@ export default function OnboardingDocuments() {
 
   const finish = async () => {
     setBusy(true);
-    const { data: existingCase } = await supabase
-      .from("optimization_cases")
-      .select("id")
-      .eq("household_id", household.id)
-      .not("state", "in", "(completed,retained_incumbent,cancelled)")
-      .limit(1)
-      .maybeSingle();
-    if (!existingCase) {
-      const { data: created } = await supabase
+    setError(null);
+    try {
+      const documentIds = uploaded.map((u) => u.documentId);
+      if (documentIds.length > 0) {
+        const { data } = await invokeEdgeFunction<{
+          session_id: string;
+          candidates: unknown[];
+        }>("extract-policy-entities", {
+          household_id: household.id,
+          policy_document_ids: documentIds,
+          session_id: sessionId ?? undefined,
+        });
+        if (data?.session_id) {
+          setSessionId(data.session_id);
+        }
+      }
+
+      const { data: existingCase } = await supabase
         .from("optimization_cases")
-        .insert({ household_id: household.id, state: "awaiting_documents" })
         .select("id")
-        .single();
-      if (created) {
+        .eq("household_id", household.id)
+        .not("state", "in", "(completed,retained_incumbent,cancelled)")
+        .limit(1)
+        .maybeSingle();
+      if (!existingCase) {
+        const { data: created } = await supabase
+          .from("optimization_cases")
+          .insert({ household_id: household.id, state: "extracting_information" })
+          .select("id")
+          .single();
+        if (created) {
+          await supabase
+            .from("optimization_cases")
+            .update({ state: "extracting_information" })
+            .eq("id", created.id);
+        }
+      } else {
         await supabase
           .from("optimization_cases")
           .update({ state: "extracting_information" })
-          .eq("id", created.id);
+          .eq("id", existingCase.id);
       }
+      await supabase
+        .from("households")
+        .update({ onboarding_step: "mandate" })
+        .eq("id", household.id);
+      queryClient.invalidateQueries({ queryKey: ["household"] });
+      queryClient.invalidateQueries({ queryKey: ["extraction-session"] });
+      router.push("/onboarding/review-entities");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Extraction failed");
+    } finally {
+      setBusy(false);
     }
-    await supabase.from("households").update({ onboarding_step: "mandate" }).eq("id", household.id);
-    queryClient.invalidateQueries({ queryKey: ["household"] });
-    queryClient.invalidateQueries({ queryKey: ["extraction-session"] });
-    setBusy(false);
-    router.push("/onboarding/review-entities");
   };
 
   return (

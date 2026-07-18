@@ -734,6 +734,7 @@ export async function parseHome(document: ExtractedPdf): Promise<ParsedInsurance
     coverageAssertions: selectedValues(selected),
     parserId: ID,
     parserVersion: VERSION,
+    pageCount: document.pageCount,
   };
 
   return result;

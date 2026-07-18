@@ -184,6 +184,7 @@ export const ParsedInsuranceDocument = z
     coverageAssertions: z.array(ParsedCoverageAssertion).default([]),
     parserId: z.string(),
     parserVersion: z.string(),
+    pageCount: z.number().int().nonnegative().default(0),
   })
   .strict();
 export type ParsedInsuranceDocument = z.infer<typeof ParsedInsuranceDocument>;

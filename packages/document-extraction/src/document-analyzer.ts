@@ -139,7 +139,7 @@ export type CurrentPolicy = z.infer<typeof CurrentPolicySchema>;
 
 export const MandateRuleSchema = z.union([
   z.object({ rule: z.literal("minimum"), amountCents: z.number().int().positive() }).strict(),
-  z.object({ rule: z.literal("maximum"), amountCents: z.number().int().positive() }).strict(),
+  z.object({ rule: z.literal("maximum"), amountCents: z.number().int().nonnegative() }).strict(),
   z.object({ rule: z.literal("match_current_or_better"), value: z.string().min(1) }).strict(),
   z.object({ rule: z.literal("required") }).strict(),
   z.object({ rule: z.literal("any"), reason: z.string().optional() }).strict(),
@@ -149,6 +149,7 @@ export type MandateRule = z.infer<typeof MandateRuleSchema>;
 export const DetectedInsuranceEntitySchema = z
   .object({
     temporaryId: z.string().min(1),
+    canonicalFingerprint: z.string().min(1),
     entityType: z.enum(["property", "vehicle"]),
     displayLabel: z.string().min(1),
     identity: DetectedEntityIdentitySchema,
@@ -189,9 +190,14 @@ export type DetectedConflict = z.infer<typeof DetectedConflictSchema>;
 export const AnalysisWarningSchema = z
   .object({
     message: z.string().min(1),
-    documentId: z.string().optional(),
+    documentId: z.string().nullable().optional(),
   })
-  .strict();
+  .strict()
+  .transform((w) => {
+    const out: { message: string; documentId?: string } = { message: w.message };
+    if (w.documentId) out.documentId = w.documentId;
+    return out;
+  });
 export type AnalysisWarning = z.infer<typeof AnalysisWarningSchema>;
 
 export const InsuranceDocumentAnalysisResultSchema = z
@@ -206,6 +212,10 @@ export const InsuranceDocumentAnalysisResultSchema = z
     attemptedModelProvider: z.string().min(1).optional(),
     attemptedModelId: z.string().min(1).optional(),
     fallbackReason: z.string().optional(),
+    rawResponse: z.unknown().nullable().optional(),
+    attemptCount: z.number().int().positive().optional(),
+    promptVersion: z.string().optional(),
+    outputSchemaVersion: z.string().optional(),
   })
   .strict();
 export type InsuranceDocumentAnalysisResult = z.infer<typeof InsuranceDocumentAnalysisResultSchema>;
@@ -550,7 +560,8 @@ function buildDetectedEntity(
   }
 
   return {
-    temporaryId: candidate.identityFingerprint,
+    temporaryId: generateOpaqueId(),
+    canonicalFingerprint: candidate.identityFingerprint,
     entityType: candidate.assetType,
     displayLabel: candidate.displayLabel,
     identity,
@@ -582,7 +593,7 @@ function buildAnalyzedDocument(doc: ParsedInsuranceDocument): AnalyzedDocument {
     classification: doc.classification,
     parserId: doc.parserId,
     parserVersion: doc.parserVersion,
-    pageCount: 0,
+    pageCount: doc.pageCount ?? 0,
     extractedEntityCount: doc.assetAssertions.length,
   };
 }
@@ -777,7 +788,7 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
   ): Promise<InsuranceDocumentAnalysisResult | null> {
     if (!this.provider) return null;
 
-    const request = buildLlmAnalysisRequest(input, extractedDocs);
+    const { content, documentIdMap } = buildLlmAnalysisRequest(input, extractedDocs);
     const basePrompt = buildInsuranceAnalysisSystemPrompt();
     let validationFeedback = "";
 
@@ -786,8 +797,15 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
         const systemPrompt = validationFeedback
           ? `${basePrompt}\n\nYour previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:\n${validationFeedback}`
           : basePrompt;
-        const raw = await this.provider.extract(request, systemPrompt);
-        const normalized = normalizeLlmAnalysisResult(raw, input, extractedDocs, this.provider);
+        const raw = await this.provider.extract({ content }, systemPrompt);
+        const normalized = normalizeLlmAnalysisResult(
+          raw,
+          input,
+          extractedDocs,
+          this.provider,
+          attempt,
+          documentIdMap,
+        );
         return InsuranceDocumentAnalysisResultSchema.parse(normalized);
       } catch (error) {
         validationFeedback =
@@ -923,6 +941,10 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       detectedEntities,
       unresolvedConflicts,
       warnings,
+      rawResponse: null,
+      attemptCount: 1,
+      promptVersion: "1.0.0",
+      outputSchemaVersion: "1.0.0",
     });
   }
 }
@@ -934,20 +956,34 @@ export type LlmContentPart =
 function buildLlmAnalysisRequest(
   input: InsuranceDocumentAnalysisInput,
   extractedDocs: ExtractedPdf[],
-): { content: LlmContentPart[] } {
+): { content: LlmContentPart[]; documentIdMap: Map<string, string> } {
   const parts: LlmContentPart[] = [];
+  const documentIdMap = new Map<string, string>();
+
+  const documentAliases: string[] = [];
+  for (let i = 0; i < extractedDocs.length; i++) {
+    const doc = extractedDocs[i];
+    const alias = `doc-${i + 1}`;
+    documentIdMap.set(doc.documentId, doc.documentId);
+    documentIdMap.set(alias, doc.documentId);
+    documentAliases.push(`${alias} = ${doc.documentId}`);
+  }
 
   parts.push({
     type: "text",
-    text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.\n\nJurisdiction: ${input.jurisdiction}\n\nExisting household assets:\n${JSON.stringify(input.existingAssets)}\n\nPending candidates:\n${JSON.stringify(input.pendingCandidates)}\n\nThe pages below are provided as extracted text. When page images are available they are included after the text for the same page.`,
+    text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.\n\nJurisdiction: ${input.jurisdiction}\n\nExisting household assets:\n${JSON.stringify(input.existingAssets)}\n\nPending candidates:\n${JSON.stringify(input.pendingCandidates)}\n\nDocument IDs (use ONLY these exact values for evidence documentId fields):\n${documentAliases.join("\n")}\n\nThe pages below are provided as extracted text. When page images are available they are included after the text for the same page.`,
   });
 
   for (const doc of extractedDocs) {
+    const alias =
+      documentIdMap.get(doc.documentId) === doc.documentId
+        ? `doc-${extractedDocs.indexOf(doc) + 1}`
+        : doc.documentId;
     const meta = input.uploadedDocuments.find((u) => u.documentId === doc.documentId);
     const filename = meta?.filename ?? doc.documentId;
     parts.push({
       type: "text",
-      text: `\n--- Document ${doc.documentId} (${filename}, ${doc.pageCount} pages) ---`,
+      text: `\n--- ${alias}: ${doc.documentId} (${filename}, ${doc.pageCount} pages) ---`,
     });
     for (const page of doc.pages) {
       parts.push({
@@ -963,7 +999,7 @@ function buildLlmAnalysisRequest(
     }
   }
 
-  return { content: parts };
+  return { content: parts, documentIdMap };
 }
 
 const INSURANCE_ANALYSIS_SYSTEM_PROMPT = `You are an insurance document analyst. Read the uploaded policy PDFs (provided as page-level text) and produce a single JSON object that conforms to the schema below. Do not include markdown fences, commentary, or any keys not in the schema.
@@ -1060,14 +1096,23 @@ function buildInsuranceAnalysisSystemPrompt(): string {
 }
 
 function countEntitiesForDocument(documentId: string, entities: DetectedInsuranceEntity[]): number {
-  return entities.filter((entity) => entity.evidence.some((e) => e.documentId === documentId))
-    .length;
+  return entities.filter((entity) => {
+    if (entity.evidence.some((e) => e.documentId === documentId)) return true;
+    return Object.values(entity.currentCoverage).some((cv) =>
+      cv.evidence?.some((e) => e.documentId === documentId),
+    );
+  }).length;
 }
 
 function documentClassification(documentId: string, entities: DetectedInsuranceEntity[]): string {
   const types = new Set(
     entities
-      .filter((e) => e.evidence.some((ev) => ev.documentId === documentId))
+      .filter((e) => {
+        if (e.evidence.some((ev) => ev.documentId === documentId)) return true;
+        return Object.values(e.currentCoverage).some((cv) =>
+          cv.evidence?.some((ev) => ev.documentId === documentId),
+        );
+      })
       .map((e) => e.entityType),
   );
   if (types.has("vehicle") && types.has("property")) return "unknown";
@@ -1083,13 +1128,14 @@ function normalizeMandateRule(raw: unknown, fieldPath: string): MandateRule {
   const typed = raw as Record<string, unknown>;
   const rule = typed.rule;
   if (rule === "minimum" || rule === "maximum") {
+    const minAmount = rule === "minimum" ? 1 : 0;
     if (
       typeof typed.amountCents !== "number" ||
-      typed.amountCents <= 0 ||
+      typed.amountCents < minAmount ||
       !Number.isInteger(typed.amountCents)
     ) {
       throw new Error(
-        `mandateSuggestions.${fieldPath}.${rule} requires a positive integer amountCents`,
+        `mandateSuggestions.${fieldPath}.${rule} requires an integer amountCents >= ${minAmount}`,
       );
     }
     return { rule, amountCents: typed.amountCents } as MandateRule;
@@ -1145,7 +1191,11 @@ function normalizeCurrentValue(
   if (Array.isArray(typed.evidence) && typed.evidence.length > 0) {
     evidence = typed.evidence.map((item, index) => {
       try {
-        return EvidenceReferenceSchema.parse(item);
+        const ref = EvidenceReferenceSchema.parse(item);
+        if (ref.documentId && documentIdMap.has(ref.documentId)) {
+          return { ...ref, documentId: documentIdMap.get(ref.documentId)! };
+        }
+        return ref;
       } catch (err) {
         throw new Error(
           `currentCoverage.${fieldPath}.evidence[${index}] is invalid: ${err instanceof Error ? err.message : String(err)}`,
@@ -1168,11 +1218,100 @@ function normalizeCurrentValue(
     : { status, value, confidence: typed.confidence, explanation };
 }
 
+function buildCanonicalFingerprintForIdentity(
+  identity: DetectedEntityIdentity,
+  entityType: "property" | "vehicle",
+  fallbackId: string,
+): string {
+  if (entityType === "vehicle") {
+    const result = buildVehicleIdentity({
+      vin: identity.vin ?? undefined,
+      modelYear: identity.year ?? undefined,
+      make: identity.make ?? undefined,
+      model: identity.model ?? undefined,
+      trim: identity.trim ?? undefined,
+    });
+    // Only exact VIN-based identities may be merged automatically. Partial or redacted
+    // identities must remain separate candidates for customer resolution.
+    return result.exactFingerprint ?? `possible:${fallbackId}`;
+  }
+  const result = buildPropertyIdentity({
+    addressLine1: identity.fullAddress ?? undefined,
+    city: identity.city ?? undefined,
+    province: identity.province ?? undefined,
+    postalCode: identity.postalCode ?? undefined,
+    occupancy: (identity.occupancy === "other" ? undefined : identity.occupancy) as
+      | PropertyIdentityInput["occupancy"]
+      | undefined,
+    isRedacted: false,
+  });
+  return result.exactFingerprint ?? `possible:${fallbackId}`;
+}
+
+function isExactFingerprint(fingerprint: string): boolean {
+  return (
+    (fingerprint.startsWith("vehicle:vin:") && fingerprint.length > "vehicle:vin:".length) ||
+    (fingerprint.startsWith("property:") && fingerprint.includes("|"))
+  );
+}
+
+function resolveCanonicalFingerprint(
+  candidateFingerprint: string,
+  entityType: "property" | "vehicle",
+  resolution: EntityResolution,
+  matchedExisting: ExistingHouseholdAsset | undefined,
+  matchedPending: PendingEntityCandidate | undefined,
+): string {
+  if (resolution.status === "matches_existing" && matchedExisting) {
+    const matchedExact = isExactFingerprint(matchedExisting.identityFingerprint);
+    const candidateExact = isExactFingerprint(candidateFingerprint);
+    if (
+      matchedExact &&
+      candidateExact &&
+      matchedExisting.identityFingerprint !== candidateFingerprint
+    ) {
+      resolution.status = "possible_match_requires_confirmation";
+      return candidateFingerprint;
+    }
+    if (matchedExact) return matchedExisting.identityFingerprint;
+    if (candidateExact) return candidateFingerprint;
+    return matchedExisting.identityFingerprint;
+  }
+
+  if (resolution.status === "matches_pending_candidate" && matchedPending) {
+    const matchedExact = isExactFingerprint(matchedPending.identityFingerprint);
+    const candidateExact = isExactFingerprint(candidateFingerprint);
+    if (
+      matchedExact &&
+      candidateExact &&
+      matchedPending.identityFingerprint !== candidateFingerprint
+    ) {
+      resolution.status = "possible_match_requires_confirmation";
+      return candidateFingerprint;
+    }
+    if (matchedExact) return matchedPending.identityFingerprint;
+    if (candidateExact) return candidateFingerprint;
+    return matchedPending.identityFingerprint;
+  }
+
+  return candidateFingerprint;
+}
+
+function generateOpaqueId(): string {
+  const cryptoGlobal = crypto as unknown as { randomUUID?: () => string };
+  if (typeof cryptoGlobal.randomUUID === "function") {
+    return cryptoGlobal.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 function normalizeLlmAnalysisResult(
   raw: unknown,
   input: InsuranceDocumentAnalysisInput,
   extractedDocs: ExtractedPdf[],
   provider: InsuranceLlmProvider,
+  attemptCount: number,
+  documentAliasMap: Map<string, string>,
 ): InsuranceDocumentAnalysisResult {
   if (!raw || typeof raw !== "object") {
     throw new Error("LLM response is not a JSON object");
@@ -1187,19 +1326,42 @@ function normalizeLlmAnalysisResult(
     : [];
   const warnings = Array.isArray(typed.warnings) ? typed.warnings : [];
 
-  const documentIdMap = new Map<string, string>();
-  for (const doc of extractedDocs) {
-    documentIdMap.set(doc.documentId, doc.documentId);
-  }
+  const documentIdMap = new Map(documentAliasMap);
   for (const doc of input.priorDocumentSummaries) {
     documentIdMap.set(doc.documentId, doc.documentId);
   }
 
+  const existingById = new Map<string, ExistingHouseholdAsset>();
+  for (const asset of input.existingAssets) {
+    existingById.set(asset.id, asset);
+  }
+  const pendingById = new Map<string, PendingEntityCandidate>();
+  for (const candidate of input.pendingCandidates) {
+    pendingById.set(candidate.id, candidate);
+  }
+
+  // Build an opaque id map so the raw LLM temporary ids never leak PII and never repeat.
+  const rawEntityIdMap = new Map<string, string>();
+  for (let index = 0; index < typed.detectedEntities.length; index++) {
+    const entity = typed.detectedEntities[index];
+    if (!entity || typeof entity !== "object") {
+      throw new Error(`detectedEntities[${index}] is not an object`);
+    }
+    const e = entity as Record<string, unknown>;
+    if (typeof e.temporaryId !== "string" || e.temporaryId.trim().length === 0) {
+      throw new Error(`detectedEntities[${index}] is missing a temporaryId`);
+    }
+    const rawId = e.temporaryId.trim();
+    if (rawEntityIdMap.has(rawId)) {
+      throw new Error(`detectedEntities[${index}] has duplicate temporaryId ${rawId}`);
+    }
+    rawEntityIdMap.set(rawId, generateOpaqueId());
+  }
+
+  const allowedDocumentIds = new Set(documentIdMap.values());
+
   const enrichedEntities: DetectedInsuranceEntity[] = typed.detectedEntities.map(
     (entity: unknown, index: number) => {
-      if (!entity || typeof entity !== "object") {
-        throw new Error(`detectedEntities[${index}] is not an object`);
-      }
       const e = entity as Record<string, unknown>;
       const entityType =
         e.entityType === "property" || e.entityType === "vehicle" ? e.entityType : null;
@@ -1207,10 +1369,8 @@ function normalizeLlmAnalysisResult(
         throw new Error(`detectedEntities[${index}] is missing a valid entityType`);
       }
 
-      if (typeof e.temporaryId !== "string" || e.temporaryId.trim().length === 0) {
-        throw new Error(`detectedEntities[${index}] is missing a temporaryId`);
-      }
-      const temporaryId = e.temporaryId.trim();
+      const rawTemporaryId = e.temporaryId as string;
+      const temporaryId = rawEntityIdMap.get(rawTemporaryId) ?? generateOpaqueId();
       const displayLabel =
         typeof e.displayLabel === "string" && e.displayLabel.trim().length > 0
           ? e.displayLabel.trim()
@@ -1219,6 +1379,54 @@ function normalizeLlmAnalysisResult(
       const identity = DetectedEntityIdentitySchema.parse(e.identity);
       const resolution = EntityResolutionSchema.parse(e.resolution);
       const currentPolicy = CurrentPolicySchema.parse(e.currentPolicy);
+      const candidateFingerprint = buildCanonicalFingerprintForIdentity(
+        identity,
+        entityType,
+        temporaryId,
+      );
+
+      const matchedExisting = resolution.matchedExistingEntityId
+        ? existingById.get(resolution.matchedExistingEntityId)
+        : undefined;
+      const matchedPending = resolution.matchedPendingCandidateId
+        ? pendingById.get(resolution.matchedPendingCandidateId)
+        : undefined;
+      if (resolution.status === "matches_existing" && !matchedExisting) {
+        throw new Error(
+          `detectedEntities[${index}].resolution references unknown matchedExistingEntityId ${resolution.matchedExistingEntityId}`,
+        );
+      }
+      if (resolution.status === "matches_pending_candidate" && !matchedPending) {
+        throw new Error(
+          `detectedEntities[${index}].resolution references unknown matchedPendingCandidateId ${resolution.matchedPendingCandidateId}`,
+        );
+      }
+      if (resolution.status === "possible_match_requires_confirmation") {
+        if (
+          (resolution.matchedExistingEntityId && !matchedExisting) ||
+          (resolution.matchedPendingCandidateId && !matchedPending)
+        ) {
+          throw new Error(
+            `detectedEntities[${index}].resolution references unknown possible-match id`,
+          );
+        }
+        if (
+          (matchedExisting && matchedExisting.assetType !== entityType) ||
+          (matchedPending && matchedPending.assetType !== entityType)
+        ) {
+          throw new Error(
+            `detectedEntities[${index}].resolution possible-match assetType mismatch`,
+          );
+        }
+      }
+
+      const canonicalFingerprint = resolveCanonicalFingerprint(
+        candidateFingerprint,
+        entityType,
+        resolution,
+        matchedExisting,
+        matchedPending,
+      );
 
       const rawCoverage = (e.currentCoverage as Record<string, unknown>) ?? {};
       const currentCoverage: Record<string, ExtractedCurrentValue> = {};
@@ -1236,7 +1444,13 @@ function normalizeLlmAnalysisResult(
         ? e.evidence
             .map((item, idx) => {
               try {
-                return EvidenceReferenceSchema.parse(item);
+                const ref = EvidenceReferenceSchema.parse(item);
+                const mappedId = ref.documentId ? documentIdMap.get(ref.documentId) : undefined;
+                const mapped = mappedId ? { ...ref, documentId: mappedId } : ref;
+                if (mapped.documentId && !allowedDocumentIds.has(mapped.documentId)) {
+                  throw new Error(`evidence references unknown documentId ${mapped.documentId}`);
+                }
+                return mapped;
               } catch (err) {
                 throw new Error(
                   `detectedEntities[${index}].evidence[${idx}] is invalid: ${err instanceof Error ? err.message : String(err)}`,
@@ -1255,6 +1469,7 @@ function normalizeLlmAnalysisResult(
 
       return {
         temporaryId,
+        canonicalFingerprint,
         entityType,
         displayLabel,
         identity,
@@ -1270,7 +1485,12 @@ function normalizeLlmAnalysisResult(
 
   const normalizedConflicts: DetectedConflict[] = unresolvedConflicts.map((conflict, index) => {
     try {
-      return DetectedConflictSchema.parse(conflict);
+      const parsed = DetectedConflictSchema.parse(conflict);
+      const mappedId = rawEntityIdMap.get(parsed.entityRef);
+      if (mappedId) {
+        return { ...parsed, entityRef: mappedId };
+      }
+      return parsed;
     } catch (err) {
       throw new Error(
         `unresolvedConflicts[${index}] is invalid: ${err instanceof Error ? err.message : String(err)}`,
@@ -1306,6 +1526,10 @@ function normalizeLlmAnalysisResult(
     detectedEntities: enrichedEntities,
     unresolvedConflicts: normalizedConflicts,
     warnings: normalizedWarnings,
+    rawResponse: raw,
+    attemptCount,
+    promptVersion: "1.0.0",
+    outputSchemaVersion: "1.0.0",
   };
 }
 

@@ -1,9 +1,7 @@
 import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
-import { useQueryClient } from "@tanstack/react-query";
 import { useHousehold } from "@/lib/household";
-import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { useExtractionCandidates, useOpenExtractionSession } from "@/lib/extraction";
 import {
   Body,
@@ -26,7 +24,6 @@ export default function ReviewEntities() {
   const { data: household, isLoading: householdLoading } = useHousehold();
   const { data: session, isLoading: sessionLoading } = useOpenExtractionSession(household?.id);
   const { data: candidates, isLoading: candidatesLoading } = useExtractionCandidates(session?.id);
-  const queryClient = useQueryClient();
   const [decisions, setDecisions] = useState<Record<string, CandidateDecision["decision"]>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,34 +55,11 @@ export default function ReviewEntities() {
     setDecisions((prev) => ({ ...prev, [candidateId]: decision }));
   };
 
-  const finished = candidates.every((c) => decisions[c.id]);
-
   const submit = async () => {
     setBusy(true);
     setError(null);
-    const payload = candidates.map((c) => ({
-      candidateId: c.id,
-      decision: decisions[c.id]!,
-    }));
-    const { data, error: fnErr } = await invokeEdgeFunction<{ session_id: string; status: string }>(
-      "approve-policy-candidates",
-      {
-        session_id: session.id,
-        decisions: payload,
-      },
-    );
+    setError("Asset approval is not yet implemented. This screen is review-only.");
     setBusy(false);
-    if (fnErr) {
-      setError(fnErr.message ?? "Approval failed");
-      return;
-    }
-    if (!data || typeof data.status !== "string") {
-      setError("Unexpected response from approval");
-      return;
-    }
-    queryClient.invalidateQueries({ queryKey: ["household"] });
-    queryClient.invalidateQueries({ queryKey: ["extraction-session"] });
-    router.push("/edit-mandate");
   };
 
   return (
@@ -93,8 +67,8 @@ export default function ReviewEntities() {
       <Stack.Screen options={{ title: "Review extracted assets" }} />
       <Title>Review extracted assets</Title>
       <Body muted>
-        We found the following assets in your uploaded documents. Approve the ones that are correct,
-        or skip them if you want to add them manually.
+        We found the following assets in your uploaded documents. This screen is review-only: you
+        can verify the extracted details, but asset approval is not yet enabled.
       </Body>
       <View style={{ height: 16 }} />
 
@@ -141,12 +115,7 @@ export default function ReviewEntities() {
 
       {error ? <Body muted>{error}</Body> : null}
 
-      <PrimaryButton
-        label="Continue to mandate"
-        onPress={submit}
-        loading={busy}
-        disabled={!finished || busy}
-      />
+      <PrimaryButton label="Approval not available" onPress={submit} loading={busy} disabled />
     </Screen>
   );
 }

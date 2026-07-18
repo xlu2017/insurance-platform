@@ -26,6 +26,7 @@ export async function parseDocument(document: ExtractedPdf): Promise<ParsedInsur
         ...parsed,
         documentId: document.documentId,
         fileDigest: document.fileDigest,
+        pageCount: document.pageCount,
       });
     }
   }
@@ -33,6 +34,7 @@ export async function parseDocument(document: ExtractedPdf): Promise<ParsedInsur
     classification: "unsupported",
     documentId: document.documentId,
     fileDigest: document.fileDigest,
+    pageCount: document.pageCount,
     parserId: "none",
     parserVersion: "0",
   });

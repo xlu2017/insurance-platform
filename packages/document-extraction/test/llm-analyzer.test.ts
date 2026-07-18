@@ -37,6 +37,7 @@ function validLlmResponse(): InsuranceDocumentAnalysisResult {
     detectedEntities: [
       {
         temporaryId: "vehicle:vin:1HGBH41JXMN109186",
+        canonicalFingerprint: "vehicle:vin:1HGBH41JXMN109186",
         entityType: "vehicle",
         displayLabel: "2021 Honda Civic",
         identity: {
@@ -156,8 +157,10 @@ describe("LlmFirstDocumentAnalyzer", () => {
     const result = await analyzer.analyze(baseInput());
     expect(result.modelProvider).toBe("mock-provider");
     expect(result.modelId).toBe("mock-model");
+    expect(result.documents[0].classification).toBe("auto_policy_renewal");
     expect(result.detectedEntities).toHaveLength(1);
-    expect(result.detectedEntities[0].temporaryId).toBe("vehicle:vin:1HGBH41JXMN109186");
+    expect(result.detectedEntities[0].temporaryId).toEqual(expect.any(String));
+    expect(result.detectedEntities[0].canonicalFingerprint).toBe("vehicle:vin:1HGBH41JXMN109186");
     expect(
       result.detectedEntities[0].mandateSuggestions["vehicle.thirdPartyLiabilityLimitCents"],
     ).toEqual({

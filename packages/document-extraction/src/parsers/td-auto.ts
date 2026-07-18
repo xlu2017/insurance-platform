@@ -825,6 +825,7 @@ export async function parseAuto(document: ExtractedPdf): Promise<ParsedInsurance
     coverageAssertions: selectedValues(selected),
     parserId: ID,
     parserVersion: VERSION,
+    pageCount: document.pageCount,
   };
 
   return result;
