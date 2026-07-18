@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 1729d17254f1b7cacf99bcff6a443df707fa29e427f35f2a24db81bd31707522
+// source-hash: 5300aec9decf2c638e2339b7ebf868afbba7629e58d0b6756d51ba899069b86f
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -41966,7 +41966,7 @@ ${page.text}`
   }
   return { content: parts, documentIdMap };
 }
-var INSURANCE_ANALYSIS_SYSTEM_PROMPT = `You are an insurance document analyst. Read the uploaded policy PDFs (provided as page-level text) and produce a single JSON object that conforms to the schema below. Do not include markdown fences, commentary, or any keys not in the schema.
+var INSURANCE_ANALYSIS_SYSTEM_PROMPT = `You are an insurance document analyst. Read the uploaded policy documents (provided as extracted document text) and produce a single JSON object that conforms to the schema below. Do not include markdown fences, commentary, or any keys not in the schema.
 
 Core rules:
 - Distinguish active coverage documents from informational notices, advertisements, and billing-only pages.
@@ -42507,6 +42507,115 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
 function createLlmFirstAnalyzer(options) {
   return new LlmFirstDocumentAnalyzer(options);
 }
+async function sha256HexBytes(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+var KimiK3DocumentAnalyzer = class {
+  provider;
+  bytesLoader;
+  constructor(options) {
+    this.provider = options.provider;
+    this.bytesLoader = options.bytesLoader;
+  }
+  async analyze(input) {
+    InsuranceDocumentAnalysisInputSchema.parse(input);
+    const originalInputs = [];
+    const fileDigestByDocumentId = /* @__PURE__ */ new Map();
+    for (const uploaded of input.uploadedDocuments) {
+      const original = await this.bytesLoader.load(uploaded);
+      const digest = await sha256HexBytes(original.bytes);
+      originalInputs.push(original);
+      fileDigestByDocumentId.set(original.documentId, digest);
+    }
+    const resolved = await this.provider.resolveModel();
+    const fileHandles = [];
+    try {
+      fileHandles.push(
+        ...await Promise.all(originalInputs.map((f) => this.provider.uploadOriginalFile(f)))
+      );
+      const syntheticExtractedDocs = originalInputs.map((original) => ({
+        documentId: original.documentId,
+        fileDigest: fileDigestByDocumentId.get(original.documentId) ?? "unknown",
+        pageCount: 0,
+        pages: []
+      }));
+      const documentAliasMap = /* @__PURE__ */ new Map();
+      for (const doc of input.uploadedDocuments) {
+        documentAliasMap.set(doc.documentId, doc.documentId);
+      }
+      for (const summary of input.priorDocumentSummaries) {
+        documentAliasMap.set(summary.documentId, summary.documentId);
+      }
+      const candidateContexts = [
+        ...input.existingAssets.map(buildCandidateContext),
+        ...input.pendingCandidates.map(buildCandidateContext)
+      ];
+      const baseUserPrompt = buildKimiAnalysisUserPrompt({
+        jurisdiction: input.jurisdiction,
+        documentIds: input.uploadedDocuments.map((d) => d.documentId),
+        candidateContexts
+      });
+      let validationFeedback = "";
+      let lastError;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const userPrompt = validationFeedback ? `${baseUserPrompt}
+
+Your previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:
+${validationFeedback}` : baseUserPrompt;
+        const raw = await this.provider.analyze({
+          model: resolved.modelId,
+          systemPrompt: buildInsuranceAnalysisSystemPrompt(),
+          userPrompt,
+          files: fileHandles,
+          responseFormat: { type: "json_object" }
+        });
+        try {
+          return await normalizeLlmAnalysisResult(
+            raw,
+            input,
+            syntheticExtractedDocs,
+            { providerId: this.provider.providerId, modelId: resolved.modelId },
+            attempt,
+            documentAliasMap
+          );
+        } catch (err) {
+          lastError = err;
+          validationFeedback = err instanceof Error ? err.message.slice(0, 2e3) : String(err).slice(0, 2e3);
+          if (attempt === 2) break;
+        }
+      }
+      throw lastError ?? new Error("Document analysis failed after validation repair attempt");
+    } finally {
+      await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h).catch(() => {
+      })));
+    }
+  }
+};
+function buildKimiAnalysisUserPrompt(args) {
+  const lines = [
+    `Jurisdiction: ${args.jurisdiction}`,
+    "",
+    "Analyze the uploaded insurance documents and produce a single JSON object matching the schema in the system prompt.",
+    "",
+    `Use ONLY these document IDs for evidence: ${args.documentIds.join(", ")}`
+  ];
+  if (args.candidateContexts.length > 0) {
+    lines.push(
+      "",
+      "Existing and pending household candidates for comparison (use the exact 'id' values for resolution.matchedExistingEntityId or resolution.matchedPendingCandidateId, and compare exactIdentityFingerprint/provisionalCandidateKey values before claiming a match):",
+      JSON.stringify(args.candidateContexts, null, 2)
+    );
+  }
+  lines.push(
+    "",
+    "Each document's extracted text is provided in the system messages. Do not invent values not supported by the documents."
+  );
+  return lines.join("\n");
+}
+function createKimiK3Analyzer(options) {
+  return new KimiK3DocumentAnalyzer(options);
+}
 
 // src/document-loaders/memory.ts
 var MemoryDocumentLoader = class {
@@ -42520,6 +42629,262 @@ var MemoryDocumentLoader = class {
       throw new Error(`Document bytes not found for reference ${document2.fileReference}`);
     }
     return extractPdfText(bytes, document2.documentId);
+  }
+};
+
+// src/providers/public-error.ts
+function sanitizeProviderError(error, supportReference) {
+  const supportId = supportReference ?? generateSupportReference();
+  const message = error instanceof Error ? error.message : String(error);
+  let code = "DOCUMENT_ANALYSIS_FAILED";
+  let retryable = false;
+  if (message.toLowerCase().includes("unsupported") || message.toLowerCase().includes("invalid file")) {
+    code = "DOCUMENT_FILE_UNSUPPORTED";
+  } else if (message.toLowerCase().includes("too large")) {
+    code = "DOCUMENT_FILE_TOO_LARGE";
+  } else if (message.toLowerCase().includes("rate limit") || message.toLowerCase().includes("temporarily unavailable") || message.toLowerCase().includes("503") || message.toLowerCase().includes("timeout")) {
+    code = "DOCUMENT_ANALYSIS_UNAVAILABLE";
+    retryable = true;
+  } else if (message.toLowerCase().includes("model unavailable") || message.toLowerCase().includes("not found")) {
+    code = "DOCUMENT_MODEL_UNAVAILABLE";
+  } else if (message.toLowerCase().includes("processing failed")) {
+    code = "DOCUMENT_PROCESSING_FAILED";
+  }
+  return {
+    code,
+    message: "Document analysis failed. Please try again or contact support if the problem continues.",
+    retryable,
+    supportReference: supportId
+  };
+}
+function generateSupportReference() {
+  return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+function publicErrorResponse(error) {
+  return { error };
+}
+
+// src/providers/kimi-k3.ts
+var KimiK3Provider = class {
+  providerId = "kimi-k3";
+  baseUrl;
+  apiKey;
+  requestedModel;
+  resolvedModel = null;
+  timeoutMs;
+  constructor(options) {
+    this.baseUrl = (options.baseUrl ?? "https://api.moonshot.ai/v1").replace(/\/+$/, "");
+    this.apiKey = options.apiKey;
+    this.requestedModel = options.requestedModel;
+    this.timeoutMs = options.timeoutMs ?? 12e5;
+  }
+  async resolveModel() {
+    if (this.resolvedModel) return this.resolvedModel;
+    if (this.requestedModel) {
+      const model = await this.fetchModel(this.requestedModel);
+      if (model) {
+        this.resolvedModel = this.toResolvedModel(model);
+        return this.resolvedModel;
+      }
+      throw new Error(`Kimi configured model ${this.requestedModel} is not available`);
+    }
+    const models = await this.listModels();
+    const k3 = models.find(
+      (m) => m.id.toLowerCase().includes("kimi-k3") && (m.supports_image_in || m.supports_video_in || true)
+    );
+    if (!k3) {
+      throw new Error("No Kimi K3 multimodal model is available");
+    }
+    this.resolvedModel = this.toResolvedModel(k3);
+    return this.resolvedModel;
+  }
+  toResolvedModel(model) {
+    return {
+      modelId: model.id,
+      supportsNativeFiles: true,
+      supportsImages: !!model.supports_image_in,
+      supportsVideo: !!model.supports_video_in,
+      providerMetadata: {
+        owned_by: model.owned_by,
+        context_length: model.context_length,
+        supports_reasoning: model.supports_reasoning,
+        supports_dynamic_tools: model.supports_dynamic_tools,
+        reasoning_efforts: model.reasoning_efforts,
+        supports_thinking_type: model.supports_thinking_type
+      }
+    };
+  }
+  async listModels() {
+    const response = await fetch(`${this.baseUrl}/models`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${this.apiKey}` }
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Kimi model list failed: ${response.status} ${text.slice(0, 200)}`);
+    }
+    const body = await response.json();
+    return body.data ?? [];
+  }
+  async fetchModel(modelId) {
+    const models = await this.listModels();
+    return models.find((m) => m.id === modelId);
+  }
+  async uploadOriginalFile(input) {
+    const form = new FormData();
+    form.append("purpose", "file-extract");
+    form.append("file", new Blob([input.bytes], { type: input.mimeType }), input.filename);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(`${this.baseUrl}/files`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+        body: form,
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Kimi file upload failed: ${response.status} ${text.slice(0, 200)}`);
+      }
+      const file = await response.json();
+      if (file.status !== "ok") {
+        await this.pollFileStatus(file.id);
+      }
+      const contentResponse = await fetch(`${this.baseUrl}/files/${file.id}/content`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${this.apiKey}` }
+      });
+      if (!contentResponse.ok) {
+        const text = await contentResponse.text().catch(() => "");
+        throw new Error(
+          `Kimi file content retrieval failed: ${contentResponse.status} ${text.slice(0, 200)}`
+        );
+      }
+      const contentBody = await contentResponse.json();
+      return {
+        providerFileId: file.id,
+        documentId: input.documentId,
+        filename: file.filename ?? input.filename,
+        mimeType: input.mimeType,
+        bytes: file.bytes,
+        status: file.status,
+        statusDetails: file.status_details,
+        extractedText: contentBody.content ?? "",
+        providerMetadata: {
+          file_type: contentBody.file_type,
+          created_at: file.created_at,
+          purpose: file.purpose
+        }
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  async pollFileStatus(fileId) {
+    const deadline = Date.now() + 6e4;
+    while (Date.now() < deadline) {
+      const response = await fetch(`${this.baseUrl}/files/${fileId}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${this.apiKey}` }
+      });
+      if (!response.ok) break;
+      const file = await response.json();
+      if (file.status === "ok" || file.status === "processed") break;
+      if (file.status === "error") {
+        throw new Error(`Kimi file processing failed: ${file.status_details ?? file.status}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  async analyze(input) {
+    const model = await this.resolveModel();
+    const parts = [];
+    for (const file of input.files) {
+      const label = `--- File ${file.documentId} (${file.filename}) ---`;
+      parts.push({ type: "text", text: `${label}
+${file.extractedText ?? ""}` });
+    }
+    const userContent = `${input.userPrompt}
+
+${parts.map((p) => p.text).join("\n\n")}`;
+    const messages = [
+      { role: "system", content: input.systemPrompt },
+      { role: "user", content: userContent }
+    ];
+    const body = {
+      model: input.model || model.modelId,
+      messages,
+      response_format: input.responseFormat ?? { type: "json_object" },
+      max_tokens: 32e3
+    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Kimi chat completion failed: ${response.status} ${text.slice(0, 200)}`);
+      }
+      const completion = await response.json();
+      const content = completion.choices?.[0]?.message?.content;
+      if (typeof content !== "string") {
+        throw new Error("Kimi response did not contain text content");
+      }
+      return JSON.parse(stripMarkdownJsonFence2(content));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  async deleteFile(handle) {
+    try {
+      await fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${this.apiKey}` }
+      });
+    } catch {
+    }
+  }
+};
+function stripMarkdownJsonFence2(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("```")) {
+    const lines = trimmed.split("\n");
+    if (lines.length > 1 && lines[0].trim().toLowerCase().startsWith("```json")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+    if (lines.length > 1 && lines[0].trim().startsWith("```")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+  }
+  return trimmed;
+}
+
+// src/document-loaders/memory-bytes.ts
+var MemoryFileBytesLoader = class {
+  bytesByReference;
+  constructor(bytesByReference) {
+    this.bytesByReference = new Map(Object.entries(bytesByReference));
+  }
+  async load(document2) {
+    const bytes = this.bytesByReference.get(document2.fileReference);
+    if (!bytes) {
+      throw new Error(`Document bytes not found for reference ${document2.fileReference}`);
+    }
+    return {
+      documentId: document2.documentId,
+      filename: document2.filename,
+      mimeType: document2.mimeType,
+      bytes
+    };
   }
 };
 export {
@@ -42539,6 +42904,7 @@ export {
   InsuranceDocumentAnalysisInputSchema,
   InsuranceDocumentAnalysisResultSchema,
   JsonValueSchema,
+  KimiK3Provider,
   LLM_EXTRACTION_PROMPT_VERSION,
   LLM_EXTRACTION_SCHEMA_VERSION,
   LLM_PARSED_DOCUMENT_PROJECTION_VERSION,
@@ -42565,29 +42931,38 @@ export {
   LlmVehicleCandidateSchema,
   MandateRuleSchema,
   MemoryDocumentLoader,
+  MemoryFileBytesLoader,
   PendingEntityCandidateSchema,
   PriorDocumentSummarySchema,
   UploadedDocumentSchema,
   assertLlmExtractionSemantics,
+  buildCandidateContext,
+  buildInsuranceAnalysisSystemPrompt,
   buildInsuranceExtractionSystemPrompt,
   buildPropertyIdentity,
   buildVehicleIdentity,
   canAutoMergeIdentity,
   createEmptyIncrementalOnboardingSession,
+  createKimiK3Analyzer,
   createLlmFirstAnalyzer,
   extractPdfPages,
   extractPdfText,
+  generateSupportReference,
   mergeIncrementalOnboardingUpload,
+  normalizeLlmAnalysisResult,
   parseDocument,
   parseLlmExtractionResult,
   planDocumentIntake,
   projectLlmRunToParsedDocument,
+  publicErrorResponse,
   resolveLlmAssetIdentity,
   runInsuranceLlmPipeline,
   runLlmExtraction,
+  sanitizeProviderError,
+  stripNullValues,
   validateLlmExtractionSemantics
 };
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "1729d17254f1b7cacf99bcff6a443df707fa29e427f35f2a24db81bd31707522";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "5300aec9decf2c638e2339b7ebf868afbba7629e58d0b6756d51ba899069b86f";
