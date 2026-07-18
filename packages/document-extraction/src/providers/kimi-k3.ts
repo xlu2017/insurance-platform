@@ -2,8 +2,11 @@ import {
   type NativeDocumentAnalysisProvider,
   type NativeDocumentAnalysisRequest,
   type OriginalFileInput,
+  type ProviderFileDeletionResult,
   type ProviderFileHandle,
+  type ProviderUploadResult,
   type ResolvedDocumentModel,
+  type ResolvedInputCapability,
 } from "./native-document-analysis.ts";
 
 export interface KimiK3ProviderOptions {
@@ -33,6 +36,7 @@ interface KimiModel {
   context_length: number;
   supports_image_in?: boolean;
   supports_video_in?: boolean;
+  supports_file_in?: boolean;
   supports_reasoning?: boolean;
   supports_dynamic_tools?: boolean;
   think_efforts?: { support: boolean; valid_efforts: string[]; default_effort: string };
@@ -65,17 +69,13 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
         this.resolvedModel = this.toResolvedModel(model);
         return this.resolvedModel;
       }
-      throw new Error(`Kimi configured model ${this.requestedModel} is not available`);
+      throw new Error("Document model unavailable");
     }
 
     const models = await this.listModels();
-    const k3 = models.find(
-      (m) =>
-        m.id.toLowerCase().includes("kimi-k3") &&
-        (m.supports_image_in || m.supports_video_in || true),
-    );
+    const k3 = models.find((m) => m.id.toLowerCase().includes("kimi-k3"));
     if (!k3) {
-      throw new Error("No Kimi K3 multimodal model is available");
+      throw new Error("Document model unavailable");
     }
 
     this.resolvedModel = this.toResolvedModel(k3);
@@ -85,9 +85,10 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
   private toResolvedModel(model: KimiModel): ResolvedDocumentModel {
     return {
       modelId: model.id,
-      supportsNativeFiles: true,
-      supportsImages: !!model.supports_image_in,
-      supportsVideo: !!model.supports_video_in,
+      supportsImageInput: !!model.supports_image_in,
+      supportsVideoInput: !!model.supports_video_in,
+      supportsGenericFileInput: !!model.supports_file_in,
+      supportedReferenceSchemes: ["ms://"],
       providerMetadata: {
         owned_by: model.owned_by,
         context_length: model.context_length,
@@ -106,7 +107,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      throw new Error(`Kimi model list failed: ${response.status} ${text.slice(0, 200)}`);
+      throw new Error(`Document model list failed: ${response.status} ${text.slice(0, 200)}`);
     }
     const body = (await response.json()) as { data?: KimiModel[] };
     return body.data ?? [];
@@ -117,9 +118,67 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     return models.find((m) => m.id === modelId);
   }
 
-  async uploadOriginalFile(input: OriginalFileInput): Promise<ProviderFileHandle> {
+  async resolveInputMode(input: OriginalFileInput): Promise<ResolvedInputCapability> {
+    const model = await this.resolveModel();
+    const mime = (input.mimeType || "").toLowerCase().trim();
+
+    if (mime.startsWith("image/") && model.supportsImageInput) {
+      return { mimeType: input.mimeType, mode: "native_image_reference", supported: true };
+    }
+    if (mime.startsWith("video/") && model.supportsVideoInput) {
+      return { mimeType: input.mimeType, mode: "native_video_reference", supported: true };
+    }
+    if (model.supportsGenericFileInput) {
+      return { mimeType: input.mimeType, mode: "native_file_reference", supported: true };
+    }
+    if (mime.startsWith("image/")) {
+      return {
+        mimeType: input.mimeType,
+        mode: "unsupported",
+        supported: false,
+        reason: "Image input is not supported by the resolved document model",
+      };
+    }
+    if (mime.startsWith("video/")) {
+      return {
+        mimeType: input.mimeType,
+        mode: "unsupported",
+        supported: false,
+        reason: "Video input is not supported by the resolved document model",
+      };
+    }
+    // PDF and other document types have no documented generic native reference in this API.
+    return {
+      mimeType: input.mimeType,
+      mode: "provider_extracted_text",
+      supported: false,
+      reason: "Native file reference is not supported for this file type",
+    };
+  }
+
+  async uploadOriginalFile(input: OriginalFileInput): Promise<ProviderUploadResult> {
+    const capability = await this.resolveInputMode(input);
+
+    if (!capability.supported) {
+      return {
+        status: "rejected",
+        errorCategory: capability.reason ?? "unsupported_file_type",
+      };
+    }
+
+    let purpose: string;
+    if (capability.mode === "native_image_reference") {
+      purpose = "image";
+    } else if (capability.mode === "native_video_reference") {
+      purpose = "video";
+    } else if (capability.mode === "native_file_reference") {
+      purpose = "file";
+    } else {
+      purpose = "file-extract";
+    }
+
     const form = new FormData();
-    form.append("purpose", "file-extract");
+    form.append("purpose", purpose);
     form.append("file", new Blob([input.bytes], { type: input.mimeType }), input.filename);
 
     const controller = new AbortController();
@@ -133,86 +192,89 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
         signal: controller.signal,
       });
       if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(`Kimi file upload failed: ${response.status} ${text.slice(0, 200)}`);
+        return {
+          status: "failed",
+          errorCategory: `upload_failed_${response.status}`,
+        };
       }
       const file = (await response.json()) as KimiFileObject;
 
-      if (file.status !== "ok") {
-        await this.pollFileStatus(file.id);
+      const finalStatus = await this.pollFileStatus(file.id);
+      if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {
+        return {
+          status: finalStatus.status as ProviderUploadResult["status"],
+          errorCategory: finalStatus.errorCategory ?? "upload_processing_failed",
+        };
       }
 
-      const contentResponse = await fetch(`${this.baseUrl}/files/${file.id}/content`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-      });
-      if (!contentResponse.ok) {
-        const text = await contentResponse.text().catch(() => "");
-        throw new Error(
-          `Kimi file content retrieval failed: ${contentResponse.status} ${text.slice(0, 200)}`,
-        );
-      }
-      const contentBody = (await contentResponse.json()) as {
-        content?: string;
-        file_type?: string;
-        filename?: string;
-      };
-
-      return {
+      const referenceScheme = (await this.resolveModel()).supportedReferenceSchemes[0] ?? "ms://";
+      const handle: ProviderFileHandle = {
         providerFileId: file.id,
         documentId: input.documentId,
         filename: file.filename ?? input.filename,
         mimeType: input.mimeType,
         bytes: file.bytes,
+        mode: capability.mode,
+        reference: `${referenceScheme}${file.id}`,
         status: file.status,
         statusDetails: file.status_details,
-        extractedText: contentBody.content ?? "",
         providerMetadata: {
-          file_type: contentBody.file_type,
+          file_type: file.file_type,
           created_at: file.created_at,
           purpose: file.purpose,
         },
       };
+      return { status: "ready", handle };
     } finally {
       clearTimeout(timeout);
     }
   }
 
-  private async pollFileStatus(fileId: string): Promise<void> {
+  private async pollFileStatus(
+    fileId: string,
+  ): Promise<{ status: string; errorCategory?: string }> {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       const response = await fetch(`${this.baseUrl}/files/${fileId}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${this.apiKey}` },
       });
-      if (!response.ok) break;
+      if (!response.ok) {
+        return { status: "failed", errorCategory: `status_poll_${response.status}` };
+      }
       const file = (await response.json()) as KimiFileObject;
-      if (file.status === "ok" || file.status === "processed") break;
+      if (file.status === "ok" || file.status === "processed") {
+        return { status: file.status };
+      }
       if (file.status === "error") {
-        throw new Error(`Kimi file processing failed: ${file.status_details ?? file.status}`);
+        return { status: "failed", errorCategory: file.status_details ?? "upload_error" };
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
+    return { status: "timed_out", errorCategory: "status_poll_timeout" };
   }
 
   async analyze(input: NativeDocumentAnalysisRequest): Promise<unknown> {
-    const model = await this.resolveModel();
-    const parts: Array<{ type: "text"; text: string }> = [];
+    const userParts: unknown[] = [{ type: "text", text: input.userPrompt }];
 
     for (const file of input.files) {
-      const label = `--- File ${file.documentId} (${file.filename}) ---`;
-      parts.push({ type: "text", text: `${label}\n${file.extractedText ?? ""}` });
+      if (file.mode === "native_image_reference" && file.reference) {
+        userParts.push({ type: "image_url", image_url: { url: file.reference } });
+      } else if (file.mode === "native_video_reference" && file.reference) {
+        userParts.push({ type: "video_url", video_url: { url: file.reference } });
+      } else if (file.mode === "native_file_reference" && file.reference) {
+        // A generic native file content part is not yet exposed by the documented API.
+        throw new Error("Native file reference is not supported by the resolved document model");
+      }
     }
-
-    const userContent = `${input.userPrompt}\n\n${parts.map((p) => p.text).join("\n\n")}`;
 
     const messages = [
       { role: "system", content: input.systemPrompt },
-      { role: "user", content: userContent },
+      { role: "user", content: userParts },
     ];
 
     const body: Record<string, unknown> = {
-      model: input.model || model.modelId,
+      model: input.model,
       messages,
       response_format: input.responseFormat ?? { type: "json_object" },
       max_tokens: 32000,
@@ -233,14 +295,17 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       });
       if (!response.ok) {
         const text = await response.text().catch(() => "");
-        throw new Error(`Kimi chat completion failed: ${response.status} ${text.slice(0, 200)}`);
+        throw new Error(
+          `Document analysis request failed: ${response.status} ${text.slice(0, 200)}`,
+        );
       }
       const completion = (await response.json()) as {
+        id?: string;
         choices?: { message?: { content?: string; reasoning_content?: string } }[];
       };
       const content = completion.choices?.[0]?.message?.content;
       if (typeof content !== "string") {
-        throw new Error("Kimi response did not contain text content");
+        throw new Error("Document analysis response did not contain text content");
       }
       return JSON.parse(stripMarkdownJsonFence(content));
     } finally {
@@ -248,15 +313,41 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     }
   }
 
-  async deleteFile(handle: ProviderFileHandle): Promise<void> {
-    try {
-      await fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-      });
-    } catch {
-      // Deletion best-effort; the provider retention policy will clean up.
+  async deleteFile(handle: ProviderFileHandle): Promise<ProviderFileDeletionResult> {
+    const maxAttempts = 3;
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      attempts += 1;
+      try {
+        const response = await fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${this.apiKey}` },
+        });
+        if (response.ok) {
+          return { deleted: true, attempts, statusCode: response.status };
+        }
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+          return {
+            deleted: false,
+            attempts,
+            statusCode: response.status,
+            failureCategory: `deletion_client_error_${response.status}`,
+          };
+        }
+        if (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempts));
+        }
+      } catch (err) {
+        if (attempts >= maxAttempts) {
+          return {
+            deleted: false,
+            attempts,
+            failureCategory: err instanceof Error ? err.message : "network_error",
+          };
+        }
+      }
     }
+    return { deleted: false, attempts, failureCategory: "deletion_failed_after_retries" };
   }
 }
 

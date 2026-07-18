@@ -5,11 +5,26 @@ export interface OriginalFileInput {
   bytes: Uint8Array;
 }
 
+export type DocumentInputMode =
+  | "native_file_reference"
+  | "native_image_reference"
+  | "native_video_reference"
+  | "provider_extracted_text"
+  | "unsupported";
+
+export interface ResolvedInputCapability {
+  mimeType: string;
+  mode: DocumentInputMode;
+  supported: boolean;
+  reason?: string;
+}
+
 export interface ResolvedDocumentModel {
   modelId: string;
-  supportsNativeFiles: boolean;
-  supportsImages: boolean;
-  supportsVideo: boolean;
+  supportsImageInput: boolean;
+  supportsVideoInput: boolean;
+  supportsGenericFileInput: boolean;
+  supportedReferenceSchemes: string[];
   providerMetadata: Record<string, unknown>;
 }
 
@@ -19,11 +34,25 @@ export interface ProviderFileHandle {
   filename: string;
   mimeType: string;
   bytes: number;
+  mode: DocumentInputMode;
+  /** Provider-native reference, e.g. ms://<file_id>, used for image/video references. */
+  reference?: string;
   status: string;
   statusDetails?: string;
-  /** Provider-extracted text content, only used to form the analysis prompt. */
-  extractedText?: string;
   providerMetadata: Record<string, unknown>;
+}
+
+export interface ProviderUploadResult {
+  status: "ready" | "rejected" | "failed" | "timed_out";
+  handle?: ProviderFileHandle;
+  errorCategory?: string;
+}
+
+export interface ProviderFileDeletionResult {
+  deleted: boolean;
+  attempts: number;
+  statusCode?: number;
+  failureCategory?: string;
 }
 
 export interface NativeDocumentAnalysisRequest {
@@ -38,9 +67,10 @@ export interface NativeDocumentAnalysisProvider {
   readonly providerId: string;
   readonly baseUrl: string;
   resolveModel(): Promise<ResolvedDocumentModel>;
-  uploadOriginalFile(input: OriginalFileInput): Promise<ProviderFileHandle>;
+  resolveInputMode(input: OriginalFileInput): Promise<ResolvedInputCapability>;
+  uploadOriginalFile(input: OriginalFileInput): Promise<ProviderUploadResult>;
   analyze(input: NativeDocumentAnalysisRequest): Promise<unknown>;
-  deleteFile(handle: ProviderFileHandle): Promise<void>;
+  deleteFile(handle: ProviderFileHandle): Promise<ProviderFileDeletionResult>;
 }
 
 export interface FileBytesLoader {

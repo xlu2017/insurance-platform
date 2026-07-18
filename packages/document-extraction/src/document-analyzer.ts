@@ -19,9 +19,15 @@ import type {
   FileBytesLoader,
   NativeDocumentAnalysisProvider,
   OriginalFileInput,
+  ProviderFileDeletionResult,
+  ProviderFileHandle,
+  ProviderUploadResult,
 } from "./providers/native-document-analysis.ts";
 
 const AnalysisVersion = z.literal("1");
+
+const GENERIC_PARSER_ID = "native-document-analysis";
+const GENERIC_PARSER_VERSION = "1.0.0";
 
 export const UploadedDocumentSchema = z
   .object({
@@ -238,6 +244,7 @@ export const InsuranceDocumentAnalysisResultSchema = z
     attemptCount: z.number().int().positive().optional(),
     promptVersion: z.string().optional(),
     outputSchemaVersion: z.string().optional(),
+    providerMetadata: z.unknown().optional(),
   })
   .strict();
 export type InsuranceDocumentAnalysisResult = z.infer<typeof InsuranceDocumentAnalysisResultSchema>;
@@ -630,8 +637,8 @@ function buildAnalyzedDocument(doc: ParsedInsuranceDocument): AnalyzedDocument {
     documentId: doc.documentId ?? "unknown",
     fileDigest: doc.fileDigest ?? "unknown",
     classification: doc.classification,
-    parserId: doc.parserId,
-    parserVersion: doc.parserVersion,
+    parserId: GENERIC_PARSER_ID,
+    parserVersion: GENERIC_PARSER_VERSION,
     pageCount: doc.pageCount ?? 0,
     extractedEntityCount: doc.assetAssertions.length,
   };
@@ -936,8 +943,8 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
         documentId: d.documentId,
         fileDigest: d.fileDigest,
         classification: analyzed?.classification ?? "unknown",
-        parserId: analyzed?.parserId ?? this.provider?.providerId ?? "unknown",
-        parserVersion: analyzed?.parserVersion ?? this.provider?.modelId ?? "unknown",
+        parserId: analyzed?.parserId ?? GENERIC_PARSER_ID,
+        parserVersion: analyzed?.parserVersion ?? GENERIC_PARSER_VERSION,
         pageCount: d.pageCount,
         extractedEntityCount: countEntitiesForDocument(d.documentId, allDetected),
       };
@@ -1192,11 +1199,12 @@ function validateEvidenceReference(
   }
   if (ref.pageNumber !== undefined) {
     const pageCount = pageCountByDocumentId.get(ref.documentId);
-    if (
-      pageCount !== undefined &&
-      pageCount > 0 &&
-      (ref.pageNumber < 1 || ref.pageNumber > pageCount)
-    ) {
+    if (pageCount === undefined || pageCount === 0) {
+      throw new Error(
+        `evidence pageNumber ${ref.pageNumber} is not valid for document ${ref.documentId} (no page reference available)`,
+      );
+    }
+    if (ref.pageNumber < 1 || ref.pageNumber > pageCount) {
       throw new Error(
         `evidence pageNumber ${ref.pageNumber} is out of range for document ${ref.documentId} (pages ${pageCount})`,
       );
@@ -1555,7 +1563,7 @@ function isRedactedAddress(input: string | null | undefined): boolean {
   return markers.some((m) => normalized.includes(m));
 }
 
-async function buildCandidateIdentity(
+export async function buildCandidateIdentity(
   identity: DetectedEntityIdentity,
   entityType: "property" | "vehicle",
 ): Promise<CandidateIdentity> {
@@ -1924,8 +1932,8 @@ export async function normalizeLlmAnalysisResult(
     documentId: doc.documentId,
     fileDigest: doc.fileDigest,
     classification: documentClassification(doc.documentId, enrichedEntities),
-    parserId: provider.providerId,
-    parserVersion: provider.modelId,
+    parserId: GENERIC_PARSER_ID,
+    parserVersion: GENERIC_PARSER_VERSION,
     pageCount: doc.pageCount,
     extractedEntityCount: countEntitiesForDocument(doc.documentId, enrichedEntities),
   }));
@@ -1960,13 +1968,19 @@ async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
     .join("");
 }
 
-class KimiK3DocumentAnalyzer implements InsuranceDocumentAnalyzer {
+class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
   private provider: NativeDocumentAnalysisProvider;
   private bytesLoader: FileBytesLoader;
+  private requireNativeInput: boolean;
 
-  constructor(options: { provider: NativeDocumentAnalysisProvider; bytesLoader: FileBytesLoader }) {
+  constructor(options: {
+    provider: NativeDocumentAnalysisProvider;
+    bytesLoader: FileBytesLoader;
+    requireNativeInput?: boolean;
+  }) {
     this.provider = options.provider;
     this.bytesLoader = options.bytesLoader;
+    this.requireNativeInput = options.requireNativeInput ?? true;
   }
 
   async analyze(input: InsuranceDocumentAnalysisInput): Promise<InsuranceDocumentAnalysisResult> {
@@ -1984,12 +1998,40 @@ class KimiK3DocumentAnalyzer implements InsuranceDocumentAnalyzer {
 
     const resolved = await this.provider.resolveModel();
 
-    const fileHandles: Awaited<ReturnType<NativeDocumentAnalysisProvider["uploadOriginalFile"]>>[] =
-      [];
+    const uploadResults: ProviderUploadResult[] = [];
+    const fileHandles: ProviderFileHandle[] = [];
+    let deletionResults: ProviderFileDeletionResult[] = [];
+    let validationFeedback = "";
+    let lastError: unknown;
+    let normalizedResult: InsuranceDocumentAnalysisResult | undefined;
+
     try {
-      fileHandles.push(
+      for (const original of originalInputs) {
+        const capability = await this.provider.resolveInputMode(original);
+        if (this.requireNativeInput && capability.mode === "provider_extracted_text") {
+          throw new Error(
+            `Unsupported file type for native document analysis: ${original.filename} (${capability.reason})`,
+          );
+        }
+      }
+
+      uploadResults.push(
         ...(await Promise.all(originalInputs.map((f) => this.provider.uploadOriginalFile(f)))),
       );
+
+      for (const result of uploadResults) {
+        if (result.status !== "ready" || !result.handle) {
+          throw new Error(
+            `Unsupported file type for native document analysis: ${result.errorCategory ?? "upload_failed"}`,
+          );
+        }
+        if (this.requireNativeInput && result.handle.mode === "provider_extracted_text") {
+          throw new Error(
+            `Unsupported file type for native document analysis: ${result.handle.filename} was converted to extracted text`,
+          );
+        }
+        fileHandles.push(result.handle);
+      }
 
       const syntheticExtractedDocs: ExtractedPdf[] = originalInputs.map((original) => ({
         documentId: original.documentId,
@@ -2011,20 +2053,18 @@ class KimiK3DocumentAnalyzer implements InsuranceDocumentAnalyzer {
         ...input.pendingCandidates.map(buildCandidateContext),
       ];
 
-      const baseUserPrompt = buildKimiAnalysisUserPrompt({
+      const baseUserPrompt = buildNativeAnalysisUserPrompt({
         jurisdiction: input.jurisdiction,
         documentIds: input.uploadedDocuments.map((d) => d.documentId),
         candidateContexts,
       });
 
-      let validationFeedback = "";
-      let lastError: unknown;
       for (let attempt = 1; attempt <= 2; attempt++) {
         const userPrompt = validationFeedback
           ? `${baseUserPrompt}\n\nYour previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:\n${validationFeedback}`
           : baseUserPrompt;
 
-        const raw = await this.provider.analyze({
+        const rawResult = await this.provider.analyze({
           model: resolved.modelId,
           systemPrompt: buildInsuranceAnalysisSystemPrompt(),
           userPrompt,
@@ -2033,14 +2073,15 @@ class KimiK3DocumentAnalyzer implements InsuranceDocumentAnalyzer {
         });
 
         try {
-          return await normalizeLlmAnalysisResult(
-            raw,
+          normalizedResult = await normalizeLlmAnalysisResult(
+            rawResult,
             input,
             syntheticExtractedDocs,
             { providerId: this.provider.providerId, modelId: resolved.modelId },
             attempt,
             documentAliasMap,
           );
+          break;
         } catch (err) {
           lastError = err;
           validationFeedback =
@@ -2049,14 +2090,28 @@ class KimiK3DocumentAnalyzer implements InsuranceDocumentAnalyzer {
         }
       }
 
-      throw lastError ?? new Error("Document analysis failed after validation repair attempt");
+      if (!normalizedResult) {
+        throw lastError ?? new Error("Document analysis failed after validation repair attempt");
+      }
     } finally {
-      await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h).catch(() => {})));
+      deletionResults = await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h)));
     }
+
+    return {
+      ...normalizedResult,
+      providerMetadata: {
+        providerFiles: fileHandles.map((h) => ({
+          documentId: h.documentId,
+          mode: h.mode,
+          bytes: h.bytes,
+        })),
+        deletionResults,
+      },
+    };
   }
 }
 
-function buildKimiAnalysisUserPrompt(args: {
+function buildNativeAnalysisUserPrompt(args: {
   jurisdiction: string;
   documentIds: string[];
   candidateContexts: CandidateComparisonContext[];
@@ -2079,15 +2134,19 @@ function buildKimiAnalysisUserPrompt(args: {
 
   lines.push(
     "",
-    "Each document's extracted text is provided in the system messages. Do not invent values not supported by the documents.",
+    "The documents are provided as native inputs. Do not invent values not supported by the documents.",
   );
 
   return lines.join("\n");
 }
 
-export function createKimiK3Analyzer(options: {
+export function createNativeDocumentAnalyzer(options: {
   provider: NativeDocumentAnalysisProvider;
   bytesLoader: FileBytesLoader;
+  requireNativeInput?: boolean;
 }): InsuranceDocumentAnalyzer {
-  return new KimiK3DocumentAnalyzer(options);
+  return new NativeDocumentAnalyzer(options);
 }
+
+/** @deprecated Use createNativeDocumentAnalyzer instead. */
+export const createKimiK3Analyzer = createNativeDocumentAnalyzer;
