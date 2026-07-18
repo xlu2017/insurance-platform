@@ -10,11 +10,16 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   buildPropertyIdentity,
   buildVehicleIdentity,
-  createKimiK3Analyzer,
+  buildCandidateContext,
+  buildCandidateIdentity,
+  createNativeDocumentAnalyzer,
   KimiK3Provider,
   MemoryFileBytesLoader,
   sanitizeProviderError,
+  ConfigAndConsentPrivacyPreparation,
+  privacyPreparationConfigFromEnv,
   type PublicDocumentError,
+  type ProcessingConsentCheck,
 } from "../_shared/document-extraction.js";
 
 const corsHeaders = {
@@ -139,26 +144,47 @@ async function loadExistingAssets(
 
   const assets: ExistingHouseholdAsset[] = [];
   for (const v of vehicles ?? []) {
-    const identity = buildVehicleIdentity({
-      vin: typeof v.vin === "string" ? v.vin : undefined,
-      modelYear: typeof v.year === "number" ? v.year : undefined,
-      make: typeof v.make === "string" ? v.make : undefined,
-      model: typeof v.model === "string" ? v.model : undefined,
+    const identity = {
+      vin: typeof v.vin === "string" ? v.vin : null,
+      year: typeof v.year === "number" ? v.year : null,
+      make: typeof v.make === "string" ? v.make : null,
+      model: typeof v.model === "string" ? v.model : null,
+      trim: null,
+    };
+    const candidateIdentity = await buildCandidateIdentity(identity, "vehicle");
+    const fingerprint =
+      candidateIdentity.exactIdentityFingerprint ?? candidateIdentity.provisionalCandidateKey;
+    assets.push({
+      id: String(v.id),
+      assetType: "vehicle",
+      identityFingerprint: fingerprint,
+      displayLabel:
+        [identity.year, identity.make, identity.model].filter(Boolean).join(" ") || undefined,
+      candidateIdentity,
+      identity,
     });
-    const fingerprint = identity.exactFingerprint ?? identity.possibleMatchHint ?? String(v.id);
-    assets.push({ id: String(v.id), assetType: "vehicle", identityFingerprint: fingerprint });
   }
   for (const p of properties ?? []) {
-    const identity = buildPropertyIdentity({
-      addressLine1: typeof p.address_line1 === "string" ? p.address_line1 : undefined,
-      city: typeof p.city === "string" ? p.city : undefined,
-      province: typeof p.province === "string" ? p.province : undefined,
-      postalCode: typeof p.postal_code === "string" ? p.postal_code : undefined,
-      occupancy: p.owner_occupied === false ? "rental" : "principal_residence",
-      isRedacted: false,
+    const identity = {
+      fullAddress: typeof p.address_line1 === "string" ? p.address_line1 : null,
+      city: typeof p.city === "string" ? p.city : null,
+      province: typeof p.province === "string" ? p.province : null,
+      postalCode: typeof p.postal_code === "string" ? p.postal_code : null,
+      occupancy: (p.owner_occupied === false ? "rental" : "principal_residence") as
+        | "principal_residence"
+        | "rental",
+    };
+    const candidateIdentity = await buildCandidateIdentity(identity, "property");
+    const fingerprint =
+      candidateIdentity.exactIdentityFingerprint ?? candidateIdentity.provisionalCandidateKey;
+    assets.push({
+      id: String(p.id),
+      assetType: "property",
+      identityFingerprint: fingerprint,
+      displayLabel: identity.fullAddress ?? undefined,
+      candidateIdentity,
+      identity,
     });
-    const fingerprint = identity.exactFingerprint ?? identity.possibleMatchHint ?? String(p.id);
-    assets.push({ id: String(p.id), assetType: "property", identityFingerprint: fingerprint });
   }
   return assets;
 }
@@ -169,11 +195,31 @@ async function loadPendingCandidates(
   excludeSessionId?: string,
 ): Promise<PendingEntityCandidate[]> {
   const rows = await loadPendingCandidateRecords(admin, householdId, excludeSessionId);
-  return rows.map((c) => ({
-    id: String(c.id),
-    assetType: c.asset_type as "property" | "vehicle",
-    identityFingerprint: String(c.identity_fingerprint),
-  }));
+  return rows.map((c) => {
+    const facts = c.selected_facts_json ?? {};
+    const identity = (facts.identity ?? {}) as Record<string, unknown>;
+    const currentPolicy = (facts.currentPolicy ?? undefined) as Record<string, unknown> | undefined;
+    const candidateIdentity = (facts.candidateIdentity ?? undefined) as
+      | { exactIdentityFingerprint: string | null; provisionalCandidateKey: string }
+      | undefined;
+    return {
+      id: String(c.id),
+      assetType: c.asset_type as "property" | "vehicle",
+      identityFingerprint: String(c.identity_fingerprint),
+      displayLabel: c.display_label || undefined,
+      candidateIdentity: candidateIdentity
+        ? {
+            exactIdentityFingerprint: candidateIdentity.exactIdentityFingerprint ?? null,
+            provisionalCandidateKey: candidateIdentity.provisionalCandidateKey,
+            identityStrength: candidateIdentity.exactIdentityFingerprint
+              ? ("exact" as const)
+              : ("partial" as const),
+          }
+        : undefined,
+      identity: identity as any,
+      currentPolicy: currentPolicy as any,
+    };
+  });
 }
 
 async function loadPendingCandidateRecords(
@@ -185,6 +231,7 @@ async function loadPendingCandidateRecords(
     id: string;
     asset_type: string;
     identity_fingerprint: string;
+    display_label: string;
     session_id: string;
     source_document_ids: string[];
     selected_facts_json: Record<string, unknown>;
@@ -194,7 +241,7 @@ async function loadPendingCandidateRecords(
   const query = admin
     .from("asset_candidates")
     .select(
-      "id, asset_type, identity_fingerprint, session_id, source_document_ids, selected_facts_json, conflicts_json",
+      "id, asset_type, identity_fingerprint, display_label, session_id, source_document_ids, selected_facts_json, conflicts_json",
     )
     .eq("household_id", householdId)
     .in("review_status", ["pending", "reviewing"])
@@ -208,6 +255,7 @@ async function loadPendingCandidateRecords(
     id: String(c.id),
     asset_type: String(c.asset_type),
     identity_fingerprint: String(c.identity_fingerprint),
+    display_label: String(c.display_label ?? ""),
     session_id: String(c.session_id),
     source_document_ids: Array.isArray(c.source_document_ids)
       ? (c.source_document_ids as string[])
@@ -282,7 +330,7 @@ Deno.serve(async (req) => {
 
   const { data: docRows, error: docsErr } = await supabase
     .from("policy_documents")
-    .select("id, storage_path, file_name, household_id")
+    .select("id, storage_path, file_name, mime_type, size_bytes, household_id")
     .in("id", policyDocumentIds)
     .eq("household_id", householdId);
   if (docsErr) {
@@ -296,6 +344,8 @@ Deno.serve(async (req) => {
   const bytesByReference: Record<string, Uint8Array> = {};
   const digestByDocId: Record<string, string> = {};
   const filenameByDocId: Record<string, string> = {};
+  const mimeTypeByDocId: Record<string, string> = {};
+  const sizeByDocId: Record<string, number> = {};
   for (const docRow of docRows) {
     const { data: fileData, error: downloadErr } = await admin.storage
       .from("policy-documents")
@@ -308,6 +358,8 @@ Deno.serve(async (req) => {
     bytesByReference[docRow.id] = bytes;
     digestByDocId[docRow.id] = digest;
     filenameByDocId[docRow.id] = docRow.file_name ?? docRow.id;
+    mimeTypeByDocId[docRow.id] = docRow.mime_type ?? "application/octet-stream";
+    sizeByDocId[docRow.id] = Number(docRow.size_bytes ?? 0);
   }
 
   // Check for existing extracted documents by digest to avoid re-parsing duplicates.
@@ -378,7 +430,7 @@ Deno.serve(async (req) => {
     (id) => ({
       documentId: id,
       filename: filenameByDocId[id],
-      mimeType: "application/pdf",
+      mimeType: mimeTypeByDocId[id],
       fileReference: id,
     }),
   );
@@ -388,6 +440,55 @@ Deno.serve(async (req) => {
     loadPendingCandidates(admin, householdId, sessionId),
   ]);
 
+  const privacyConfig = privacyPreparationConfigFromEnv(Deno.env.get);
+  const { data: consentRows, error: consentErr } = await admin
+    .from("document_processing_consent")
+    .select(
+      "household_id, profile_id, purpose, privacy_notice_version, foreign_processing_acknowledged, automated_processing_acknowledged, processor_contract_version, raw_processing_approved, withdrawn_at",
+    )
+    .eq("household_id", householdId)
+    .eq("purpose", "insurance_policy_extraction")
+    .is("withdrawn_at", null)
+    .order("consented_at", { ascending: false })
+    .limit(1);
+
+  if (consentErr) {
+    return jsonError("Failed to verify document processing consent", 500);
+  }
+
+  const consent: ProcessingConsentCheck | undefined =
+    consentRows && consentRows.length > 0
+      ? {
+          householdId: String(consentRows[0].household_id),
+          profileId: consentRows[0].profile_id ? String(consentRows[0].profile_id) : undefined,
+          purpose: String(consentRows[0].purpose),
+          privacyNoticeVersion: String(consentRows[0].privacy_notice_version),
+          processorContractVersion: String(consentRows[0].processor_contract_version),
+          foreignProcessingAcknowledged: Boolean(consentRows[0].foreign_processing_acknowledged),
+          automatedProcessingAcknowledged: Boolean(
+            consentRows[0].automated_processing_acknowledged,
+          ),
+          rawProcessingApproved: Boolean(consentRows[0].raw_processing_approved),
+          withdrawnAt: consentRows[0].withdrawn_at ? String(consentRows[0].withdrawn_at) : null,
+        }
+      : undefined;
+
+  for (const uploaded of uploadedDocuments) {
+    const bytes = bytesByReference[uploaded.documentId];
+    const prep = new ConfigAndConsentPrivacyPreparation(privacyConfig, consent);
+    const originalInput = {
+      documentId: uploaded.documentId,
+      filename: uploaded.filename,
+      mimeType: uploaded.mimeType,
+      bytes,
+    };
+    try {
+      await prep.prepare(originalInput);
+    } catch (err) {
+      return jsonError(sanitizeProviderError(err), 503);
+    }
+  }
+
   const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
   if (!kimiApiKey) {
     return jsonError(
@@ -396,12 +497,13 @@ Deno.serve(async (req) => {
     );
   }
 
-  const analyzer = createKimiK3Analyzer({
+  const analyzer = createNativeDocumentAnalyzer({
     provider: new KimiK3Provider({
       apiKey: kimiApiKey,
       baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
     }),
     bytesLoader: new MemoryFileBytesLoader(bytesByReference),
+    requireNativeInput: Deno.env.get("DOCUMENT_ANALYSIS_REQUIRE_NATIVE_INPUT") !== "false",
   });
 
   let analysis;
@@ -436,6 +538,7 @@ Deno.serve(async (req) => {
     rawResponse: analysis.rawResponse,
     validatedOutput,
     warnings: analysis.warnings,
+    providerMetadata: analysis.providerMetadata,
   };
 
   const documentsJson: unknown[] = [];
@@ -630,6 +733,7 @@ Deno.serve(async (req) => {
       sourceDocuments: Array.from(mergedSourceDocIds),
       resolution: group.resolution,
       identity: representative.identity,
+      candidateIdentity: representative.candidateIdentity,
       currentPolicy: representative.currentPolicy,
       currentCoverage: representative.currentCoverage,
       mandateSuggestions: representative.mandateSuggestions,
