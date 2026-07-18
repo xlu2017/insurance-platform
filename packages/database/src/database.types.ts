@@ -534,12 +534,124 @@ export type Database = {
           },
         ];
       };
+      document_analysis_cleanup_attempts: {
+        Row: {
+          attempted_at: string;
+          failure_category: string | null;
+          file_id: string;
+          id: string;
+          next_attempt_at: string | null;
+          status_code: number | null;
+          success: boolean;
+        };
+        Insert: {
+          attempted_at?: string;
+          failure_category?: string | null;
+          file_id: string;
+          id?: string;
+          next_attempt_at?: string | null;
+          status_code?: number | null;
+          success?: boolean;
+        };
+        Update: {
+          attempted_at?: string;
+          failure_category?: string | null;
+          file_id?: string;
+          id?: string;
+          next_attempt_at?: string | null;
+          status_code?: number | null;
+          success?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_analysis_cleanup_attempts_file_id_fkey";
+            columns: ["file_id"];
+            isOneToOne: false;
+            referencedRelation: "document_analysis_provider_files";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      document_analysis_provider_files: {
+        Row: {
+          analysis_request_id: string | null;
+          authorization_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          deletion_attempts: number;
+          deletion_status: string | null;
+          id: string;
+          last_deletion_error_category: string | null;
+          next_deletion_attempt_at: string | null;
+          policy_document_id: string;
+          processing_status: string | null;
+          provider_file_id: string;
+          updated_at: string;
+          upload_completed_at: string | null;
+          upload_started_at: string;
+          upload_status: string;
+        };
+        Insert: {
+          analysis_request_id?: string | null;
+          authorization_id: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          deletion_attempts?: number;
+          deletion_status?: string | null;
+          id?: string;
+          last_deletion_error_category?: string | null;
+          next_deletion_attempt_at?: string | null;
+          policy_document_id: string;
+          processing_status?: string | null;
+          provider_file_id: string;
+          updated_at?: string;
+          upload_completed_at?: string | null;
+          upload_started_at?: string;
+          upload_status?: string;
+        };
+        Update: {
+          analysis_request_id?: string | null;
+          authorization_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          deletion_attempts?: number;
+          deletion_status?: string | null;
+          id?: string;
+          last_deletion_error_category?: string | null;
+          next_deletion_attempt_at?: string | null;
+          policy_document_id?: string;
+          processing_status?: string | null;
+          provider_file_id?: string;
+          updated_at?: string;
+          upload_completed_at?: string | null;
+          upload_started_at?: string;
+          upload_status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_analysis_provider_files_authorization_id_fkey";
+            columns: ["authorization_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_authorizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_analysis_provider_files_policy_document_id_fkey";
+            columns: ["policy_document_id"];
+            isOneToOne: false;
+            referencedRelation: "policy_documents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_analysis_runs: {
         Row: {
           attempt_count: number;
           attempted_model_id: string | null;
           attempted_model_provider: string | null;
+          authorization_id: string | null;
           client_request_id: string;
+          consent_id: string | null;
           created_at: string;
           fallback_reason: string | null;
           household_id: string;
@@ -558,7 +670,9 @@ export type Database = {
           attempt_count?: number;
           attempted_model_id?: string | null;
           attempted_model_provider?: string | null;
+          authorization_id?: string | null;
           client_request_id: string;
+          consent_id?: string | null;
           created_at?: string;
           fallback_reason?: string | null;
           household_id: string;
@@ -577,7 +691,9 @@ export type Database = {
           attempt_count?: number;
           attempted_model_id?: string | null;
           attempted_model_provider?: string | null;
+          authorization_id?: string | null;
           client_request_id?: string;
+          consent_id?: string | null;
           created_at?: string;
           fallback_reason?: string | null;
           household_id?: string;
@@ -593,6 +709,20 @@ export type Database = {
           warnings_json?: Json;
         };
         Relationships: [
+          {
+            foreignKeyName: "document_analysis_runs_authorization_id_fkey";
+            columns: ["authorization_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_authorizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_analysis_runs_consent_id_fkey";
+            columns: ["consent_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_consent";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "document_analysis_runs_household_id_fkey";
             columns: ["household_id"];
@@ -651,8 +781,85 @@ export type Database = {
           },
         ];
       };
+      document_processing_authorizations: {
+        Row: {
+          actor_profile_id: string;
+          analysis_request_id: string | null;
+          authorization_result: string;
+          authorized_at: string;
+          automated_processing_acknowledged: boolean;
+          consent_id: string | null;
+          created_at: string;
+          external_processing_enabled: boolean;
+          foreign_processing_acknowledged: boolean;
+          household_id: string;
+          id: string;
+          privacy_notice_version: string;
+          processor_contract_version: string;
+          purpose: string;
+          raw_processing_approved: boolean;
+        };
+        Insert: {
+          actor_profile_id: string;
+          analysis_request_id?: string | null;
+          authorization_result?: string;
+          authorized_at?: string;
+          automated_processing_acknowledged?: boolean;
+          consent_id?: string | null;
+          created_at?: string;
+          external_processing_enabled?: boolean;
+          foreign_processing_acknowledged?: boolean;
+          household_id: string;
+          id?: string;
+          privacy_notice_version: string;
+          processor_contract_version: string;
+          purpose?: string;
+          raw_processing_approved?: boolean;
+        };
+        Update: {
+          actor_profile_id?: string;
+          analysis_request_id?: string | null;
+          authorization_result?: string;
+          authorized_at?: string;
+          automated_processing_acknowledged?: boolean;
+          consent_id?: string | null;
+          created_at?: string;
+          external_processing_enabled?: boolean;
+          foreign_processing_acknowledged?: boolean;
+          household_id?: string;
+          id?: string;
+          privacy_notice_version?: string;
+          processor_contract_version?: string;
+          purpose?: string;
+          raw_processing_approved?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_processing_authorizations_actor_profile_id_fkey";
+            columns: ["actor_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_authorizations_consent_id_fkey";
+            columns: ["consent_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_consent";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_authorizations_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_processing_consent: {
         Row: {
+          authority_basis: string;
           automated_processing_acknowledged: boolean;
           consented_at: string;
           created_at: string;
@@ -664,10 +871,13 @@ export type Database = {
           profile_id: string;
           purpose: string;
           raw_processing_approved: boolean;
+          status: string;
+          superseded_by: string | null;
           updated_at: string;
           withdrawn_at: string | null;
         };
         Insert: {
+          authority_basis?: string;
           automated_processing_acknowledged?: boolean;
           consented_at?: string;
           created_at?: string;
@@ -679,10 +889,13 @@ export type Database = {
           profile_id: string;
           purpose?: string;
           raw_processing_approved?: boolean;
+          status?: string;
+          superseded_by?: string | null;
           updated_at?: string;
           withdrawn_at?: string | null;
         };
         Update: {
+          authority_basis?: string;
           automated_processing_acknowledged?: boolean;
           consented_at?: string;
           created_at?: string;
@@ -694,6 +907,8 @@ export type Database = {
           profile_id?: string;
           purpose?: string;
           raw_processing_approved?: boolean;
+          status?: string;
+          superseded_by?: string | null;
           updated_at?: string;
           withdrawn_at?: string | null;
         };
@@ -710,6 +925,13 @@ export type Database = {
             columns: ["profile_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_consent_superseded_by_fkey";
+            columns: ["superseded_by"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_consent";
             referencedColumns: ["id"];
           },
         ];
@@ -2969,8 +3191,10 @@ export type Database = {
         Args: {
           p_analysis_json?: Json;
           p_analysis_run_id?: string;
+          p_authorization_id?: string;
           p_candidates_json?: Json;
           p_client_request_id: string;
+          p_consent_id?: string;
           p_documents_json?: Json;
           p_household_id: string;
           p_session_id: string;
@@ -3034,6 +3258,20 @@ export type Database = {
         };
         Returns: Json;
       };
+      record_document_processing_consent: {
+        Args: {
+          p_authority_basis?: string;
+          p_automated_processing_acknowledged: boolean;
+          p_foreign_processing_acknowledged: boolean;
+          p_household_id: string;
+          p_privacy_notice_version: string;
+          p_processor_contract_version: string;
+          p_profile_id: string;
+          p_purpose: string;
+          p_raw_processing_approved: boolean;
+        };
+        Returns: string;
+      };
       require_household_member_for_recommendation: {
         Args: { rec_id: string };
         Returns: string;
@@ -3069,6 +3307,14 @@ export type Database = {
           p_target_state: Database["public"]["Enums"]["case_state"];
         };
         Returns: Json;
+      };
+      withdraw_document_processing_consent: {
+        Args: {
+          p_household_id: string;
+          p_profile_id: string;
+          p_purpose: string;
+        };
+        Returns: string;
       };
     };
     Enums: {

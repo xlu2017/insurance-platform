@@ -12,6 +12,8 @@ const CUSTOMER_FACING_MESSAGES: Record<PublicDocumentErrorCode, string> = {
   DOCUMENT_ANALYSIS_FAILED: "Document analysis failed. Please try again or contact support.",
   DOCUMENT_MODEL_UNAVAILABLE:
     "Document analysis is temporarily unavailable. Please try again later.",
+  DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED:
+    "Review and accept the document-processing notice before analyzing these files.",
 };
 
 export function sanitizeProviderError(
@@ -26,6 +28,14 @@ export function sanitizeProviderError(
   let retryable = false;
 
   if (
+    lower.includes("not authorized") ||
+    lower.includes("consent required") ||
+    lower.includes("consent withdrawn") ||
+    lower.includes("privacy notice")
+  ) {
+    code = "DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED";
+    retryable = false;
+  } else if (
     lower.includes("unsupported file") ||
     lower.includes("file type") ||
     lower.includes("invalid file") ||

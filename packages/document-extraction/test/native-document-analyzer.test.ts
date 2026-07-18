@@ -4,6 +4,9 @@ import {
   buildCandidateContext,
   sanitizeProviderError,
   ConfigAndConsentPrivacyPreparation,
+  MemoryAuthorizationStore,
+  MemoryExternalFileLifecycleStore,
+  type DocumentProcessingAuthorization,
   type FileBytesLoader,
   type NativeDocumentAnalysisProvider,
   type NativeDocumentAnalysisRequest,
@@ -142,6 +145,43 @@ function baseInput(mimeType = "image/png") {
   };
 }
 
+async function createAuthorization(
+  overrides: Partial<DocumentProcessingAuthorization> = {},
+): Promise<DocumentProcessingAuthorization> {
+  const store = new MemoryAuthorizationStore();
+  return store.createAuthorization({
+    householdId: "household-1",
+    actorProfileId: "profile-1",
+    purpose: "insurance_policy_extraction",
+    privacyNoticeVersion: "v1",
+    processorContractVersion: "v1",
+    foreignProcessingAcknowledged: true,
+    automatedProcessingAcknowledged: true,
+    rawProcessingApproved: true,
+    externalProcessingEnabled: true,
+    authorizationResult: "authorized",
+    ...overrides,
+  });
+}
+
+async function authorizedAnalyzer(
+  provider: FakeNativeProvider,
+  options: {
+    bytes?: Uint8Array;
+    requireNativeInput?: boolean;
+    authorization?: DocumentProcessingAuthorization;
+  } = {},
+) {
+  const authorization = options.authorization ?? (await createAuthorization());
+  return createNativeDocumentAnalyzer({
+    provider,
+    bytesLoader: new MemoryBytesLoader(options.bytes ?? new Uint8Array([1, 2, 3])),
+    requireNativeInput: options.requireNativeInput,
+    authorization,
+    fileLifecycleStore: new MemoryExternalFileLifecycleStore(),
+  });
+}
+
 describe("NativeDocumentAnalyzer", () => {
   it("rejects PDFs in native-only mode without uploading", async () => {
     const provider = new FakeNativeProvider();
@@ -152,11 +192,7 @@ describe("NativeDocumentAnalyzer", () => {
       reason: "Native file reference is not supported",
     };
 
-    const analyzer = createNativeDocumentAnalyzer({
-      provider,
-      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
-      requireNativeInput: true,
-    });
+    const analyzer = await authorizedAnalyzer(provider, { requireNativeInput: true });
 
     await expect(analyzer.analyze(baseInput("application/pdf"))).rejects.toThrow(
       /Unsupported file/,
@@ -173,10 +209,7 @@ describe("NativeDocumentAnalyzer", () => {
       supported: true,
     };
 
-    const analyzer = createNativeDocumentAnalyzer({
-      provider,
-      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
-    });
+    const analyzer = await authorizedAnalyzer(provider);
 
     const result = await analyzer.analyze(baseInput("image/png"));
     expect(provider.uploadCalls).toBe(1);
@@ -194,10 +227,7 @@ describe("NativeDocumentAnalyzer", () => {
       supported: true,
     };
 
-    const analyzer = createNativeDocumentAnalyzer({
-      provider,
-      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
-    });
+    const analyzer = await authorizedAnalyzer(provider);
 
     await analyzer.analyze(baseInput("image/jpeg"));
     expect(provider.uploadCalls).toBe(1);
@@ -219,10 +249,7 @@ describe("NativeDocumentAnalyzer", () => {
       errorCategory: "unsupported_mime_type",
     };
 
-    const analyzer = createNativeDocumentAnalyzer({
-      provider,
-      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
-    });
+    const analyzer = await authorizedAnalyzer(provider);
 
     await expect(analyzer.analyze(baseInput("image/png"))).rejects.toThrow();
     expect(provider.analyzeCalls).toBe(0);
@@ -237,10 +264,7 @@ describe("NativeDocumentAnalyzer", () => {
       supported: true,
     };
 
-    const analyzer = createNativeDocumentAnalyzer({
-      provider,
-      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
-    });
+    const analyzer = await authorizedAnalyzer(provider);
 
     const result = await analyzer.analyze(baseInput("image/png"));
     expect(provider.deleteCalls).toBe(1);
@@ -260,11 +284,7 @@ describe("NativeDocumentAnalyzer", () => {
       reason: "Native file reference not supported",
     };
 
-    const analyzer = createNativeDocumentAnalyzer({
-      provider,
-      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
-      requireNativeInput: true,
-    });
+    const analyzer = await authorizedAnalyzer(provider, { requireNativeInput: true });
 
     try {
       await analyzer.analyze(baseInput("application/pdf"));
@@ -362,5 +382,239 @@ describe("ConfigAndConsentPrivacyPreparation", () => {
         bytes: new Uint8Array([1]),
       }),
     ).rejects.toThrow(/not approved/);
+  });
+
+  it("rejects stale privacy notice versions", async () => {
+    const prep = new ConfigAndConsentPrivacyPreparation(
+      {
+        externalDocumentProcessingEnabled: true,
+        rawExternalDocumentProcessingApproved: true,
+        privacyNoticeVersion: "v2",
+        processorContractVersion: "v1",
+      },
+      {
+        householdId: "hh-1",
+        purpose: "insurance_policy_extraction",
+        privacyNoticeVersion: "v1",
+        processorContractVersion: "v1",
+        foreignProcessingAcknowledged: true,
+        automatedProcessingAcknowledged: true,
+        rawProcessingApproved: true,
+      },
+    );
+
+    await expect(
+      prep.prepare({
+        documentId: "doc-1",
+        filename: "policy.pdf",
+        mimeType: "application/pdf",
+        bytes: new Uint8Array([1]),
+      }),
+    ).rejects.toThrow(/out of date/);
+  });
+
+  it("creates an authorization snapshot before analysis", async () => {
+    const prep = new ConfigAndConsentPrivacyPreparation(
+      {
+        externalDocumentProcessingEnabled: true,
+        rawExternalDocumentProcessingApproved: true,
+        privacyNoticeVersion: "v1",
+        processorContractVersion: "v1",
+      },
+      {
+        id: "consent-1",
+        householdId: "hh-1",
+        profileId: "profile-1",
+        purpose: "insurance_policy_extraction",
+        privacyNoticeVersion: "v1",
+        processorContractVersion: "v1",
+        foreignProcessingAcknowledged: true,
+        automatedProcessingAcknowledged: true,
+        rawProcessingApproved: true,
+      },
+    );
+
+    const store = new MemoryAuthorizationStore();
+    const authorization = await prep.authorize("profile-1", store);
+    expect(authorization.householdId).toBe("hh-1");
+    expect(authorization.consentId).toBe("consent-1");
+    expect(authorization.authorizationResult).toBe("authorized");
+    expect(store.get(authorization.id)).toBeDefined();
+  });
+});
+
+describe("NativeDocumentAnalyzer lifecycle", () => {
+  it("persists an authorization snapshot before any upload", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+
+    const authStore = new MemoryAuthorizationStore();
+    const authorization = await authStore.createAuthorization({
+      householdId: "household-1",
+      actorProfileId: "profile-1",
+      purpose: "insurance_policy_extraction",
+      privacyNoticeVersion: "v1",
+      processorContractVersion: "v1",
+      foreignProcessingAcknowledged: true,
+      automatedProcessingAcknowledged: true,
+      rawProcessingApproved: true,
+      externalProcessingEnabled: true,
+      authorizationResult: "authorized",
+    });
+
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
+      authorization,
+      fileLifecycleStore: lifecycle,
+    });
+
+    await analyzer.analyze(baseInput("image/png"));
+    expect(authorization.id).toBeDefined();
+    expect(provider.uploadCalls).toBe(1);
+    expect(lifecycle.getRecords().length).toBe(1);
+    expect(lifecycle.getRecords()[0].authorizationId).toBe(authorization.id);
+  });
+
+  it("requires a valid authorization to run analysis", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
+    });
+
+    await expect(analyzer.analyze(baseInput("image/png"))).rejects.toThrow(/not authorized/);
+    expect(provider.uploadCalls).toBe(0);
+    expect(provider.analyzeCalls).toBe(0);
+  });
+
+  it("fails closed when one selected file is unsupported", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+    provider.modes["application/pdf"] = {
+      mimeType: "application/pdf",
+      mode: "unsupported",
+      supported: false,
+      reason: "Native file reference is not supported",
+    };
+
+    const analyzer = await authorizedAnalyzer(provider, { requireNativeInput: true });
+
+    const input = {
+      ...baseInput("image/png"),
+      uploadedDocuments: [
+        ...baseInput("image/png").uploadedDocuments,
+        {
+          documentId: "doc-2",
+          filename: "policy.pdf",
+          mimeType: "application/pdf",
+          fileReference: "doc-2",
+        },
+      ],
+    };
+
+    await expect(analyzer.analyze(input)).rejects.toThrow(/Unsupported file/);
+    expect(provider.uploadCalls).toBe(0);
+    expect(provider.analyzeCalls).toBe(0);
+  });
+
+  it("deletes any successfully uploaded files when a parallel upload fails", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+
+    let callCount = 0;
+    provider.uploadOriginalFile = async (input) => {
+      callCount++;
+      if (input.documentId === "doc-2") {
+        throw new Error("Network error");
+      }
+      return {
+        status: "ready" as const,
+        handle: {
+          providerFileId: `file-${callCount}`,
+          documentId: input.documentId,
+          filename: input.filename,
+          mimeType: input.mimeType,
+          bytes: input.bytes.length,
+          mode: "native_image_reference" as const,
+          reference: `test://file-${callCount}`,
+          status: "ok" as const,
+          providerMetadata: {},
+        },
+      };
+    };
+    provider.deletionResult = { deleted: true, attempts: 1, statusCode: 200 };
+
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
+      authorization: await createAuthorization(),
+      fileLifecycleStore: lifecycle,
+    });
+
+    const input = {
+      ...baseInput("image/png"),
+      uploadedDocuments: [
+        { documentId: "doc-1", filename: "a.png", mimeType: "image/png", fileReference: "doc-1" },
+        { documentId: "doc-2", filename: "b.png", mimeType: "image/png", fileReference: "doc-2" },
+      ],
+    };
+
+    await expect(analyzer.analyze(input)).rejects.toThrow();
+    expect(callCount).toBe(2);
+    expect(provider.deleteCalls).toBe(1);
+    const records = lifecycle.getRecords();
+    expect(records.length).toBe(2);
+    expect(
+      records.every((r) => r.providerFileId !== "pending" || r.uploadStatus === "failed"),
+    ).toBe(true);
+  });
+
+  it("records every deletion attempt and queues cleanup after transient failures", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+    let attempts = 0;
+    provider.deleteFile = async () => {
+      attempts++;
+      return { deleted: false, attempts, statusCode: 503, failureCategory: "transient" };
+    };
+
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
+      authorization: await createAuthorization(),
+      fileLifecycleStore: lifecycle,
+    });
+
+    await analyzer.analyze(baseInput("image/png"));
+    expect(attempts).toBeGreaterThanOrEqual(1);
+    const record = lifecycle.getRecords()[0];
+    expect(record.deletionAttempts).toBeGreaterThanOrEqual(1);
+    expect(record.deletionStatus).toBe("queued");
   });
 });

@@ -73,6 +73,56 @@ export interface NativeDocumentAnalysisProvider {
   deleteFile(handle: ProviderFileHandle): Promise<ProviderFileDeletionResult>;
 }
 
+export interface DocumentProcessingAuthorization {
+  id: string;
+  householdId: string;
+  actorProfileId: string;
+  consentId?: string;
+  purpose: string;
+  privacyNoticeVersion: string;
+  processorContractVersion: string;
+  foreignProcessingAcknowledged: boolean;
+  automatedProcessingAcknowledged: boolean;
+  rawProcessingApproved: boolean;
+  externalProcessingEnabled: boolean;
+  authorizationResult: "authorized" | "denied";
+  authorizedAt: string;
+  analysisRequestId?: string;
+}
+
+export interface ExternalFileRecord {
+  id: string;
+  authorizationId: string;
+  analysisRequestId?: string;
+  policyDocumentId: string;
+  providerFileId: string;
+  uploadStartedAt: string;
+  uploadCompletedAt?: string;
+  uploadStatus: "started" | "completed" | "failed" | "rejected";
+  processingStatus?: "ready" | "failed" | "timed_out";
+  deletionStatus?: "pending" | "deleted" | "queued" | "failed_permanently";
+  deletionAttempts: number;
+  lastDeletionErrorCategory?: string;
+  nextDeletionAttemptAt?: string;
+  deletedAt?: string;
+}
+
+export interface AuthorizationStore {
+  createAuthorization(
+    auth: Omit<DocumentProcessingAuthorization, "id" | "authorizedAt">,
+  ): Promise<DocumentProcessingAuthorization>;
+  updateAuthorization(id: string, patch: Partial<DocumentProcessingAuthorization>): Promise<void>;
+}
+
+export interface ExternalFileLifecycleStore {
+  recordUpload(
+    record: Omit<ExternalFileRecord, "id" | "uploadStartedAt" | "deletionAttempts">,
+  ): Promise<ExternalFileRecord>;
+  markUploadCompleted(id: string, patch: Partial<ExternalFileRecord>): Promise<void>;
+  recordDeletionAttempt(id: string, result: ProviderFileDeletionResult): Promise<void>;
+  queueCleanup(id: string, failureCategory: string, nextAttemptAt: string): Promise<void>;
+}
+
 export interface FileBytesLoader {
   load(document: {
     documentId: string;
@@ -124,7 +174,8 @@ export type PublicDocumentErrorCode =
   | "DOCUMENT_PROCESSING_FAILED"
   | "DOCUMENT_ANALYSIS_UNAVAILABLE"
   | "DOCUMENT_ANALYSIS_FAILED"
-  | "DOCUMENT_MODEL_UNAVAILABLE";
+  | "DOCUMENT_MODEL_UNAVAILABLE"
+  | "DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED";
 
 export interface PublicDocumentError {
   code: PublicDocumentErrorCode;

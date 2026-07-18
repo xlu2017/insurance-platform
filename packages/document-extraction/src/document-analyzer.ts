@@ -16,6 +16,8 @@ import {
 } from "./entity-identity.ts";
 import type { InsuranceLlmProvider } from "./llm-contract.ts";
 import type {
+  DocumentProcessingAuthorization,
+  ExternalFileLifecycleStore,
   FileBytesLoader,
   NativeDocumentAnalysisProvider,
   OriginalFileInput,
@@ -1972,19 +1974,30 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
   private provider: NativeDocumentAnalysisProvider;
   private bytesLoader: FileBytesLoader;
   private requireNativeInput: boolean;
+  private authorization?: DocumentProcessingAuthorization;
+  private fileLifecycleStore?: ExternalFileLifecycleStore;
+  private lifecycleRecords = new Map<string, string>();
 
   constructor(options: {
     provider: NativeDocumentAnalysisProvider;
     bytesLoader: FileBytesLoader;
     requireNativeInput?: boolean;
+    authorization?: DocumentProcessingAuthorization;
+    fileLifecycleStore?: ExternalFileLifecycleStore;
   }) {
     this.provider = options.provider;
     this.bytesLoader = options.bytesLoader;
     this.requireNativeInput = options.requireNativeInput ?? true;
+    this.authorization = options.authorization;
+    this.fileLifecycleStore = options.fileLifecycleStore;
   }
 
   async analyze(input: InsuranceDocumentAnalysisInput): Promise<InsuranceDocumentAnalysisResult> {
     InsuranceDocumentAnalysisInputSchema.parse(input);
+
+    if (!this.authorization || this.authorization.authorizationResult !== "authorized") {
+      throw new Error("Document processing not authorized: consent required or withdrawn");
+    }
 
     const originalInputs: OriginalFileInput[] = [];
     const fileDigestByDocumentId = new Map<string, string>();
@@ -1998,45 +2011,60 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
 
     const resolved = await this.provider.resolveModel();
 
-    const uploadResults: ProviderUploadResult[] = [];
     const fileHandles: ProviderFileHandle[] = [];
-    let deletionResults: ProviderFileDeletionResult[] = [];
-    let validationFeedback = "";
-    let lastError: unknown;
     let normalizedResult: InsuranceDocumentAnalysisResult | undefined;
 
     try {
-      for (const original of originalInputs) {
-        const capability = await this.provider.resolveInputMode(original);
-        if (this.requireNativeInput && capability.mode === "provider_extracted_text") {
+      const capabilities = await Promise.all(
+        originalInputs.map((o) => this.provider.resolveInputMode(o)),
+      );
+      for (let i = 0; i < originalInputs.length; i++) {
+        const original = originalInputs[i];
+        const capability = capabilities[i];
+        if (
+          !capability.supported ||
+          capability.mode === "unsupported" ||
+          (this.requireNativeInput && capability.mode === "provider_extracted_text")
+        ) {
           throw new Error(
             `Unsupported file type for native document analysis: ${original.filename} (${capability.reason})`,
           );
         }
       }
 
-      uploadResults.push(
-        ...(await Promise.all(originalInputs.map((f) => this.provider.uploadOriginalFile(f)))),
+      const settled = await Promise.allSettled(
+        originalInputs.map((original) => this.uploadAndRecord(original)),
       );
 
-      for (const result of uploadResults) {
-        if (result.status !== "ready" || !result.handle) {
-          throw new Error(
-            `Unsupported file type for native document analysis: ${result.errorCategory ?? "upload_failed"}`,
-          );
+      const uploadFailures: string[] = [];
+      for (let i = 0; i < settled.length; i++) {
+        const result = settled[i];
+        if (result.status === "rejected") {
+          uploadFailures.push(String(result.reason));
+          continue;
         }
-        if (this.requireNativeInput && result.handle.mode === "provider_extracted_text") {
-          throw new Error(
-            `Unsupported file type for native document analysis: ${result.handle.filename} was converted to extracted text`,
-          );
+        const uploadResult = result.value;
+        if (uploadResult.status !== "ready" || !uploadResult.handle) {
+          uploadFailures.push(uploadResult.errorCategory ?? "upload_failed");
+          continue;
         }
-        fileHandles.push(result.handle);
+        if (this.requireNativeInput && uploadResult.handle.mode === "provider_extracted_text") {
+          uploadFailures.push(
+            `Unsupported file type for native document analysis: ${uploadResult.handle.filename} was converted to extracted text`,
+          );
+          continue;
+        }
+        fileHandles.push(uploadResult.handle);
       }
 
-      const syntheticExtractedDocs: ExtractedPdf[] = originalInputs.map((original) => ({
+      if (uploadFailures.length > 0) {
+        throw new Error(`Document upload failed: ${uploadFailures.join("; ")}`);
+      }
+
+      const syntheticExtractedDocs: ExtractedPdf[] = originalInputs.map((original, i) => ({
         documentId: original.documentId,
         fileDigest: fileDigestByDocumentId.get(original.documentId) ?? "unknown",
-        pageCount: 0,
+        pageCount: fileHandles[i]?.mode === "native_image_reference" ? 1 : 0,
         pages: [],
       }));
 
@@ -2059,6 +2087,8 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
         candidateContexts,
       });
 
+      let validationFeedback = "";
+      let lastError: unknown;
       for (let attempt = 1; attempt <= 2; attempt++) {
         const userPrompt = validationFeedback
           ? `${baseUserPrompt}\n\nYour previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:\n${validationFeedback}`
@@ -2093,21 +2123,93 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       if (!normalizedResult) {
         throw lastError ?? new Error("Document analysis failed after validation repair attempt");
       }
-    } finally {
-      deletionResults = await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h)));
+    } catch (err) {
+      await this.deleteAll(fileHandles);
+      throw err;
     }
 
-    return {
-      ...normalizedResult,
-      providerMetadata: {
-        providerFiles: fileHandles.map((h) => ({
-          documentId: h.documentId,
-          mode: h.mode,
-          bytes: h.bytes,
-        })),
-        deletionResults,
-      },
+    const deletionResults = await this.deleteAll(fileHandles);
+
+    normalizedResult.modelProvider = GENERIC_PARSER_ID;
+    normalizedResult.modelId = GENERIC_PARSER_VERSION;
+    normalizedResult.providerMetadata = {
+      providerId: this.provider.providerId,
+      modelId: resolved.modelId,
+      providerFiles: fileHandles.map((h) => ({
+        documentId: h.documentId,
+        mode: h.mode,
+        bytes: h.bytes,
+      })),
+      deletionResults,
     };
+    return normalizedResult;
+  }
+
+  private async uploadAndRecord(original: OriginalFileInput): Promise<ProviderUploadResult> {
+    if (this.fileLifecycleStore && this.authorization) {
+      const record = await this.fileLifecycleStore.recordUpload({
+        authorizationId: this.authorization.id,
+        policyDocumentId: original.documentId,
+        providerFileId: "pending",
+        uploadStatus: "started",
+      });
+      this.lifecycleRecords.set(original.documentId, record.id);
+    }
+
+    try {
+      const result = await this.provider.uploadOriginalFile(original);
+
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(original.documentId);
+        if (recordId) {
+          if (result.status === "ready" && result.handle) {
+            await this.fileLifecycleStore.markUploadCompleted(recordId, {
+              providerFileId: result.handle.providerFileId,
+              uploadStatus: "completed",
+              processingStatus: "ready",
+            });
+          } else {
+            await this.fileLifecycleStore.markUploadCompleted(recordId, {
+              uploadStatus: result.status === "rejected" ? "rejected" : "failed",
+            });
+          }
+        }
+      }
+
+      return result;
+    } catch (err) {
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(original.documentId);
+        if (recordId) {
+          await this.fileLifecycleStore.markUploadCompleted(recordId, { uploadStatus: "failed" });
+        }
+      }
+      throw err;
+    }
+  }
+
+  private async deleteAll(handles: ProviderFileHandle[]): Promise<ProviderFileDeletionResult[]> {
+    const results: ProviderFileDeletionResult[] = [];
+    for (const handle of handles) {
+      const result = await this.provider.deleteFile(handle);
+      results.push(result);
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(handle.documentId);
+        if (recordId) {
+          await this.fileLifecycleStore.recordDeletionAttempt(recordId, result);
+          if (!result.deleted) {
+            const nextAttemptAt = new Date();
+            nextAttemptAt.setMinutes(nextAttemptAt.getMinutes() + 5 * result.attempts);
+            await this.fileLifecycleStore.queueCleanup(
+              recordId,
+              result.failureCategory ?? "deletion_failed",
+              nextAttemptAt.toISOString(),
+            );
+          }
+        }
+      }
+    }
+    return results;
   }
 }
 
@@ -2144,6 +2246,8 @@ export function createNativeDocumentAnalyzer(options: {
   provider: NativeDocumentAnalysisProvider;
   bytesLoader: FileBytesLoader;
   requireNativeInput?: boolean;
+  authorization?: DocumentProcessingAuthorization;
+  fileLifecycleStore?: ExternalFileLifecycleStore;
 }): InsuranceDocumentAnalyzer {
   return new NativeDocumentAnalyzer(options);
 }

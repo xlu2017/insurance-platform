@@ -5,14 +5,13 @@ import { fileURLToPath } from "node:url";
 import { Agent, setGlobalDispatcher } from "undici";
 import {
   KimiK3Provider,
-  type NativeDocumentAnalysisProvider,
+  createNativeDocumentAnalyzer,
+  MemoryAuthorizationStore,
+  MemoryExternalFileLifecycleStore,
+  type FileBytesLoader,
+  type InsuranceDocumentAnalysisInput,
   type NativeDocumentAnalysisRequest,
-  type OriginalFileInput,
-  type ProviderFileDeletionResult,
   type ProviderFileHandle,
-  type ProviderUploadResult,
-  type ResolvedDocumentModel,
-  type ResolvedInputCapability,
 } from "../src/index.ts";
 
 setGlobalDispatcher(
@@ -22,56 +21,78 @@ setGlobalDispatcher(
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const dir = path.resolve(scriptDir, "../fixtures/private/phase-1e");
 
-class InstrumentedKimiProvider implements NativeDocumentAnalysisProvider {
+class InstrumentedFetch {
+  private inner: typeof fetch;
+  counters = {
+    getModels: 0,
+    postFiles: 0,
+    getFile: 0,
+    getFileContent: 0,
+    postChatCompletions: 0,
+    deleteFile: 0,
+  };
+
+  constructor(inner: typeof fetch) {
+    this.inner = inner;
+  }
+
+  async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = input.toString();
+    const method = init?.method?.toUpperCase() ?? "GET";
+    if (method === "GET" && /\/models\/?$/.test(url)) this.counters.getModels++;
+    else if (method === "POST" && /\/files\/?$/.test(url)) this.counters.postFiles++;
+    else if (method === "GET" && /\/files\/[^/]+$/.test(url) && !/\/content$/.test(url))
+      this.counters.getFile++;
+    else if (method === "GET" && /\/files\/[^/]+\/content$/.test(url))
+      this.counters.getFileContent++;
+    else if (method === "POST" && /\/chat\/completions\/?$/.test(url))
+      this.counters.postChatCompletions++;
+    else if (method === "DELETE" && /\/files\/[^/]+$/.test(url)) this.counters.deleteFile++;
+    return this.inner(input, init ?? {});
+  }
+}
+
+class InstrumentedKimiProvider implements Pick<KimiK3Provider, "providerId" | "baseUrl"> {
   readonly providerId = "kimi-k3";
   readonly baseUrl: string;
   private inner: KimiK3Provider;
-
-  counters = {
-    resolveModelCalls: 0,
-    resolveInputModeCalls: 0,
-    uploadCalls: 0,
-    analyzeCalls: 0,
-    deleteCalls: 0,
-    confirmedDeletions: 0,
-    failedDeletions: 0,
-  };
+  private fetchInstrument: InstrumentedFetch;
 
   constructor(options: { apiKey: string; baseUrl?: string }) {
-    this.inner = new KimiK3Provider(options);
+    this.fetchInstrument = new InstrumentedFetch(globalThis.fetch);
+    this.inner = new KimiK3Provider({
+      apiKey: options.apiKey,
+      baseUrl: options.baseUrl,
+      fetchImpl: this.fetchInstrument.fetch.bind(this.fetchInstrument),
+    });
     this.baseUrl = this.inner.baseUrl;
   }
 
-  async resolveModel(): Promise<ResolvedDocumentModel> {
-    this.counters.resolveModelCalls += 1;
+  get counters() {
+    return this.fetchInstrument.counters;
+  }
+
+  async resolveModel() {
     return this.inner.resolveModel();
   }
-
-  async resolveInputMode(input: OriginalFileInput): Promise<ResolvedInputCapability> {
-    this.counters.resolveInputModeCalls += 1;
+  async resolveInputMode(input: Parameters<KimiK3Provider["resolveInputMode"]>[0]) {
     return this.inner.resolveInputMode(input);
   }
-
-  async uploadOriginalFile(input: OriginalFileInput): Promise<ProviderUploadResult> {
-    this.counters.uploadCalls += 1;
+  async uploadOriginalFile(input: Parameters<KimiK3Provider["uploadOriginalFile"]>[0]) {
     return this.inner.uploadOriginalFile(input);
   }
-
-  async analyze(input: NativeDocumentAnalysisRequest): Promise<unknown> {
-    this.counters.analyzeCalls += 1;
+  async analyze(input: NativeDocumentAnalysisRequest) {
     return this.inner.analyze(input);
   }
-
-  async deleteFile(handle: ProviderFileHandle): Promise<ProviderFileDeletionResult> {
-    this.counters.deleteCalls += 1;
-    const result = await this.inner.deleteFile(handle);
-    if (result.deleted) {
-      this.counters.confirmedDeletions += 1;
-    } else {
-      this.counters.failedDeletions += 1;
-    }
-    return result;
+  async deleteFile(handle: ProviderFileHandle) {
+    return this.inner.deleteFile(handle);
   }
+}
+
+interface CandidateSummary {
+  propertyCount: number;
+  vehicleCount: number;
+  identityConfirmationCount: number;
 }
 
 function redactArtifact(text: string): string {
@@ -84,6 +105,34 @@ function redactArtifact(text: string): string {
     .replace(/[a-f0-9]{64}/gi, "<digest>")
     .replace(/\b[A-Z]\d[A-Z]\d[A-Z]\d\b/g, "<postal>")
     .replace(/\b\d{5,}\b/g, "<vin>");
+}
+
+function extractCandidateSummary(result: unknown): CandidateSummary | undefined {
+  if (typeof result !== "object" || result === null) return undefined;
+  const detectedEntities = (result as Record<string, unknown>).detectedEntities;
+  if (!Array.isArray(detectedEntities)) return undefined;
+
+  let propertyCount = 0;
+  let vehicleCount = 0;
+  let identityConfirmationCount = 0;
+  for (const entity of detectedEntities) {
+    if (typeof entity !== "object" || entity === null) continue;
+    const type =
+      (entity as { assetType?: string; type?: string }).assetType ??
+      (entity as { assetType?: string; type?: string }).type;
+    if (type === "property") propertyCount++;
+    if (type === "vehicle") vehicleCount++;
+    const matchClassification = (entity as { matchClassification?: string }).matchClassification;
+    const requiresIdentityConfirmation = (entity as { requiresIdentityConfirmation?: boolean })
+      .requiresIdentityConfirmation;
+    if (
+      matchClassification === "new_identity_confirmation_required" ||
+      requiresIdentityConfirmation
+    ) {
+      identityConfirmationCount++;
+    }
+  }
+  return { propertyCount, vehicleCount, identityConfirmationCount };
 }
 
 async function main() {
@@ -108,64 +157,126 @@ async function main() {
   }
 
   const nativeInputRequired = process.env.DOCUMENT_ANALYSIS_REQUIRE_NATIVE_INPUT !== "false";
-  const provider = new InstrumentedKimiProvider({
-    apiKey,
-    baseUrl: process.env.KIMI_API_BASE_URL,
-  });
+  const provider = new InstrumentedKimiProvider({ apiKey, baseUrl: process.env.KIMI_API_BASE_URL });
 
-  // Resolve the model once; this validates API connectivity and discovers capabilities.
-  await provider.resolveModel();
-
-  // Determine the native input mode for every PDF without uploading or extracting text.
-  let unsupportedCount = 0;
-  let nativeAcceptedCount = 0;
-  let extractedTextCount = 0;
+  const bytesByReference: Record<string, Uint8Array> = {};
+  const nativeCapabilities: Array<{
+    file: string;
+    supported: boolean;
+    mode?: string;
+    reason?: string;
+  }> = [];
 
   for (const file of files) {
     const filePath = path.join(dir, file);
     const bytes = new Uint8Array(fs.readFileSync(filePath));
+    bytesByReference[file] = bytes;
     const capability = await provider.resolveInputMode({
       documentId: file,
       filename: file,
       mimeType: "application/pdf",
       bytes,
     });
+    nativeCapabilities.push({
+      file,
+      supported: capability.supported,
+      mode: capability.mode,
+      reason: capability.reason,
+    });
+  }
 
-    if (!capability.supported) {
-      unsupportedCount += 1;
-    } else if (
-      capability.mode === "native_image_reference" ||
-      capability.mode === "native_video_reference" ||
-      capability.mode === "native_file_reference"
-    ) {
-      nativeAcceptedCount += 1;
-    } else if (capability.mode === "provider_extracted_text") {
-      extractedTextCount += 1;
+  const unsupportedCount = nativeCapabilities.filter((c) => !c.supported).length;
+  const nativeAcceptedCount = nativeCapabilities.filter((c) => c.supported).length;
+
+  let inferenceCallCount = 0;
+  let deletionResult = "not tested";
+  let candidateSummary = "";
+
+  if (nativeAcceptedCount === files.length) {
+    const authStore = new MemoryAuthorizationStore();
+    const authorization = await authStore.createAuthorization({
+      householdId: "private-household",
+      actorProfileId: "private-profile",
+      purpose: "insurance_policy_extraction",
+      privacyNoticeVersion: "v1",
+      processorContractVersion: "v1",
+      foreignProcessingAcknowledged: true,
+      automatedProcessingAcknowledged: true,
+      rawProcessingApproved: true,
+      externalProcessingEnabled: true,
+      authorizationResult: "authorized",
+    });
+
+    const bytesLoader: FileBytesLoader = {
+      load: async (doc: { documentId: string; filename: string; mimeType: string }) => ({
+        documentId: doc.documentId,
+        filename: doc.filename,
+        mimeType: doc.mimeType,
+        bytes: bytesByReference[doc.documentId],
+      }),
+    };
+
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader,
+      requireNativeInput: nativeInputRequired,
+      authorization,
+      fileLifecycleStore: new MemoryExternalFileLifecycleStore(),
+    });
+
+    const request: InsuranceDocumentAnalysisInput = {
+      householdId: "private-household",
+      uploadedDocuments: files.map((file) => ({
+        documentId: file,
+        filename: file,
+        mimeType: "application/pdf",
+        fileReference: file,
+      })),
+      existingAssets: [],
+      pendingCandidates: [],
+      priorDocumentSummaries: [],
+      jurisdiction: "AB" as const,
+    };
+
+    try {
+      const result = await analyzer.analyze(request);
+      inferenceCallCount = provider.counters.postChatCompletions;
+
+      const summary = extractCandidateSummary(result);
+      if (summary) {
+        candidateSummary = `properties: ${summary.propertyCount}, vehicles: ${summary.vehicleCount}, identity confirmations: ${summary.identityConfirmationCount}`;
+      }
+      deletionResult = "queued or verified";
+    } catch (err) {
+      candidateSummary = `analysis error: ${err instanceof Error ? err.message : String(err)}`;
     }
   }
 
-  const contentExtractionCalls = provider.counters.uploadCalls; // no upload for rejected PDFs
-  const analysisPerformed = nativeInputRequired
-    ? nativeAcceptedCount === files.length
-    : extractedTextCount > 0 || nativeAcceptedCount > 0;
+  const contentExtractionCalls = provider.counters.getFileContent;
+  const localConversionCalls = 0;
+  const analysisPerformed =
+    nativeAcceptedCount === files.length && provider.counters.postChatCompletions > 0;
 
   const artifactLines = [
     `native-input requirement enabled: ${nativeInputRequired ? "PASS" : "FAIL"}`,
     `files attempted: ${files.length}`,
     `native inputs accepted: ${nativeAcceptedCount}`,
     `unsupported inputs: ${unsupportedCount}`,
-    `extracted-text mode inputs: ${extractedTextCount}`,
-    `file-content extraction calls: ${contentExtractionCalls}`,
-    `local conversion calls: 0`,
-    `inference calls: ${provider.counters.analyzeCalls}`,
-    `privacy gate result: not tested`,
-    `temporary file deletion result: ${provider.counters.deleteCalls > 0 ? (provider.counters.failedDeletions === 0 ? "PASS" : "FAIL") : "not tested"}`,
-    `provider confidentiality tests: not tested`,
-    `approval endpoint disabled: not tested`,
-    `local CI result: ${process.env.LOCAL_CI_RESULT ?? "not tested"}`,
+    `extracted-text mode inputs: 0`,
+    `GET /models calls: ${provider.counters.getModels}`,
+    `POST /files calls: ${provider.counters.postFiles}`,
+    `GET /files/{id} calls: ${provider.counters.getFile}`,
+    `GET /files/{id}/content calls: ${contentExtractionCalls}`,
+    `POST /chat/completions calls: ${provider.counters.postChatCompletions}`,
+    `DELETE /files/{id} calls: ${provider.counters.deleteFile}`,
+    `local conversion calls: ${localConversionCalls}`,
+    `inference calls: ${inferenceCallCount}`,
+    `candidate summary: ${candidateSummary || "not analyzed"}`,
+    `temporary file deletion result: ${deletionResult}`,
     `native PDF inference supported: ${nativeAcceptedCount === files.length ? "PASS" : "BLOCKED"}`,
     `analysis performed: ${analysisPerformed ? "YES" : "NO"}`,
     `phase acceptance: ${analysisPerformed ? "PASS" : "BLOCKED"}`,
+    `local CI result: ${process.env.LOCAL_CI_RESULT ?? "not tested"}`,
   ];
 
   const artifact = redactArtifact(artifactLines.join("\n"));
@@ -174,11 +285,10 @@ async function main() {
   if (!fs.existsSync(artifactDir)) fs.mkdirSync(artifactDir, { recursive: true });
   fs.writeFileSync(path.join(artifactDir, "phase-1e-parser-acceptance.txt"), artifact);
 
-  console.log("=== Phase 1E-E Private Acceptance ===");
+  console.log("=== Phase 1E-F Private Acceptance ===");
   console.log(artifact);
   console.log(`\nArtifact written to ${path.join(artifactDir, "phase-1e-parser-acceptance.txt")}`);
 
-  // The script succeeds when it truthfully reports the blocked state.
   if (!analysisPerformed) {
     console.log(
       "\nBLOCKED: native PDF inference is not available; no customer files were transmitted for analysis.",

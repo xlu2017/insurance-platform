@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 68d79e14c34697b0c3d8f1661e87d9de7516142343446395b8986f75fdd49108
+// source-hash: dcc2b51d96d1cdafff0cba7205733519a58a82352d60ae6c64ec8fd7b1b32d22
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -42523,13 +42523,21 @@ var NativeDocumentAnalyzer = class {
   provider;
   bytesLoader;
   requireNativeInput;
+  authorization;
+  fileLifecycleStore;
+  lifecycleRecords = /* @__PURE__ */ new Map();
   constructor(options) {
     this.provider = options.provider;
     this.bytesLoader = options.bytesLoader;
     this.requireNativeInput = options.requireNativeInput ?? true;
+    this.authorization = options.authorization;
+    this.fileLifecycleStore = options.fileLifecycleStore;
   }
   async analyze(input) {
     InsuranceDocumentAnalysisInputSchema.parse(input);
+    if (!this.authorization || this.authorization.authorizationResult !== "authorized") {
+      throw new Error("Document processing not authorized: consent required or withdrawn");
+    }
     const originalInputs = [];
     const fileDigestByDocumentId = /* @__PURE__ */ new Map();
     for (const uploaded of input.uploadedDocuments) {
@@ -42539,41 +42547,51 @@ var NativeDocumentAnalyzer = class {
       fileDigestByDocumentId.set(original.documentId, digest);
     }
     const resolved = await this.provider.resolveModel();
-    const uploadResults = [];
     const fileHandles = [];
-    let deletionResults = [];
-    let validationFeedback = "";
-    let lastError;
     let normalizedResult;
     try {
-      for (const original of originalInputs) {
-        const capability = await this.provider.resolveInputMode(original);
-        if (this.requireNativeInput && capability.mode === "provider_extracted_text") {
+      const capabilities = await Promise.all(
+        originalInputs.map((o) => this.provider.resolveInputMode(o))
+      );
+      for (let i = 0; i < originalInputs.length; i++) {
+        const original = originalInputs[i];
+        const capability = capabilities[i];
+        if (!capability.supported || capability.mode === "unsupported" || this.requireNativeInput && capability.mode === "provider_extracted_text") {
           throw new Error(
             `Unsupported file type for native document analysis: ${original.filename} (${capability.reason})`
           );
         }
       }
-      uploadResults.push(
-        ...await Promise.all(originalInputs.map((f) => this.provider.uploadOriginalFile(f)))
+      const settled = await Promise.allSettled(
+        originalInputs.map((original) => this.uploadAndRecord(original))
       );
-      for (const result2 of uploadResults) {
-        if (result2.status !== "ready" || !result2.handle) {
-          throw new Error(
-            `Unsupported file type for native document analysis: ${result2.errorCategory ?? "upload_failed"}`
-          );
+      const uploadFailures = [];
+      for (let i = 0; i < settled.length; i++) {
+        const result2 = settled[i];
+        if (result2.status === "rejected") {
+          uploadFailures.push(String(result2.reason));
+          continue;
         }
-        if (this.requireNativeInput && result2.handle.mode === "provider_extracted_text") {
-          throw new Error(
-            `Unsupported file type for native document analysis: ${result2.handle.filename} was converted to extracted text`
-          );
+        const uploadResult = result2.value;
+        if (uploadResult.status !== "ready" || !uploadResult.handle) {
+          uploadFailures.push(uploadResult.errorCategory ?? "upload_failed");
+          continue;
         }
-        fileHandles.push(result2.handle);
+        if (this.requireNativeInput && uploadResult.handle.mode === "provider_extracted_text") {
+          uploadFailures.push(
+            `Unsupported file type for native document analysis: ${uploadResult.handle.filename} was converted to extracted text`
+          );
+          continue;
+        }
+        fileHandles.push(uploadResult.handle);
       }
-      const syntheticExtractedDocs = originalInputs.map((original) => ({
+      if (uploadFailures.length > 0) {
+        throw new Error(`Document upload failed: ${uploadFailures.join("; ")}`);
+      }
+      const syntheticExtractedDocs = originalInputs.map((original, i) => ({
         documentId: original.documentId,
         fileDigest: fileDigestByDocumentId.get(original.documentId) ?? "unknown",
-        pageCount: 0,
+        pageCount: fileHandles[i]?.mode === "native_image_reference" ? 1 : 0,
         pages: []
       }));
       const documentAliasMap = /* @__PURE__ */ new Map();
@@ -42592,6 +42610,8 @@ var NativeDocumentAnalyzer = class {
         documentIds: input.uploadedDocuments.map((d) => d.documentId),
         candidateContexts
       });
+      let validationFeedback = "";
+      let lastError;
       for (let attempt = 1; attempt <= 2; attempt++) {
         const userPrompt = validationFeedback ? `${baseUserPrompt}
 
@@ -42623,20 +42643,86 @@ ${validationFeedback}` : baseUserPrompt;
       if (!normalizedResult) {
         throw lastError ?? new Error("Document analysis failed after validation repair attempt");
       }
-    } finally {
-      deletionResults = await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h)));
+    } catch (err) {
+      await this.deleteAll(fileHandles);
+      throw err;
     }
-    return {
-      ...normalizedResult,
-      providerMetadata: {
-        providerFiles: fileHandles.map((h) => ({
-          documentId: h.documentId,
-          mode: h.mode,
-          bytes: h.bytes
-        })),
-        deletionResults
-      }
+    const deletionResults = await this.deleteAll(fileHandles);
+    normalizedResult.modelProvider = GENERIC_PARSER_ID;
+    normalizedResult.modelId = GENERIC_PARSER_VERSION;
+    normalizedResult.providerMetadata = {
+      providerId: this.provider.providerId,
+      modelId: resolved.modelId,
+      providerFiles: fileHandles.map((h) => ({
+        documentId: h.documentId,
+        mode: h.mode,
+        bytes: h.bytes
+      })),
+      deletionResults
     };
+    return normalizedResult;
+  }
+  async uploadAndRecord(original) {
+    if (this.fileLifecycleStore && this.authorization) {
+      const record = await this.fileLifecycleStore.recordUpload({
+        authorizationId: this.authorization.id,
+        policyDocumentId: original.documentId,
+        providerFileId: "pending",
+        uploadStatus: "started"
+      });
+      this.lifecycleRecords.set(original.documentId, record.id);
+    }
+    try {
+      const result2 = await this.provider.uploadOriginalFile(original);
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(original.documentId);
+        if (recordId) {
+          if (result2.status === "ready" && result2.handle) {
+            await this.fileLifecycleStore.markUploadCompleted(recordId, {
+              providerFileId: result2.handle.providerFileId,
+              uploadStatus: "completed",
+              processingStatus: "ready"
+            });
+          } else {
+            await this.fileLifecycleStore.markUploadCompleted(recordId, {
+              uploadStatus: result2.status === "rejected" ? "rejected" : "failed"
+            });
+          }
+        }
+      }
+      return result2;
+    } catch (err) {
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(original.documentId);
+        if (recordId) {
+          await this.fileLifecycleStore.markUploadCompleted(recordId, { uploadStatus: "failed" });
+        }
+      }
+      throw err;
+    }
+  }
+  async deleteAll(handles) {
+    const results = [];
+    for (const handle of handles) {
+      const result2 = await this.provider.deleteFile(handle);
+      results.push(result2);
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(handle.documentId);
+        if (recordId) {
+          await this.fileLifecycleStore.recordDeletionAttempt(recordId, result2);
+          if (!result2.deleted) {
+            const nextAttemptAt = /* @__PURE__ */ new Date();
+            nextAttemptAt.setMinutes(nextAttemptAt.getMinutes() + 5 * result2.attempts);
+            await this.fileLifecycleStore.queueCleanup(
+              recordId,
+              result2.failureCategory ?? "deletion_failed",
+              nextAttemptAt.toISOString()
+            );
+          }
+        }
+      }
+    }
+    return results;
   }
 };
 function buildNativeAnalysisUserPrompt(args) {
@@ -42687,7 +42773,8 @@ var CUSTOMER_FACING_MESSAGES = {
   DOCUMENT_PROCESSING_FAILED: "Document processing failed. Please try again or contact support.",
   DOCUMENT_ANALYSIS_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later.",
   DOCUMENT_ANALYSIS_FAILED: "Document analysis failed. Please try again or contact support.",
-  DOCUMENT_MODEL_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later."
+  DOCUMENT_MODEL_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later.",
+  DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED: "Review and accept the document-processing notice before analyzing these files."
 };
 function sanitizeProviderError(error, supportReference) {
   const supportId = supportReference ?? generateSupportReference();
@@ -42695,7 +42782,10 @@ function sanitizeProviderError(error, supportReference) {
   const lower = message.toLowerCase();
   let code = "DOCUMENT_ANALYSIS_FAILED";
   let retryable = false;
-  if (lower.includes("unsupported file") || lower.includes("file type") || lower.includes("invalid file") || lower.includes("not currently supported")) {
+  if (lower.includes("not authorized") || lower.includes("consent required") || lower.includes("consent withdrawn") || lower.includes("privacy notice")) {
+    code = "DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED";
+    retryable = false;
+  } else if (lower.includes("unsupported file") || lower.includes("file type") || lower.includes("invalid file") || lower.includes("not currently supported")) {
     code = "DOCUMENT_FILE_UNSUPPORTED";
   } else if (lower.includes("too large")) {
     code = "DOCUMENT_FILE_TOO_LARGE";
@@ -42729,7 +42819,7 @@ var ConfigAndConsentPrivacyPreparation = class {
     this.config = config;
     this.consent = consent;
   }
-  async prepare(input) {
+  assertAuthorized() {
     if (!this.config.externalDocumentProcessingEnabled) {
       throw new Error(
         "Document processing is not enabled. External document processing must be enabled by the operator."
@@ -42772,12 +42862,31 @@ var ConfigAndConsentPrivacyPreparation = class {
     if (this.consent.processorContractVersion !== this.config.processorContractVersion) {
       throw new Error("The recorded processor contract version is out of date.");
     }
+  }
+  async prepare(input) {
+    this.assertAuthorized();
     const privacyAssessmentId = `privacy-${this.consent.householdId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     return {
       mode: "raw_original",
       file: input,
       privacyAssessmentId
     };
+  }
+  async authorize(actorProfileId, authorizationStore) {
+    this.assertAuthorized();
+    return authorizationStore.createAuthorization({
+      householdId: this.consent.householdId,
+      actorProfileId,
+      consentId: this.consent.id,
+      purpose: this.consent.purpose,
+      privacyNoticeVersion: this.consent.privacyNoticeVersion,
+      processorContractVersion: this.consent.processorContractVersion,
+      foreignProcessingAcknowledged: this.consent.foreignProcessingAcknowledged,
+      automatedProcessingAcknowledged: this.consent.automatedProcessingAcknowledged,
+      rawProcessingApproved: this.consent.rawProcessingApproved,
+      externalProcessingEnabled: this.config.externalDocumentProcessingEnabled,
+      authorizationResult: "authorized"
+    });
   }
 };
 function privacyPreparationConfigFromEnv(getEnv) {
@@ -42797,11 +42906,16 @@ var KimiK3Provider = class {
   requestedModel;
   resolvedModel = null;
   timeoutMs;
+  fetchImpl;
   constructor(options) {
     this.baseUrl = (options.baseUrl ?? "https://api.moonshot.ai/v1").replace(/\/+$/, "");
     this.apiKey = options.apiKey;
     this.requestedModel = options.requestedModel;
     this.timeoutMs = options.timeoutMs ?? 12e5;
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+  fetch(...args) {
+    return this.fetchImpl(...args);
   }
   async resolveModel() {
     if (this.resolvedModel) return this.resolvedModel;
@@ -42826,7 +42940,7 @@ var KimiK3Provider = class {
       modelId: model.id,
       supportsImageInput: !!model.supports_image_in,
       supportsVideoInput: !!model.supports_video_in,
-      supportsGenericFileInput: !!model.supports_file_in,
+      supportsGenericFileInput: false,
       supportedReferenceSchemes: ["ms://"],
       providerMetadata: {
         owned_by: model.owned_by,
@@ -42839,7 +42953,7 @@ var KimiK3Provider = class {
     };
   }
   async listModels() {
-    const response = await fetch(`${this.baseUrl}/models`, {
+    const response = await this.fetch(`${this.baseUrl}/models`, {
       method: "GET",
       headers: { Authorization: `Bearer ${this.apiKey}` }
     });
@@ -42863,9 +42977,6 @@ var KimiK3Provider = class {
     if (mime.startsWith("video/") && model.supportsVideoInput) {
       return { mimeType: input.mimeType, mode: "native_video_reference", supported: true };
     }
-    if (model.supportsGenericFileInput) {
-      return { mimeType: input.mimeType, mode: "native_file_reference", supported: true };
-    }
     if (mime.startsWith("image/")) {
       return {
         mimeType: input.mimeType,
@@ -42884,7 +42995,7 @@ var KimiK3Provider = class {
     }
     return {
       mimeType: input.mimeType,
-      mode: "provider_extracted_text",
+      mode: "unsupported",
       supported: false,
       reason: "Native file reference is not supported for this file type"
     };
@@ -42897,23 +43008,14 @@ var KimiK3Provider = class {
         errorCategory: capability.reason ?? "unsupported_file_type"
       };
     }
-    let purpose;
-    if (capability.mode === "native_image_reference") {
-      purpose = "image";
-    } else if (capability.mode === "native_video_reference") {
-      purpose = "video";
-    } else if (capability.mode === "native_file_reference") {
-      purpose = "file";
-    } else {
-      purpose = "file-extract";
-    }
+    const purpose = capability.mode === "native_image_reference" ? "image" : capability.mode === "native_video_reference" ? "video" : "file";
     const form = new FormData();
     form.append("purpose", purpose);
     form.append("file", new Blob([input.bytes], { type: input.mimeType }), input.filename);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await fetch(`${this.baseUrl}/files`, {
+      const response = await this.fetch(`${this.baseUrl}/files`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.apiKey}` },
         body: form,
@@ -42958,7 +43060,7 @@ var KimiK3Provider = class {
   async pollFileStatus(fileId) {
     const deadline = Date.now() + 6e4;
     while (Date.now() < deadline) {
-      const response = await fetch(`${this.baseUrl}/files/${fileId}`, {
+      const response = await this.fetch(`${this.baseUrl}/files/${fileId}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${this.apiKey}` }
       });
@@ -43000,7 +43102,7 @@ var KimiK3Provider = class {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      const response = await this.fetch(`${this.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -43031,7 +43133,7 @@ var KimiK3Provider = class {
     while (attempts < maxAttempts) {
       attempts += 1;
       try {
-        const response = await fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
+        const response = await this.fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${this.apiKey}` }
         });
@@ -43177,4 +43279,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "68d79e14c34697b0c3d8f1661e87d9de7516142343446395b8986f75fdd49108";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "dcc2b51d96d1cdafff0cba7205733519a58a82352d60ae6c64ec8fd7b1b32d22";

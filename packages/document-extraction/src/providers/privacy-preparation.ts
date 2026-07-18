@@ -1,4 +1,8 @@
-import type { OriginalFileInput } from "./native-document-analysis.ts";
+import type {
+  AuthorizationStore,
+  DocumentProcessingAuthorization,
+  OriginalFileInput,
+} from "./native-document-analysis.ts";
 
 export type PrivacyPreparationMode = "raw_original" | "sanitized_derivative";
 
@@ -10,6 +14,10 @@ export interface PrivacyPreparationResult {
 
 export interface DocumentPrivacyPreparation {
   prepare(input: OriginalFileInput): Promise<PrivacyPreparationResult>;
+  authorize(
+    actorProfileId: string,
+    authorizationStore: AuthorizationStore,
+  ): Promise<DocumentProcessingAuthorization>;
 }
 
 export interface PrivacyGateConfig {
@@ -20,6 +28,7 @@ export interface PrivacyGateConfig {
 }
 
 export interface ProcessingConsentCheck {
+  id?: string;
   householdId: string;
   profileId?: string;
   purpose: string;
@@ -40,7 +49,7 @@ export class ConfigAndConsentPrivacyPreparation implements DocumentPrivacyPrepar
     this.consent = consent;
   }
 
-  async prepare(input: OriginalFileInput): Promise<PrivacyPreparationResult> {
+  private assertAuthorized(): void {
     if (!this.config.externalDocumentProcessingEnabled) {
       throw new Error(
         "Document processing is not enabled. External document processing must be enabled by the operator.",
@@ -83,13 +92,36 @@ export class ConfigAndConsentPrivacyPreparation implements DocumentPrivacyPrepar
     if (this.consent.processorContractVersion !== this.config.processorContractVersion) {
       throw new Error("The recorded processor contract version is out of date.");
     }
+  }
 
-    const privacyAssessmentId = `privacy-${this.consent.householdId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  async prepare(input: OriginalFileInput): Promise<PrivacyPreparationResult> {
+    this.assertAuthorized();
+    const privacyAssessmentId = `privacy-${this.consent!.householdId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     return {
       mode: "raw_original",
       file: input,
       privacyAssessmentId,
     };
+  }
+
+  async authorize(
+    actorProfileId: string,
+    authorizationStore: AuthorizationStore,
+  ): Promise<DocumentProcessingAuthorization> {
+    this.assertAuthorized();
+    return authorizationStore.createAuthorization({
+      householdId: this.consent!.householdId,
+      actorProfileId,
+      consentId: this.consent!.id,
+      purpose: this.consent!.purpose,
+      privacyNoticeVersion: this.consent!.privacyNoticeVersion,
+      processorContractVersion: this.consent!.processorContractVersion,
+      foreignProcessingAcknowledged: this.consent!.foreignProcessingAcknowledged,
+      automatedProcessingAcknowledged: this.consent!.automatedProcessingAcknowledged,
+      rawProcessingApproved: this.consent!.rawProcessingApproved,
+      externalProcessingEnabled: this.config.externalDocumentProcessingEnabled,
+      authorizationResult: "authorized",
+    });
   }
 }
 

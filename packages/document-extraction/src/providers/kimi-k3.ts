@@ -14,6 +14,7 @@ export interface KimiK3ProviderOptions {
   baseUrl?: string;
   requestedModel?: string;
   timeoutMs?: number;
+  fetchImpl?: typeof fetch;
 }
 
 interface KimiFileObject {
@@ -52,12 +53,18 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
   private requestedModel?: string;
   private resolvedModel: ResolvedDocumentModel | null = null;
   private timeoutMs: number;
+  private fetchImpl: typeof fetch;
 
   constructor(options: KimiK3ProviderOptions) {
     this.baseUrl = (options.baseUrl ?? "https://api.moonshot.ai/v1").replace(/\/+$/, "");
     this.apiKey = options.apiKey;
     this.requestedModel = options.requestedModel;
     this.timeoutMs = options.timeoutMs ?? 1_200_000;
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  private fetch(...args: Parameters<typeof fetch>): ReturnType<typeof fetch> {
+    return this.fetchImpl(...args);
   }
 
   async resolveModel(): Promise<ResolvedDocumentModel> {
@@ -87,7 +94,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       modelId: model.id,
       supportsImageInput: !!model.supports_image_in,
       supportsVideoInput: !!model.supports_video_in,
-      supportsGenericFileInput: !!model.supports_file_in,
+      supportsGenericFileInput: false,
       supportedReferenceSchemes: ["ms://"],
       providerMetadata: {
         owned_by: model.owned_by,
@@ -101,7 +108,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
   }
 
   private async listModels(): Promise<KimiModel[]> {
-    const response = await fetch(`${this.baseUrl}/models`, {
+    const response = await this.fetch(`${this.baseUrl}/models`, {
       method: "GET",
       headers: { Authorization: `Bearer ${this.apiKey}` },
     });
@@ -128,9 +135,6 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     if (mime.startsWith("video/") && model.supportsVideoInput) {
       return { mimeType: input.mimeType, mode: "native_video_reference", supported: true };
     }
-    if (model.supportsGenericFileInput) {
-      return { mimeType: input.mimeType, mode: "native_file_reference", supported: true };
-    }
     if (mime.startsWith("image/")) {
       return {
         mimeType: input.mimeType,
@@ -147,10 +151,10 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
         reason: "Video input is not supported by the resolved document model",
       };
     }
-    // PDF and other document types have no documented generic native reference in this API.
+    // Generic native file references are not implemented and tested for this provider.
     return {
       mimeType: input.mimeType,
-      mode: "provider_extracted_text",
+      mode: "unsupported",
       supported: false,
       reason: "Native file reference is not supported for this file type",
     };
@@ -166,16 +170,12 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       };
     }
 
-    let purpose: string;
-    if (capability.mode === "native_image_reference") {
-      purpose = "image";
-    } else if (capability.mode === "native_video_reference") {
-      purpose = "video";
-    } else if (capability.mode === "native_file_reference") {
-      purpose = "file";
-    } else {
-      purpose = "file-extract";
-    }
+    const purpose =
+      capability.mode === "native_image_reference"
+        ? "image"
+        : capability.mode === "native_video_reference"
+          ? "video"
+          : "file";
 
     const form = new FormData();
     form.append("purpose", purpose);
@@ -185,7 +185,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(`${this.baseUrl}/files`, {
+      const response = await this.fetch(`${this.baseUrl}/files`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.apiKey}` },
         body: form,
@@ -235,7 +235,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
   ): Promise<{ status: string; errorCategory?: string }> {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
-      const response = await fetch(`${this.baseUrl}/files/${fileId}`, {
+      const response = await this.fetch(`${this.baseUrl}/files/${fileId}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${this.apiKey}` },
       });
@@ -284,7 +284,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      const response = await this.fetch(`${this.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -319,7 +319,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     while (attempts < maxAttempts) {
       attempts += 1;
       try {
-        const response = await fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
+        const response = await this.fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${this.apiKey}` },
         });

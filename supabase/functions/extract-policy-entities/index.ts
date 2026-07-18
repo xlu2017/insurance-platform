@@ -22,6 +22,105 @@ import {
   type ProcessingConsentCheck,
 } from "../_shared/document-extraction.js";
 
+class SupabaseAuthorizationStore {
+  constructor(private admin) {}
+  async createAuthorization(auth) {
+    const { data, error } = await this.admin
+      .from("document_processing_authorizations")
+      .insert({
+        household_id: auth.householdId,
+        actor_profile_id: auth.actorProfileId,
+        consent_id: auth.consentId,
+        purpose: auth.purpose,
+        privacy_notice_version: auth.privacyNoticeVersion,
+        processor_contract_version: auth.processorContractVersion,
+        foreign_processing_acknowledged: auth.foreignProcessingAcknowledged,
+        automated_processing_acknowledged: auth.automatedProcessingAcknowledged,
+        raw_processing_approved: auth.rawProcessingApproved,
+        external_processing_enabled: auth.externalProcessingEnabled,
+        authorization_result: auth.authorizationResult,
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw new Error("Failed to persist document processing authorization");
+    return { ...auth, id: data.id, authorizedAt: new Date().toISOString() };
+  }
+  async updateAuthorization(id, patch) {
+    const { error } = await this.admin
+      .from("document_processing_authorizations")
+      .update(patch)
+      .eq("id", id);
+    if (error) throw new Error("Failed to update authorization: " + error.message);
+  }
+}
+
+class SupabaseFileLifecycleStore {
+  constructor(private admin) {}
+  async recordUpload(record) {
+    const { data, error } = await this.admin
+      .from("document_analysis_provider_files")
+      .insert({
+        authorization_id: record.authorizationId,
+        analysis_request_id: record.analysisRequestId,
+        policy_document_id: record.policyDocumentId,
+        provider_file_id: record.providerFileId,
+        upload_status: record.uploadStatus,
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw new Error("Failed to record provider file upload: " + error?.message);
+    return {
+      ...record,
+      id: data.id,
+      uploadStartedAt: new Date().toISOString(),
+      deletionAttempts: 0,
+    };
+  }
+  async markUploadCompleted(id, patch) {
+    const updates = { ...patch, upload_completed_at: new Date().toISOString() };
+    const { error } = await this.admin
+      .from("document_analysis_provider_files")
+      .update(updates)
+      .eq("id", id);
+    if (error) throw new Error("Failed to mark upload completed: " + error.message);
+  }
+  async recordDeletionAttempt(id, result) {
+    const { error } = await this.admin
+      .from("document_analysis_provider_files")
+      .update({
+        deletion_status: result.deleted ? "deleted" : "queued",
+        deletion_attempts: result.attempts,
+        last_deletion_error_category: result.failureCategory,
+        deleted_at: result.deleted ? new Date().toISOString() : null,
+      })
+      .eq("id", id);
+    if (error) throw new Error("Failed to record deletion attempt: " + error.message);
+    await this.admin.from("document_analysis_cleanup_attempts").insert({
+      file_id: id,
+      status_code: result.statusCode,
+      failure_category: result.failureCategory,
+      success: result.deleted,
+    });
+  }
+  async queueCleanup(id, failureCategory, nextAttemptAt) {
+    const { error } = await this.admin
+      .from("document_analysis_provider_files")
+      .update({
+        deletion_status: "queued",
+        last_deletion_error_category: failureCategory,
+        next_deletion_attempt_at: nextAttemptAt,
+      })
+      .eq("id", id);
+    if (error) throw new Error("Failed to queue cleanup: " + error.message);
+    await this.admin.from("document_analysis_cleanup_attempts").insert({
+      file_id: id,
+      failure_category: failureCategory,
+      success: false,
+      next_attempt_at: nextAttemptAt,
+    });
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -321,11 +420,24 @@ Deno.serve(async (req) => {
 
   const { data: household, error: householdErr } = await supabase
     .from("households")
-    .select("id")
+    .select("id, owner_profile_id")
     .eq("id", householdId)
     .maybeSingle();
   if (householdErr || !household) {
     return jsonError("Household not found", 404);
+  }
+
+  const isHouseholdActor =
+    household.owner_profile_id === user.id ||
+    (await supabase
+      .from("household_members")
+      .select("id")
+      .eq("household_id", householdId)
+      .eq("profile_id", user.id)
+      .maybeSingle()
+      .then((r) => !!r.data));
+  if (!isHouseholdActor) {
+    return jsonError("Household access denied", 403);
   }
 
   const { data: docRows, error: docsErr } = await supabase
@@ -444,11 +556,12 @@ Deno.serve(async (req) => {
   const { data: consentRows, error: consentErr } = await admin
     .from("document_processing_consent")
     .select(
-      "household_id, profile_id, purpose, privacy_notice_version, foreign_processing_acknowledged, automated_processing_acknowledged, processor_contract_version, raw_processing_approved, withdrawn_at",
+      "id, household_id, profile_id, purpose, privacy_notice_version, foreign_processing_acknowledged, automated_processing_acknowledged, processor_contract_version, raw_processing_approved, withdrawn_at",
     )
     .eq("household_id", householdId)
+    .eq("profile_id", user.id)
     .eq("purpose", "insurance_policy_extraction")
-    .is("withdrawn_at", null)
+    .eq("status", "active")
     .order("consented_at", { ascending: false })
     .limit(1);
 
@@ -459,6 +572,7 @@ Deno.serve(async (req) => {
   const consent: ProcessingConsentCheck | undefined =
     consentRows && consentRows.length > 0
       ? {
+          id: consentRows[0].id ? String(consentRows[0].id) : undefined,
           householdId: String(consentRows[0].household_id),
           profileId: consentRows[0].profile_id ? String(consentRows[0].profile_id) : undefined,
           purpose: String(consentRows[0].purpose),
@@ -473,20 +587,21 @@ Deno.serve(async (req) => {
         }
       : undefined;
 
-  for (const uploaded of uploadedDocuments) {
-    const bytes = bytesByReference[uploaded.documentId];
-    const prep = new ConfigAndConsentPrivacyPreparation(privacyConfig, consent);
-    const originalInput = {
-      documentId: uploaded.documentId,
-      filename: uploaded.filename,
-      mimeType: uploaded.mimeType,
-      bytes,
-    };
-    try {
-      await prep.prepare(originalInput);
-    } catch (err) {
-      return jsonError(sanitizeProviderError(err), 503);
+  const prep = new ConfigAndConsentPrivacyPreparation(privacyConfig, consent);
+  let authorization;
+  try {
+    for (const uploaded of uploadedDocuments) {
+      const bytes = bytesByReference[uploaded.documentId];
+      await prep.prepare({
+        documentId: uploaded.documentId,
+        filename: uploaded.filename,
+        mimeType: uploaded.mimeType,
+        bytes,
+      });
     }
+    authorization = await prep.authorize(user.id, new SupabaseAuthorizationStore(admin));
+  } catch (err) {
+    return jsonError(sanitizeProviderError(err), 403);
   }
 
   const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
@@ -497,6 +612,7 @@ Deno.serve(async (req) => {
     );
   }
 
+  const fileLifecycleStore = new SupabaseFileLifecycleStore(admin);
   const analyzer = createNativeDocumentAnalyzer({
     provider: new KimiK3Provider({
       apiKey: kimiApiKey,
@@ -504,6 +620,8 @@ Deno.serve(async (req) => {
     }),
     bytesLoader: new MemoryFileBytesLoader(bytesByReference),
     requireNativeInput: Deno.env.get("DOCUMENT_ANALYSIS_REQUIRE_NATIVE_INPUT") !== "false",
+    authorization,
+    fileLifecycleStore,
   });
 
   let analysis;
@@ -782,6 +900,8 @@ Deno.serve(async (req) => {
       p_analysis_json: analysisJson,
       p_documents_json: documentsJson,
       p_candidates_json: candidatesJson,
+      p_authorization_id: authorization.id,
+      p_consent_id: consent?.id,
     },
   );
   if (persistErr || !persistResult) {
