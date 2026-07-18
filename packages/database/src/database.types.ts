@@ -5,6 +5,7 @@ export type Database = {
     Tables: {
       asset_candidates: {
         Row: {
+          analysis_run_id: string | null;
           asset_type: Database["public"]["Enums"]["candidate_asset_type"];
           conflicts_json: Json;
           created_at: string;
@@ -22,6 +23,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          analysis_run_id?: string | null;
           asset_type: Database["public"]["Enums"]["candidate_asset_type"];
           conflicts_json?: Json;
           created_at?: string;
@@ -39,6 +41,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          analysis_run_id?: string | null;
           asset_type?: Database["public"]["Enums"]["candidate_asset_type"];
           conflicts_json?: Json;
           created_at?: string;
@@ -56,6 +59,13 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "asset_candidates_analysis_run_id_fkey";
+            columns: ["analysis_run_id"];
+            isOneToOne: false;
+            referencedRelation: "document_analysis_runs";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "asset_candidates_household_id_fkey";
             columns: ["household_id"];
@@ -418,6 +428,75 @@ export type Database = {
           },
         ];
       };
+      document_analysis_runs: {
+        Row: {
+          attempt_count: number;
+          attempted_model_id: string | null;
+          attempted_model_provider: string | null;
+          created_at: string;
+          fallback_reason: string | null;
+          household_id: string;
+          id: string;
+          model_id: string;
+          model_provider: string;
+          output_schema_version: string;
+          prompt_version: string;
+          raw_response_json: Json | null;
+          session_id: string | null;
+          validated_output_json: Json;
+          warnings_json: Json;
+        };
+        Insert: {
+          attempt_count?: number;
+          attempted_model_id?: string | null;
+          attempted_model_provider?: string | null;
+          created_at?: string;
+          fallback_reason?: string | null;
+          household_id: string;
+          id?: string;
+          model_id: string;
+          model_provider: string;
+          output_schema_version?: string;
+          prompt_version?: string;
+          raw_response_json?: Json | null;
+          session_id?: string | null;
+          validated_output_json: Json;
+          warnings_json?: Json;
+        };
+        Update: {
+          attempt_count?: number;
+          attempted_model_id?: string | null;
+          attempted_model_provider?: string | null;
+          created_at?: string;
+          fallback_reason?: string | null;
+          household_id?: string;
+          id?: string;
+          model_id?: string;
+          model_provider?: string;
+          output_schema_version?: string;
+          prompt_version?: string;
+          raw_response_json?: Json | null;
+          session_id?: string | null;
+          validated_output_json?: Json;
+          warnings_json?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_analysis_runs_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_analysis_runs_session_id_fkey";
+            columns: ["session_id"];
+            isOneToOne: false;
+            referencedRelation: "document_extraction_sessions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_extraction_sessions: {
         Row: {
           created_at: string;
@@ -562,6 +641,7 @@ export type Database = {
       };
       extracted_documents: {
         Row: {
+          analysis_run_id: string | null;
           classification: string;
           created_at: string;
           extracted_at: string;
@@ -577,6 +657,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          analysis_run_id?: string | null;
           classification?: string;
           created_at?: string;
           extracted_at?: string;
@@ -592,6 +673,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          analysis_run_id?: string | null;
           classification?: string;
           created_at?: string;
           extracted_at?: string;
@@ -607,6 +689,13 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "extracted_documents_analysis_run_id_fkey";
+            columns: ["analysis_run_id"];
+            isOneToOne: false;
+            referencedRelation: "document_analysis_runs";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "extracted_documents_household_id_fkey";
             columns: ["household_id"];

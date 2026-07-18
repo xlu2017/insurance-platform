@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: d0873dec61752eb4658c34b552b7283300af7e40b2e78b9ddfadfc963524869b
+// source-hash: 77bd3e016b76bf9903155aff576d772da8812fffc3f795cad16bf47a3482bcd1
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -36089,7 +36089,8 @@ var ParsedInsuranceDocument = z.object({
   assetAssertions: z.array(ParsedAssetAssertion).default([]),
   coverageAssertions: z.array(ParsedCoverageAssertion).default([]),
   parserId: z.string(),
-  parserVersion: z.string()
+  parserVersion: z.string(),
+  pageCount: z.number().int().nonnegative().default(0)
 }).strict();
 
 // src/parsers/ids.ts
@@ -36818,7 +36819,8 @@ async function parseHome(document2) {
     assetAssertions,
     coverageAssertions: selectedValues(selected),
     parserId: ID,
-    parserVersion: VERSION
+    parserVersion: VERSION,
+    pageCount: document2.pageCount
   };
   return result2;
 }
@@ -37514,7 +37516,8 @@ async function parseAuto(document2) {
     assetAssertions,
     coverageAssertions: selectedValues(selected),
     parserId: ID2,
-    parserVersion: VERSION2
+    parserVersion: VERSION2,
+    pageCount: document2.pageCount
   };
   return result2;
 }
@@ -37541,7 +37544,8 @@ async function parseDocument(document2) {
       return ParsedInsuranceDocument.parse({
         ...parsed,
         documentId: document2.documentId,
-        fileDigest: document2.fileDigest
+        fileDigest: document2.fileDigest,
+        pageCount: document2.pageCount
       });
     }
   }
@@ -37549,6 +37553,7 @@ async function parseDocument(document2) {
     classification: "unsupported",
     documentId: document2.documentId,
     fileDigest: document2.fileDigest,
+    pageCount: document2.pageCount,
     parserId: "none",
     parserVersion: "0"
   });
@@ -39992,6 +39997,7 @@ function stripMarkdownJsonFence(text) {
 var HttpLlmProvider = class {
   providerId;
   modelId;
+  supportsImageInput;
   apiUrl;
   apiKey;
   constructor(options) {
@@ -40000,6 +40006,7 @@ var HttpLlmProvider = class {
     this.apiKey = options.apiKey;
     this.modelId = options.model;
     this.providerId = options.providerId ?? "http-llm-provider";
+    this.supportsImageInput = options.supportsImageInput ?? false;
   }
   async extract(request, systemPrompt) {
     let messages;
@@ -40211,13 +40218,14 @@ var CurrentPolicySchema = z.object({
 }).strict();
 var MandateRuleSchema = z.union([
   z.object({ rule: z.literal("minimum"), amountCents: z.number().int().positive() }).strict(),
-  z.object({ rule: z.literal("maximum"), amountCents: z.number().int().positive() }).strict(),
+  z.object({ rule: z.literal("maximum"), amountCents: z.number().int().nonnegative() }).strict(),
   z.object({ rule: z.literal("match_current_or_better"), value: z.string().min(1) }).strict(),
   z.object({ rule: z.literal("required") }).strict(),
   z.object({ rule: z.literal("any"), reason: z.string().optional() }).strict()
 ]);
 var DetectedInsuranceEntitySchema = z.object({
   temporaryId: z.string().min(1),
+  canonicalFingerprint: z.string().min(1),
   entityType: z.enum(["property", "vehicle"]),
   displayLabel: z.string().min(1),
   identity: DetectedEntityIdentitySchema,
@@ -40246,8 +40254,12 @@ var DetectedConflictSchema = z.object({
 }).strict();
 var AnalysisWarningSchema = z.object({
   message: z.string().min(1),
-  documentId: z.string().optional()
-}).strict();
+  documentId: z.string().nullable().optional()
+}).strict().transform((w) => {
+  const out = { message: w.message };
+  if (w.documentId) out.documentId = w.documentId;
+  return out;
+});
 var InsuranceDocumentAnalysisResultSchema = z.object({
   analysisVersion: AnalysisVersion,
   modelProvider: z.string().min(1),
@@ -40258,7 +40270,11 @@ var InsuranceDocumentAnalysisResultSchema = z.object({
   warnings: z.array(AnalysisWarningSchema),
   attemptedModelProvider: z.string().min(1).optional(),
   attemptedModelId: z.string().min(1).optional(),
-  fallbackReason: z.string().optional()
+  fallbackReason: z.string().optional(),
+  rawResponse: z.unknown().nullable().optional(),
+  attemptCount: z.number().int().positive().optional(),
+  promptVersion: z.string().optional(),
+  outputSchemaVersion: z.string().optional()
 }).strict();
 function valueForFieldPath(assertions, fieldPath) {
   return assertions.find((a) => a.fieldPath === fieldPath)?.normalizedValue;
@@ -40519,7 +40535,8 @@ function buildDetectedEntity(candidate, doc, documentId, existingByFingerprint, 
     );
   }
   return {
-    temporaryId: candidate.identityFingerprint,
+    temporaryId: generateOpaqueId(),
+    canonicalFingerprint: candidate.identityFingerprint,
     entityType: candidate.assetType,
     displayLabel: candidate.displayLabel,
     identity,
@@ -40544,7 +40561,7 @@ function buildAnalyzedDocument(doc) {
     classification: doc.classification,
     parserId: doc.parserId,
     parserVersion: doc.parserVersion,
-    pageCount: 0,
+    pageCount: doc.pageCount ?? 0,
     extractedEntityCount: doc.assetAssertions.length
   };
 }
@@ -40687,7 +40704,7 @@ var LlmFirstDocumentAnalyzer = class {
   }
   async analyzeWithLlm(input, extractedDocs) {
     if (!this.provider) return null;
-    const request = buildLlmAnalysisRequest(input, extractedDocs);
+    const { content, documentIdMap } = buildLlmAnalysisRequest(input, extractedDocs);
     const basePrompt = buildInsuranceAnalysisSystemPrompt();
     let validationFeedback = "";
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -40696,8 +40713,15 @@ var LlmFirstDocumentAnalyzer = class {
 
 Your previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:
 ${validationFeedback}` : basePrompt;
-        const raw = await this.provider.extract(request, systemPrompt);
-        const normalized = normalizeLlmAnalysisResult(raw, input, extractedDocs, this.provider);
+        const raw = await this.provider.extract({ content }, systemPrompt);
+        const normalized = normalizeLlmAnalysisResult(
+          raw,
+          input,
+          extractedDocs,
+          this.provider,
+          attempt,
+          documentIdMap
+        );
         return InsuranceDocumentAnalysisResultSchema.parse(normalized);
       } catch (error) {
         validationFeedback = validationFeedback || `${error instanceof Error ? error.message : String(error)}`.slice(0, 2e3);
@@ -40811,12 +40835,25 @@ ${validationFeedback}` : basePrompt;
       documents,
       detectedEntities,
       unresolvedConflicts,
-      warnings
+      warnings,
+      rawResponse: null,
+      attemptCount: 1,
+      promptVersion: "1.0.0",
+      outputSchemaVersion: "1.0.0"
     });
   }
 };
 function buildLlmAnalysisRequest(input, extractedDocs) {
   const parts = [];
+  const documentIdMap = /* @__PURE__ */ new Map();
+  const documentAliases = [];
+  for (let i = 0; i < extractedDocs.length; i++) {
+    const doc = extractedDocs[i];
+    const alias = `doc-${i + 1}`;
+    documentIdMap.set(doc.documentId, doc.documentId);
+    documentIdMap.set(alias, doc.documentId);
+    documentAliases.push(`${alias} = ${doc.documentId}`);
+  }
   parts.push({
     type: "text",
     text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.
@@ -40829,15 +40866,19 @@ ${JSON.stringify(input.existingAssets)}
 Pending candidates:
 ${JSON.stringify(input.pendingCandidates)}
 
+Document IDs (use ONLY these exact values for evidence documentId fields):
+${documentAliases.join("\n")}
+
 The pages below are provided as extracted text. When page images are available they are included after the text for the same page.`
   });
   for (const doc of extractedDocs) {
+    const alias = documentIdMap.get(doc.documentId) === doc.documentId ? `doc-${extractedDocs.indexOf(doc) + 1}` : doc.documentId;
     const meta = input.uploadedDocuments.find((u) => u.documentId === doc.documentId);
     const filename = meta?.filename ?? doc.documentId;
     parts.push({
       type: "text",
       text: `
---- Document ${doc.documentId} (${filename}, ${doc.pageCount} pages) ---`
+--- ${alias}: ${doc.documentId} (${filename}, ${doc.pageCount} pages) ---`
     });
     for (const page of doc.pages) {
       parts.push({
@@ -40854,7 +40895,7 @@ ${page.text}`
       }
     }
   }
-  return { content: parts };
+  return { content: parts, documentIdMap };
 }
 var INSURANCE_ANALYSIS_SYSTEM_PROMPT = `You are an insurance document analyst. Read the uploaded policy PDFs (provided as page-level text) and produce a single JSON object that conforms to the schema below. Do not include markdown fences, commentary, or any keys not in the schema.
 
@@ -40948,11 +40989,21 @@ function buildInsuranceAnalysisSystemPrompt() {
   return INSURANCE_ANALYSIS_SYSTEM_PROMPT;
 }
 function countEntitiesForDocument(documentId, entities) {
-  return entities.filter((entity) => entity.evidence.some((e) => e.documentId === documentId)).length;
+  return entities.filter((entity) => {
+    if (entity.evidence.some((e) => e.documentId === documentId)) return true;
+    return Object.values(entity.currentCoverage).some(
+      (cv) => cv.evidence?.some((e) => e.documentId === documentId)
+    );
+  }).length;
 }
 function documentClassification(documentId, entities) {
   const types = new Set(
-    entities.filter((e) => e.evidence.some((ev) => ev.documentId === documentId)).map((e) => e.entityType)
+    entities.filter((e) => {
+      if (e.evidence.some((ev) => ev.documentId === documentId)) return true;
+      return Object.values(e.currentCoverage).some(
+        (cv) => cv.evidence?.some((ev) => ev.documentId === documentId)
+      );
+    }).map((e) => e.entityType)
   );
   if (types.has("vehicle") && types.has("property")) return "unknown";
   if (types.has("vehicle")) return "auto_policy_renewal";
@@ -40966,9 +41017,10 @@ function normalizeMandateRule(raw, fieldPath) {
   const typed = raw;
   const rule = typed.rule;
   if (rule === "minimum" || rule === "maximum") {
-    if (typeof typed.amountCents !== "number" || typed.amountCents <= 0 || !Number.isInteger(typed.amountCents)) {
+    const minAmount = rule === "minimum" ? 1 : 0;
+    if (typeof typed.amountCents !== "number" || typed.amountCents < minAmount || !Number.isInteger(typed.amountCents)) {
       throw new Error(
-        `mandateSuggestions.${fieldPath}.${rule} requires a positive integer amountCents`
+        `mandateSuggestions.${fieldPath}.${rule} requires an integer amountCents >= ${minAmount}`
       );
     }
     return { rule, amountCents: typed.amountCents };
@@ -41008,7 +41060,11 @@ function normalizeCurrentValue(raw, fieldPath, documentIdMap) {
   if (Array.isArray(typed.evidence) && typed.evidence.length > 0) {
     evidence = typed.evidence.map((item, index) => {
       try {
-        return EvidenceReferenceSchema.parse(item);
+        const ref = EvidenceReferenceSchema.parse(item);
+        if (ref.documentId && documentIdMap.has(ref.documentId)) {
+          return { ...ref, documentId: documentIdMap.get(ref.documentId) };
+        }
+        return ref;
       } catch (err) {
         throw new Error(
           `currentCoverage.${fieldPath}.evidence[${index}] is invalid: ${err instanceof Error ? err.message : String(err)}`
@@ -41026,7 +41082,63 @@ function normalizeCurrentValue(raw, fieldPath, documentIdMap) {
   }
   return evidence ? { status, value, confidence: typed.confidence, evidence, explanation } : { status, value, confidence: typed.confidence, explanation };
 }
-function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider) {
+function buildCanonicalFingerprintForIdentity(identity, entityType, fallbackId) {
+  if (entityType === "vehicle") {
+    const result3 = buildVehicleIdentity({
+      vin: identity.vin ?? void 0,
+      modelYear: identity.year ?? void 0,
+      make: identity.make ?? void 0,
+      model: identity.model ?? void 0,
+      trim: identity.trim ?? void 0
+    });
+    return result3.exactFingerprint ?? `possible:${fallbackId}`;
+  }
+  const result2 = buildPropertyIdentity({
+    addressLine1: identity.fullAddress ?? void 0,
+    city: identity.city ?? void 0,
+    province: identity.province ?? void 0,
+    postalCode: identity.postalCode ?? void 0,
+    occupancy: identity.occupancy === "other" ? void 0 : identity.occupancy,
+    isRedacted: false
+  });
+  return result2.exactFingerprint ?? `possible:${fallbackId}`;
+}
+function isExactFingerprint(fingerprint) {
+  return fingerprint.startsWith("vehicle:vin:") && fingerprint.length > "vehicle:vin:".length || fingerprint.startsWith("property:") && fingerprint.includes("|");
+}
+function resolveCanonicalFingerprint(candidateFingerprint, entityType, resolution, matchedExisting, matchedPending) {
+  if (resolution.status === "matches_existing" && matchedExisting) {
+    const matchedExact = isExactFingerprint(matchedExisting.identityFingerprint);
+    const candidateExact = isExactFingerprint(candidateFingerprint);
+    if (matchedExact && candidateExact && matchedExisting.identityFingerprint !== candidateFingerprint) {
+      resolution.status = "possible_match_requires_confirmation";
+      return candidateFingerprint;
+    }
+    if (matchedExact) return matchedExisting.identityFingerprint;
+    if (candidateExact) return candidateFingerprint;
+    return matchedExisting.identityFingerprint;
+  }
+  if (resolution.status === "matches_pending_candidate" && matchedPending) {
+    const matchedExact = isExactFingerprint(matchedPending.identityFingerprint);
+    const candidateExact = isExactFingerprint(candidateFingerprint);
+    if (matchedExact && candidateExact && matchedPending.identityFingerprint !== candidateFingerprint) {
+      resolution.status = "possible_match_requires_confirmation";
+      return candidateFingerprint;
+    }
+    if (matchedExact) return matchedPending.identityFingerprint;
+    if (candidateExact) return candidateFingerprint;
+    return matchedPending.identityFingerprint;
+  }
+  return candidateFingerprint;
+}
+function generateOpaqueId() {
+  const cryptoGlobal = crypto;
+  if (typeof cryptoGlobal.randomUUID === "function") {
+    return cryptoGlobal.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, attemptCount, documentAliasMap) {
   if (!raw || typeof raw !== "object") {
     throw new Error("LLM response is not a JSON object");
   }
@@ -41036,31 +41148,84 @@ function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider) {
   }
   const unresolvedConflicts = Array.isArray(typed.unresolvedConflicts) ? typed.unresolvedConflicts : [];
   const warnings = Array.isArray(typed.warnings) ? typed.warnings : [];
-  const documentIdMap = /* @__PURE__ */ new Map();
-  for (const doc of extractedDocs) {
-    documentIdMap.set(doc.documentId, doc.documentId);
-  }
+  const documentIdMap = new Map(documentAliasMap);
   for (const doc of input.priorDocumentSummaries) {
     documentIdMap.set(doc.documentId, doc.documentId);
   }
+  const existingById = /* @__PURE__ */ new Map();
+  for (const asset of input.existingAssets) {
+    existingById.set(asset.id, asset);
+  }
+  const pendingById = /* @__PURE__ */ new Map();
+  for (const candidate of input.pendingCandidates) {
+    pendingById.set(candidate.id, candidate);
+  }
+  const rawEntityIdMap = /* @__PURE__ */ new Map();
+  for (let index = 0; index < typed.detectedEntities.length; index++) {
+    const entity = typed.detectedEntities[index];
+    if (!entity || typeof entity !== "object") {
+      throw new Error(`detectedEntities[${index}] is not an object`);
+    }
+    const e = entity;
+    if (typeof e.temporaryId !== "string" || e.temporaryId.trim().length === 0) {
+      throw new Error(`detectedEntities[${index}] is missing a temporaryId`);
+    }
+    const rawId = e.temporaryId.trim();
+    if (rawEntityIdMap.has(rawId)) {
+      throw new Error(`detectedEntities[${index}] has duplicate temporaryId ${rawId}`);
+    }
+    rawEntityIdMap.set(rawId, generateOpaqueId());
+  }
+  const allowedDocumentIds = new Set(documentIdMap.values());
   const enrichedEntities = typed.detectedEntities.map(
     (entity, index) => {
-      if (!entity || typeof entity !== "object") {
-        throw new Error(`detectedEntities[${index}] is not an object`);
-      }
       const e = entity;
       const entityType = e.entityType === "property" || e.entityType === "vehicle" ? e.entityType : null;
       if (!entityType) {
         throw new Error(`detectedEntities[${index}] is missing a valid entityType`);
       }
-      if (typeof e.temporaryId !== "string" || e.temporaryId.trim().length === 0) {
-        throw new Error(`detectedEntities[${index}] is missing a temporaryId`);
-      }
-      const temporaryId = e.temporaryId.trim();
+      const rawTemporaryId = e.temporaryId;
+      const temporaryId = rawEntityIdMap.get(rawTemporaryId) ?? generateOpaqueId();
       const displayLabel = typeof e.displayLabel === "string" && e.displayLabel.trim().length > 0 ? e.displayLabel.trim() : temporaryId;
       const identity = DetectedEntityIdentitySchema.parse(e.identity);
       const resolution = EntityResolutionSchema.parse(e.resolution);
       const currentPolicy = CurrentPolicySchema.parse(e.currentPolicy);
+      const candidateFingerprint = buildCanonicalFingerprintForIdentity(
+        identity,
+        entityType,
+        temporaryId
+      );
+      const matchedExisting = resolution.matchedExistingEntityId ? existingById.get(resolution.matchedExistingEntityId) : void 0;
+      const matchedPending = resolution.matchedPendingCandidateId ? pendingById.get(resolution.matchedPendingCandidateId) : void 0;
+      if (resolution.status === "matches_existing" && !matchedExisting) {
+        throw new Error(
+          `detectedEntities[${index}].resolution references unknown matchedExistingEntityId ${resolution.matchedExistingEntityId}`
+        );
+      }
+      if (resolution.status === "matches_pending_candidate" && !matchedPending) {
+        throw new Error(
+          `detectedEntities[${index}].resolution references unknown matchedPendingCandidateId ${resolution.matchedPendingCandidateId}`
+        );
+      }
+      if (resolution.status === "possible_match_requires_confirmation") {
+        if (resolution.matchedExistingEntityId && !matchedExisting || resolution.matchedPendingCandidateId && !matchedPending) {
+          throw new Error(
+            `detectedEntities[${index}].resolution references unknown possible-match id`
+          );
+        }
+        if (matchedExisting && matchedExisting.assetType !== entityType || matchedPending && matchedPending.assetType !== entityType) {
+          throw new Error(
+            `detectedEntities[${index}].resolution possible-match assetType mismatch`
+          );
+        }
+      }
+      const canonicalFingerprint = resolveCanonicalFingerprint(
+        candidateFingerprint,
+        entityType,
+        resolution,
+        matchedExisting,
+        matchedPending
+      );
       const rawCoverage = e.currentCoverage ?? {};
       const currentCoverage = {};
       for (const [fieldPath, rawValue] of Object.entries(rawCoverage)) {
@@ -41073,7 +41238,13 @@ function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider) {
       }
       const evidence = Array.isArray(e.evidence) ? e.evidence.map((item, idx) => {
         try {
-          return EvidenceReferenceSchema.parse(item);
+          const ref = EvidenceReferenceSchema.parse(item);
+          const mappedId = ref.documentId ? documentIdMap.get(ref.documentId) : void 0;
+          const mapped = mappedId ? { ...ref, documentId: mappedId } : ref;
+          if (mapped.documentId && !allowedDocumentIds.has(mapped.documentId)) {
+            throw new Error(`evidence references unknown documentId ${mapped.documentId}`);
+          }
+          return mapped;
         } catch (err) {
           throw new Error(
             `detectedEntities[${index}].evidence[${idx}] is invalid: ${err instanceof Error ? err.message : String(err)}`
@@ -41085,6 +41256,7 @@ function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider) {
       const requiredConfirmations = Array.isArray(e.requiredConfirmations) ? e.requiredConfirmations.filter((x) => typeof x === "string" && x.length > 0) : [];
       return {
         temporaryId,
+        canonicalFingerprint,
         entityType,
         displayLabel,
         identity,
@@ -41099,7 +41271,12 @@ function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider) {
   );
   const normalizedConflicts = unresolvedConflicts.map((conflict, index) => {
     try {
-      return DetectedConflictSchema.parse(conflict);
+      const parsed = DetectedConflictSchema.parse(conflict);
+      const mappedId = rawEntityIdMap.get(parsed.entityRef);
+      if (mappedId) {
+        return { ...parsed, entityRef: mappedId };
+      }
+      return parsed;
     } catch (err) {
       throw new Error(
         `unresolvedConflicts[${index}] is invalid: ${err instanceof Error ? err.message : String(err)}`
@@ -41131,7 +41308,11 @@ function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider) {
     documents,
     detectedEntities: enrichedEntities,
     unresolvedConflicts: normalizedConflicts,
-    warnings: normalizedWarnings
+    warnings: normalizedWarnings,
+    rawResponse: raw,
+    attemptCount,
+    promptVersion: "1.0.0",
+    outputSchemaVersion: "1.0.0"
   };
 }
 function createLlmFirstAnalyzer(options) {
@@ -41219,4 +41400,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "d0873dec61752eb4658c34b552b7283300af7e40b2e78b9ddfadfc963524869b";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "77bd3e016b76bf9903155aff576d772da8812fffc3f795cad16bf47a3482bcd1";
