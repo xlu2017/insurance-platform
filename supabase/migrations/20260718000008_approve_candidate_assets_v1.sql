@@ -84,6 +84,7 @@ declare
   v_annual_premium bigint;
   v_current_mandate_version int;
   v_current_switching_version int;
+  v_product_line product_line;
 begin
   v_caller_role := current_setting('request.jwt.claims', true)::jsonb->>'role';
   if v_caller_role is null or v_caller_role <> 'service_role' then
@@ -191,6 +192,11 @@ begin
     v_identity := v_facts->'identity';
     v_current_policy := v_facts->'currentPolicy';
 
+    v_product_line := case v_candidate.asset_type
+      when 'vehicle' then 'auto'::product_line
+      when 'property' then 'property'::product_line
+    end;
+
     -- Create or update the insured asset.
     if v_candidate.asset_type = 'vehicle' then
       v_year := coalesce((v_identity->>'year')::int, 0);
@@ -292,7 +298,7 @@ begin
             annual_premium_cents, renewal_date, coverage_details, is_current,
             created_by, updated_by
           ) values (
-            p_household_id, null, v_insurer_name, v_candidate.asset_type,
+            p_household_id, null, v_insurer_name, v_product_line,
             v_policy_number, v_annual_premium, v_expiry_date, v_current_coverage, true,
             p_actor_profile_id, p_actor_profile_id
           ) returning id into v_policy_id;

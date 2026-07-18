@@ -3030,7 +3030,13 @@ export type Database = {
       billing_method: "automatic_bank" | "credit_card" | "mail";
       broker_direct_preference: "broker" | "direct" | "indifferent";
       candidate_asset_type: "property" | "vehicle";
-      candidate_decision: "undecided" | "approve_new" | "link_existing" | "skip" | "not_sure";
+      candidate_decision:
+        | "undecided"
+        | "approve_new"
+        | "link_existing"
+        | "skip"
+        | "not_sure"
+        | "approved";
       candidate_field_review_action:
         | "confirm"
         | "correct"
@@ -3292,7 +3298,14 @@ export const Constants = {
       billing_method: ["automatic_bank", "credit_card", "mail"],
       broker_direct_preference: ["broker", "direct", "indifferent"],
       candidate_asset_type: ["property", "vehicle"],
-      candidate_decision: ["undecided", "approve_new", "link_existing", "skip", "not_sure"],
+      candidate_decision: [
+        "undecided",
+        "approve_new",
+        "link_existing",
+        "skip",
+        "not_sure",
+        "approved",
+      ],
       candidate_field_review_action: [
         "confirm",
         "correct",
