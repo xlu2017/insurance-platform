@@ -135,6 +135,13 @@ export function buildPropertyIdentity(input: PropertyIdentityInput): PropertyIde
     input.addressLine1 && !isRedactedOrPlaceholder(input.addressLine1)
       ? normalizeAddressTokens(input.addressLine1)
       : null;
+
+  // A full civic address must include a street number. Rural routes and other
+  // edge cases require customer confirmation and are not exact identities.
+  const hasStreetNumber =
+    normalizedAddressLine1 &&
+    normalizedAddressLine1.split(/\s+/).some((token) => /^\d+$/.test(token));
+
   const normalizedUnit = normalizeUnit(input.unit);
   const normalizedCity = normalizeOptionalText(input.city);
   const normalizedProvince = input.province ? (normalizeProvince(input.province) ?? null) : null;
@@ -142,7 +149,7 @@ export function buildPropertyIdentity(input: PropertyIdentityInput): PropertyIde
     ? (normalizePostalCode(input.postalCode) ?? null)
     : null;
 
-  if (input.isRedacted || !normalizedAddressLine1) {
+  if (input.isRedacted || !normalizedAddressLine1 || !hasStreetNumber) {
     reasons.push("insured_civic_address_missing_or_redacted");
   }
   if (!normalizedCity) reasons.push("insured_city_missing");
@@ -150,7 +157,11 @@ export function buildPropertyIdentity(input: PropertyIdentityInput): PropertyIde
   if (!normalizedPostalCode) reasons.push("insured_postal_code_missing_or_invalid");
 
   const completeAddress =
-    normalizedAddressLine1 && normalizedCity && normalizedProvince && normalizedPostalCode;
+    normalizedAddressLine1 &&
+    hasStreetNumber &&
+    normalizedCity &&
+    normalizedProvince &&
+    normalizedPostalCode;
 
   const exactFingerprint = completeAddress
     ? `property:${joinFingerprintParts([

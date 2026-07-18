@@ -38,6 +38,11 @@ function validLlmResponse(): InsuranceDocumentAnalysisResult {
       {
         temporaryId: "vehicle:vin:1HGBH41JXMN109186",
         canonicalFingerprint: "vehicle:vin:1HGBH41JXMN109186",
+        candidateIdentity: {
+          exactIdentityFingerprint: "vehicle:vin:1HGBH41JXMN109186",
+          provisionalCandidateKey: "vehicle:vin:1HGBH41JXMN109186",
+          identityStrength: "exact",
+        },
         entityType: "vehicle",
         displayLabel: "2021 Honda Civic",
         identity: {

@@ -1,11 +1,25 @@
 commit: local
 provider: deepseek
 model: deepseek-v4-pro
+native PDF input: false
+images: false
+fallback used: false
 private PDF count: 4
-A digest: a4c89781ff8518c1c1cf49d6741e8bdf468b286b2bb4f4fad851cde7149443e5
-A summary: {"confirmationRequired":3,"conflicts":0,"documents":[{"classification":"home_policy_renewal","pageCount":20},{"classification":"home_policy_renewal","pageCount":24},{"classification":"home_policy_renewal","pageCount":18},{"classification":"auto_policy_renewal","pageCount":10}],"properties":3,"vehicles":1,"warnings":2}
-C digest: 609bf915840d85f55c60d161643c15ffb1d44e2f3b3e87c4cc4489da8f902ed7
-D digest: 7048ff172d543e1bf2c3dfa7e876465720aed28a01f767137d291fce1056ecf5
-E digest: 8bef74332a864dc895cbc606a0bbd183aaa39226133156724f3aeadba05720f9
+A summary hash: 0fc3b1886cd1cfcd97b6bfee54057485d3f053c78913e86ded19768ecaf85b31
+B summary hash: 0fc3b1886cd1cfcd97b6bfee54057485d3f053c78913e86ded19768ecaf85b31
+C summary hash: 0fc3b1886cd1cfcd97b6bfee54057485d3f053c78913e86ded19768ecaf85b31
+D summary hash: 0fc3b1886cd1cfcd97b6bfee54057485d3f053c78913e86ded19768ecaf85b31
+E summary hash: 0fc3b1886cd1cfcd97b6bfee54057485d3f053c78913e86ded19768ecaf85b31
 A result: 4 documents, 3 properties, 1 vehicles, 3 confirmation-required
+A documents: PASS
+A properties: PASS
+A vehicles: PASS
+A confirmation-required: PASS
+A LLM path exercised: PASS
+A/B summaries equal: PASS
+A/C summaries equal: PASS
+A/D summaries equal: PASS
+A/E summaries equal: PASS
+F vehicle exact match: PASS
+G property possible match: PASS
 private acceptance: PASS

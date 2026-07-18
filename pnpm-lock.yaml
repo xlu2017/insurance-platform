@@ -271,6 +271,12 @@ importers:
       '@autopilot/schemas':
         specifier: workspace:*
         version: link:../schemas
+      '@napi-rs/canvas':
+        specifier: 1.0.2
+        version: 1.0.2
+      path2d:
+        specifier: 0.3.3
+        version: 0.3.3
       pdfjs-dist:
         specifier: ^6.1.200
         version: 6.1.200
@@ -5483,6 +5489,10 @@ packages:
     resolution: {integrity: sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==}
     engines: {node: '>=8'}
 
+  path2d@0.3.3:
+    resolution: {integrity: sha512-wVz8vOQFX2m5Onr6u3XOtvhl8ag3/FXhN2n+yvdN+z/GIAkiMIe0fMa1yO6usvhgd9Oh7RxnDZTqk7Tl+JKWoQ==}
+    engines: {node: '>=6'}
+
   pathe@1.1.2:
     resolution: {integrity: sha512-whLdWMYL2TwI08hn8/ZqAbrVemu0LNaNNJZX73O6qaIdCTfXutsLhMkjdENX0qhsQ9uIimo4/aQOmXkoon2nDQ==}
 
@@ -8723,7 +8733,6 @@ snapshots:
       '@napi-rs/canvas-linux-x64-musl': 1.0.2
       '@napi-rs/canvas-win32-arm64-msvc': 1.0.2
       '@napi-rs/canvas-win32-x64-msvc': 1.0.2
-    optional: true
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
@@ -13128,6 +13137,8 @@ snapshots:
       minipass: 7.1.3
 
   path-type@4.0.0: {}
+
+  path2d@0.3.3: {}
 
   pathe@1.1.2: {}
 

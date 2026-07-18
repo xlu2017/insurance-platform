@@ -363,6 +363,7 @@ export type LlmExtractionRequest = z.infer<typeof LlmExtractionRequestSchema>;
 export interface InsuranceLlmProvider {
   readonly providerId: string;
   readonly modelId: string;
+  readonly supportsNativePdfInput?: boolean;
   readonly supportsImageInput?: boolean;
   extract(request: unknown, systemPrompt: string): Promise<unknown>;
 }

@@ -112,20 +112,10 @@ class PolyfillDOMMatrix {
   }
 }
 
-class PolyfillPath2D {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  addPath(_path: unknown, _matrix?: unknown): void {
-    // no-op; text extraction does not need path rendering
-  }
-}
-
 function ensureCanvasPolyfills(): void {
   const g = globalThis as unknown as Record<string, unknown>;
   if (typeof g.DOMMatrix === "undefined") {
     g.DOMMatrix = PolyfillDOMMatrix as unknown as typeof globalThis.DOMMatrix;
-  }
-  if (typeof g.Path2D === "undefined") {
-    g.Path2D = PolyfillPath2D as unknown as typeof globalThis.Path2D;
   }
   const abProto = ArrayBuffer.prototype as unknown as Record<string, unknown>;
   if (typeof abProto.transferToFixedLength !== "function") {
@@ -137,6 +127,69 @@ function ensureCanvasPolyfills(): void {
     abProto.transfer = function (this: ArrayBuffer) {
       return this.slice(0);
     };
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CanvasModule = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Path2dModule = any;
+
+let nodeCanvasModule: CanvasModule | undefined;
+let path2dModule: Path2dModule | undefined;
+
+async function initNodeCanvas(): Promise<{
+  canvas: CanvasModule;
+  path2d: Path2dModule;
+}> {
+  if (nodeCanvasModule && path2dModule) {
+    return { canvas: nodeCanvasModule, path2d: path2dModule };
+  }
+  const [canvas, path2d] = await Promise.all([import("canvas"), import("path2d")]);
+  nodeCanvasModule = canvas;
+  path2dModule = path2d;
+  path2d.applyPath2DToCanvasRenderingContext(
+    canvas.CanvasRenderingContext2D as unknown as Parameters<
+      typeof path2d.applyPath2DToCanvasRenderingContext
+    >[0],
+  );
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.Path2D = path2d.Path2D;
+  if (typeof g.Image === "undefined") {
+    g.Image = canvas.Image;
+  }
+  return { canvas, path2d };
+}
+
+class NodeCanvasFactory {
+  private canvas: CanvasModule;
+
+  constructor(canvas: CanvasModule) {
+    this.canvas = canvas;
+  }
+
+  create(width: number, height: number) {
+    if (width <= 0 || height <= 0) {
+      throw new Error("Invalid canvas size");
+    }
+    const cvs = this.canvas.createCanvas(width, height);
+    const ctx = cvs.getContext("2d");
+    return { canvas: cvs, context: ctx };
+  }
+
+  reset(entry: { canvas: { width: number; height: number } }, width: number, height: number) {
+    if (!entry.canvas) throw new Error("Canvas is not specified");
+    if (width <= 0 || height <= 0) throw new Error("Invalid canvas size");
+    entry.canvas.width = width;
+    entry.canvas.height = height;
+  }
+
+  destroy(entry: { canvas: { width: number; height: number } | null; context: unknown }) {
+    if (!entry.canvas) throw new Error("Canvas is not specified");
+    entry.canvas.width = 0;
+    entry.canvas.height = 0;
+    entry.canvas = null as unknown as { width: number; height: number };
+    entry.context = null;
   }
 }
 
@@ -154,21 +207,39 @@ export async function extractPdfPages(options: ExtractPdfOptions): Promise<Extra
   const fileDigest = Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+
+  const includeImages = options.includeImages ?? false;
+  const imageScale = options.imageScale ?? 2;
+  const isDeno = typeof (globalThis as unknown as { Deno?: unknown }).Deno !== "undefined";
+
+  let CanvasFactory: unknown = undefined;
+  let canvasModule: CanvasModule | undefined;
+  if (includeImages && !isDeno) {
+    const init = await initNodeCanvas();
+    canvasModule = init.canvas;
+    CanvasFactory = class {
+      create(w: number, h: number) {
+        return new NodeCanvasFactory(init.canvas).create(w, h);
+      }
+      reset(entry: { canvas: { width: number; height: number } }, w: number, h: number) {
+        return new NodeCanvasFactory(init.canvas).reset(entry, w, h);
+      }
+      destroy(entry: { canvas: { width: number; height: number } | null; context: unknown }) {
+        return new NodeCanvasFactory(init.canvas).destroy(entry);
+      }
+    };
+  }
+
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  if (
-    typeof (globalThis as unknown as { Deno?: unknown }).Deno !== "undefined" &&
-    typeof __PDF_WORKER_DATA_URL__ !== "undefined"
-  ) {
+  if (isDeno && typeof __PDF_WORKER_DATA_URL__ !== "undefined") {
     pdfjs.GlobalWorkerOptions.workerSrc = __PDF_WORKER_DATA_URL__;
   }
   const doc = await pdfjs.getDocument({
     data: bytesArray,
     useSystemFonts: true,
     isEvalSupported: false,
+    CanvasFactory,
   } as unknown as Parameters<typeof pdfjs.getDocument>[0]).promise;
-
-  const includeImages = options.includeImages ?? false;
-  const imageScale = options.imageScale ?? 2;
 
   const pages: ExtractedPdfPage[] = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
@@ -190,8 +261,8 @@ export async function extractPdfPages(options: ExtractPdfOptions): Promise<Extra
     }
 
     let image: ExtractedPdfPage["image"] | undefined;
-    if (includeImages) {
-      image = await renderPageToImage(page, imageScale);
+    if (includeImages && canvasModule) {
+      image = await renderPageToImage(page, imageScale, canvasModule);
     }
 
     pages.push({
@@ -218,13 +289,13 @@ export async function extractPdfText(bytes: Uint8Array, documentId: string): Pro
 async function renderPageToImage(
   page: unknown,
   scale: number,
+  canvasModule: CanvasModule,
 ): Promise<ExtractedPdfPage["image"] | undefined> {
   try {
-    const { createCanvas } = await import("canvas");
     const viewport = (
       page as { getViewport: (opts: { scale: number }) => { width: number; height: number } }
     ).getViewport({ scale });
-    const canvas = createCanvas(viewport.width, viewport.height);
+    const canvas = canvasModule.createCanvas(viewport.width, viewport.height);
     const ctx = canvas.getContext("2d");
     await (
       page as {
@@ -238,7 +309,8 @@ async function renderPageToImage(
     }).promise;
     const base64 = canvas.toDataURL("image/png").split(",")[1];
     return { mimeType: "image/png", base64 };
-  } catch {
+  } catch (e) {
+    console.error("renderPageToImage error:", e);
     return undefined;
   }
 }

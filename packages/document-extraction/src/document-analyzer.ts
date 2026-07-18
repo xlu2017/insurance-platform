@@ -28,12 +28,24 @@ export const UploadedDocumentSchema = z
   .strict();
 export type UploadedDocument = z.infer<typeof UploadedDocumentSchema>;
 
+export const CandidateIdentitySchema = z
+  .object({
+    exactIdentityFingerprint: z.string().nullable(),
+    provisionalCandidateKey: z.string().min(1),
+    identityStrength: z.enum(["exact", "partial", "redacted", "unknown"]),
+  })
+  .strict();
+export type CandidateIdentity = z.infer<typeof CandidateIdentitySchema>;
+
 export const ExistingHouseholdAssetSchema = z
   .object({
     id: z.string().min(1),
     assetType: z.enum(["property", "vehicle"]),
     identityFingerprint: z.string().min(1),
     displayLabel: z.string().optional(),
+    candidateIdentity: z.lazy(() => CandidateIdentitySchema).optional(),
+    identity: z.lazy(() => DetectedEntityIdentitySchema).optional(),
+    currentPolicy: z.lazy(() => CurrentPolicySchema).optional(),
   })
   .strict();
 export type ExistingHouseholdAsset = z.infer<typeof ExistingHouseholdAssetSchema>;
@@ -43,6 +55,9 @@ export const PendingEntityCandidateSchema = z
     id: z.string().min(1),
     assetType: z.enum(["property", "vehicle"]),
     identityFingerprint: z.string().min(1),
+    candidateIdentity: z.lazy(() => CandidateIdentitySchema).optional(),
+    identity: z.lazy(() => DetectedEntityIdentitySchema).optional(),
+    currentPolicy: z.lazy(() => CurrentPolicySchema).optional(),
   })
   .strict();
 export type PendingEntityCandidate = z.infer<typeof PendingEntityCandidateSchema>;
@@ -150,6 +165,7 @@ export const DetectedInsuranceEntitySchema = z
   .object({
     temporaryId: z.string().min(1),
     canonicalFingerprint: z.string().min(1),
+    candidateIdentity: CandidateIdentitySchema,
     entityType: z.enum(["property", "vehicle"]),
     displayLabel: z.string().min(1),
     identity: DetectedEntityIdentitySchema,
@@ -447,9 +463,16 @@ function buildCurrentPolicy(
 
 function findPossibleMatch(
   candidate: ParsedAssetAssertion,
+  candidateFingerprint: string,
   existingByFingerprint: Map<string, ExistingHouseholdAsset>,
   pendingByFingerprint: Map<string, PendingEntityCandidate>,
 ): ExistingHouseholdAsset | PendingEntityCandidate | undefined {
+  if (candidate.assetType === "vehicle") {
+    for (const map of [existingByFingerprint, pendingByFingerprint]) {
+      const exact = map.get(candidateFingerprint);
+      if (exact) return exact;
+    }
+  }
   if (candidate.assetType === "property") {
     const postal = stringAssertion(candidate.assertions, "property.postalCode");
     if (postal) {
@@ -465,22 +488,17 @@ function findPossibleMatch(
       }
     }
   }
-  if (candidate.assetType === "vehicle") {
-    for (const map of [existingByFingerprint, pendingByFingerprint]) {
-      const exact = map.get(candidate.identityFingerprint);
-      if (exact) return exact;
-    }
-  }
   return undefined;
 }
 
 function mapResolution(
   candidate: ParsedAssetAssertion,
+  candidateFingerprint: string,
   existingByFingerprint: Map<string, ExistingHouseholdAsset>,
   pendingByFingerprint: Map<string, PendingEntityCandidate>,
 ): EntityResolution {
   if (candidate.matchClassification === "exact_existing_match") {
-    const existing = existingByFingerprint.get(candidate.identityFingerprint);
+    const existing = existingByFingerprint.get(candidateFingerprint);
     if (existing) {
       return {
         status: "matches_existing",
@@ -489,7 +507,7 @@ function mapResolution(
         reasoning: "Exact identity fingerprint matches an existing household asset.",
       };
     }
-    const pending = pendingByFingerprint.get(candidate.identityFingerprint);
+    const pending = pendingByFingerprint.get(candidateFingerprint);
     if (pending) {
       return {
         status: "matches_pending_candidate",
@@ -501,7 +519,12 @@ function mapResolution(
   }
 
   if (candidate.matchClassification === "possible_existing_match") {
-    const possible = findPossibleMatch(candidate, existingByFingerprint, pendingByFingerprint);
+    const possible = findPossibleMatch(
+      candidate,
+      candidateFingerprint,
+      existingByFingerprint,
+      pendingByFingerprint,
+    );
     if (possible && "identityFingerprint" in possible) {
       const isPending = !("displayLabel" in possible);
       return {
@@ -538,15 +561,19 @@ function mapResolution(
   };
 }
 
-function buildDetectedEntity(
+async function buildDetectedEntity(
   candidate: ParsedAssetAssertion,
   doc: ParsedInsuranceDocument,
   documentId: string,
   existingByFingerprint: Map<string, ExistingHouseholdAsset>,
   pendingByFingerprint: Map<string, PendingEntityCandidate>,
-): DetectedInsuranceEntity {
-  const currentCoverage = buildCurrentCoverage(candidate, documentId);
+): Promise<DetectedInsuranceEntity> {
+  const currentPolicy = buildCurrentPolicy(candidate, doc);
   const identity = buildIdentity(candidate);
+  const candidateIdentity = await buildCandidateIdentity(identity, candidate.assetType);
+  const canonicalFingerprint =
+    candidateIdentity.exactIdentityFingerprint ?? candidateIdentity.provisionalCandidateKey;
+  const currentCoverage = buildCurrentCoverage(candidate, documentId);
   const requiredConfirmations: string[] = [];
   if (candidate.matchClassification === "new_identity_confirmation_required") {
     requiredConfirmations.push(
@@ -561,12 +588,18 @@ function buildDetectedEntity(
 
   return {
     temporaryId: generateOpaqueId(),
-    canonicalFingerprint: candidate.identityFingerprint,
+    canonicalFingerprint,
+    candidateIdentity,
     entityType: candidate.assetType,
     displayLabel: candidate.displayLabel,
     identity,
-    resolution: mapResolution(candidate, existingByFingerprint, pendingByFingerprint),
-    currentPolicy: buildCurrentPolicy(candidate, doc),
+    resolution: mapResolution(
+      candidate,
+      canonicalFingerprint,
+      existingByFingerprint,
+      pendingByFingerprint,
+    ),
+    currentPolicy,
     currentCoverage,
     mandateSuggestions: buildMandateSuggestions(currentCoverage),
     evidence: candidate.assertions
@@ -782,13 +815,18 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     this.fallbackToDeterministic = options.fallbackToDeterministic ?? true;
   }
 
-  private async analyzeWithLlm(
-    input: InsuranceDocumentAnalysisInput,
-    extractedDocs: ExtractedPdf[],
+  private async analyzeSingleDocumentWithLlm(
+    uploaded: InsuranceDocumentAnalysisInput["uploadedDocuments"][number],
+    extractedDoc: ExtractedPdf,
+    baseInput: InsuranceDocumentAnalysisInput,
   ): Promise<InsuranceDocumentAnalysisResult | null> {
     if (!this.provider) return null;
 
-    const { content, documentIdMap } = buildLlmAnalysisRequest(input, extractedDocs);
+    const docInput: InsuranceDocumentAnalysisInput = {
+      ...baseInput,
+      uploadedDocuments: [uploaded],
+    };
+    const { content, documentIdMap } = buildLlmAnalysisRequest(docInput, [extractedDoc]);
     const basePrompt = buildInsuranceAnalysisSystemPrompt();
     let validationFeedback = "";
 
@@ -798,10 +836,10 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
           ? `${basePrompt}\n\nYour previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:\n${validationFeedback}`
           : basePrompt;
         const raw = await this.provider.extract({ content }, systemPrompt);
-        const normalized = normalizeLlmAnalysisResult(
+        const normalized = await normalizeLlmAnalysisResult(
           raw,
-          input,
-          extractedDocs,
+          docInput,
+          [extractedDoc],
           this.provider,
           attempt,
           documentIdMap,
@@ -816,6 +854,102 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     }
 
     return null;
+  }
+
+  private async analyzeWithLlm(
+    input: InsuranceDocumentAnalysisInput,
+    extractedDocs: ExtractedPdf[],
+  ): Promise<InsuranceDocumentAnalysisResult | null> {
+    if (!this.provider) return null;
+
+    const existingByFingerprint = new Map<string, ExistingHouseholdAsset>();
+    for (const asset of input.existingAssets) {
+      existingByFingerprint.set(asset.identityFingerprint, asset);
+    }
+
+    const allDocuments: AnalyzedDocument[] = [];
+    const allDetected: DetectedInsuranceEntity[] = [];
+    const allConflicts: DetectedConflict[] = [];
+    const allWarnings: AnalysisWarning[] = [];
+    const perDocTemporaryIdMap = new Map<string, string>();
+    let totalAttempts = 0;
+
+    for (let i = 0; i < extractedDocs.length; i++) {
+      const extractedDoc = extractedDocs[i];
+      const uploaded = input.uploadedDocuments[i];
+      if (!uploaded) continue;
+
+      const docResult = await this.analyzeSingleDocumentWithLlm(uploaded, extractedDoc, input);
+      if (!docResult) {
+        return null;
+      }
+      totalAttempts += docResult.attemptCount ?? 1;
+      allDocuments.push(...docResult.documents);
+      allWarnings.push(...docResult.warnings);
+
+      for (const e of docResult.detectedEntities) {
+        const existing = existingByFingerprint.get(e.canonicalFingerprint);
+        if (
+          existing &&
+          isExactFingerprint(e.canonicalFingerprint) &&
+          e.resolution.status !== "matches_existing"
+        ) {
+          e.resolution = {
+            status: "matches_existing",
+            matchedExistingEntityId: existing.id,
+            confidence: 0.99,
+            reasoning: "Exact identity fingerprint matches an existing household asset.",
+          };
+        }
+
+        const kept = allDetected.find((d) => d.canonicalFingerprint === e.canonicalFingerprint);
+        if (kept) {
+          perDocTemporaryIdMap.set(e.temporaryId, kept.temporaryId);
+          mergeDetectedEntities(kept, e);
+        } else {
+          allDetected.push(e);
+          perDocTemporaryIdMap.set(e.temporaryId, e.temporaryId);
+        }
+      }
+
+      for (const c of docResult.unresolvedConflicts) {
+        const mappedRef = perDocTemporaryIdMap.get(c.entityRef);
+        allConflicts.push({ ...c, entityRef: mappedRef ?? c.entityRef });
+      }
+    }
+
+    markPossiblePropertyDuplicates(allDetected);
+
+    const documentMap = new Map<string, AnalyzedDocument>();
+    for (const d of allDocuments) {
+      documentMap.set(d.documentId, d);
+    }
+    const finalDocuments = extractedDocs.map((d) => {
+      const analyzed = documentMap.get(d.documentId);
+      return {
+        documentId: d.documentId,
+        fileDigest: d.fileDigest,
+        classification: analyzed?.classification ?? "unknown",
+        parserId: analyzed?.parserId ?? this.provider?.providerId ?? "unknown",
+        parserVersion: analyzed?.parserVersion ?? this.provider?.modelId ?? "unknown",
+        pageCount: d.pageCount,
+        extractedEntityCount: countEntitiesForDocument(d.documentId, allDetected),
+      };
+    });
+
+    return InsuranceDocumentAnalysisResultSchema.parse({
+      analysisVersion: "1",
+      modelProvider: this.provider.providerId,
+      modelId: this.provider.modelId,
+      documents: finalDocuments,
+      detectedEntities: allDetected,
+      unresolvedConflicts: allConflicts,
+      warnings: allWarnings,
+      rawResponse: null,
+      attemptCount: totalAttempts,
+      promptVersion: "1.0.0",
+      outputSchemaVersion: "1.0.0",
+    });
   }
 
   async analyze(input: InsuranceDocumentAnalysisInput): Promise<InsuranceDocumentAnalysisResult> {
@@ -906,7 +1040,7 @@ export class LlmFirstDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     for (const candidate of resolved.candidates) {
       const doc = documentForCandidate.get(candidate.identityFingerprint) ?? resolved.documents[0];
       detectedEntities.push(
-        buildDetectedEntity(
+        await buildDetectedEntity(
           candidate,
           doc,
           doc?.documentId ?? candidate.assertions[0]?.documentId ?? "unknown",
@@ -966,24 +1100,19 @@ function buildLlmAnalysisRequest(
     const alias = `doc-${i + 1}`;
     documentIdMap.set(doc.documentId, doc.documentId);
     documentIdMap.set(alias, doc.documentId);
-    documentAliases.push(`${alias} = ${doc.documentId}`);
+    documentAliases.push(`${alias} = ${alias}`);
   }
 
   parts.push({
     type: "text",
-    text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.\n\nJurisdiction: ${input.jurisdiction}\n\nExisting household assets:\n${JSON.stringify(input.existingAssets)}\n\nPending candidates:\n${JSON.stringify(input.pendingCandidates)}\n\nDocument IDs (use ONLY these exact values for evidence documentId fields):\n${documentAliases.join("\n")}\n\nThe pages below are provided as extracted text. When page images are available they are included after the text for the same page.`,
+    text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.\n\nJurisdiction: ${input.jurisdiction}\n\nDocument IDs (use ONLY these exact values for evidence documentId fields):\n${documentAliases.join("\n")}\n\nThe pages below are provided as extracted text. When page images are available they are included after the text for the same page.`,
   });
 
   for (const doc of extractedDocs) {
-    const alias =
-      documentIdMap.get(doc.documentId) === doc.documentId
-        ? `doc-${extractedDocs.indexOf(doc) + 1}`
-        : doc.documentId;
-    const meta = input.uploadedDocuments.find((u) => u.documentId === doc.documentId);
-    const filename = meta?.filename ?? doc.documentId;
+    const alias = `doc-${extractedDocs.indexOf(doc) + 1}`;
     parts.push({
       type: "text",
-      text: `\n--- ${alias}: ${doc.documentId} (${filename}, ${doc.pageCount} pages) ---`,
+      text: `\n--- ${alias} (${doc.pageCount} pages) ---`,
     });
     for (const page of doc.pages) {
       parts.push({
@@ -1104,6 +1233,45 @@ function countEntitiesForDocument(documentId: string, entities: DetectedInsuranc
   }).length;
 }
 
+function mergeDetectedEntities(target: DetectedInsuranceEntity, source: DetectedInsuranceEntity) {
+  target.evidence.push(...source.evidence);
+  for (const [fieldPath, value] of Object.entries(source.currentCoverage)) {
+    const existing = target.currentCoverage[fieldPath];
+    if (!existing || (value.confidence ?? 0) > (existing.confidence ?? 0)) {
+      target.currentCoverage[fieldPath] = value;
+    }
+  }
+  target.mandateSuggestions = { ...target.mandateSuggestions, ...source.mandateSuggestions };
+  const required = new Set([...target.requiredConfirmations, ...source.requiredConfirmations]);
+  target.requiredConfirmations = Array.from(required);
+}
+
+function markPossiblePropertyDuplicates(entities: DetectedInsuranceEntity[]) {
+  const propertyGroups = new Map<string, DetectedInsuranceEntity[]>();
+  for (const e of entities) {
+    if (e.entityType !== "property") continue;
+    if (isExactFingerprint(e.canonicalFingerprint)) continue;
+    const postal = e.identity.postalCode?.toUpperCase().replace(/\s+/g, "");
+    if (!postal) continue;
+    const group = propertyGroups.get(postal) ?? [];
+    group.push(e);
+    propertyGroups.set(postal, group);
+  }
+  for (const group of propertyGroups.values()) {
+    if (group.length <= 1) continue;
+    for (const e of group) {
+      e.resolution = {
+        status: "possible_match_requires_confirmation",
+        confidence: 0.5,
+        reasoning: `Another pending property candidate shares postal code ${e.identity.postalCode}. Confirm whether they are the same property.`,
+      };
+      if (!e.requiredConfirmations.includes(e.resolution.reasoning)) {
+        e.requiredConfirmations.push(e.resolution.reasoning);
+      }
+    }
+  }
+}
+
 function documentClassification(documentId: string, entities: DetectedInsuranceEntity[]): string {
   const types = new Set(
     entities
@@ -1218,11 +1386,33 @@ function normalizeCurrentValue(
     : { status, value, confidence: typed.confidence, explanation };
 }
 
-function buildCanonicalFingerprintForIdentity(
+async function hashProvisionalKey(input: Record<string, unknown>): Promise<string> {
+  const keys = Object.keys(input).sort();
+  const ordered: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = input[key];
+    ordered[key] = value === undefined ? null : value;
+  }
+  const text = new TextEncoder().encode(JSON.stringify(ordered));
+  const digest = await crypto.subtle.digest("SHA-256", text);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `provisional:${hex.slice(0, 32)}`;
+}
+
+function isRedactedAddress(input: string | null | undefined): boolean {
+  if (!input) return true;
+  const normalized = input.toUpperCase().replace(/\s+/g, " ");
+  if (normalized.trim().length === 0) return true;
+  const markers = ["REDACTED", "WITHHELD", "NOT PROVIDED", "UNKNOWN", "XXXX", "****", "••••"];
+  return markers.some((m) => normalized.includes(m));
+}
+
+async function buildCandidateIdentity(
   identity: DetectedEntityIdentity,
   entityType: "property" | "vehicle",
-  fallbackId: string,
-): string {
+): Promise<CandidateIdentity> {
   if (entityType === "vehicle") {
     const result = buildVehicleIdentity({
       vin: identity.vin ?? undefined,
@@ -1231,10 +1421,37 @@ function buildCanonicalFingerprintForIdentity(
       model: identity.model ?? undefined,
       trim: identity.trim ?? undefined,
     });
-    // Only exact VIN-based identities may be merged automatically. Partial or redacted
-    // identities must remain separate candidates for customer resolution.
-    return result.exactFingerprint ?? `possible:${fallbackId}`;
+
+    if (result.exactFingerprint) {
+      return {
+        exactIdentityFingerprint: result.exactFingerprint,
+        provisionalCandidateKey: result.exactFingerprint,
+        identityStrength: "exact",
+      };
+    }
+
+    const key = await hashProvisionalKey({
+      entityType,
+      vin: result.normalizedVin?.toUpperCase().replace(/\s+/g, "") ?? null,
+      year: identity.year,
+      make: identity.make?.toLowerCase().trim() ?? null,
+      model: identity.model?.toLowerCase().trim() ?? null,
+      trim: identity.trim?.toLowerCase().trim() ?? null,
+    });
+
+    return {
+      exactIdentityFingerprint: null,
+      provisionalCandidateKey: key,
+      identityStrength:
+        identity.vin && !result.normalizedVin
+          ? "redacted"
+          : identity.year && identity.make && identity.model
+            ? "partial"
+            : "unknown",
+    };
   }
+
+  const redacted = identity.fullAddress ? isRedactedAddress(identity.fullAddress) : true;
   const result = buildPropertyIdentity({
     addressLine1: identity.fullAddress ?? undefined,
     city: identity.city ?? undefined,
@@ -1243,9 +1460,41 @@ function buildCanonicalFingerprintForIdentity(
     occupancy: (identity.occupancy === "other" ? undefined : identity.occupancy) as
       | PropertyIdentityInput["occupancy"]
       | undefined,
-    isRedacted: false,
+    isRedacted: redacted,
   });
-  return result.exactFingerprint ?? `possible:${fallbackId}`;
+
+  if (result.exactFingerprint) {
+    return {
+      exactIdentityFingerprint: result.exactFingerprint,
+      provisionalCandidateKey: result.exactFingerprint,
+      identityStrength: "exact",
+    };
+  }
+
+  const keyInput: Record<string, unknown> = {
+    entityType,
+    city: result.normalizedCity?.toLowerCase() ?? null,
+    province: result.normalizedProvince?.toLowerCase() ?? null,
+    postalCode: result.normalizedPostalCode?.replace(/\s+/g, "") ?? null,
+  };
+  // Do not include partial/fullAddress in the provisional key because the model
+  // often produces inconsistent partial addresses; city/province/postal are the
+  // strongest stable non-exact identity facts.
+  const key = await hashProvisionalKey(keyInput);
+
+  const strength: CandidateIdentity["identityStrength"] = redacted
+    ? "redacted"
+    : identity.city && identity.province
+      ? "partial"
+      : identity.postalCode
+        ? "partial"
+        : "unknown";
+
+  return {
+    exactIdentityFingerprint: null,
+    provisionalCandidateKey: key,
+    identityStrength: strength,
+  };
 }
 
 function isExactFingerprint(fingerprint: string): boolean {
@@ -1257,43 +1506,31 @@ function isExactFingerprint(fingerprint: string): boolean {
 
 function resolveCanonicalFingerprint(
   candidateFingerprint: string,
-  entityType: "property" | "vehicle",
+  _entityType: "property" | "vehicle",
   resolution: EntityResolution,
   matchedExisting: ExistingHouseholdAsset | undefined,
   matchedPending: PendingEntityCandidate | undefined,
 ): string {
-  if (resolution.status === "matches_existing" && matchedExisting) {
-    const matchedExact = isExactFingerprint(matchedExisting.identityFingerprint);
-    const candidateExact = isExactFingerprint(candidateFingerprint);
-    if (
-      matchedExact &&
-      candidateExact &&
-      matchedExisting.identityFingerprint !== candidateFingerprint
-    ) {
-      resolution.status = "possible_match_requires_confirmation";
-      return candidateFingerprint;
-    }
-    if (matchedExact) return matchedExisting.identityFingerprint;
-    if (candidateExact) return candidateFingerprint;
-    return matchedExisting.identityFingerprint;
+  const target = matchedExisting ?? matchedPending;
+  if (
+    !target ||
+    (resolution.status !== "matches_existing" && resolution.status !== "matches_pending_candidate")
+  ) {
+    return candidateFingerprint;
   }
 
-  if (resolution.status === "matches_pending_candidate" && matchedPending) {
-    const matchedExact = isExactFingerprint(matchedPending.identityFingerprint);
-    const candidateExact = isExactFingerprint(candidateFingerprint);
-    if (
-      matchedExact &&
-      candidateExact &&
-      matchedPending.identityFingerprint !== candidateFingerprint
-    ) {
-      resolution.status = "possible_match_requires_confirmation";
-      return candidateFingerprint;
-    }
-    if (matchedExact) return matchedPending.identityFingerprint;
-    if (candidateExact) return candidateFingerprint;
-    return matchedPending.identityFingerprint;
+  const targetExact = isExactFingerprint(target.identityFingerprint);
+  const candidateExact = isExactFingerprint(candidateFingerprint);
+
+  if (targetExact && candidateExact && target.identityFingerprint === candidateFingerprint) {
+    return target.identityFingerprint;
   }
 
+  // Deterministic safety: only equal normalized VINs or full civic addresses
+  // become automatic exact matches. Everything else is downgraded.
+  resolution.status = "possible_match_requires_confirmation";
+  resolution.confidence = Math.min(resolution.confidence, 0.5);
+  resolution.reasoning = `Identity match requires confirmation: ${resolution.reasoning} (the match is not an exact VIN or full-address match).`;
   return candidateFingerprint;
 }
 
@@ -1305,14 +1542,14 @@ function generateOpaqueId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-function normalizeLlmAnalysisResult(
+async function normalizeLlmAnalysisResult(
   raw: unknown,
   input: InsuranceDocumentAnalysisInput,
   extractedDocs: ExtractedPdf[],
   provider: InsuranceLlmProvider,
   attemptCount: number,
   documentAliasMap: Map<string, string>,
-): InsuranceDocumentAnalysisResult {
+): Promise<InsuranceDocumentAnalysisResult> {
   if (!raw || typeof raw !== "object") {
     throw new Error("LLM response is not a JSON object");
   }
@@ -1340,6 +1577,15 @@ function normalizeLlmAnalysisResult(
     pendingById.set(candidate.id, candidate);
   }
 
+  const existingByFingerprint = new Map<string, ExistingHouseholdAsset>();
+  for (const asset of input.existingAssets) {
+    existingByFingerprint.set(asset.identityFingerprint, asset);
+  }
+  const pendingByFingerprint = new Map<string, PendingEntityCandidate>();
+  for (const candidate of input.pendingCandidates) {
+    pendingByFingerprint.set(candidate.identityFingerprint, candidate);
+  }
+
   // Build an opaque id map so the raw LLM temporary ids never leak PII and never repeat.
   const rawEntityIdMap = new Map<string, string>();
   for (let index = 0; index < typed.detectedEntities.length; index++) {
@@ -1360,8 +1606,8 @@ function normalizeLlmAnalysisResult(
 
   const allowedDocumentIds = new Set(documentIdMap.values());
 
-  const enrichedEntities: DetectedInsuranceEntity[] = typed.detectedEntities.map(
-    (entity: unknown, index: number) => {
+  const enrichedEntities: DetectedInsuranceEntity[] = await Promise.all(
+    typed.detectedEntities.map(async (entity: unknown, index: number) => {
       const e = entity as Record<string, unknown>;
       const entityType =
         e.entityType === "property" || e.entityType === "vehicle" ? e.entityType : null;
@@ -1377,48 +1623,38 @@ function normalizeLlmAnalysisResult(
           : temporaryId;
 
       const identity = DetectedEntityIdentitySchema.parse(e.identity);
-      const resolution = EntityResolutionSchema.parse(e.resolution);
       const currentPolicy = CurrentPolicySchema.parse(e.currentPolicy);
-      const candidateFingerprint = buildCanonicalFingerprintForIdentity(
-        identity,
-        entityType,
-        temporaryId,
-      );
+      const candidateIdentity = await buildCandidateIdentity(identity, entityType);
+      const candidateFingerprint =
+        candidateIdentity.exactIdentityFingerprint ?? candidateIdentity.provisionalCandidateKey;
 
-      const matchedExisting = resolution.matchedExistingEntityId
-        ? existingById.get(resolution.matchedExistingEntityId)
-        : undefined;
-      const matchedPending = resolution.matchedPendingCandidateId
-        ? pendingById.get(resolution.matchedPendingCandidateId)
-        : undefined;
-      if (resolution.status === "matches_existing" && !matchedExisting) {
-        throw new Error(
-          `detectedEntities[${index}].resolution references unknown matchedExistingEntityId ${resolution.matchedExistingEntityId}`,
-        );
-      }
-      if (resolution.status === "matches_pending_candidate" && !matchedPending) {
-        throw new Error(
-          `detectedEntities[${index}].resolution references unknown matchedPendingCandidateId ${resolution.matchedPendingCandidateId}`,
-        );
-      }
-      if (resolution.status === "possible_match_requires_confirmation") {
-        if (
-          (resolution.matchedExistingEntityId && !matchedExisting) ||
-          (resolution.matchedPendingCandidateId && !matchedPending)
-        ) {
-          throw new Error(
-            `detectedEntities[${index}].resolution references unknown possible-match id`,
-          );
-        }
-        if (
-          (matchedExisting && matchedExisting.assetType !== entityType) ||
-          (matchedPending && matchedPending.assetType !== entityType)
-        ) {
-          throw new Error(
-            `detectedEntities[${index}].resolution possible-match assetType mismatch`,
-          );
-        }
-      }
+      const matchedExisting = existingByFingerprint.get(candidateFingerprint);
+      const matchedPending = pendingByFingerprint.get(candidateFingerprint);
+      const initialResolution: EntityResolution = matchedExisting
+        ? {
+            status: "matches_existing",
+            matchedExistingEntityId: matchedExisting.id,
+            confidence: 0.99,
+            reasoning: "Exact identity fingerprint matches an existing household asset.",
+          }
+        : matchedPending
+          ? {
+              status: "matches_pending_candidate",
+              matchedPendingCandidateId: matchedPending.id,
+              confidence: 0.99,
+              reasoning: "Exact identity fingerprint matches a pending candidate.",
+            }
+          : {
+              status: candidateIdentity.exactIdentityFingerprint
+                ? "new"
+                : "possible_match_requires_confirmation",
+              confidence: candidateIdentity.exactIdentityFingerprint ? 0.95 : 0.5,
+              reasoning: candidateIdentity.exactIdentityFingerprint
+                ? "No existing or pending asset matches the normalized identity fingerprint."
+                : "Identity is partial or redacted and requires customer confirmation before it can be matched.",
+            };
+
+      const resolution = EntityResolutionSchema.parse(initialResolution);
 
       const canonicalFingerprint = resolveCanonicalFingerprint(
         candidateFingerprint,
@@ -1467,9 +1703,24 @@ function normalizeLlmAnalysisResult(
         ? e.requiredConfirmations.filter((x): x is string => typeof x === "string" && x.length > 0)
         : [];
 
+      if (candidateIdentity.identityStrength === "redacted") {
+        requiredConfirmations.push(
+          "Confirm the insured civic address or VIN because the extracted identity is redacted.",
+        );
+      } else if (candidateIdentity.identityStrength === "partial") {
+        requiredConfirmations.push(
+          "Confirm the insured address or VIN because the extracted identity is partial.",
+        );
+      }
+
+      if (resolution.status === "possible_match_requires_confirmation") {
+        requiredConfirmations.push(resolution.reasoning);
+      }
+
       return {
         temporaryId,
         canonicalFingerprint,
+        candidateIdentity,
         entityType,
         displayLabel,
         identity,
@@ -1480,7 +1731,7 @@ function normalizeLlmAnalysisResult(
         evidence,
         requiredConfirmations,
       };
-    },
+    }),
   );
 
   const normalizedConflicts: DetectedConflict[] = unresolvedConflicts.map((conflict, index) => {

@@ -6,6 +6,7 @@ export interface HttpLlmProviderOptions {
   apiKey: string;
   model: string;
   providerId?: string;
+  supportsNativePdfInput?: boolean;
   supportsImageInput?: boolean;
 }
 
@@ -36,6 +37,7 @@ function stripMarkdownJsonFence(text: string): string {
 export class HttpLlmProvider implements InsuranceLlmProvider {
   readonly providerId: string;
   readonly modelId: string;
+  readonly supportsNativePdfInput: boolean;
   readonly supportsImageInput: boolean;
   private readonly apiUrl: string;
   private readonly apiKey: string;
@@ -46,6 +48,7 @@ export class HttpLlmProvider implements InsuranceLlmProvider {
     this.apiKey = options.apiKey;
     this.modelId = options.model;
     this.providerId = options.providerId ?? "http-llm-provider";
+    this.supportsNativePdfInput = options.supportsNativePdfInput ?? false;
     this.supportsImageInput = options.supportsImageInput ?? false;
   }
 
