@@ -1,27 +1,16 @@
-commit: local
-document provider configured: PASS
-native original-file submission: PASS
+native-input requirement enabled: PASS
 files attempted: 4
-files accepted: 4
-analysis calls: 1
+native inputs accepted: 0
+unsupported inputs: 4
+extracted-text mode inputs: 0
+file-content extraction calls: 0
 local conversion calls: 0
-fallback calls: 0
-LLM path exercised: PASS
-properties detected: 3
-vehicles detected: 1
-confirmation-required count: 3
-cross-household denial: PASS
-approve-all result: not tested
-mandate-preservation result: not tested
-rollback result: not tested
-idempotency result: not tested
-temporary files deleted: PASS
-local CI result: not tested
-A documents: PASS
-A properties: PASS
-A vehicles: PASS
-A confirmation-required: PASS
-A LLM path exercised: PASS
-F vehicle exact match: PASS
-G property possible match: PASS
-private acceptance: PASS
+inference calls: 0
+privacy gate result: not tested
+temporary file deletion result: not tested
+provider confidentiality tests: not tested
+approval endpoint disabled: not tested
+local CI result: PASS
+native PDF inference supported: BLOCKED
+analysis performed: NO
+phase acceptance: BLOCKED

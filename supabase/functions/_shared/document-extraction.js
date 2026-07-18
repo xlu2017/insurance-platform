@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 5300aec9decf2c638e2339b7ebf868afbba7629e58d0b6756d51ba899069b86f
+// source-hash: 68d79e14c34697b0c3d8f1661e87d9de7516142343446395b8986f75fdd49108
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -41026,6 +41026,8 @@ function resolveParsedDocuments({
 
 // src/document-analyzer.ts
 var AnalysisVersion = z.literal("1");
+var GENERIC_PARSER_ID = "native-document-analysis";
+var GENERIC_PARSER_VERSION = "1.0.0";
 var UploadedDocumentSchema = z.object({
   documentId: z.string().min(1),
   filename: z.string().min(1),
@@ -41174,7 +41176,8 @@ var InsuranceDocumentAnalysisResultSchema = z.object({
   rawResponse: z.unknown().nullable().optional(),
   attemptCount: z.number().int().positive().optional(),
   promptVersion: z.string().optional(),
-  outputSchemaVersion: z.string().optional()
+  outputSchemaVersion: z.string().optional(),
+  providerMetadata: z.unknown().optional()
 }).strict();
 function valueForFieldPath(assertions, fieldPath) {
   return assertions.find((a) => a.fieldPath === fieldPath)?.normalizedValue;
@@ -41473,8 +41476,8 @@ function buildAnalyzedDocument(doc) {
     documentId: doc.documentId ?? "unknown",
     fileDigest: doc.fileDigest ?? "unknown",
     classification: doc.classification,
-    parserId: doc.parserId,
-    parserVersion: doc.parserVersion,
+    parserId: GENERIC_PARSER_ID,
+    parserVersion: GENERIC_PARSER_VERSION,
     pageCount: doc.pageCount ?? 0,
     extractedEntityCount: doc.assetAssertions.length
   };
@@ -41706,8 +41709,8 @@ ${validationFeedback}` : basePrompt;
         documentId: d.documentId,
         fileDigest: d.fileDigest,
         classification: analyzed?.classification ?? "unknown",
-        parserId: analyzed?.parserId ?? this.provider?.providerId ?? "unknown",
-        parserVersion: analyzed?.parserVersion ?? this.provider?.modelId ?? "unknown",
+        parserId: analyzed?.parserId ?? GENERIC_PARSER_ID,
+        parserVersion: analyzed?.parserVersion ?? GENERIC_PARSER_VERSION,
         pageCount: d.pageCount,
         extractedEntityCount: countEntitiesForDocument(d.documentId, allDetected)
       };
@@ -41899,7 +41902,12 @@ function validateEvidenceReference(ref, allowedDocumentIds, pageCountByDocumentI
   }
   if (ref.pageNumber !== void 0) {
     const pageCount = pageCountByDocumentId.get(ref.documentId);
-    if (pageCount !== void 0 && pageCount > 0 && (ref.pageNumber < 1 || ref.pageNumber > pageCount)) {
+    if (pageCount === void 0 || pageCount === 0) {
+      throw new Error(
+        `evidence pageNumber ${ref.pageNumber} is not valid for document ${ref.documentId} (no page reference available)`
+      );
+    }
+    if (ref.pageNumber < 1 || ref.pageNumber > pageCount) {
       throw new Error(
         `evidence pageNumber ${ref.pageNumber} is out of range for document ${ref.documentId} (pages ${pageCount})`
       );
@@ -42485,8 +42493,8 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
     documentId: doc.documentId,
     fileDigest: doc.fileDigest,
     classification: documentClassification(doc.documentId, enrichedEntities),
-    parserId: provider.providerId,
-    parserVersion: provider.modelId,
+    parserId: GENERIC_PARSER_ID,
+    parserVersion: GENERIC_PARSER_VERSION,
     pageCount: doc.pageCount,
     extractedEntityCount: countEntitiesForDocument(doc.documentId, enrichedEntities)
   }));
@@ -42511,12 +42519,14 @@ async function sha256HexBytes(bytes) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-var KimiK3DocumentAnalyzer = class {
+var NativeDocumentAnalyzer = class {
   provider;
   bytesLoader;
+  requireNativeInput;
   constructor(options) {
     this.provider = options.provider;
     this.bytesLoader = options.bytesLoader;
+    this.requireNativeInput = options.requireNativeInput ?? true;
   }
   async analyze(input) {
     InsuranceDocumentAnalysisInputSchema.parse(input);
@@ -42529,11 +42539,37 @@ var KimiK3DocumentAnalyzer = class {
       fileDigestByDocumentId.set(original.documentId, digest);
     }
     const resolved = await this.provider.resolveModel();
+    const uploadResults = [];
     const fileHandles = [];
+    let deletionResults = [];
+    let validationFeedback = "";
+    let lastError;
+    let normalizedResult;
     try {
-      fileHandles.push(
+      for (const original of originalInputs) {
+        const capability = await this.provider.resolveInputMode(original);
+        if (this.requireNativeInput && capability.mode === "provider_extracted_text") {
+          throw new Error(
+            `Unsupported file type for native document analysis: ${original.filename} (${capability.reason})`
+          );
+        }
+      }
+      uploadResults.push(
         ...await Promise.all(originalInputs.map((f) => this.provider.uploadOriginalFile(f)))
       );
+      for (const result2 of uploadResults) {
+        if (result2.status !== "ready" || !result2.handle) {
+          throw new Error(
+            `Unsupported file type for native document analysis: ${result2.errorCategory ?? "upload_failed"}`
+          );
+        }
+        if (this.requireNativeInput && result2.handle.mode === "provider_extracted_text") {
+          throw new Error(
+            `Unsupported file type for native document analysis: ${result2.handle.filename} was converted to extracted text`
+          );
+        }
+        fileHandles.push(result2.handle);
+      }
       const syntheticExtractedDocs = originalInputs.map((original) => ({
         documentId: original.documentId,
         fileDigest: fileDigestByDocumentId.get(original.documentId) ?? "unknown",
@@ -42551,19 +42587,17 @@ var KimiK3DocumentAnalyzer = class {
         ...input.existingAssets.map(buildCandidateContext),
         ...input.pendingCandidates.map(buildCandidateContext)
       ];
-      const baseUserPrompt = buildKimiAnalysisUserPrompt({
+      const baseUserPrompt = buildNativeAnalysisUserPrompt({
         jurisdiction: input.jurisdiction,
         documentIds: input.uploadedDocuments.map((d) => d.documentId),
         candidateContexts
       });
-      let validationFeedback = "";
-      let lastError;
       for (let attempt = 1; attempt <= 2; attempt++) {
         const userPrompt = validationFeedback ? `${baseUserPrompt}
 
 Your previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:
 ${validationFeedback}` : baseUserPrompt;
-        const raw = await this.provider.analyze({
+        const rawResult = await this.provider.analyze({
           model: resolved.modelId,
           systemPrompt: buildInsuranceAnalysisSystemPrompt(),
           userPrompt,
@@ -42571,28 +42605,41 @@ ${validationFeedback}` : baseUserPrompt;
           responseFormat: { type: "json_object" }
         });
         try {
-          return await normalizeLlmAnalysisResult(
-            raw,
+          normalizedResult = await normalizeLlmAnalysisResult(
+            rawResult,
             input,
             syntheticExtractedDocs,
             { providerId: this.provider.providerId, modelId: resolved.modelId },
             attempt,
             documentAliasMap
           );
+          break;
         } catch (err) {
           lastError = err;
           validationFeedback = err instanceof Error ? err.message.slice(0, 2e3) : String(err).slice(0, 2e3);
           if (attempt === 2) break;
         }
       }
-      throw lastError ?? new Error("Document analysis failed after validation repair attempt");
+      if (!normalizedResult) {
+        throw lastError ?? new Error("Document analysis failed after validation repair attempt");
+      }
     } finally {
-      await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h).catch(() => {
-      })));
+      deletionResults = await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h)));
     }
+    return {
+      ...normalizedResult,
+      providerMetadata: {
+        providerFiles: fileHandles.map((h) => ({
+          documentId: h.documentId,
+          mode: h.mode,
+          bytes: h.bytes
+        })),
+        deletionResults
+      }
+    };
   }
 };
-function buildKimiAnalysisUserPrompt(args) {
+function buildNativeAnalysisUserPrompt(args) {
   const lines = [
     `Jurisdiction: ${args.jurisdiction}`,
     "",
@@ -42609,13 +42656,14 @@ function buildKimiAnalysisUserPrompt(args) {
   }
   lines.push(
     "",
-    "Each document's extracted text is provided in the system messages. Do not invent values not supported by the documents."
+    "The documents are provided as native inputs. Do not invent values not supported by the documents."
   );
   return lines.join("\n");
 }
-function createKimiK3Analyzer(options) {
-  return new KimiK3DocumentAnalyzer(options);
+function createNativeDocumentAnalyzer(options) {
+  return new NativeDocumentAnalyzer(options);
 }
+var createKimiK3Analyzer = createNativeDocumentAnalyzer;
 
 // src/document-loaders/memory.ts
 var MemoryDocumentLoader = class {
@@ -42633,26 +42681,35 @@ var MemoryDocumentLoader = class {
 };
 
 // src/providers/public-error.ts
+var CUSTOMER_FACING_MESSAGES = {
+  DOCUMENT_FILE_UNSUPPORTED: "This file type is not currently supported for document analysis.",
+  DOCUMENT_FILE_TOO_LARGE: "This file is too large for document analysis.",
+  DOCUMENT_PROCESSING_FAILED: "Document processing failed. Please try again or contact support.",
+  DOCUMENT_ANALYSIS_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later.",
+  DOCUMENT_ANALYSIS_FAILED: "Document analysis failed. Please try again or contact support.",
+  DOCUMENT_MODEL_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later."
+};
 function sanitizeProviderError(error, supportReference) {
   const supportId = supportReference ?? generateSupportReference();
   const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
   let code = "DOCUMENT_ANALYSIS_FAILED";
   let retryable = false;
-  if (message.toLowerCase().includes("unsupported") || message.toLowerCase().includes("invalid file")) {
+  if (lower.includes("unsupported file") || lower.includes("file type") || lower.includes("invalid file") || lower.includes("not currently supported")) {
     code = "DOCUMENT_FILE_UNSUPPORTED";
-  } else if (message.toLowerCase().includes("too large")) {
+  } else if (lower.includes("too large")) {
     code = "DOCUMENT_FILE_TOO_LARGE";
-  } else if (message.toLowerCase().includes("rate limit") || message.toLowerCase().includes("temporarily unavailable") || message.toLowerCase().includes("503") || message.toLowerCase().includes("timeout")) {
+  } else if (lower.includes("rate limit") || lower.includes("temporarily unavailable") || lower.includes("503") || lower.includes("timeout") || lower.includes("not enabled") || lower.includes("not approved") || lower.includes("consent") || lower.includes("privacy notice")) {
     code = "DOCUMENT_ANALYSIS_UNAVAILABLE";
-    retryable = true;
-  } else if (message.toLowerCase().includes("model unavailable") || message.toLowerCase().includes("not found")) {
+    retryable = !lower.includes("not enabled") && !lower.includes("not approved");
+  } else if (lower.includes("model unavailable") || lower.includes("model is not available") || lower.includes("not found")) {
     code = "DOCUMENT_MODEL_UNAVAILABLE";
-  } else if (message.toLowerCase().includes("processing failed")) {
+  } else if (lower.includes("processing failed")) {
     code = "DOCUMENT_PROCESSING_FAILED";
   }
   return {
     code,
-    message: "Document analysis failed. Please try again or contact support if the problem continues.",
+    message: CUSTOMER_FACING_MESSAGES[code],
     retryable,
     supportReference: supportId
   };
@@ -42662,6 +42719,74 @@ function generateSupportReference() {
 }
 function publicErrorResponse(error) {
   return { error };
+}
+
+// src/providers/privacy-preparation.ts
+var ConfigAndConsentPrivacyPreparation = class {
+  config;
+  consent;
+  constructor(config, consent) {
+    this.config = config;
+    this.consent = consent;
+  }
+  async prepare(input) {
+    if (!this.config.externalDocumentProcessingEnabled) {
+      throw new Error(
+        "Document processing is not enabled. External document processing must be enabled by the operator."
+      );
+    }
+    if (!this.config.rawExternalDocumentProcessingApproved) {
+      throw new Error(
+        "Raw external document processing is not approved. Operator approval is required before transmitting original files."
+      );
+    }
+    if (!this.config.privacyNoticeVersion || !this.config.processorContractVersion) {
+      throw new Error(
+        "Privacy notice and processor contract versions must be configured before document processing."
+      );
+    }
+    if (!this.consent) {
+      throw new Error(
+        "Document processing consent is missing. The customer must provide explicit consent before analysis."
+      );
+    }
+    if (this.consent.withdrawnAt) {
+      throw new Error("Document processing consent has been withdrawn.");
+    }
+    if (!this.consent.foreignProcessingAcknowledged) {
+      throw new Error(
+        "Foreign processing acknowledgement is required before documents can be analyzed externally."
+      );
+    }
+    if (!this.consent.automatedProcessingAcknowledged) {
+      throw new Error(
+        "Automated processing acknowledgement is required before documents can be analyzed."
+      );
+    }
+    if (!this.consent.rawProcessingApproved) {
+      throw new Error("Raw document processing is not approved for this customer consent.");
+    }
+    if (this.consent.privacyNoticeVersion !== this.config.privacyNoticeVersion) {
+      throw new Error("The recorded privacy notice version is out of date.");
+    }
+    if (this.consent.processorContractVersion !== this.config.processorContractVersion) {
+      throw new Error("The recorded processor contract version is out of date.");
+    }
+    const privacyAssessmentId = `privacy-${this.consent.householdId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    return {
+      mode: "raw_original",
+      file: input,
+      privacyAssessmentId
+    };
+  }
+};
+function privacyPreparationConfigFromEnv(getEnv) {
+  return {
+    externalDocumentProcessingEnabled: getEnv("EXTERNAL_DOCUMENT_PROCESSING_ENABLED") === "true",
+    rawExternalDocumentProcessingApproved: getEnv("RAW_EXTERNAL_DOCUMENT_PROCESSING_APPROVED") === "true",
+    privacyNoticeVersion: getEnv("PRIVACY_NOTICE_VERSION") ?? "",
+    processorContractVersion: getEnv("PROCESSOR_CONTRACT_VERSION") ?? ""
+  };
 }
 
 // src/providers/kimi-k3.ts
@@ -42686,14 +42811,12 @@ var KimiK3Provider = class {
         this.resolvedModel = this.toResolvedModel(model);
         return this.resolvedModel;
       }
-      throw new Error(`Kimi configured model ${this.requestedModel} is not available`);
+      throw new Error("Document model unavailable");
     }
     const models = await this.listModels();
-    const k3 = models.find(
-      (m) => m.id.toLowerCase().includes("kimi-k3") && (m.supports_image_in || m.supports_video_in || true)
-    );
+    const k3 = models.find((m) => m.id.toLowerCase().includes("kimi-k3"));
     if (!k3) {
-      throw new Error("No Kimi K3 multimodal model is available");
+      throw new Error("Document model unavailable");
     }
     this.resolvedModel = this.toResolvedModel(k3);
     return this.resolvedModel;
@@ -42701,9 +42824,10 @@ var KimiK3Provider = class {
   toResolvedModel(model) {
     return {
       modelId: model.id,
-      supportsNativeFiles: true,
-      supportsImages: !!model.supports_image_in,
-      supportsVideo: !!model.supports_video_in,
+      supportsImageInput: !!model.supports_image_in,
+      supportsVideoInput: !!model.supports_video_in,
+      supportsGenericFileInput: !!model.supports_file_in,
+      supportedReferenceSchemes: ["ms://"],
       providerMetadata: {
         owned_by: model.owned_by,
         context_length: model.context_length,
@@ -42721,7 +42845,7 @@ var KimiK3Provider = class {
     });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      throw new Error(`Kimi model list failed: ${response.status} ${text.slice(0, 200)}`);
+      throw new Error(`Document model list failed: ${response.status} ${text.slice(0, 200)}`);
     }
     const body = await response.json();
     return body.data ?? [];
@@ -42730,9 +42854,61 @@ var KimiK3Provider = class {
     const models = await this.listModels();
     return models.find((m) => m.id === modelId);
   }
+  async resolveInputMode(input) {
+    const model = await this.resolveModel();
+    const mime = (input.mimeType || "").toLowerCase().trim();
+    if (mime.startsWith("image/") && model.supportsImageInput) {
+      return { mimeType: input.mimeType, mode: "native_image_reference", supported: true };
+    }
+    if (mime.startsWith("video/") && model.supportsVideoInput) {
+      return { mimeType: input.mimeType, mode: "native_video_reference", supported: true };
+    }
+    if (model.supportsGenericFileInput) {
+      return { mimeType: input.mimeType, mode: "native_file_reference", supported: true };
+    }
+    if (mime.startsWith("image/")) {
+      return {
+        mimeType: input.mimeType,
+        mode: "unsupported",
+        supported: false,
+        reason: "Image input is not supported by the resolved document model"
+      };
+    }
+    if (mime.startsWith("video/")) {
+      return {
+        mimeType: input.mimeType,
+        mode: "unsupported",
+        supported: false,
+        reason: "Video input is not supported by the resolved document model"
+      };
+    }
+    return {
+      mimeType: input.mimeType,
+      mode: "provider_extracted_text",
+      supported: false,
+      reason: "Native file reference is not supported for this file type"
+    };
+  }
   async uploadOriginalFile(input) {
+    const capability = await this.resolveInputMode(input);
+    if (!capability.supported) {
+      return {
+        status: "rejected",
+        errorCategory: capability.reason ?? "unsupported_file_type"
+      };
+    }
+    let purpose;
+    if (capability.mode === "native_image_reference") {
+      purpose = "image";
+    } else if (capability.mode === "native_video_reference") {
+      purpose = "video";
+    } else if (capability.mode === "native_file_reference") {
+      purpose = "file";
+    } else {
+      purpose = "file-extract";
+    }
     const form = new FormData();
-    form.append("purpose", "file-extract");
+    form.append("purpose", purpose);
     form.append("file", new Blob([input.bytes], { type: input.mimeType }), input.filename);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -42744,39 +42920,37 @@ var KimiK3Provider = class {
         signal: controller.signal
       });
       if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(`Kimi file upload failed: ${response.status} ${text.slice(0, 200)}`);
+        return {
+          status: "failed",
+          errorCategory: `upload_failed_${response.status}`
+        };
       }
       const file = await response.json();
-      if (file.status !== "ok") {
-        await this.pollFileStatus(file.id);
+      const finalStatus = await this.pollFileStatus(file.id);
+      if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {
+        return {
+          status: finalStatus.status,
+          errorCategory: finalStatus.errorCategory ?? "upload_processing_failed"
+        };
       }
-      const contentResponse = await fetch(`${this.baseUrl}/files/${file.id}/content`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${this.apiKey}` }
-      });
-      if (!contentResponse.ok) {
-        const text = await contentResponse.text().catch(() => "");
-        throw new Error(
-          `Kimi file content retrieval failed: ${contentResponse.status} ${text.slice(0, 200)}`
-        );
-      }
-      const contentBody = await contentResponse.json();
-      return {
+      const referenceScheme = (await this.resolveModel()).supportedReferenceSchemes[0] ?? "ms://";
+      const handle = {
         providerFileId: file.id,
         documentId: input.documentId,
         filename: file.filename ?? input.filename,
         mimeType: input.mimeType,
         bytes: file.bytes,
+        mode: capability.mode,
+        reference: `${referenceScheme}${file.id}`,
         status: file.status,
         statusDetails: file.status_details,
-        extractedText: contentBody.content ?? "",
         providerMetadata: {
-          file_type: contentBody.file_type,
+          file_type: file.file_type,
           created_at: file.created_at,
           purpose: file.purpose
         }
       };
+      return { status: "ready", handle };
     } finally {
       clearTimeout(timeout);
     }
@@ -42788,32 +42962,37 @@ var KimiK3Provider = class {
         method: "GET",
         headers: { Authorization: `Bearer ${this.apiKey}` }
       });
-      if (!response.ok) break;
+      if (!response.ok) {
+        return { status: "failed", errorCategory: `status_poll_${response.status}` };
+      }
       const file = await response.json();
-      if (file.status === "ok" || file.status === "processed") break;
+      if (file.status === "ok" || file.status === "processed") {
+        return { status: file.status };
+      }
       if (file.status === "error") {
-        throw new Error(`Kimi file processing failed: ${file.status_details ?? file.status}`);
+        return { status: "failed", errorCategory: file.status_details ?? "upload_error" };
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
+    return { status: "timed_out", errorCategory: "status_poll_timeout" };
   }
   async analyze(input) {
-    const model = await this.resolveModel();
-    const parts = [];
+    const userParts = [{ type: "text", text: input.userPrompt }];
     for (const file of input.files) {
-      const label = `--- File ${file.documentId} (${file.filename}) ---`;
-      parts.push({ type: "text", text: `${label}
-${file.extractedText ?? ""}` });
+      if (file.mode === "native_image_reference" && file.reference) {
+        userParts.push({ type: "image_url", image_url: { url: file.reference } });
+      } else if (file.mode === "native_video_reference" && file.reference) {
+        userParts.push({ type: "video_url", video_url: { url: file.reference } });
+      } else if (file.mode === "native_file_reference" && file.reference) {
+        throw new Error("Native file reference is not supported by the resolved document model");
+      }
     }
-    const userContent = `${input.userPrompt}
-
-${parts.map((p) => p.text).join("\n\n")}`;
     const messages = [
       { role: "system", content: input.systemPrompt },
-      { role: "user", content: userContent }
+      { role: "user", content: userParts }
     ];
     const body = {
-      model: input.model || model.modelId,
+      model: input.model,
       messages,
       response_format: input.responseFormat ?? { type: "json_object" },
       max_tokens: 32e3
@@ -42832,12 +43011,14 @@ ${parts.map((p) => p.text).join("\n\n")}`;
       });
       if (!response.ok) {
         const text = await response.text().catch(() => "");
-        throw new Error(`Kimi chat completion failed: ${response.status} ${text.slice(0, 200)}`);
+        throw new Error(
+          `Document analysis request failed: ${response.status} ${text.slice(0, 200)}`
+        );
       }
       const completion = await response.json();
       const content = completion.choices?.[0]?.message?.content;
       if (typeof content !== "string") {
-        throw new Error("Kimi response did not contain text content");
+        throw new Error("Document analysis response did not contain text content");
       }
       return JSON.parse(stripMarkdownJsonFence2(content));
     } finally {
@@ -42845,13 +43026,40 @@ ${parts.map((p) => p.text).join("\n\n")}`;
     }
   }
   async deleteFile(handle) {
-    try {
-      await fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${this.apiKey}` }
-      });
-    } catch {
+    const maxAttempts = 3;
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      attempts += 1;
+      try {
+        const response = await fetch(`${this.baseUrl}/files/${handle.providerFileId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${this.apiKey}` }
+        });
+        if (response.ok) {
+          return { deleted: true, attempts, statusCode: response.status };
+        }
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+          return {
+            deleted: false,
+            attempts,
+            statusCode: response.status,
+            failureCategory: `deletion_client_error_${response.status}`
+          };
+        }
+        if (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1e3 * attempts));
+        }
+      } catch (err) {
+        if (attempts >= maxAttempts) {
+          return {
+            deleted: false,
+            attempts,
+            failureCategory: err instanceof Error ? err.message : "network_error"
+          };
+        }
+      }
     }
+    return { deleted: false, attempts, failureCategory: "deletion_failed_after_retries" };
   }
 };
 function stripMarkdownJsonFence2(text) {
@@ -42891,6 +43099,7 @@ export {
   AnalysisWarningSchema,
   AnalyzedDocumentSchema,
   CandidateIdentitySchema,
+  ConfigAndConsentPrivacyPreparation,
   CurrentPolicySchema,
   DetectedConflictSchema,
   DetectedEntityIdentitySchema,
@@ -42937,6 +43146,7 @@ export {
   UploadedDocumentSchema,
   assertLlmExtractionSemantics,
   buildCandidateContext,
+  buildCandidateIdentity,
   buildInsuranceAnalysisSystemPrompt,
   buildInsuranceExtractionSystemPrompt,
   buildPropertyIdentity,
@@ -42945,6 +43155,7 @@ export {
   createEmptyIncrementalOnboardingSession,
   createKimiK3Analyzer,
   createLlmFirstAnalyzer,
+  createNativeDocumentAnalyzer,
   extractPdfPages,
   extractPdfText,
   generateSupportReference,
@@ -42953,6 +43164,7 @@ export {
   parseDocument,
   parseLlmExtractionResult,
   planDocumentIntake,
+  privacyPreparationConfigFromEnv,
   projectLlmRunToParsedDocument,
   publicErrorResponse,
   resolveLlmAssetIdentity,
@@ -42965,4 +43177,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "5300aec9decf2c638e2339b7ebf868afbba7629e58d0b6756d51ba899069b86f";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "68d79e14c34697b0c3d8f1661e87d9de7516142343446395b8986f75fdd49108";
