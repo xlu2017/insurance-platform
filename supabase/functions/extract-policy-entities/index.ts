@@ -633,6 +633,10 @@ Deno.serve(async (req) => {
       entities: group.entities.map((e) => e.temporaryId),
       sourceDocuments: Array.from(mergedSourceDocIds),
       resolution: group.resolution,
+      identity: representative.identity,
+      currentPolicy: representative.currentPolicy,
+      currentCoverage: representative.currentCoverage,
+      mandateSuggestions: representative.mandateSuggestions,
     };
 
     const candidateId = existingCandidate ? existingCandidate.id : crypto.randomUUID();
