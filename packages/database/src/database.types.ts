@@ -548,6 +548,7 @@ export type Database = {
           model_provider: string;
           output_schema_version: string;
           prompt_version: string;
+          provider_metadata_json: Json;
           raw_response_json: Json | null;
           session_id: string | null;
           validated_output_json: Json;
@@ -566,6 +567,7 @@ export type Database = {
           model_provider: string;
           output_schema_version?: string;
           prompt_version?: string;
+          provider_metadata_json?: Json;
           raw_response_json?: Json | null;
           session_id?: string | null;
           validated_output_json: Json;
@@ -584,6 +586,7 @@ export type Database = {
           model_provider?: string;
           output_schema_version?: string;
           prompt_version?: string;
+          provider_metadata_json?: Json;
           raw_response_json?: Json | null;
           session_id?: string | null;
           validated_output_json?: Json;
@@ -644,6 +647,69 @@ export type Database = {
             columns: ["household_id"];
             isOneToOne: false;
             referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      document_processing_consent: {
+        Row: {
+          automated_processing_acknowledged: boolean;
+          consented_at: string;
+          created_at: string;
+          foreign_processing_acknowledged: boolean;
+          household_id: string;
+          id: string;
+          privacy_notice_version: string;
+          processor_contract_version: string;
+          profile_id: string;
+          purpose: string;
+          raw_processing_approved: boolean;
+          updated_at: string;
+          withdrawn_at: string | null;
+        };
+        Insert: {
+          automated_processing_acknowledged?: boolean;
+          consented_at?: string;
+          created_at?: string;
+          foreign_processing_acknowledged?: boolean;
+          household_id: string;
+          id?: string;
+          privacy_notice_version: string;
+          processor_contract_version: string;
+          profile_id: string;
+          purpose?: string;
+          raw_processing_approved?: boolean;
+          updated_at?: string;
+          withdrawn_at?: string | null;
+        };
+        Update: {
+          automated_processing_acknowledged?: boolean;
+          consented_at?: string;
+          created_at?: string;
+          foreign_processing_acknowledged?: boolean;
+          household_id?: string;
+          id?: string;
+          privacy_notice_version?: string;
+          processor_contract_version?: string;
+          profile_id?: string;
+          purpose?: string;
+          raw_processing_approved?: boolean;
+          updated_at?: string;
+          withdrawn_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_processing_consent_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_consent_profile_id_fkey";
+            columns: ["profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
