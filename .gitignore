@@ -16,4 +16,4 @@ test-results/
 *.tsbuildinfo
 .DS_Store
 deno.lock
-fixtures/private/
+**/fixtures/private/
