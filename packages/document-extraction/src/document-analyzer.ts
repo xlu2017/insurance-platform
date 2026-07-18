@@ -15,6 +15,11 @@ import {
   type VehicleIdentityInput,
 } from "./entity-identity.ts";
 import type { InsuranceLlmProvider } from "./llm-contract.ts";
+import type {
+  FileBytesLoader,
+  NativeDocumentAnalysisProvider,
+  OriginalFileInput,
+} from "./providers/native-document-analysis.ts";
 
 const AnalysisVersion = z.literal("1");
 
@@ -1098,7 +1103,7 @@ export type CandidateComparisonContext = {
   provisionalCandidateKey: string;
 };
 
-function buildCandidateContext(
+export function buildCandidateContext(
   candidate: ExistingHouseholdAsset | PendingEntityCandidate,
 ): CandidateComparisonContext {
   return {
@@ -1115,7 +1120,7 @@ function buildCandidateContext(
   };
 }
 
-function stripNullValues<T extends Record<string, unknown>>(input: T): Partial<T> {
+export function stripNullValues<T extends Record<string, unknown>>(input: T): Partial<T> {
   const result: Partial<T> = {};
   for (const [key, value] of Object.entries(input)) {
     if (value !== null && value !== undefined) {
@@ -1259,7 +1264,7 @@ function buildLlmAnalysisRequest(
   return { content: parts, documentIdMap };
 }
 
-const INSURANCE_ANALYSIS_SYSTEM_PROMPT = `You are an insurance document analyst. Read the uploaded policy PDFs (provided as page-level text) and produce a single JSON object that conforms to the schema below. Do not include markdown fences, commentary, or any keys not in the schema.
+const INSURANCE_ANALYSIS_SYSTEM_PROMPT = `You are an insurance document analyst. Read the uploaded policy documents (provided as extracted document text) and produce a single JSON object that conforms to the schema below. Do not include markdown fences, commentary, or any keys not in the schema.
 
 Core rules:
 - Distinguish active coverage documents from informational notices, advertisements, and billing-only pages.
@@ -1348,7 +1353,7 @@ Expected output JSON schema:
 
 Return only the JSON object.`;
 
-function buildInsuranceAnalysisSystemPrompt(): string {
+export function buildInsuranceAnalysisSystemPrompt(): string {
   return INSURANCE_ANALYSIS_SYSTEM_PROMPT;
 }
 
@@ -1683,11 +1688,11 @@ function generateOpaqueId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-async function normalizeLlmAnalysisResult(
+export async function normalizeLlmAnalysisResult(
   raw: unknown,
   input: InsuranceDocumentAnalysisInput,
   extractedDocs: ExtractedPdf[],
-  provider: InsuranceLlmProvider,
+  provider: { providerId: string; modelId: string },
   attemptCount: number,
   documentAliasMap: Map<string, string>,
 ): Promise<InsuranceDocumentAnalysisResult> {
@@ -1946,4 +1951,143 @@ export function createLlmFirstAnalyzer(options?: {
   fallbackToDeterministic?: boolean;
 }): InsuranceDocumentAnalyzer {
   return new LlmFirstDocumentAnalyzer(options);
+}
+
+async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+class KimiK3DocumentAnalyzer implements InsuranceDocumentAnalyzer {
+  private provider: NativeDocumentAnalysisProvider;
+  private bytesLoader: FileBytesLoader;
+
+  constructor(options: { provider: NativeDocumentAnalysisProvider; bytesLoader: FileBytesLoader }) {
+    this.provider = options.provider;
+    this.bytesLoader = options.bytesLoader;
+  }
+
+  async analyze(input: InsuranceDocumentAnalysisInput): Promise<InsuranceDocumentAnalysisResult> {
+    InsuranceDocumentAnalysisInputSchema.parse(input);
+
+    const originalInputs: OriginalFileInput[] = [];
+    const fileDigestByDocumentId = new Map<string, string>();
+
+    for (const uploaded of input.uploadedDocuments) {
+      const original = await this.bytesLoader.load(uploaded);
+      const digest = await sha256HexBytes(original.bytes);
+      originalInputs.push(original);
+      fileDigestByDocumentId.set(original.documentId, digest);
+    }
+
+    const resolved = await this.provider.resolveModel();
+
+    const fileHandles: Awaited<ReturnType<NativeDocumentAnalysisProvider["uploadOriginalFile"]>>[] =
+      [];
+    try {
+      fileHandles.push(
+        ...(await Promise.all(originalInputs.map((f) => this.provider.uploadOriginalFile(f)))),
+      );
+
+      const syntheticExtractedDocs: ExtractedPdf[] = originalInputs.map((original) => ({
+        documentId: original.documentId,
+        fileDigest: fileDigestByDocumentId.get(original.documentId) ?? "unknown",
+        pageCount: 0,
+        pages: [],
+      }));
+
+      const documentAliasMap = new Map<string, string>();
+      for (const doc of input.uploadedDocuments) {
+        documentAliasMap.set(doc.documentId, doc.documentId);
+      }
+      for (const summary of input.priorDocumentSummaries) {
+        documentAliasMap.set(summary.documentId, summary.documentId);
+      }
+
+      const candidateContexts: CandidateComparisonContext[] = [
+        ...input.existingAssets.map(buildCandidateContext),
+        ...input.pendingCandidates.map(buildCandidateContext),
+      ];
+
+      const baseUserPrompt = buildKimiAnalysisUserPrompt({
+        jurisdiction: input.jurisdiction,
+        documentIds: input.uploadedDocuments.map((d) => d.documentId),
+        candidateContexts,
+      });
+
+      let validationFeedback = "";
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const userPrompt = validationFeedback
+          ? `${baseUserPrompt}\n\nYour previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:\n${validationFeedback}`
+          : baseUserPrompt;
+
+        const raw = await this.provider.analyze({
+          model: resolved.modelId,
+          systemPrompt: buildInsuranceAnalysisSystemPrompt(),
+          userPrompt,
+          files: fileHandles,
+          responseFormat: { type: "json_object" },
+        });
+
+        try {
+          return await normalizeLlmAnalysisResult(
+            raw,
+            input,
+            syntheticExtractedDocs,
+            { providerId: this.provider.providerId, modelId: resolved.modelId },
+            attempt,
+            documentAliasMap,
+          );
+        } catch (err) {
+          lastError = err;
+          validationFeedback =
+            err instanceof Error ? err.message.slice(0, 2000) : String(err).slice(0, 2000);
+          if (attempt === 2) break;
+        }
+      }
+
+      throw lastError ?? new Error("Document analysis failed after validation repair attempt");
+    } finally {
+      await Promise.all(fileHandles.map((h) => this.provider.deleteFile(h).catch(() => {})));
+    }
+  }
+}
+
+function buildKimiAnalysisUserPrompt(args: {
+  jurisdiction: string;
+  documentIds: string[];
+  candidateContexts: CandidateComparisonContext[];
+}): string {
+  const lines = [
+    `Jurisdiction: ${args.jurisdiction}`,
+    "",
+    "Analyze the uploaded insurance documents and produce a single JSON object matching the schema in the system prompt.",
+    "",
+    `Use ONLY these document IDs for evidence: ${args.documentIds.join(", ")}`,
+  ];
+
+  if (args.candidateContexts.length > 0) {
+    lines.push(
+      "",
+      "Existing and pending household candidates for comparison (use the exact 'id' values for resolution.matchedExistingEntityId or resolution.matchedPendingCandidateId, and compare exactIdentityFingerprint/provisionalCandidateKey values before claiming a match):",
+      JSON.stringify(args.candidateContexts, null, 2),
+    );
+  }
+
+  lines.push(
+    "",
+    "Each document's extracted text is provided in the system messages. Do not invent values not supported by the documents.",
+  );
+
+  return lines.join("\n");
+}
+
+export function createKimiK3Analyzer(options: {
+  provider: NativeDocumentAnalysisProvider;
+  bytesLoader: FileBytesLoader;
+}): InsuranceDocumentAnalyzer {
+  return new KimiK3DocumentAnalyzer(options);
 }

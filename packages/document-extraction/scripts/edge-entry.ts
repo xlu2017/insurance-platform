@@ -24,3 +24,7 @@ export * from "../src/llm-pipeline.ts";
 export { HttpLlmProvider } from "../src/llm-providers/http.ts";
 export * from "../src/document-analyzer.ts";
 export { MemoryDocumentLoader } from "../src/document-loaders/memory.ts";
+export * from "../src/providers/native-document-analysis.ts";
+export * from "../src/providers/public-error.ts";
+export { KimiK3Provider } from "../src/providers/kimi-k3.ts";
+export { MemoryFileBytesLoader } from "../src/document-loaders/memory-bytes.ts";

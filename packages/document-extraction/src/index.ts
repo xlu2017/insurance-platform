@@ -15,3 +15,8 @@ export * from "./llm-parsed-document-projection.ts";
 export * from "./llm-identity-resolver.ts";
 export * from "./llm-pipeline.ts";
 export { HttpLlmProvider } from "./llm-providers/http.ts";
+
+export * from "./providers/native-document-analysis.ts";
+export * from "./providers/public-error.ts";
+export { KimiK3Provider } from "./providers/kimi-k3.ts";
+export { FileSystemFileBytesLoader } from "./document-loaders/node-bytes.ts";

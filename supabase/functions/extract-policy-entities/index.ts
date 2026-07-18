@@ -1,19 +1,20 @@
 // @ts-nocheck
 // Analyze all selected policy documents together and extract stable asset candidates.
 //
-// The PDFs are downloaded from the private policy-documents bucket. When LLM_API_URL
-// and LLM_API_KEY are configured, the extraction routes the documents through the
-// InsuranceDocumentAnalyzer with an HTTP LLM provider; otherwise it falls back to
-// the deterministic pdfjs-dist + TD parser path. Results are persisted in
-// document_extraction_sessions, extracted_documents, and asset_candidates.
+// The PDFs are downloaded from the private policy-documents bucket and submitted
+// unchanged to a server-side native document-analysis provider. Provider names,
+// model identifiers, and file references are never returned to the client.
+// Results are persisted in document_extraction_sessions, extracted_documents, and
+// asset_candidates.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   buildPropertyIdentity,
   buildVehicleIdentity,
-  createLlmFirstAnalyzer,
-  extractPdfText,
-  HttpLlmProvider,
-  MemoryDocumentLoader,
+  createKimiK3Analyzer,
+  KimiK3Provider,
+  MemoryFileBytesLoader,
+  sanitizeProviderError,
+  type PublicDocumentError,
 } from "../_shared/document-extraction.js";
 
 const corsHeaders = {
@@ -22,8 +23,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function jsonError(message: string, status: number) {
-  return new Response(JSON.stringify({ message }), {
+function jsonError(error: string | PublicDocumentError, status: number) {
+  const body =
+    typeof error === "string"
+      ? { code: "DOCUMENT_PROCESSING_FAILED", message: error, retryable: false }
+      : error;
+  return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
@@ -281,7 +286,7 @@ Deno.serve(async (req) => {
     .in("id", policyDocumentIds)
     .eq("household_id", householdId);
   if (docsErr) {
-    return jsonError(docsErr.message, 500);
+    return jsonError("Failed to load policy documents", 500);
   }
   if (!docRows || docRows.length !== policyDocumentIds.length) {
     return jsonError("One or more policy documents not found", 404);
@@ -296,7 +301,7 @@ Deno.serve(async (req) => {
       .from("policy-documents")
       .download(docRow.storage_path);
     if (downloadErr || !fileData) {
-      return jsonError(downloadErr?.message ?? "Failed to download document", 502);
+      return jsonError("Failed to download document", 502);
     }
     const bytes = new Uint8Array(await fileData.arrayBuffer());
     const digest = await sha256Hex(bytes);
@@ -338,7 +343,7 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (sessionErr || !session) {
-        return jsonError(sessionErr?.message ?? "Failed to create extraction session", 500);
+        return jsonError("Failed to create extraction session", 500);
       }
       sessionId = session.id;
     }
@@ -383,35 +388,35 @@ Deno.serve(async (req) => {
     loadPendingCandidates(admin, householdId, sessionId),
   ]);
 
-  const llmApiUrl = Deno.env.get("LLM_API_URL");
-  const llmApiKey = Deno.env.get("LLM_API_KEY");
-  const llmModel = Deno.env.get("LLM_MODEL") ?? "deepseek-v4-pro";
+  const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
+  if (!kimiApiKey) {
+    return jsonError(
+      sanitizeProviderError(new Error("Document analysis service is not configured")),
+      503,
+    );
+  }
 
-  const provider =
-    llmApiUrl && llmApiKey
-      ? new HttpLlmProvider({
-          apiUrl: llmApiUrl,
-          apiKey: llmApiKey,
-          model: llmModel,
-          providerId: llmModel.includes("deepseek") ? "deepseek" : "http-llm-provider",
-          supportsImageInput: false,
-        })
-      : undefined;
-
-  const analyzer = createLlmFirstAnalyzer({
-    provider,
-    loader: new MemoryDocumentLoader(bytesByReference),
-    fallbackToDeterministic: true,
+  const analyzer = createKimiK3Analyzer({
+    provider: new KimiK3Provider({
+      apiKey: kimiApiKey,
+      baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
+    }),
+    bytesLoader: new MemoryFileBytesLoader(bytesByReference),
   });
 
-  const analysis = await analyzer.analyze({
-    householdId,
-    uploadedDocuments,
-    existingAssets,
-    pendingCandidates,
-    priorDocumentSummaries: [],
-    jurisdiction: "AB",
-  });
+  let analysis;
+  try {
+    analysis = await analyzer.analyze({
+      householdId,
+      uploadedDocuments,
+      existingAssets,
+      pendingCandidates,
+      priorDocumentSummaries: [],
+      jurisdiction: "AB",
+    });
+  } catch (err) {
+    return jsonError(sanitizeProviderError(err), 502);
+  }
 
   // Build the analysis-run payload. A single RPC call will persist the run,
   // extracted documents, and candidate upserts atomically.
@@ -442,16 +447,6 @@ Deno.serve(async (req) => {
   for (const analyzedDoc of analysis.documents) {
     const docId = analyzedDoc.documentId;
     const extractedId = crypto.randomUUID();
-    let pagesJson: { pageNumber: number; text: string }[] = [];
-    try {
-      const extracted = await extractPdfText(bytesByReference[docId], docId);
-      pagesJson = extracted.pages.map((page: { pageNumber: number; text: string }) => ({
-        pageNumber: page.pageNumber,
-        text: page.text,
-      }));
-    } catch {
-      // Page text is a best-effort audit field; extraction failure is recorded in warnings.
-    }
 
     documentsJson.push({
       id: extractedId,
@@ -461,7 +456,7 @@ Deno.serve(async (req) => {
       classification: analyzedDoc.classification,
       parser_id: analyzedDoc.parserId,
       parser_version: analyzedDoc.parserVersion,
-      pages_json: pagesJson,
+      pages_json: [],
     });
     extractedDocRows.push({ id: extractedId, policy_document_id: docId });
     extractedDocIdByInputId.set(docId, extractedId);
@@ -686,7 +681,7 @@ Deno.serve(async (req) => {
     },
   );
   if (persistErr || !persistResult) {
-    return jsonError(persistErr?.message ?? "Failed to persist analysis", 500);
+    return jsonError("Failed to persist analysis", 500);
   }
 
   return jsonResponse({
@@ -695,14 +690,9 @@ Deno.serve(async (req) => {
     duplicate: !!persistResult.duplicate,
     candidates: persistResult.candidates ?? [],
     analysis: {
-      modelProvider: analysis.modelProvider,
-      modelId: analysis.modelId,
-      attemptedModelProvider: analysis.attemptedModelProvider,
-      attemptedModelId: analysis.attemptedModelId,
-      fallbackReason: analysis.fallbackReason,
+      analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
       warnings: analysis.warnings,
       unresolvedConflicts: analysis.unresolvedConflicts,
-      analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
     },
   });
 });
