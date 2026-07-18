@@ -2,6 +2,7 @@ import { router, Stack } from "expo-router";
 import { useMemo, useState } from "react";
 import { View, TextInput } from "react-native";
 import { useHousehold } from "@/lib/household";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import {
   type CandidateFieldReview,
   type ExtractionCandidate,
@@ -246,9 +247,14 @@ export default function ReviewEntities() {
         return;
       }
 
-      setError("Asset approval is not yet implemented. This screen is review-only.");
+      await invokeEdgeFunction("approve-policy-candidates", {
+        household_id: household.id,
+        candidate_ids: approved.map((c) => c.id),
+      });
+
+      router.push("/onboarding/mandate");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Review failed");
+      setError(e instanceof Error ? e.message : "Approval failed");
     } finally {
       setBusy(false);
     }

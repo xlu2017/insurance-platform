@@ -41,6 +41,7 @@ function isUuid(value: string): boolean {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  // @ts-ignore: Deno's crypto.subtle.digest accepts Uint8Array views at runtime.
   const buffer = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, "0"))

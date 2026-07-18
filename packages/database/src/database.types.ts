@@ -149,6 +149,51 @@ export type Database = {
           },
         ];
       };
+      candidate_approvals: {
+        Row: {
+          actor_profile_id: string | null;
+          client_request_id: string;
+          created_at: string;
+          household_id: string;
+          id: string;
+          result_json: Json;
+          status: string;
+        };
+        Insert: {
+          actor_profile_id?: string | null;
+          client_request_id: string;
+          created_at?: string;
+          household_id: string;
+          id?: string;
+          result_json?: Json;
+          status?: string;
+        };
+        Update: {
+          actor_profile_id?: string | null;
+          client_request_id?: string;
+          created_at?: string;
+          household_id?: string;
+          id?: string;
+          result_json?: Json;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "candidate_approvals_actor_profile_id_fkey";
+            columns: ["actor_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_approvals_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       candidate_conflicts: {
         Row: {
           assertion_ids: string[];
@@ -2739,6 +2784,19 @@ export type Database = {
       app_role: {
         Args: never;
         Returns: Database["public"]["Enums"]["user_role"];
+      };
+      approve_candidate_assets_v1: {
+        Args: {
+          p_actor_profile_id: string;
+          p_candidate_ids: string[];
+          p_client_request_id: string;
+          p_household_auto_defaults?: Json;
+          p_household_id: string;
+          p_household_property_defaults?: Json;
+          p_jurisdiction?: string;
+          p_switching_preferences?: Json;
+        };
+        Returns: Json;
       };
       approve_customer_recommendation: {
         Args: { p_expected_rec_version: number; p_recommendation_id: string };
