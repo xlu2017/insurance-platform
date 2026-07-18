@@ -23,7 +23,7 @@ interface CandidateDecision {
 export default function ReviewEntities() {
   const { data: household, isLoading: householdLoading } = useHousehold();
   const { data: session, isLoading: sessionLoading } = useOpenExtractionSession(household?.id);
-  const { data: candidates, isLoading: candidatesLoading } = useExtractionCandidates(session?.id);
+  const { data: candidates, isLoading: candidatesLoading } = useExtractionCandidates(household?.id);
   const [decisions, setDecisions] = useState<Record<string, CandidateDecision["decision"]>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

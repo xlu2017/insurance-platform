@@ -194,6 +194,67 @@ export type Database = {
           },
         ];
       };
+      candidate_field_reviews: {
+        Row: {
+          action: Database["public"]["Enums"]["candidate_field_review_action"];
+          candidate_id: string;
+          corrected_value: Json | null;
+          created_at: string;
+          field_path: string;
+          household_id: string;
+          id: string;
+          mandate_rule_json: Json | null;
+          reviewed_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          action: Database["public"]["Enums"]["candidate_field_review_action"];
+          candidate_id: string;
+          corrected_value?: Json | null;
+          created_at?: string;
+          field_path: string;
+          household_id: string;
+          id?: string;
+          mandate_rule_json?: Json | null;
+          reviewed_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          action?: Database["public"]["Enums"]["candidate_field_review_action"];
+          candidate_id?: string;
+          corrected_value?: Json | null;
+          created_at?: string;
+          field_path?: string;
+          household_id?: string;
+          id?: string;
+          mandate_rule_json?: Json | null;
+          reviewed_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "candidate_field_reviews_candidate_id_fkey";
+            columns: ["candidate_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_candidates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_field_reviews_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_field_reviews_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       case_assignments: {
         Row: {
           assignee_profile_id: string;
@@ -2912,6 +2973,12 @@ export type Database = {
       broker_direct_preference: "broker" | "direct" | "indifferent";
       candidate_asset_type: "property" | "vehicle";
       candidate_decision: "undecided" | "approve_new" | "link_existing" | "skip" | "not_sure";
+      candidate_field_review_action:
+        | "confirm"
+        | "correct"
+        | "unknown"
+        | "change_mandate"
+        | "reset_mandate_to_current";
       candidate_match_classification:
         | "new"
         | "exact_existing_match"
@@ -3168,6 +3235,13 @@ export const Constants = {
       broker_direct_preference: ["broker", "direct", "indifferent"],
       candidate_asset_type: ["property", "vehicle"],
       candidate_decision: ["undecided", "approve_new", "link_existing", "skip", "not_sure"],
+      candidate_field_review_action: [
+        "confirm",
+        "correct",
+        "unknown",
+        "change_mandate",
+        "reset_mandate_to_current",
+      ],
       candidate_match_classification: [
         "new",
         "exact_existing_match",

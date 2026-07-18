@@ -41,15 +41,17 @@ export function useOpenExtractionSession(householdId: string | undefined) {
   });
 }
 
-export function useExtractionCandidates(sessionId: string | undefined) {
+export function useExtractionCandidates(householdId: string | undefined) {
   return useQuery({
-    queryKey: ["extraction-candidates", sessionId],
-    enabled: !!sessionId,
+    queryKey: ["extraction-candidates", householdId],
+    enabled: !!householdId,
     queryFn: async (): Promise<ExtractionCandidate[]> => {
       const { data, error } = await supabase
         .from("asset_candidates")
         .select("*, extracted_fact_assertions!candidate_id(id, field_path, normalized_value)")
-        .eq("session_id", sessionId!)
+        .eq("household_id", householdId!)
+        .in("review_status", ["pending", "reviewing"])
+        .in("decision", ["undecided", "not_sure"])
         .order("created_at", { ascending: true });
       if (error) throw error;
       return (data ?? []) as ExtractionCandidate[];
