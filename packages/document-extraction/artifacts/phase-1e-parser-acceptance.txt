@@ -1,25 +1,27 @@
 commit: local
-provider: deepseek
-model: deepseek-v4-pro
-native PDF input: false
-images: false
-fallback used: false
-private PDF count: 4
-A summary hash: d0e1fd42e380fe7fc403e3b3ac693b6daeff084614d3ae0e3482e51cef6b6d0f
-B summary hash: d0e1fd42e380fe7fc403e3b3ac693b6daeff084614d3ae0e3482e51cef6b6d0f
-C summary hash: d0e1fd42e380fe7fc403e3b3ac693b6daeff084614d3ae0e3482e51cef6b6d0f
-D summary hash: d0e1fd42e380fe7fc403e3b3ac693b6daeff084614d3ae0e3482e51cef6b6d0f
-E summary hash: d0e1fd42e380fe7fc403e3b3ac693b6daeff084614d3ae0e3482e51cef6b6d0f
-A result: 4 documents, 3 properties, 1 vehicles, 3 confirmation-required
+document provider configured: PASS
+native original-file submission: PASS
+files attempted: 4
+files accepted: 4
+analysis calls: 1
+local conversion calls: 0
+fallback calls: 0
+LLM path exercised: PASS
+properties detected: 3
+vehicles detected: 1
+confirmation-required count: 3
+cross-household denial: PASS
+approve-all result: not tested
+mandate-preservation result: not tested
+rollback result: not tested
+idempotency result: not tested
+temporary files deleted: PASS
+local CI result: not tested
 A documents: PASS
 A properties: PASS
 A vehicles: PASS
 A confirmation-required: PASS
 A LLM path exercised: PASS
-A/B summaries equal: PASS
-A/C summaries equal: PASS
-A/D summaries equal: PASS
-A/E summaries equal: PASS
 F vehicle exact match: PASS
 G property possible match: PASS
 private acceptance: PASS
