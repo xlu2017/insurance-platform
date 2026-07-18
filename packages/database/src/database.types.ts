@@ -433,6 +433,7 @@ export type Database = {
           attempt_count: number;
           attempted_model_id: string | null;
           attempted_model_provider: string | null;
+          client_request_id: string;
           created_at: string;
           fallback_reason: string | null;
           household_id: string;
@@ -450,6 +451,7 @@ export type Database = {
           attempt_count?: number;
           attempted_model_id?: string | null;
           attempted_model_provider?: string | null;
+          client_request_id: string;
           created_at?: string;
           fallback_reason?: string | null;
           household_id: string;
@@ -467,6 +469,7 @@ export type Database = {
           attempt_count?: number;
           attempted_model_id?: string | null;
           attempted_model_provider?: string | null;
+          client_request_id?: string;
           created_at?: string;
           fallback_reason?: string | null;
           household_id?: string;
@@ -2774,6 +2777,18 @@ export type Database = {
           p_quote_id?: string;
           p_state: Database["public"]["Enums"]["quote_state"];
           p_underwriting_conditions?: string[];
+        };
+        Returns: Json;
+      };
+      persist_document_analysis_v1: {
+        Args: {
+          p_analysis_json?: Json;
+          p_analysis_run_id?: string;
+          p_candidates_json?: Json;
+          p_client_request_id: string;
+          p_documents_json?: Json;
+          p_household_id: string;
+          p_session_id: string;
         };
         Returns: Json;
       };

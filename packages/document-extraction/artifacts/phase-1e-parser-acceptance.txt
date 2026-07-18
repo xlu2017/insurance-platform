@@ -5,12 +5,12 @@ native PDF input: false
 images: false
 fallback used: false
 private PDF count: 4
-A summary hash: 497d35b2c1d391f72e44cb161112090381019e4d19ab24b08db87f01ee4964f4
-B summary hash: 497d35b2c1d391f72e44cb161112090381019e4d19ab24b08db87f01ee4964f4
-C summary hash: 497d35b2c1d391f72e44cb161112090381019e4d19ab24b08db87f01ee4964f4
-D summary hash: 497d35b2c1d391f72e44cb161112090381019e4d19ab24b08db87f01ee4964f4
-E summary hash: 497d35b2c1d391f72e44cb161112090381019e4d19ab24b08db87f01ee4964f4
-A result: 4 documents, 3 properties, 1 vehicles, 3 confirmation-required
+A summary hash: d121876a19a68158084eab1dfd68da633be9ea5f164ac130a24f6af8dfab1c33
+B summary hash: d121876a19a68158084eab1dfd68da633be9ea5f164ac130a24f6af8dfab1c33
+C summary hash: d121876a19a68158084eab1dfd68da633be9ea5f164ac130a24f6af8dfab1c33
+D summary hash: d121876a19a68158084eab1dfd68da633be9ea5f164ac130a24f6af8dfab1c33
+E summary hash: d121876a19a68158084eab1dfd68da633be9ea5f164ac130a24f6af8dfab1c33
+A result: 4 documents, 3 properties, 1 vehicles, 2 confirmation-required
 A documents: PASS
 A properties: PASS
 A vehicles: PASS

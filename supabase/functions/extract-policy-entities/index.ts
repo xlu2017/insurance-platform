@@ -412,38 +412,35 @@ Deno.serve(async (req) => {
     jurisdiction: "AB",
   });
 
-  // Persist the auditable analysis run first.
+  // Build the analysis-run payload. A single RPC call will persist the run,
+  // extracted documents, and candidate upserts atomically.
+  const analysisRunId = crypto.randomUUID();
   const validatedOutput = { ...analysis };
   delete (validatedOutput as Record<string, unknown>).rawResponse;
 
-  const { data: analysisRun, error: runErr } = await admin
-    .from("document_analysis_runs")
-    .insert({
-      session_id: sessionId,
-      household_id: householdId,
-      model_provider: analysis.modelProvider,
-      model_id: analysis.modelId,
-      attempted_model_provider: analysis.attemptedModelProvider ?? null,
-      attempted_model_id: analysis.attemptedModelId ?? null,
-      fallback_reason: analysis.fallbackReason ?? null,
-      prompt_version: analysis.promptVersion ?? "1.0.0",
-      output_schema_version: analysis.outputSchemaVersion ?? "1.0.0",
-      attempt_count: analysis.attemptCount ?? 1,
-      raw_response_json: analysis.rawResponse ?? null,
-      validated_output_json: validatedOutput,
-      warnings_json: analysis.warnings,
-    })
-    .select()
-    .single();
-  if (runErr || !analysisRun) {
-    return jsonError(runErr?.message ?? "Failed to record analysis run", 500);
-  }
-  const analysisRunId = analysisRun.id;
+  const analysisJson = {
+    modelProvider: analysis.modelProvider,
+    modelId: analysis.modelId,
+    attemptedModelProvider: analysis.attemptedModelProvider,
+    attemptedModelId: analysis.attemptedModelId,
+    fallbackReason: analysis.fallbackReason,
+    promptVersion: analysis.promptVersion ?? "1.0.0",
+    outputSchemaVersion: analysis.outputSchemaVersion ?? "1.0.0",
+    attemptCount: analysis.attemptCount ?? 1,
+    rawResponse: analysis.rawResponse,
+    validatedOutput,
+    warnings: analysis.warnings,
+  };
 
-  // Persist new extracted document rows, including page-level text for audit.
+  const documentsJson: unknown[] = [];
+
+  // Prepare extracted document rows with pre-generated UUIDs. The single persistence
+  // RPC will insert them atomically.
   const extractedDocRows: { id: string; policy_document_id: string }[] = [];
+  const extractedDocIdByInputId = new Map<string, string>();
   for (const analyzedDoc of analysis.documents) {
     const docId = analyzedDoc.documentId;
+    const extractedId = crypto.randomUUID();
     let pagesJson: { pageNumber: number; text: string }[] = [];
     try {
       const extracted = await extractPdfText(bytesByReference[docId], docId);
@@ -455,31 +452,18 @@ Deno.serve(async (req) => {
       // Page text is a best-effort audit field; extraction failure is recorded in warnings.
     }
 
-    const { data: extractedDoc, error: extractedErr } = await admin
-      .from("extracted_documents")
-      .insert({
-        session_id: sessionId,
-        household_id: householdId,
-        policy_document_id: docId,
-        file_digest: analyzedDoc.fileDigest,
-        page_count: analyzedDoc.pageCount,
-        classification: analyzedDoc.classification,
-        parser_id: analyzedDoc.parserId,
-        parser_version: analyzedDoc.parserVersion,
-        pages_json: pagesJson,
-        analysis_run_id: analysisRunId,
-      })
-      .select()
-      .single();
-    if (extractedErr || !extractedDoc) {
-      return jsonError(extractedErr?.message ?? "Failed to record extracted document", 500);
-    }
-    extractedDocRows.push({ id: extractedDoc.id, policy_document_id: docId });
-  }
-
-  const extractedDocIdByInputId = new Map<string, string>();
-  for (const row of extractedDocRows) {
-    extractedDocIdByInputId.set(row.policy_document_id, row.id);
+    documentsJson.push({
+      id: extractedId,
+      policy_document_id: docId,
+      file_digest: analyzedDoc.fileDigest,
+      page_count: analyzedDoc.pageCount,
+      classification: analyzedDoc.classification,
+      parser_id: analyzedDoc.parserId,
+      parser_version: analyzedDoc.parserVersion,
+      pages_json: pagesJson,
+    });
+    extractedDocRows.push({ id: extractedId, policy_document_id: docId });
+    extractedDocIdByInputId.set(docId, extractedId);
   }
 
   // Prepare household-wide lookup tables for canonical identity resolution.
@@ -621,8 +605,9 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Upsert candidates by canonical household identity.
-  const candidateRecords: unknown[] = [];
+  // Build candidate payloads with pre-generated UUIDs. Existing candidates reuse
+  // their database id so the RPC can upsert them by primary key.
+  const candidatesJson: unknown[] = [];
   for (const group of canonicalGroups.values()) {
     const representative = group.entities[0];
     const displayLabel =
@@ -630,27 +615,6 @@ Deno.serve(async (req) => {
         ?.displayLabel ?? candidateDisplayLabel(representative);
     const occupancy =
       group.entities.map(occupancyForEntity).find((o) => o) ?? occupancyForEntity(representative);
-
-    const selectedFacts = {
-      canonicalFingerprint: group.fingerprint,
-      entities: group.entities.map((e) => e.temporaryId),
-      sourceDocuments: Array.from(group.sourceDocIds),
-      resolution: group.resolution,
-    };
-
-    const payload = {
-      display_label: displayLabel,
-      occupancy,
-      match_classification: mapResolutionStatus({
-        ...representative,
-        resolution: group.resolution,
-      } as DetectedInsuranceEntity),
-      source_document_ids: Array.from(group.sourceDocIds),
-      selected_facts_json: selectedFacts,
-      conflicts_json: group.conflicts,
-      updated_at: new Date().toISOString(),
-      analysis_run_id: analysisRunId,
-    };
 
     const matchedPendingId =
       group.resolution.status === "matches_pending_candidate" &&
@@ -661,64 +625,70 @@ Deno.serve(async (req) => {
       (matchedPendingId ? pendingById.get(matchedPendingId) : undefined) ??
       candidateByFingerprint.get(group.fingerprint);
 
-    let candidateId: string;
-    if (existingCandidate) {
-      const mergedSourceDocIds = new Set<string>(existingCandidate.source_document_ids);
-      for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
+    const mergedSourceDocIds = new Set<string>(existingCandidate?.source_document_ids ?? []);
+    for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
 
-      const { data: updated, error: updateErr } = await admin
-        .from("asset_candidates")
-        .update({
-          ...payload,
-          source_document_ids: Array.from(mergedSourceDocIds),
-        })
-        .eq("id", existingCandidate.id)
-        .select()
-        .single();
-      if (updateErr || !updated) {
-        return jsonError(updateErr?.message ?? "Failed to update candidate", 500);
-      }
-      candidateId = updated.id;
-      candidateRecords.push(updated);
+    const selectedFacts = {
+      canonicalFingerprint: group.fingerprint,
+      entities: group.entities.map((e) => e.temporaryId),
+      sourceDocuments: Array.from(mergedSourceDocIds),
+      resolution: group.resolution,
+    };
+
+    const candidateId = existingCandidate ? existingCandidate.id : crypto.randomUUID();
+    candidatesJson.push({
+      id: candidateId,
+      asset_type: group.entityType,
+      identity_fingerprint: group.fingerprint,
+      display_label: displayLabel,
+      occupancy,
+      match_classification: mapResolutionStatus({
+        ...representative,
+        resolution: group.resolution,
+      } as DetectedInsuranceEntity),
+      decision: "undecided",
+      review_status: "pending",
+      source_document_ids: Array.from(mergedSourceDocIds),
+      selected_facts_json: selectedFacts,
+      conflicts_json: group.conflicts,
+    });
+
+    if (existingCandidate) {
       candidateByFingerprint.set(group.fingerprint, {
         ...existingCandidate,
         source_document_ids: Array.from(mergedSourceDocIds),
         selected_facts_json: selectedFacts,
       });
-    } else {
-      const { data: inserted, error: insertErr } = await admin
-        .from("asset_candidates")
-        .insert({
-          session_id: sessionId,
-          household_id: householdId,
-          asset_type: group.entityType,
-          identity_fingerprint: group.fingerprint,
-          ...payload,
-        })
-        .select()
-        .single();
-      if (insertErr || !inserted) {
-        return jsonError(insertErr?.message ?? "Failed to insert candidate", 500);
-      }
-      candidateId = inserted.id;
-      candidateRecords.push(inserted);
-      candidateByFingerprint.set(group.fingerprint, {
-        id: inserted.id,
-        asset_type: group.entityType,
-        identity_fingerprint: group.fingerprint,
-        session_id: sessionId,
-        source_document_ids: Array.from(group.sourceDocIds),
-        selected_facts_json: selectedFacts,
-        conflicts_json: group.conflicts,
-      });
     }
+  }
+
+  // Generate a deterministic client request id so retries return the same result.
+  const requestIdPayload = new TextEncoder().encode(
+    [householdId, sessionId, ...Object.values(digestByDocId).sort()].join("|"),
+  );
+  const clientRequestId = await sha256Hex(requestIdPayload);
+
+  const { data: persistResult, error: persistErr } = await admin.rpc(
+    "persist_document_analysis_v1",
+    {
+      p_household_id: householdId,
+      p_session_id: sessionId,
+      p_client_request_id: clientRequestId,
+      p_analysis_run_id: analysisRunId,
+      p_analysis_json: analysisJson,
+      p_documents_json: documentsJson,
+      p_candidates_json: candidatesJson,
+    },
+  );
+  if (persistErr || !persistResult) {
+    return jsonError(persistErr?.message ?? "Failed to persist analysis", 500);
   }
 
   return jsonResponse({
     session_id: sessionId,
-    extracted_document_ids: extractedDocRows.map((r) => r.id),
-    duplicate: false,
-    candidates: candidateRecords,
+    extracted_document_ids: (persistResult.documents ?? []).map((r: { id: string }) => r.id),
+    duplicate: !!persistResult.duplicate,
+    candidates: persistResult.candidates ?? [],
     analysis: {
       modelProvider: analysis.modelProvider,
       modelId: analysis.modelId,
@@ -727,7 +697,7 @@ Deno.serve(async (req) => {
       fallbackReason: analysis.fallbackReason,
       warnings: analysis.warnings,
       unresolvedConflicts: analysis.unresolvedConflicts,
-      analysisRunId,
+      analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
     },
   });
 });
