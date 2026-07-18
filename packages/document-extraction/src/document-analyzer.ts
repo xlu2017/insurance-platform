@@ -55,6 +55,7 @@ export const PendingEntityCandidateSchema = z
     id: z.string().min(1),
     assetType: z.enum(["property", "vehicle"]),
     identityFingerprint: z.string().min(1),
+    displayLabel: z.string().optional(),
     candidateIdentity: z.lazy(() => CandidateIdentitySchema).optional(),
     identity: z.lazy(() => DetectedEntityIdentitySchema).optional(),
     currentPolicy: z.lazy(() => CurrentPolicySchema).optional(),
@@ -1087,6 +1088,128 @@ export type LlmContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
+export type CandidateComparisonContext = {
+  id: string;
+  entityType: "property" | "vehicle";
+  displayLabel?: string;
+  identity: Partial<DetectedEntityIdentity>;
+  currentPolicy?: Partial<CurrentPolicy>;
+  exactIdentityFingerprint: string | null;
+  provisionalCandidateKey: string;
+};
+
+function buildCandidateContext(
+  candidate: ExistingHouseholdAsset | PendingEntityCandidate,
+): CandidateComparisonContext {
+  return {
+    id: candidate.id,
+    entityType: candidate.assetType,
+    displayLabel: candidate.identity
+      ? buildDisplayLabel(candidate.identity, candidate.assetType)
+      : candidate.displayLabel,
+    identity: candidate.identity ? stripNullValues(candidate.identity) : {},
+    currentPolicy: candidate.currentPolicy ? stripNullValues(candidate.currentPolicy) : undefined,
+    exactIdentityFingerprint: candidate.candidateIdentity?.exactIdentityFingerprint ?? null,
+    provisionalCandidateKey:
+      candidate.candidateIdentity?.provisionalCandidateKey ?? candidate.identityFingerprint,
+  };
+}
+
+function stripNullValues<T extends Record<string, unknown>>(input: T): Partial<T> {
+  const result: Partial<T> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== null && value !== undefined) {
+      (result as Record<string, unknown>)[key] = value;
+    }
+  }
+  return result;
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDate(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value !== "string") return false;
+  if (!ISO_DATE_RE.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+function isMonetaryField(fieldPath: string): boolean {
+  const normalized = fieldPath.toLowerCase().replace(/[^a-z]/g, "");
+  return (
+    normalized.includes("cents") ||
+    normalized.includes("premium") ||
+    normalized.includes("limit") ||
+    normalized.includes("deductible")
+  );
+}
+
+function isValidMonetaryCents(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function validateCurrentPolicy(policy: CurrentPolicy): void {
+  if (policy.effectiveDate && !isValidDate(policy.effectiveDate)) {
+    throw new Error(
+      `currentPolicy.effectiveDate ${JSON.stringify(policy.effectiveDate)} is not a valid ISO date`,
+    );
+  }
+  if (policy.expiryDate && !isValidDate(policy.expiryDate)) {
+    throw new Error(
+      `currentPolicy.expiryDate ${JSON.stringify(policy.expiryDate)} is not a valid ISO date`,
+    );
+  }
+  if (
+    policy.annualPremiumCents !== null &&
+    policy.annualPremiumCents !== undefined &&
+    (!Number.isInteger(policy.annualPremiumCents) || policy.annualPremiumCents < 0)
+  ) {
+    throw new Error(`currentPolicy.annualPremiumCents must be a non-negative integer`);
+  }
+  if (
+    policy.effectiveDate &&
+    policy.expiryDate &&
+    new Date(policy.effectiveDate) > new Date(policy.expiryDate)
+  ) {
+    throw new Error(`currentPolicy.effectiveDate must not be after expiryDate`);
+  }
+}
+
+function validateEvidenceReference(
+  ref: EvidenceReference,
+  allowedDocumentIds: Set<string>,
+  pageCountByDocumentId: Map<string, number>,
+): void {
+  if (!allowedDocumentIds.has(ref.documentId)) {
+    throw new Error(`evidence references unknown documentId ${ref.documentId}`);
+  }
+  if (ref.pageNumber !== undefined) {
+    const pageCount = pageCountByDocumentId.get(ref.documentId);
+    if (
+      pageCount !== undefined &&
+      pageCount > 0 &&
+      (ref.pageNumber < 1 || ref.pageNumber > pageCount)
+    ) {
+      throw new Error(
+        `evidence pageNumber ${ref.pageNumber} is out of range for document ${ref.documentId} (pages ${pageCount})`,
+      );
+    }
+  }
+}
+
+function buildDisplayLabel(
+  identity: DetectedEntityIdentity,
+  entityType: "property" | "vehicle",
+): string | undefined {
+  if (entityType === "vehicle") {
+    const parts = [identity.year, identity.make, identity.model, identity.trim].filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : undefined;
+  }
+  return identity.fullAddress ?? undefined;
+}
+
 function buildLlmAnalysisRequest(
   input: InsuranceDocumentAnalysisInput,
   extractedDocs: ExtractedPdf[],
@@ -1103,9 +1226,14 @@ function buildLlmAnalysisRequest(
     documentAliases.push(`${alias} = ${alias}`);
   }
 
+  const candidateContexts: CandidateComparisonContext[] = [
+    ...input.existingAssets.map(buildCandidateContext),
+    ...input.pendingCandidates.map(buildCandidateContext),
+  ];
+
   parts.push({
     type: "text",
-    text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.\n\nJurisdiction: ${input.jurisdiction}\n\nDocument IDs (use ONLY these exact values for evidence documentId fields):\n${documentAliases.join("\n")}\n\nThe pages below are provided as extracted text. When page images are available they are included after the text for the same page.`,
+    text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.\n\nJurisdiction: ${input.jurisdiction}\n\nDocument IDs (use ONLY these exact values for evidence documentId fields):\n${documentAliases.join("\n")}${candidateContexts.length > 0 ? `\n\nExisting and pending household candidates for comparison (use the exact "id" values for resolution.matchedExistingEntityId or resolution.matchedPendingCandidateId, and compare exactIdentityFingerprint/provisionalCandidateKey values before claiming a match):\n${JSON.stringify(candidateContexts, null, 2)}` : ""}\n\nThe pages below are provided as extracted text. When page images are available they are included after the text for the same page.`,
   });
 
   for (const doc of extractedDocs) {
@@ -1330,6 +1458,8 @@ function normalizeCurrentValue(
   raw: unknown,
   fieldPath: string,
   documentIdMap: Map<string, string>,
+  allowedDocumentIds: Set<string>,
+  pageCountByDocumentId: Map<string, number>,
 ): ExtractedCurrentValue {
   if (!raw || typeof raw !== "object") {
     throw new Error(`currentCoverage.${fieldPath} is not an object`);
@@ -1355,14 +1485,30 @@ function normalizeCurrentValue(
       ? typed.explanation
       : undefined;
 
+  if (status === "known" && value !== null && value !== undefined) {
+    if (isMonetaryField(fieldPath) && !isValidMonetaryCents(value)) {
+      throw new Error(
+        `currentCoverage.${fieldPath} value ${JSON.stringify(value)} is not a valid non-negative integer cent amount`,
+      );
+    }
+    if (typeof value === "string" && ISO_DATE_RE.test(value) && !isValidDate(value)) {
+      throw new Error(
+        `currentCoverage.${fieldPath} value ${JSON.stringify(value)} is not a valid date`,
+      );
+    }
+  }
+
   let evidence: ExtractedCurrentValue["evidence"];
   if (Array.isArray(typed.evidence) && typed.evidence.length > 0) {
     evidence = typed.evidence.map((item, index) => {
       try {
         const ref = EvidenceReferenceSchema.parse(item);
         if (ref.documentId && documentIdMap.has(ref.documentId)) {
-          return { ...ref, documentId: documentIdMap.get(ref.documentId)! };
+          const mapped = { ...ref, documentId: documentIdMap.get(ref.documentId)! };
+          validateEvidenceReference(mapped, allowedDocumentIds, pageCountByDocumentId);
+          return mapped;
         }
+        validateEvidenceReference(ref, allowedDocumentIds, pageCountByDocumentId);
         return ref;
       } catch (err) {
         throw new Error(
@@ -1370,11 +1516,6 @@ function normalizeCurrentValue(
         );
       }
     });
-    for (const ref of evidence) {
-      if (ref.documentId && !documentIdMap.has(ref.documentId)) {
-        throw new Error(`currentCoverage.${fieldPath} cites unknown documentId ${ref.documentId}`);
-      }
-    }
   }
 
   if ((status === "known" || status === "conflicting") && (!evidence || evidence.length === 0)) {
@@ -1605,6 +1746,15 @@ async function normalizeLlmAnalysisResult(
   }
 
   const allowedDocumentIds = new Set(documentIdMap.values());
+  const pageCountByDocumentId = new Map<string, number>();
+  for (const doc of extractedDocs) {
+    pageCountByDocumentId.set(doc.documentId, doc.pageCount);
+  }
+  for (const summary of input.priorDocumentSummaries) {
+    if (summary.fileDigest && !pageCountByDocumentId.has(summary.documentId)) {
+      pageCountByDocumentId.set(summary.documentId, 0);
+    }
+  }
 
   const enrichedEntities: DetectedInsuranceEntity[] = await Promise.all(
     typed.detectedEntities.map(async (entity: unknown, index: number) => {
@@ -1667,7 +1817,13 @@ async function normalizeLlmAnalysisResult(
       const rawCoverage = (e.currentCoverage as Record<string, unknown>) ?? {};
       const currentCoverage: Record<string, ExtractedCurrentValue> = {};
       for (const [fieldPath, rawValue] of Object.entries(rawCoverage)) {
-        currentCoverage[fieldPath] = normalizeCurrentValue(rawValue, fieldPath, documentIdMap);
+        currentCoverage[fieldPath] = normalizeCurrentValue(
+          rawValue,
+          fieldPath,
+          documentIdMap,
+          allowedDocumentIds,
+          pageCountByDocumentId,
+        );
       }
 
       const rawMandates = (e.mandateSuggestions as Record<string, unknown>) ?? {};
@@ -1683,9 +1839,7 @@ async function normalizeLlmAnalysisResult(
                 const ref = EvidenceReferenceSchema.parse(item);
                 const mappedId = ref.documentId ? documentIdMap.get(ref.documentId) : undefined;
                 const mapped = mappedId ? { ...ref, documentId: mappedId } : ref;
-                if (mapped.documentId && !allowedDocumentIds.has(mapped.documentId)) {
-                  throw new Error(`evidence references unknown documentId ${mapped.documentId}`);
-                }
+                validateEvidenceReference(mapped, allowedDocumentIds, pageCountByDocumentId);
                 return mapped;
               } catch (err) {
                 throw new Error(
@@ -1698,6 +1852,8 @@ async function normalizeLlmAnalysisResult(
                 typeof ref.evidenceSummary === "string" && ref.evidenceSummary.length > 0,
             )
         : [];
+
+      validateCurrentPolicy(currentPolicy);
 
       const requiredConfirmations = Array.isArray(e.requiredConfirmations)
         ? e.requiredConfirmations.filter((x): x is string => typeof x === "string" && x.length > 0)

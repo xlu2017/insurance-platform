@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: c58a5defce071500197af046e8862beaa4775a5b2881d121e119ba914c46b338
+// source-hash: 1729d17254f1b7cacf99bcff6a443df707fa29e427f35f2a24db81bd31707522
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -41050,6 +41050,7 @@ var PendingEntityCandidateSchema = z.object({
   id: z.string().min(1),
   assetType: z.enum(["property", "vehicle"]),
   identityFingerprint: z.string().min(1),
+  displayLabel: z.string().optional(),
   candidateIdentity: z.lazy(() => CandidateIdentitySchema).optional(),
   identity: z.lazy(() => DetectedEntityIdentitySchema).optional(),
   currentPolicy: z.lazy(() => CurrentPolicySchema).optional()
@@ -41838,6 +41839,80 @@ ${validationFeedback}` : basePrompt;
     });
   }
 };
+function buildCandidateContext(candidate) {
+  return {
+    id: candidate.id,
+    entityType: candidate.assetType,
+    displayLabel: candidate.identity ? buildDisplayLabel(candidate.identity, candidate.assetType) : candidate.displayLabel,
+    identity: candidate.identity ? stripNullValues(candidate.identity) : {},
+    currentPolicy: candidate.currentPolicy ? stripNullValues(candidate.currentPolicy) : void 0,
+    exactIdentityFingerprint: candidate.candidateIdentity?.exactIdentityFingerprint ?? null,
+    provisionalCandidateKey: candidate.candidateIdentity?.provisionalCandidateKey ?? candidate.identityFingerprint
+  };
+}
+function stripNullValues(input) {
+  const result2 = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== null && value !== void 0) {
+      result2[key] = value;
+    }
+  }
+  return result2;
+}
+var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function isValidDate(value) {
+  if (value === null || value === void 0) return true;
+  if (typeof value !== "string") return false;
+  if (!ISO_DATE_RE.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+function isMonetaryField(fieldPath) {
+  const normalized = fieldPath.toLowerCase().replace(/[^a-z]/g, "");
+  return normalized.includes("cents") || normalized.includes("premium") || normalized.includes("limit") || normalized.includes("deductible");
+}
+function isValidMonetaryCents(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+function validateCurrentPolicy(policy) {
+  if (policy.effectiveDate && !isValidDate(policy.effectiveDate)) {
+    throw new Error(
+      `currentPolicy.effectiveDate ${JSON.stringify(policy.effectiveDate)} is not a valid ISO date`
+    );
+  }
+  if (policy.expiryDate && !isValidDate(policy.expiryDate)) {
+    throw new Error(
+      `currentPolicy.expiryDate ${JSON.stringify(policy.expiryDate)} is not a valid ISO date`
+    );
+  }
+  if (policy.annualPremiumCents !== null && policy.annualPremiumCents !== void 0 && (!Number.isInteger(policy.annualPremiumCents) || policy.annualPremiumCents < 0)) {
+    throw new Error(`currentPolicy.annualPremiumCents must be a non-negative integer`);
+  }
+  if (policy.effectiveDate && policy.expiryDate && new Date(policy.effectiveDate) > new Date(policy.expiryDate)) {
+    throw new Error(`currentPolicy.effectiveDate must not be after expiryDate`);
+  }
+}
+function validateEvidenceReference(ref, allowedDocumentIds, pageCountByDocumentId) {
+  if (!allowedDocumentIds.has(ref.documentId)) {
+    throw new Error(`evidence references unknown documentId ${ref.documentId}`);
+  }
+  if (ref.pageNumber !== void 0) {
+    const pageCount = pageCountByDocumentId.get(ref.documentId);
+    if (pageCount !== void 0 && pageCount > 0 && (ref.pageNumber < 1 || ref.pageNumber > pageCount)) {
+      throw new Error(
+        `evidence pageNumber ${ref.pageNumber} is out of range for document ${ref.documentId} (pages ${pageCount})`
+      );
+    }
+  }
+}
+function buildDisplayLabel(identity, entityType) {
+  if (entityType === "vehicle") {
+    const parts = [identity.year, identity.make, identity.model, identity.trim].filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : void 0;
+  }
+  return identity.fullAddress ?? void 0;
+}
 function buildLlmAnalysisRequest(input, extractedDocs) {
   const parts = [];
   const documentIdMap = /* @__PURE__ */ new Map();
@@ -41849,6 +41924,10 @@ function buildLlmAnalysisRequest(input, extractedDocs) {
     documentIdMap.set(alias, doc.documentId);
     documentAliases.push(`${alias} = ${alias}`);
   }
+  const candidateContexts = [
+    ...input.existingAssets.map(buildCandidateContext),
+    ...input.pendingCandidates.map(buildCandidateContext)
+  ];
   parts.push({
     type: "text",
     text: `You are an insurance document analyst. Analyze the uploaded policy PDFs and produce a single JSON object conforming to the schema in the system prompt.
@@ -41856,7 +41935,10 @@ function buildLlmAnalysisRequest(input, extractedDocs) {
 Jurisdiction: ${input.jurisdiction}
 
 Document IDs (use ONLY these exact values for evidence documentId fields):
-${documentAliases.join("\n")}
+${documentAliases.join("\n")}${candidateContexts.length > 0 ? `
+
+Existing and pending household candidates for comparison (use the exact "id" values for resolution.matchedExistingEntityId or resolution.matchedPendingCandidateId, and compare exactIdentityFingerprint/provisionalCandidateKey values before claiming a match):
+${JSON.stringify(candidateContexts, null, 2)}` : ""}
 
 The pages below are provided as extracted text. When page images are available they are included after the text for the same page.`
   });
@@ -42066,7 +42148,7 @@ function normalizeMandateRule(raw, fieldPath) {
   }
   throw new Error(`mandateSuggestions.${fieldPath} has unknown rule ${String(rule)}`);
 }
-function normalizeCurrentValue(raw, fieldPath, documentIdMap) {
+function normalizeCurrentValue(raw, fieldPath, documentIdMap, allowedDocumentIds, pageCountByDocumentId) {
   if (!raw || typeof raw !== "object") {
     throw new Error(`currentCoverage.${fieldPath} is not an object`);
   }
@@ -42080,14 +42162,29 @@ function normalizeCurrentValue(raw, fieldPath, documentIdMap) {
   }
   const value = Object.prototype.hasOwnProperty.call(typed, "value") ? typed.value : null;
   const explanation = typeof typed.explanation === "string" && typed.explanation.length > 0 ? typed.explanation : void 0;
+  if (status === "known" && value !== null && value !== void 0) {
+    if (isMonetaryField(fieldPath) && !isValidMonetaryCents(value)) {
+      throw new Error(
+        `currentCoverage.${fieldPath} value ${JSON.stringify(value)} is not a valid non-negative integer cent amount`
+      );
+    }
+    if (typeof value === "string" && ISO_DATE_RE.test(value) && !isValidDate(value)) {
+      throw new Error(
+        `currentCoverage.${fieldPath} value ${JSON.stringify(value)} is not a valid date`
+      );
+    }
+  }
   let evidence;
   if (Array.isArray(typed.evidence) && typed.evidence.length > 0) {
     evidence = typed.evidence.map((item, index) => {
       try {
         const ref = EvidenceReferenceSchema.parse(item);
         if (ref.documentId && documentIdMap.has(ref.documentId)) {
-          return { ...ref, documentId: documentIdMap.get(ref.documentId) };
+          const mapped = { ...ref, documentId: documentIdMap.get(ref.documentId) };
+          validateEvidenceReference(mapped, allowedDocumentIds, pageCountByDocumentId);
+          return mapped;
         }
+        validateEvidenceReference(ref, allowedDocumentIds, pageCountByDocumentId);
         return ref;
       } catch (err) {
         throw new Error(
@@ -42095,11 +42192,6 @@ function normalizeCurrentValue(raw, fieldPath, documentIdMap) {
         );
       }
     });
-    for (const ref of evidence) {
-      if (ref.documentId && !documentIdMap.has(ref.documentId)) {
-        throw new Error(`currentCoverage.${fieldPath} cites unknown documentId ${ref.documentId}`);
-      }
-    }
   }
   if ((status === "known" || status === "conflicting") && (!evidence || evidence.length === 0)) {
     throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
@@ -42257,6 +42349,15 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
     rawEntityIdMap.set(rawId, generateOpaqueId());
   }
   const allowedDocumentIds = new Set(documentIdMap.values());
+  const pageCountByDocumentId = /* @__PURE__ */ new Map();
+  for (const doc of extractedDocs) {
+    pageCountByDocumentId.set(doc.documentId, doc.pageCount);
+  }
+  for (const summary of input.priorDocumentSummaries) {
+    if (summary.fileDigest && !pageCountByDocumentId.has(summary.documentId)) {
+      pageCountByDocumentId.set(summary.documentId, 0);
+    }
+  }
   const enrichedEntities = await Promise.all(
     typed.detectedEntities.map(async (entity, index) => {
       const e = entity;
@@ -42299,7 +42400,13 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
       const rawCoverage = e.currentCoverage ?? {};
       const currentCoverage = {};
       for (const [fieldPath, rawValue] of Object.entries(rawCoverage)) {
-        currentCoverage[fieldPath] = normalizeCurrentValue(rawValue, fieldPath, documentIdMap);
+        currentCoverage[fieldPath] = normalizeCurrentValue(
+          rawValue,
+          fieldPath,
+          documentIdMap,
+          allowedDocumentIds,
+          pageCountByDocumentId
+        );
       }
       const rawMandates = e.mandateSuggestions ?? {};
       const mandateSuggestions = {};
@@ -42311,9 +42418,7 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
           const ref = EvidenceReferenceSchema.parse(item);
           const mappedId = ref.documentId ? documentIdMap.get(ref.documentId) : void 0;
           const mapped = mappedId ? { ...ref, documentId: mappedId } : ref;
-          if (mapped.documentId && !allowedDocumentIds.has(mapped.documentId)) {
-            throw new Error(`evidence references unknown documentId ${mapped.documentId}`);
-          }
+          validateEvidenceReference(mapped, allowedDocumentIds, pageCountByDocumentId);
           return mapped;
         } catch (err) {
           throw new Error(
@@ -42323,6 +42428,7 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
       }).filter(
         (ref) => typeof ref.evidenceSummary === "string" && ref.evidenceSummary.length > 0
       ) : [];
+      validateCurrentPolicy(currentPolicy);
       const requiredConfirmations = Array.isArray(e.requiredConfirmations) ? e.requiredConfirmations.filter((x) => typeof x === "string" && x.length > 0) : [];
       if (candidateIdentity.identityStrength === "redacted") {
         requiredConfirmations.push(
@@ -42484,4 +42590,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "c58a5defce071500197af046e8862beaa4775a5b2881d121e119ba914c46b338";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "1729d17254f1b7cacf99bcff6a443df707fa29e427f35f2a24db81bd31707522";
