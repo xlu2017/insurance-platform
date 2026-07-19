@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Alert, Linking, ScrollView, View } from "react-native";
+import { Alert, Linking, Platform, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { documentCategories, type DocumentCategory } from "@autopilot/schemas";
@@ -113,32 +113,34 @@ export default function Documents() {
     if (data?.signedUrl) await Linking.openURL(data.signedUrl);
   };
 
+  const removeDocument = async (doc: DocumentRow) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await deletePolicyDocument(doc.id);
+      await queryClient.invalidateQueries({ queryKey: ["documents", household.id] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Remove failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = (doc: DocumentRow) => {
-    Alert.alert(
-      "Remove document?",
-      `${doc.file_name} will be removed from your household documents.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                await deletePolicyDocument(doc.id);
-                await queryClient.invalidateQueries({ queryKey: ["documents", household.id] });
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "Remove failed");
-              } finally {
-                setBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    const message = `${doc.file_name} will be removed from your household documents.`;
+    if (Platform.OS === "web") {
+      if (window.confirm(`Remove document?\n\n${message}`)) void removeDocument(doc);
+      return;
+    }
+
+    Alert.alert("Remove document?", message, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => void removeDocument(doc),
+      },
+    ]);
   };
 
   return (
