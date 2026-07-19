@@ -9,18 +9,23 @@ alter table document_processing_consent
   add column if not exists status text not null default 'active',
   add column if not exists superseded_by uuid references document_processing_consent(id) on delete set null;
 
--- Remove direct authenticated write privileges and misleading RLS policies.
-revoke insert, update, delete on document_processing_consent from authenticated;
-revoke all on document_processing_consent from anon;
+-- Remove all direct authenticated and anonymous access; authenticated customers must use RPCs.
+revoke all on document_processing_consent from authenticated, anon;
 
 alter table document_processing_consent disable row level security;
 
--- Drop previous policies that allowed direct authenticated insert/update.
+-- Drop previous policies that allowed direct authenticated insert/update/select.
 drop policy if exists document_processing_consent_select on document_processing_consent;
 drop policy if exists document_processing_consent_insert on document_processing_consent;
 drop policy if exists document_processing_consent_update on document_processing_consent;
 
--- Only service_role and staff roles may read/write; authenticated customers use RPCs.
+-- Replace the old uniqueness guard with a status-based partial unique index.
+drop index if exists idx_document_processing_consent_household_purpose;
+create unique index if not exists idx_document_processing_consent_household_purpose_active
+  on document_processing_consent (household_id, purpose)
+  where status = 'active';
+
+-- Only service_role may read/write; authenticated customers use RPCs.
 grant select, insert, update on document_processing_consent to service_role;
 
 -- -----------------------------------------------------------------------------
@@ -138,12 +143,22 @@ begin
     raise exception 'profile is not authorized to consent for this household';
   end if;
 
-  -- Supersede any existing active consent for this household/purpose.
+  -- Serialize concurrent consent changes for this household/purpose.
+  perform pg_advisory_xact_lock(hashtext(p_household_id::text || ':' || p_purpose)::bigint);
+
+  -- Supersede any existing active consent before inserting the replacement.
   select id into v_existing_id
   from document_processing_consent
   where household_id = p_household_id and purpose = p_purpose and status = 'active'
   order by consented_at desc
-  limit 1;
+  limit 1
+  for update;
+
+  if v_existing_id is not null then
+    update document_processing_consent
+    set status = 'superseded', superseded_by = null, updated_at = now()
+    where id = v_existing_id;
+  end if;
 
   insert into document_processing_consent (
     household_id,
@@ -174,7 +189,7 @@ begin
 
   if v_existing_id is not null then
     update document_processing_consent
-    set status = 'superseded', superseded_by = v_new_id, updated_at = now()
+    set superseded_by = v_new_id
     where id = v_existing_id;
   end if;
 
@@ -212,11 +227,18 @@ begin
     raise exception 'no active consent found for this profile and purpose';
   end if;
 
+  perform pg_advisory_xact_lock(hashtext(p_household_id::text || ':' || p_purpose)::bigint);
+
   select id into v_existing_id
   from document_processing_consent
   where household_id = p_household_id and profile_id = p_profile_id and purpose = p_purpose and status = 'active'
   order by consented_at desc
-  limit 1;
+  limit 1
+  for update;
+
+  if v_existing_id is null then
+    raise exception 'no active consent found for this profile and purpose';
+  end if;
 
   update document_processing_consent
   set status = 'withdrawn', withdrawn_at = now(), updated_at = now()
@@ -287,7 +309,17 @@ begin
         '[]'::jsonb
       ),
       'candidates', coalesce(
-        (select jsonb_agg(to_jsonb(asset_candidates.*))
+        (select jsonb_agg(jsonb_build_object(
+          'id', id,
+          'asset_type', asset_type,
+          'identity_fingerprint', identity_fingerprint,
+          'display_label', display_label,
+          'occupancy', occupancy,
+          'match_classification', match_classification,
+          'decision', decision,
+          'review_status', review_status,
+          'source_document_ids', source_document_ids
+        ))
          from asset_candidates
          where analysis_run_id = v_existing_run_id),
         '[]'::jsonb
@@ -403,9 +435,13 @@ begin
     if exists (
       select 1
       from unnest(v_source_doc_ids) as src_id
-      where not exists (select 1 from extracted_documents where id = src_id and analysis_run_id = v_run_id)
+      where not exists (
+        select 1
+        from extracted_documents ed
+        where ed.id = src_id and ed.household_id = p_household_id
+      )
     ) then
-      raise exception 'candidate references source document id not created by this analysis run';
+      raise exception 'candidate references source document id not belonging to this household';
     end if;
 
     insert into asset_candidates (
