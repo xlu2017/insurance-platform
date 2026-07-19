@@ -55,53 +55,33 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-async function isCleanupReadinessReady(admin: any): Promise<boolean> {
-  // Reuse a recent, positive readiness status if available.
-  try {
-    const { data: status, error } = await admin
-      .from("cleanup_readiness_status")
-      .select("ready, checked_at")
-      .single();
-    if (!error && status?.ready && status?.checked_at) {
-      const checkedAt = new Date(status.checked_at);
-      const staleThresholdMs = 6 * 60 * 1000;
-      if (Date.now() - checkedAt.getTime() <= staleThresholdMs) {
-        return true;
-      }
-    }
-  } catch {
-    // Fall through to a live check.
+async function isCleanupReadinessReady(): Promise<boolean> {
+  // Always perform a live, authenticated health invocation of the cleanup worker.
+  // A cached positive readiness result must never be the sole authorization for
+  // raw external transmission.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    return false;
   }
 
-  // Live check: verify durable prerequisites and perform an authenticated
-  // health invocation of the cleanup function.
   try {
-    const { data: readiness, error: readinessErr } = await admin.rpc("check_cleanup_readiness");
-    if (readinessErr || !readiness?.ready) {
-      return false;
-    }
-
-    const { data: secrets, error: secretsErr } = await admin.rpc("get_cleanup_secrets");
-    if (secretsErr || !secrets?.cleanup_service_url || !secrets?.cleanup_service_role_key) {
-      return false;
-    }
-
-    const healthUrl = `${String(secrets.cleanup_service_url).replace(/\/$/, "")}/functions/v1/cleanup-provider-files`;
+    const healthUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/cleanup-provider-files`;
     const resp = await fetch(healthUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${secrets.cleanup_service_role_key}`,
+        Authorization: `Bearer ${serviceKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ health_check: true }),
     });
-    if (!resp.ok) return false;
-    try {
-      const health = await resp.json();
-      return health.provider_ready === true;
-    } catch {
+    if (!resp.ok) {
       return false;
     }
+    const health = await resp.json();
+    return (
+      health.status === "ok" && health.provider_ready === true && health.readiness?.ready === true
+    );
   } catch {
     return false;
   }
@@ -571,7 +551,7 @@ Deno.serve(async (req) => {
   const prep = new ConfigAndConsentPrivacyPreparation(
     {
       ...privacyConfig,
-      cleanupReadinessCheck: async () => isCleanupReadinessReady(admin),
+      cleanupReadinessCheck: async () => isCleanupReadinessReady(),
     },
     consent,
   );

@@ -1,6 +1,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { KimiK3Provider } from "../_shared/document-extraction.js";
 
+interface ProviderFileDeletionResult {
+  deleted: boolean;
+  attempts: number;
+  statusCode?: number;
+  failureCategory?: string;
+}
+
 const BATCH_SIZE = 20;
 const MAX_ATTEMPTS = 5;
 const LEASE_MINUTES = 5;
@@ -124,13 +131,27 @@ Deno.serve(async (req) => {
   }
 
   if (body.health_check === true) {
+    const { ready: readinessReady, checks } = await checkReadiness(
+      admin,
+      workerId,
+      kimiApiKey !== "",
+    );
     if (!provider) {
       return jsonResponse(
-        { status: "error", provider_ready: false, error: "KIMI_K3_API_KEY not configured" },
+        {
+          status: "error",
+          provider_ready: false,
+          readiness: { ready: readinessReady, checks },
+          error: "KIMI_K3_API_KEY not configured",
+        },
         200,
       );
     }
-    return jsonResponse({ status: "ok", provider_ready: true });
+    return jsonResponse({
+      status: readinessReady ? "ok" : "error",
+      provider_ready: true,
+      readiness: { ready: readinessReady, checks },
+    });
   }
 
   // Self-check and publish readiness status before processing the real queue.
@@ -167,41 +188,76 @@ Deno.serve(async (req) => {
 
   // Process unresolved emergency cleanup rows first, using the same lease model as
   // the normal queue to prevent concurrent workers from racing the same row.
-  const { data: emergencyRows, error: emergencyFetchErr } = await admin
-    .from("document_analysis_emergency_cleanup")
-    .select(
-      "id, provider_file_id, policy_document_id, retries, cleanup_status, next_attempt_at, cleanup_claimed_at, cleanup_lease_expires_at, cleanup_worker_id, operator_action_required",
-    )
-    .in("cleanup_status", ["pending", "failed_permanently"])
-    .is("operator_action_required", false)
-    .or(`cleanup_claimed_at.is.null,cleanup_lease_expires_at.lt.${now}`)
-    .or(`next_attempt_at.is.null,next_attempt_at.lte.${now}`)
-    .order("next_attempt_at", { ascending: true, nullsFirst: true })
-    .limit(BATCH_SIZE);
-
-  if (emergencyFetchErr) {
-    return jsonResponse({ error: "Failed to fetch emergency cleanup queue" }, 500);
-  }
-
-  const emergencyResults: { id: string; status: string }[] = [];
-
-  for (const row of (emergencyRows ?? []) as EmergencyRow[]) {
-    const attemptedAt = new Date().toISOString();
-    const nextLeaseExpires = addMinutes(attemptedAt, LEASE_MINUTES);
-
-    const { data: claimed, error: claimErr } = await admin
+  // Emergency rows become due either by next_attempt_at (pending/failed-permanently)
+  // or by a `processing` row whose lease has expired (crashed worker recovery).
+  const [emergencyDueResult, emergencyExpiredProcessingResult] = await Promise.all([
+    admin
       .from("document_analysis_emergency_cleanup")
-      .update({
-        cleanup_status: "processing",
-        cleanup_claimed_at: attemptedAt,
-        cleanup_lease_expires_at: nextLeaseExpires,
-        cleanup_worker_id: workerId,
-      })
-      .eq("id", row.id)
+      .select(
+        "id, provider_file_id, policy_document_id, retries, cleanup_status, next_attempt_at, cleanup_claimed_at, cleanup_lease_expires_at, cleanup_worker_id, operator_action_required",
+      )
       .in("cleanup_status", ["pending", "failed_permanently"])
       .is("operator_action_required", false)
       .or(`cleanup_claimed_at.is.null,cleanup_lease_expires_at.lt.${now}`)
       .or(`next_attempt_at.is.null,next_attempt_at.lte.${now}`)
+      .order("next_attempt_at", { ascending: true, nullsFirst: true })
+      .limit(BATCH_SIZE),
+    admin
+      .from("document_analysis_emergency_cleanup")
+      .select(
+        "id, provider_file_id, policy_document_id, retries, cleanup_status, next_attempt_at, cleanup_claimed_at, cleanup_lease_expires_at, cleanup_worker_id, operator_action_required",
+      )
+      .eq("cleanup_status", "processing")
+      .is("operator_action_required", false)
+      .lt("cleanup_lease_expires_at", now)
+      .order("cleanup_lease_expires_at", { ascending: true })
+      .limit(BATCH_SIZE),
+  ]);
+
+  if (emergencyDueResult.error || emergencyExpiredProcessingResult.error) {
+    return jsonResponse({ error: "Failed to fetch emergency cleanup queue" }, 500);
+  }
+
+  const emergencyRows: EmergencyRow[] = [
+    ...((emergencyDueResult.data ?? []) as EmergencyRow[]),
+    ...((emergencyExpiredProcessingResult.data ?? []) as EmergencyRow[]),
+  ].slice(0, BATCH_SIZE);
+
+  const emergencyResults: { id: string; status: string }[] = [];
+  let emergencyPermanentFailure = false;
+
+  for (const row of emergencyRows) {
+    const attemptedAt = new Date().toISOString();
+    const nextLeaseExpires = addMinutes(attemptedAt, LEASE_MINUTES);
+
+    const isExpiredProcessing = row.cleanup_status === "processing";
+    const claimFilter = isExpiredProcessing
+      ? admin
+          .from("document_analysis_emergency_cleanup")
+          .update({
+            cleanup_status: "processing",
+            cleanup_claimed_at: attemptedAt,
+            cleanup_lease_expires_at: nextLeaseExpires,
+            cleanup_worker_id: workerId,
+          })
+          .eq("id", row.id)
+          .eq("cleanup_status", "processing")
+          .lt("cleanup_lease_expires_at", now)
+      : admin
+          .from("document_analysis_emergency_cleanup")
+          .update({
+            cleanup_status: "processing",
+            cleanup_claimed_at: attemptedAt,
+            cleanup_lease_expires_at: nextLeaseExpires,
+            cleanup_worker_id: workerId,
+          })
+          .eq("id", row.id)
+          .in("cleanup_status", ["pending", "failed_permanently"])
+          .is("operator_action_required", false)
+          .or(`cleanup_claimed_at.is.null,cleanup_lease_expires_at.lt.${now}`)
+          .or(`next_attempt_at.is.null,next_attempt_at.lte.${now}`);
+
+    const { data: claimed, error: claimErr } = await claimFilter
       .select("id, provider_file_id, policy_document_id, retries")
       .single();
 
@@ -211,7 +267,7 @@ Deno.serve(async (req) => {
     }
 
     const handle = { providerFileId: String(claimed.provider_file_id) };
-    let deletion;
+    let deletion: ProviderFileDeletionResult;
     try {
       deletion = await provider.deleteFile(handle);
     } catch (e) {
@@ -278,11 +334,17 @@ Deno.serve(async (req) => {
       .from("document_analysis_emergency_cleanup")
       .update(finalUpdate)
       .eq("id", claimed.id)
+      .eq("cleanup_status", "processing")
       .eq("cleanup_worker_id", workerId);
 
     if (finalUpdateErr) {
+      emergencyPermanentFailure = true;
       emergencyResults.push({ id: String(claimed.id), status: "final_update_failed" });
       continue;
+    }
+
+    if (finalUpdate.cleanup_status === "failed_permanently") {
+      emergencyPermanentFailure = true;
     }
 
     emergencyResults.push({ id: String(claimed.id), status: String(finalUpdate.cleanup_status) });
@@ -305,10 +367,33 @@ Deno.serve(async (req) => {
   }
 
   const results: { id: string; status: string }[] = [];
+  let normalPermanentFailure = false;
 
   for (const row of (dueRows ?? []) as CleanupRow[]) {
     if (!row.provider_file_id || row.provider_file_id === "pending") {
       const attemptedAt = new Date().toISOString();
+      // Claim the row before marking it permanently failed so concurrent workers
+      // cannot both escalate the same record.
+      const { data: missingClaimed, error: missingClaimErr } = await admin
+        .from("document_analysis_provider_files")
+        .update({
+          deletion_status: "deleting",
+          cleanup_claimed_at: attemptedAt,
+          cleanup_lease_expires_at: addMinutes(attemptedAt, LEASE_MINUTES),
+          cleanup_worker_id: workerId,
+        })
+        .eq("id", row.id)
+        .eq("deletion_status", row.deletion_status)
+        .or(
+          `and(deletion_status.eq.queued,next_deletion_attempt_at.lte.${now}),and(deletion_status.eq.deleting,cleanup_lease_expires_at.lt.${now})`,
+        )
+        .select("id")
+        .single();
+      if (missingClaimErr || !missingClaimed) {
+        results.push({ id: String(row.id), status: "claim_failed" });
+        continue;
+      }
+
       const { error: missingInsertErr } = await admin
         .from("document_analysis_cleanup_attempts")
         .insert({
@@ -332,8 +417,11 @@ Deno.serve(async (req) => {
           next_deletion_attempt_at: null,
           last_deletion_error_category: "missing_provider_file_id",
         })
-        .eq("id", row.id);
+        .eq("id", missingClaimed.id)
+        .eq("deletion_status", "deleting")
+        .eq("cleanup_worker_id", workerId);
       if (missingUpdateErr) {
+        normalPermanentFailure = true;
         results.push({ id: String(row.id), status: "update_failed" });
         continue;
       }
@@ -372,14 +460,13 @@ Deno.serve(async (req) => {
     }
 
     const handle = { providerFileId: String(claimed.provider_file_id) };
-    let deletion;
+    let deletion: ProviderFileDeletionResult;
     try {
       deletion = await provider.deleteFile(handle);
     } catch (e) {
       deletion = {
         deleted: false,
         attempts: (claimed.deletion_attempts ?? 0) + 1,
-        statusCode: undefined as number | undefined,
         failureCategory: e instanceof Error ? e.message : "delete_failed",
       };
     }
@@ -420,8 +507,11 @@ Deno.serve(async (req) => {
           cleanup_lease_expires_at: null,
           cleanup_worker_id: null,
         })
-        .eq("id", claimed.id);
+        .eq("id", claimed.id)
+        .eq("deletion_status", "deleting")
+        .eq("cleanup_worker_id", workerId);
       if (finalUpdateErr) {
+        normalPermanentFailure = true;
         results.push({ id: String(claimed.id), status: "update_failed" });
         continue;
       }
@@ -442,10 +532,16 @@ Deno.serve(async (req) => {
           cleanup_lease_expires_at: null,
           cleanup_worker_id: null,
         })
-        .eq("id", claimed.id);
+        .eq("id", claimed.id)
+        .eq("deletion_status", "deleting")
+        .eq("cleanup_worker_id", workerId);
       if (finalUpdateErr) {
+        normalPermanentFailure = true;
         results.push({ id: String(claimed.id), status: "update_failed" });
         continue;
+      }
+      if (permanent) {
+        normalPermanentFailure = true;
       }
       results.push({
         id: String(claimed.id),
@@ -454,9 +550,34 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Recompute readiness after processing so any permanent failure or lease-holding
+  // final-update failure is reflected immediately in the stored status.
+  const finalReadiness = await checkReadiness(admin, workerId, kimiApiKey !== "");
+  const hasFailures = emergencyPermanentFailure || normalPermanentFailure;
+  if (hasFailures || emergencyResults.some((r) => r.status === "final_update_failed")) {
+    finalReadiness.ready = false;
+    finalReadiness.checks.errors = finalReadiness.checks.errors ?? [];
+    if (emergencyPermanentFailure) {
+      finalReadiness.checks.errors!.push("emergency cleanup permanent failure detected");
+    }
+    if (normalPermanentFailure) {
+      finalReadiness.checks.errors!.push("normal cleanup permanent failure detected");
+    }
+  }
+
+  const finalCheckedAt = new Date().toISOString();
+  await admin.from("cleanup_readiness_status").upsert({
+    id: "00000000-0000-0000-0000-000000000001",
+    ready: finalReadiness.ready,
+    checked_at: finalCheckedAt,
+    stale_deleting_count: finalReadiness.checks.stale_deleting_count ?? 0,
+    permanent_failure_count: finalReadiness.checks.permanent_failure_count ?? 0,
+    checks: finalReadiness.checks,
+  });
+
   return jsonResponse({
     worker_id: workerId,
-    readiness: { ready: readinessReady, checks },
+    readiness: finalReadiness,
     emergency_processed: emergencyResults.length,
     emergency_results: emergencyResults,
     processed: results.length,
