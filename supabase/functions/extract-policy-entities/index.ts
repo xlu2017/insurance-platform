@@ -95,7 +95,13 @@ async function isCleanupReadinessReady(admin: any): Promise<boolean> {
       },
       body: JSON.stringify({ health_check: true }),
     });
-    return resp.ok;
+    if (!resp.ok) return false;
+    try {
+      const health = await resp.json();
+      return health.provider_ready === true;
+    } catch {
+      return false;
+    }
   } catch {
     return false;
   }

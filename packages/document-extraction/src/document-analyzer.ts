@@ -2243,19 +2243,28 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     const MAX_IMMEDIATE_ATTEMPTS = 3;
 
     for (const handle of handles) {
-      let deletion = await this.provider.deleteFile(handle);
+      let deletion: ProviderFileDeletionResult;
+      try {
+        deletion = await this.provider.deleteFile(handle);
+      } catch (error) {
+        deletion = {
+          deleted: false,
+          attempts: 1,
+          failureCategory: classifyDeletionError(error),
+        };
+      }
       let attempts = deletion.attempts ?? 1;
       while (!deletion.deleted && attempts < MAX_IMMEDIATE_ATTEMPTS) {
         await delay(Math.min(1000 * Math.pow(2, attempts - 1), 5000));
         try {
           deletion = await this.provider.deleteFile(handle);
-          attempts = deletion.attempts ?? attempts + 1;
+          attempts += 1;
         } catch (retryErr) {
           attempts += 1;
           deletion = {
             deleted: false,
             attempts,
-            failureCategory: retryErr instanceof Error ? retryErr.message : "deletion_retry_failed",
+            failureCategory: classifyDeletionError(retryErr),
           };
         }
       }
@@ -2314,6 +2323,10 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function classifyDeletionError(error: unknown): string {
+  return error instanceof Error ? error.message : "delete_failed";
 }
 
 function buildNativeAnalysisUserPrompt(args: {

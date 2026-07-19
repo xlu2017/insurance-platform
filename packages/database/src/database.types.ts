@@ -347,6 +347,7 @@ export type Database = {
           checked_at: string;
           checks: Json;
           id: string;
+          permanent_failure_count: number;
           ready: boolean;
           stale_deleting_count: number;
         };
@@ -354,6 +355,7 @@ export type Database = {
           checked_at?: string;
           checks?: Json;
           id?: string;
+          permanent_failure_count?: number;
           ready?: boolean;
           stale_deleting_count?: number;
         };
@@ -361,6 +363,7 @@ export type Database = {
           checked_at?: string;
           checks?: Json;
           id?: string;
+          permanent_failure_count?: number;
           ready?: boolean;
           stale_deleting_count?: number;
         };
@@ -625,27 +628,51 @@ export type Database = {
       };
       document_analysis_emergency_cleanup: {
         Row: {
+          cleanup_claimed_at: string | null;
+          cleanup_lease_expires_at: string | null;
+          cleanup_status: string;
+          cleanup_worker_id: string | null;
           created_at: string;
           failure_category: string | null;
           id: string;
+          last_attempt_at: string | null;
+          last_failure_category: string | null;
+          next_attempt_at: string | null;
+          operator_action_required: boolean;
           policy_document_id: string | null;
           provider_file_id: string;
           resolved_at: string | null;
           retries: number;
         };
         Insert: {
+          cleanup_claimed_at?: string | null;
+          cleanup_lease_expires_at?: string | null;
+          cleanup_status?: string;
+          cleanup_worker_id?: string | null;
           created_at?: string;
           failure_category?: string | null;
           id?: string;
+          last_attempt_at?: string | null;
+          last_failure_category?: string | null;
+          next_attempt_at?: string | null;
+          operator_action_required?: boolean;
           policy_document_id?: string | null;
           provider_file_id: string;
           resolved_at?: string | null;
           retries?: number;
         };
         Update: {
+          cleanup_claimed_at?: string | null;
+          cleanup_lease_expires_at?: string | null;
+          cleanup_status?: string;
+          cleanup_worker_id?: string | null;
           created_at?: string;
           failure_category?: string | null;
           id?: string;
+          last_attempt_at?: string | null;
+          last_failure_category?: string | null;
+          next_attempt_at?: string | null;
+          operator_action_required?: boolean;
           policy_document_id?: string | null;
           provider_file_id?: string;
           resolved_at?: string | null;

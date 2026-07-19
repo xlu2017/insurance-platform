@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   SupabaseAuthorizationStore,
   SupabaseFileLifecycleStore,
@@ -27,7 +27,30 @@ async function getUserClient() {
 }
 
 describe("cleanup-provider-files worker integration", () => {
-  it("exposes a healthy, authenticated endpoint", async () => {
+  beforeAll(async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    // Clean up any leftover rows from interrupted prior test runs so the
+    // readiness check can observe a known, healthy baseline.
+    await admin
+      .from("document_analysis_cleanup_attempts")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    await admin
+      .from("document_analysis_provider_files")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    await admin
+      .from("document_processing_authorizations")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    await admin
+      .from("document_analysis_emergency_cleanup")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    await admin.from("policy_documents").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  });
+
+  it("reports provider readiness on the authenticated health endpoint", async () => {
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/cleanup-provider-files`, {
       method: "POST",
       headers: {
@@ -38,7 +61,28 @@ describe("cleanup-provider-files worker integration", () => {
     });
     expect(resp.status).toBe(200);
     const body = await resp.json();
-    expect(body.status).toBe("ok");
+    expect(typeof body.provider_ready).toBe("boolean");
+  });
+
+  it("records a not-ready status when the provider credential is missing", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/cleanup-provider-files`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(resp.status).toBe(503);
+
+    const { data: status } = await admin
+      .from("cleanup_readiness_status")
+      .select("ready, checks")
+      .single();
+    expect(status?.ready).toBe(false);
+    expect(status?.checks?.provider_credential_present).toBe(false);
   });
 
   it("reports cleanup readiness as ready when the cron schedule and vault secrets exist", async () => {
@@ -51,9 +95,66 @@ describe("cleanup-provider-files worker integration", () => {
     expect(data.checks.vault_secrets).toBe(true);
     expect(data.checks.synthetic_resolved).toBe(true);
     expect(data.checks.stale_deleting_count).toBe(0);
+    expect(data.checks.permanent_failure_count).toBe(0);
   });
 
-  it("records an emergency cleanup row with the actual provider file ID", async () => {
+  it("reports cleanup readiness as not ready when a permanent failure exists", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const user = await getUserClient();
+
+    const { data: policyDoc, error: policyDocErr } = await user
+      .from("policy_documents")
+      .insert({
+        household_id: DEMO_HOUSEHOLD_ID,
+        file_name: "test.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 0,
+        storage_path: "test",
+      })
+      .select("id")
+      .single();
+    expect(policyDocErr).toBeNull();
+
+    const { data: auth } = await admin
+      .from("document_processing_authorizations")
+      .insert({
+        household_id: DEMO_HOUSEHOLD_ID,
+        actor_profile_id: DEMO_PROFILE_ID,
+        purpose: "document_extraction",
+        privacy_notice_version: "1.0",
+        processor_contract_version: "1.0",
+        foreign_processing_acknowledged: true,
+        automated_processing_acknowledged: true,
+        raw_processing_approved: true,
+        external_processing_enabled: false,
+        authorization_result: "authorized",
+      })
+      .select("id")
+      .single();
+
+    const { data: file } = await admin
+      .from("document_analysis_provider_files")
+      .insert({
+        authorization_id: auth!.id,
+        policy_document_id: policyDoc!.id,
+        provider_file_id: `permanent_${crypto.randomUUID()}`,
+        upload_status: "completed",
+        deletion_status: "failed_permanently",
+      })
+      .select("id")
+      .single();
+
+    const { data, error } = await admin.rpc("check_cleanup_readiness");
+    expect(error).toBeNull();
+    expect(data.ready).toBe(false);
+    expect(data.checks.permanent_failure_count).toBeGreaterThanOrEqual(1);
+
+    await admin.from("document_analysis_provider_files").delete().eq("id", file!.id);
+    await admin.from("document_processing_authorizations").delete().eq("id", auth!.id);
+    await admin.from("policy_documents").delete().eq("id", policyDoc!.id);
+  });
+
+  it("records an emergency cleanup row with the actual provider file ID and pending status", async () => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const store = new SupabaseFileLifecycleStore(admin);
     const providerFileId = `file_emergency_${crypto.randomUUID()}`;
@@ -62,7 +163,9 @@ describe("cleanup-provider-files worker integration", () => {
 
     const { data, error } = await admin
       .from("document_analysis_emergency_cleanup")
-      .select("provider_file_id, policy_document_id, failure_category")
+      .select(
+        "provider_file_id, policy_document_id, failure_category, cleanup_status, operator_action_required, next_attempt_at, resolved_at",
+      )
       .eq("provider_file_id", providerFileId)
       .single();
 
@@ -70,11 +173,103 @@ describe("cleanup-provider-files worker integration", () => {
     expect(data?.provider_file_id).toBe(providerFileId);
     expect(data?.policy_document_id).toBe("policy-doc-456");
     expect(data?.failure_category).toBe("ledger_failed");
+    expect(data?.cleanup_status).toBe("pending");
+    expect(data?.operator_action_required).toBe(false);
+    expect(data?.next_attempt_at).toBeTruthy();
+    expect(data?.resolved_at).toBeNull();
 
     await admin
       .from("document_analysis_emergency_cleanup")
       .delete()
       .eq("provider_file_id", providerFileId);
+  });
+
+  it("keeps a permanent emergency failure unresolved and flagged for operator action", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const providerFileId = `permanent_emergency_${crypto.randomUUID()}`;
+
+    await admin.from("document_analysis_emergency_cleanup").insert({
+      provider_file_id: providerFileId,
+      policy_document_id: "policy-doc-789",
+      failure_category: "deletion_failed",
+      cleanup_status: "failed_permanently",
+      operator_action_required: true,
+    });
+
+    const { data } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .select("resolved_at, cleanup_status, operator_action_required")
+      .eq("provider_file_id", providerFileId)
+      .single();
+
+    expect(data?.resolved_at).toBeNull();
+    expect(data?.cleanup_status).toBe("failed_permanently");
+    expect(data?.operator_action_required).toBe(true);
+
+    await admin
+      .from("document_analysis_emergency_cleanup")
+      .delete()
+      .eq("provider_file_id", providerFileId);
+  });
+
+  it("prevents concurrent workers from claiming the same emergency cleanup row", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const providerFileId = `emergency_concurrent_${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    const { data: inserted } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .insert({
+        provider_file_id: providerFileId,
+        policy_document_id: "policy-concurrent",
+        cleanup_status: "pending",
+        next_attempt_at: now,
+      })
+      .select("id")
+      .single();
+
+    const id = inserted!.id as string;
+    const workerA = "worker-a";
+    const workerB = "worker-b";
+    const leaseExpires = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    const [claimA, claimB] = await Promise.all([
+      admin
+        .from("document_analysis_emergency_cleanup")
+        .update({
+          cleanup_status: "processing",
+          cleanup_claimed_at: now,
+          cleanup_lease_expires_at: leaseExpires,
+          cleanup_worker_id: workerA,
+        })
+        .eq("id", id)
+        .in("cleanup_status", ["pending", "failed_permanently"])
+        .is("operator_action_required", false)
+        .or("cleanup_claimed_at.is.null,cleanup_lease_expires_at.lt.now")
+        .or("next_attempt_at.is.null,next_attempt_at.lte.now")
+        .select("id, cleanup_worker_id")
+        .single(),
+      admin
+        .from("document_analysis_emergency_cleanup")
+        .update({
+          cleanup_status: "processing",
+          cleanup_claimed_at: now,
+          cleanup_lease_expires_at: leaseExpires,
+          cleanup_worker_id: workerB,
+        })
+        .eq("id", id)
+        .in("cleanup_status", ["pending", "failed_permanently"])
+        .is("operator_action_required", false)
+        .or("cleanup_claimed_at.is.null,cleanup_lease_expires_at.lt.now")
+        .or("next_attempt_at.is.null,next_attempt_at.lte.now")
+        .select("id, cleanup_worker_id")
+        .single(),
+    ]);
+
+    const winners = [claimA, claimB].filter((c) => c.data?.cleanup_worker_id);
+    expect(winners.length).toBe(1);
+
+    await admin.from("document_analysis_emergency_cleanup").delete().eq("id", id);
   });
 
   it("prevents concurrent workers from both claiming the same queued lease", async () => {

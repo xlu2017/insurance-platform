@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: a691cbb8cd2a5e814671908d71f4542d5fa7a36e4d27c8bfebac044b1692341b
+// source-hash: a08d894456d929ed83e00d55c2af85a1530b79626a46c8fe9ea5367cf5a82a41
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -42785,19 +42785,28 @@ ${validationFeedback}` : baseUserPrompt;
     const unhandled = [];
     const MAX_IMMEDIATE_ATTEMPTS = 3;
     for (const handle of handles) {
-      let deletion = await this.provider.deleteFile(handle);
+      let deletion;
+      try {
+        deletion = await this.provider.deleteFile(handle);
+      } catch (error) {
+        deletion = {
+          deleted: false,
+          attempts: 1,
+          failureCategory: classifyDeletionError(error)
+        };
+      }
       let attempts = deletion.attempts ?? 1;
       while (!deletion.deleted && attempts < MAX_IMMEDIATE_ATTEMPTS) {
         await delay(Math.min(1e3 * Math.pow(2, attempts - 1), 5e3));
         try {
           deletion = await this.provider.deleteFile(handle);
-          attempts = deletion.attempts ?? attempts + 1;
+          attempts += 1;
         } catch (retryErr) {
           attempts += 1;
           deletion = {
             deleted: false,
             attempts,
-            failureCategory: retryErr instanceof Error ? retryErr.message : "deletion_retry_failed"
+            failureCategory: classifyDeletionError(retryErr)
           };
         }
       }
@@ -42850,6 +42859,9 @@ ${validationFeedback}` : baseUserPrompt;
 };
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function classifyDeletionError(error) {
+  return error instanceof Error ? error.message : "delete_failed";
 }
 function buildNativeAnalysisUserPrompt(args) {
   const lines = [
@@ -43369,14 +43381,15 @@ var SupabaseFileLifecycleStore = class {
     });
   }
   async queueCleanup(id, failureCategory, nextAttemptAt, providerFileId) {
+    if (!providerFileId || providerFileId === "pending") {
+      throw new Error("Cannot queue cleanup without actual provider file id");
+    }
     const update = {
       deletion_status: "queued",
       last_deletion_error_category: failureCategory,
-      next_deletion_attempt_at: nextAttemptAt
+      next_deletion_attempt_at: nextAttemptAt,
+      provider_file_id: providerFileId
     };
-    if (providerFileId) {
-      update.provider_file_id = providerFileId;
-    }
     const { error } = await this.admin.from("document_analysis_provider_files").update(update).eq("id", id);
     if (error) throw new Error("Failed to queue cleanup: " + error.message);
     await this.admin.from("document_analysis_cleanup_attempts").insert({
@@ -43390,7 +43403,12 @@ var SupabaseFileLifecycleStore = class {
     const { error } = await this.admin.from("document_analysis_emergency_cleanup").insert({
       provider_file_id: providerFileId,
       policy_document_id: policyDocumentId,
-      failure_category: failureCategory
+      failure_category: failureCategory,
+      cleanup_status: "pending",
+      next_attempt_at: (/* @__PURE__ */ new Date()).toISOString(),
+      retries: 0,
+      operator_action_required: false,
+      last_failure_category: failureCategory ?? null
     });
     if (error) throw new Error("Failed to record emergency cleanup: " + error.message);
   }
@@ -43519,4 +43537,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a691cbb8cd2a5e814671908d71f4542d5fa7a36e4d27c8bfebac044b1692341b";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a08d894456d929ed83e00d55c2af85a1530b79626a46c8fe9ea5367cf5a82a41";

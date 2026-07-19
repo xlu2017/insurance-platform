@@ -15,6 +15,19 @@ interface CleanupRow {
   cleanup_lease_expires_at?: string;
 }
 
+interface EmergencyRow {
+  id: string;
+  provider_file_id: string;
+  policy_document_id?: string;
+  retries: number;
+  cleanup_status: string;
+  next_attempt_at?: string;
+  cleanup_claimed_at?: string;
+  cleanup_lease_expires_at?: string;
+  cleanup_worker_id?: string;
+  operator_action_required: boolean;
+}
+
 interface ReadinessChecks {
   cron_active?: boolean;
   vault_secrets?: boolean;
@@ -22,6 +35,8 @@ interface ReadinessChecks {
   health_invocation?: boolean;
   synthetic_resolved?: boolean;
   stale_deleting_count?: number;
+  permanent_failure_count?: number;
+  provider_credential_present?: boolean;
   errors?: string[];
 }
 
@@ -41,6 +56,7 @@ function addMinutes(iso: string, minutes: number): string {
 async function checkReadiness(
   admin: any,
   workerId: string,
+  providerCredentialPresent: boolean,
 ): Promise<{ ready: boolean; checks: ReadinessChecks }> {
   const checks: ReadinessChecks = { errors: [] };
 
@@ -55,6 +71,9 @@ async function checkReadiness(
     ready = true;
     Object.assign(checks, rpcResult.checks ?? {});
   }
+
+  checks.provider_credential_present = providerCredentialPresent;
+  ready = ready && providerCredentialPresent;
 
   // The worker itself is executing, which demonstrates the function is deployed
   // and reachable. The extraction gate performs an authenticated health
@@ -79,22 +98,54 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  if (body.health_check === true) {
-    return jsonResponse({ status: "ok" });
-  }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "http://127.0.0.1:54321";
   const admin = createClient(supabaseUrl, serviceKey);
   const workerId = crypto.randomUUID();
 
+  // Provider credential and adapter initialization must be available before any
+  // readiness or cleanup work is performed.
+  const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY") ?? "";
+  let provider: InstanceType<typeof KimiK3Provider> | undefined;
+  if (kimiApiKey) {
+    try {
+      provider = new KimiK3Provider({
+        apiKey: kimiApiKey,
+        baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
+      });
+    } catch (e) {
+      return jsonResponse(
+        {
+          error: "Failed to initialize provider adapter",
+          details: e instanceof Error ? e.message : String(e),
+        },
+        503,
+      );
+    }
+  }
+
+  if (body.health_check === true) {
+    if (!provider) {
+      return jsonResponse(
+        { status: "error", provider_ready: false, error: "KIMI_K3_API_KEY not configured" },
+        200,
+      );
+    }
+    return jsonResponse({ status: "ok", provider_ready: true });
+  }
+
   // Self-check and publish readiness status before processing the real queue.
-  const { ready: readinessReady, checks } = await checkReadiness(admin, workerId);
+  const { ready: readinessReady, checks } = await checkReadiness(
+    admin,
+    workerId,
+    kimiApiKey !== "",
+  );
   const checkedAt = new Date().toISOString();
   const { error: statusErr } = await admin.from("cleanup_readiness_status").upsert({
     id: "00000000-0000-0000-0000-000000000001",
     ready: readinessReady,
     checked_at: checkedAt,
     stale_deleting_count: checks.stale_deleting_count ?? 0,
+    permanent_failure_count: checks.permanent_failure_count ?? 0,
     checks,
   });
   if (statusErr) {
@@ -104,25 +155,28 @@ Deno.serve(async (req) => {
     );
   }
 
-  const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY") ?? "";
-  if (!kimiApiKey) {
-    return jsonResponse({ error: "KIMI_K3_API_KEY not configured" }, 503);
+  if (!provider) {
+    return jsonResponse(
+      { error: "KIMI_K3_API_KEY not configured", readiness: { ready: readinessReady, checks } },
+      503,
+    );
   }
-
-  const provider = new KimiK3Provider({
-    apiKey: kimiApiKey,
-    baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
-  });
 
   const now = new Date().toISOString();
   const leaseExpires = addMinutes(now, LEASE_MINUTES);
 
-  // Process any unresolved emergency cleanup rows first.
+  // Process unresolved emergency cleanup rows first, using the same lease model as
+  // the normal queue to prevent concurrent workers from racing the same row.
   const { data: emergencyRows, error: emergencyFetchErr } = await admin
     .from("document_analysis_emergency_cleanup")
-    .select("id, provider_file_id, policy_document_id, retries")
-    .is("resolved_at", null)
-    .order("created_at", { ascending: true })
+    .select(
+      "id, provider_file_id, policy_document_id, retries, cleanup_status, next_attempt_at, cleanup_claimed_at, cleanup_lease_expires_at, cleanup_worker_id, operator_action_required",
+    )
+    .in("cleanup_status", ["pending", "failed_permanently"])
+    .is("operator_action_required", false)
+    .or(`cleanup_claimed_at.is.null,cleanup_lease_expires_at.lt.${now}`)
+    .or(`next_attempt_at.is.null,next_attempt_at.lte.${now}`)
+    .order("next_attempt_at", { ascending: true, nullsFirst: true })
     .limit(BATCH_SIZE);
 
   if (emergencyFetchErr) {
@@ -130,8 +184,33 @@ Deno.serve(async (req) => {
   }
 
   const emergencyResults: { id: string; status: string }[] = [];
-  for (const row of emergencyRows ?? []) {
-    const handle = { providerFileId: String(row.provider_file_id) };
+
+  for (const row of (emergencyRows ?? []) as EmergencyRow[]) {
+    const attemptedAt = new Date().toISOString();
+    const nextLeaseExpires = addMinutes(attemptedAt, LEASE_MINUTES);
+
+    const { data: claimed, error: claimErr } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .update({
+        cleanup_status: "processing",
+        cleanup_claimed_at: attemptedAt,
+        cleanup_lease_expires_at: nextLeaseExpires,
+        cleanup_worker_id: workerId,
+      })
+      .eq("id", row.id)
+      .in("cleanup_status", ["pending", "failed_permanently"])
+      .is("operator_action_required", false)
+      .or(`cleanup_claimed_at.is.null,cleanup_lease_expires_at.lt.${now}`)
+      .or(`next_attempt_at.is.null,next_attempt_at.lte.${now}`)
+      .select("id, provider_file_id, policy_document_id, retries")
+      .single();
+
+    if (claimErr || !claimed) {
+      emergencyResults.push({ id: String(row.id), status: "claim_failed" });
+      continue;
+    }
+
+    const handle = { providerFileId: String(claimed.provider_file_id) };
     let deletion;
     try {
       deletion = await provider.deleteFile(handle);
@@ -142,34 +221,74 @@ Deno.serve(async (req) => {
         failureCategory: e instanceof Error ? e.message : "delete_failed",
       };
     }
+
     const isNotFound =
       !deletion.deleted &&
       (deletion.statusCode === 404 ||
         String(deletion.failureCategory).includes("404") ||
         String(deletion.failureCategory).includes("Not Found"));
     const deleted = deletion.deleted || isNotFound;
-    const attemptedAt = new Date().toISOString();
-    const retries = (row.retries ?? 0) + 1;
+    const retries = (claimed.retries ?? 0) + 1;
     const permanent = retries >= MAX_ATTEMPTS;
 
-    const { error: emergencyUpdateErr } = await admin
-      .from("document_analysis_emergency_cleanup")
-      .update({
-        resolved_at: deleted || permanent ? attemptedAt : null,
+    let finalUpdate: Record<string, unknown>;
+    if (deleted) {
+      finalUpdate = {
+        cleanup_status: "deleted",
+        resolved_at: attemptedAt,
         retries,
-        failure_category: deletion.failureCategory ?? "deletion_failed",
-      })
-      .eq("id", row.id);
-    if (emergencyUpdateErr) {
-      emergencyResults.push({ id: String(row.id), status: "emergency_update_failed" });
+        last_attempt_at: attemptedAt,
+        last_failure_category: null,
+        operator_action_required: false,
+        cleanup_claimed_at: null,
+        cleanup_lease_expires_at: null,
+        cleanup_worker_id: null,
+        next_attempt_at: null,
+      };
+    } else if (permanent) {
+      finalUpdate = {
+        cleanup_status: "failed_permanently",
+        resolved_at: null,
+        operator_action_required: true,
+        retries,
+        last_attempt_at: attemptedAt,
+        last_failure_category: deletion.failureCategory ?? "max_attempts_exceeded",
+        cleanup_claimed_at: null,
+        cleanup_lease_expires_at: null,
+        cleanup_worker_id: null,
+        next_attempt_at: null,
+      };
+    } else {
+      const backoffMinutes = Math.min(5 * Math.pow(2, retries - 1), 60);
+      const nextAttempt = addMinutes(attemptedAt, backoffMinutes);
+      finalUpdate = {
+        cleanup_status: "pending",
+        resolved_at: null,
+        retries,
+        last_attempt_at: attemptedAt,
+        last_failure_category: deletion.failureCategory ?? "deletion_failed",
+        cleanup_claimed_at: null,
+        cleanup_lease_expires_at: null,
+        cleanup_worker_id: null,
+        next_attempt_at: nextAttempt,
+      };
+    }
+
+    const { error: finalUpdateErr } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .update(finalUpdate)
+      .eq("id", claimed.id)
+      .eq("cleanup_worker_id", workerId);
+
+    if (finalUpdateErr) {
+      emergencyResults.push({ id: String(claimed.id), status: "final_update_failed" });
       continue;
     }
-    emergencyResults.push({
-      id: String(row.id),
-      status: deleted ? "deleted" : permanent ? "failed_permanently" : "pending",
-    });
+
+    emergencyResults.push({ id: String(claimed.id), status: String(finalUpdate.cleanup_status) });
   }
 
+  // Process the normal provider-file cleanup queue with leased claims.
   const { data: dueRows, error: fetchErr } = await admin
     .from("document_analysis_provider_files")
     .select(

@@ -18,7 +18,7 @@ create index if not exists idx_emergency_cleanup_unresolved
   on document_analysis_emergency_cleanup (created_at)
   where resolved_at is null;
 
-grant select, insert, update on document_analysis_emergency_cleanup to service_role;
+grant select, insert, update, delete on document_analysis_emergency_cleanup to service_role;
 
 -- Singleton readiness status updated by the cleanup worker each run.
 create table if not exists cleanup_readiness_status (

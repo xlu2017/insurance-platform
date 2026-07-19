@@ -136,14 +136,15 @@ export class SupabaseFileLifecycleStore implements ExternalFileLifecycleStore {
     nextAttemptAt: string,
     providerFileId?: string,
   ): Promise<void> {
+    if (!providerFileId || providerFileId === "pending") {
+      throw new Error("Cannot queue cleanup without actual provider file id");
+    }
     const update: Record<string, unknown> = {
       deletion_status: "queued",
       last_deletion_error_category: failureCategory,
       next_deletion_attempt_at: nextAttemptAt,
+      provider_file_id: providerFileId,
     };
-    if (providerFileId) {
-      update.provider_file_id = providerFileId;
-    }
     const { error } = await this.admin
       .from("document_analysis_provider_files")
       .update(update)
@@ -166,6 +167,11 @@ export class SupabaseFileLifecycleStore implements ExternalFileLifecycleStore {
       provider_file_id: providerFileId,
       policy_document_id: policyDocumentId,
       failure_category: failureCategory,
+      cleanup_status: "pending",
+      next_attempt_at: new Date().toISOString(),
+      retries: 0,
+      operator_action_required: false,
+      last_failure_category: failureCategory ?? null,
     });
     if (error) throw new Error("Failed to record emergency cleanup: " + error.message);
   }

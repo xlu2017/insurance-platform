@@ -670,3 +670,155 @@ describe("NativeDocumentAnalyzer lifecycle", () => {
     expect(record.processingStatus).toBe("timed_out");
   });
 });
+
+describe("NativeDocumentAnalyzer deleteAll compound failures", () => {
+  function makeHandle(providerFileId: string): ProviderFileHandle {
+    return {
+      providerFileId,
+      documentId: "doc-1",
+      filename: "a.png",
+      mimeType: "image/png",
+      bytes: 3,
+      mode: "native_image_reference",
+      status: "ok",
+      providerMetadata: {},
+    };
+  }
+
+  async function analyzerWithLifecycle(
+    lifecycle: MemoryExternalFileLifecycleStore,
+    authorization: DocumentProcessingAuthorization,
+  ) {
+    const provider = new FakeNativeProvider();
+    provider.deletionResult = {
+      deleted: false,
+      attempts: 1,
+      statusCode: 503,
+      failureCategory: "transient",
+    };
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
+      authorization,
+      fileLifecycleStore: lifecycle,
+    });
+    const record = await lifecycle.recordUpload({
+      authorizationId: authorization.id,
+      analysisRequestId: undefined,
+      policyDocumentId: "doc-1",
+      providerFileId: "pending",
+      uploadStatus: "started",
+    });
+    (analyzer as unknown as { lifecycleRecords: Map<string, string> }).lifecycleRecords.set(
+      "doc-1",
+      record.id,
+    );
+    return analyzer;
+  }
+
+  it("queues cleanup when recordDeletionAttempt fails", async () => {
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    lifecycle.recordDeletionAttempt = async () => {
+      throw new Error("database unavailable");
+    };
+
+    const analyzer = await analyzerWithLifecycle(lifecycle, await createAuthorization());
+    await (
+      analyzer as unknown as {
+        deleteAll(handles: ProviderFileHandle[]): Promise<ProviderFileDeletionResult[]>;
+      }
+    ).deleteAll([makeHandle("file-1")]);
+
+    const records = lifecycle.getRecords();
+    expect(records.length).toBe(1);
+    expect(records[0].providerFileId).toBe("file-1");
+    expect(records[0].deletionStatus).toBe("queued");
+  });
+
+  it("falls back to emergency cleanup when both ledger updates fail", async () => {
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    lifecycle.recordDeletionAttempt = async () => {
+      throw new Error("database unavailable");
+    };
+    lifecycle.queueCleanup = async () => {
+      throw new Error("queue unavailable");
+    };
+
+    const analyzer = await analyzerWithLifecycle(lifecycle, await createAuthorization());
+    await (
+      analyzer as unknown as {
+        deleteAll(handles: ProviderFileHandle[]): Promise<ProviderFileDeletionResult[]>;
+      }
+    ).deleteAll([makeHandle("file-2")]);
+
+    const emergency = lifecycle.getEmergencyCleanup();
+    expect(emergency.length).toBe(1);
+    expect(emergency[0].providerFileId).toBe("file-2");
+    expect(emergency[0].failureCategory).toMatch(/transient/);
+  });
+
+  it("throws with a support reference when all cleanup persistence fails", async () => {
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    lifecycle.recordDeletionAttempt = async () => {
+      throw new Error("database unavailable");
+    };
+    lifecycle.queueCleanup = async () => {
+      throw new Error("queue unavailable");
+    };
+    lifecycle.recordEmergencyCleanup = async () => {
+      throw new Error("emergency ledger unavailable");
+    };
+
+    const analyzer = await analyzerWithLifecycle(lifecycle, await createAuthorization());
+    await expect(
+      (
+        analyzer as unknown as {
+          deleteAll(handles: ProviderFileHandle[]): Promise<ProviderFileDeletionResult[]>;
+        }
+      ).deleteAll([makeHandle("file-3")]),
+    ).rejects.toThrow(/Support reference/);
+  });
+
+  it("wraps an initial deleteFile throw and still attempts cleanup persistence", async () => {
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    const authorization = await createAuthorization();
+    const provider = new FakeNativeProvider();
+    let calls = 0;
+    provider.deleteFile = async () => {
+      calls++;
+      if (calls === 1) {
+        throw new Error("network timeout");
+      }
+      return { deleted: true, attempts: calls, statusCode: 200 };
+    };
+
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
+      authorization,
+      fileLifecycleStore: lifecycle,
+    });
+    const record = await lifecycle.recordUpload({
+      authorizationId: authorization.id,
+      analysisRequestId: undefined,
+      policyDocumentId: "doc-1",
+      providerFileId: "pending",
+      uploadStatus: "started",
+    });
+    (analyzer as unknown as { lifecycleRecords: Map<string, string> }).lifecycleRecords.set(
+      "doc-1",
+      record.id,
+    );
+
+    const results = await (
+      analyzer as unknown as {
+        deleteAll(handles: ProviderFileHandle[]): Promise<ProviderFileDeletionResult[]>;
+      }
+    ).deleteAll([makeHandle("file-4")]);
+
+    expect(calls).toBe(2);
+    expect(results[0].deleted).toBe(true);
+    expect(lifecycle.getRecords().length).toBe(1);
+    expect(lifecycle.getRecords()[0].deletionStatus).toBe("deleted");
+  });
+});
