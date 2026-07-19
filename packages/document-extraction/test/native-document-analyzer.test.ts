@@ -617,4 +617,50 @@ describe("NativeDocumentAnalyzer lifecycle", () => {
     expect(record.deletionAttempts).toBeGreaterThanOrEqual(1);
     expect(record.deletionStatus).toBe("queued");
   });
+
+  it("records the provider file id and deletes when polling times out", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+    provider.uploadResult = {
+      status: "timed_out" as const,
+      handle: {
+        providerFileId: "file-poll-timeout",
+        documentId: "doc-1",
+        filename: "a.png",
+        mimeType: "image/png",
+        bytes: 3,
+        mode: "native_image_reference" as const,
+        reference: "test://file-poll-timeout",
+        status: "processing",
+        providerMetadata: {},
+      },
+      errorCategory: "status_poll_timeout",
+    };
+
+    let deleteCalls = 0;
+    provider.deleteFile = async (handle) => {
+      deleteCalls++;
+      expect(handle.providerFileId).toBe("file-poll-timeout");
+      return { deleted: true, attempts: 1, statusCode: 200 };
+    };
+
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    const analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryBytesLoader(new Uint8Array([1, 2, 3])),
+      authorization: await createAuthorization(),
+      fileLifecycleStore: lifecycle,
+    });
+
+    await expect(analyzer.analyze(baseInput("image/png"))).rejects.toThrow();
+    expect(deleteCalls).toBe(1);
+    const record = lifecycle.getRecords()[0];
+    expect(record.providerFileId).toBe("file-poll-timeout");
+    expect(record.uploadStatus).toBe("completed");
+    expect(record.processingStatus).toBe("timed_out");
+  });
 });

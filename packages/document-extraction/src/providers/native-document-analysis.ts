@@ -85,7 +85,13 @@ export interface DocumentProcessingAuthorization {
   automatedProcessingAcknowledged: boolean;
   rawProcessingApproved: boolean;
   externalProcessingEnabled: boolean;
-  authorizationResult: "authorized" | "denied";
+  authorizationResult:
+    | "authorized"
+    | "denied"
+    | "authorized_no_transmission"
+    | "processing_started"
+    | "processing_failed"
+    | "analysis_persisted";
   authorizedAt: string;
   analysisRequestId?: string;
 }
@@ -99,7 +105,7 @@ export interface ExternalFileRecord {
   uploadStartedAt: string;
   uploadCompletedAt?: string;
   uploadStatus: "started" | "completed" | "failed" | "rejected";
-  processingStatus?: "ready" | "failed" | "timed_out";
+  processingStatus?: "ready" | "rejected" | "failed" | "timed_out";
   deletionStatus?: "pending" | "deleted" | "queued" | "failed_permanently";
   deletionAttempts: number;
   lastDeletionErrorCategory?: string;

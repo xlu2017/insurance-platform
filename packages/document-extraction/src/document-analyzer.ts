@@ -20,6 +20,7 @@ import type {
   ExternalFileLifecycleStore,
   FileBytesLoader,
   NativeDocumentAnalysisProvider,
+  ExternalFileRecord,
   OriginalFileInput,
   ProviderFileDeletionResult,
   ProviderFileHandle,
@@ -2011,8 +2012,8 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
 
     const resolved = await this.provider.resolveModel();
 
-    const fileHandles: ProviderFileHandle[] = [];
     let normalizedResult: InsuranceDocumentAnalysisResult | undefined;
+    const allHandles: ProviderFileHandle[] = [];
 
     try {
       const capabilities = await Promise.all(
@@ -2036,6 +2037,8 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
         originalInputs.map((original) => this.uploadAndRecord(original)),
       );
 
+      const uploadResults: ProviderUploadResult[] = [];
+      const readyHandles: ProviderFileHandle[] = [];
       const uploadFailures: string[] = [];
       for (let i = 0; i < settled.length; i++) {
         const result = settled[i];
@@ -2044,6 +2047,10 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
           continue;
         }
         const uploadResult = result.value;
+        uploadResults[i] = uploadResult;
+        if (uploadResult.handle) {
+          allHandles.push(uploadResult.handle);
+        }
         if (uploadResult.status !== "ready" || !uploadResult.handle) {
           uploadFailures.push(uploadResult.errorCategory ?? "upload_failed");
           continue;
@@ -2054,7 +2061,7 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
           );
           continue;
         }
-        fileHandles.push(uploadResult.handle);
+        readyHandles.push(uploadResult.handle);
       }
 
       if (uploadFailures.length > 0) {
@@ -2064,7 +2071,12 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       const syntheticExtractedDocs: ExtractedPdf[] = originalInputs.map((original, i) => ({
         documentId: original.documentId,
         fileDigest: fileDigestByDocumentId.get(original.documentId) ?? "unknown",
-        pageCount: fileHandles[i]?.mode === "native_image_reference" ? 1 : 0,
+        pageCount:
+          uploadResults[i]?.handle?.mode === "native_image_reference"
+            ? 1
+            : uploadResults[i]?.handle?.mode === "native_video_reference"
+              ? 0
+              : 0,
         pages: [],
       }));
 
@@ -2098,7 +2110,7 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
           model: resolved.modelId,
           systemPrompt: buildInsuranceAnalysisSystemPrompt(),
           userPrompt,
-          files: fileHandles,
+          files: readyHandles,
           responseFormat: { type: "json_object" },
         });
 
@@ -2124,18 +2136,18 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
         throw lastError ?? new Error("Document analysis failed after validation repair attempt");
       }
     } catch (err) {
-      await this.deleteAll(fileHandles);
+      await this.deleteAll(allHandles);
       throw err;
     }
 
-    const deletionResults = await this.deleteAll(fileHandles);
+    const deletionResults = await this.deleteAll(allHandles);
 
     normalizedResult.modelProvider = GENERIC_PARSER_ID;
     normalizedResult.modelId = GENERIC_PARSER_VERSION;
     normalizedResult.providerMetadata = {
       providerId: this.provider.providerId,
       modelId: resolved.modelId,
-      providerFiles: fileHandles.map((h) => ({
+      providerFiles: allHandles.map((h) => ({
         documentId: h.documentId,
         mode: h.mode,
         bytes: h.bytes,
@@ -2162,17 +2174,14 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
         if (recordId) {
-          if (result.status === "ready" && result.handle) {
-            await this.fileLifecycleStore.markUploadCompleted(recordId, {
-              providerFileId: result.handle.providerFileId,
-              uploadStatus: "completed",
-              processingStatus: "ready",
-            });
-          } else {
-            await this.fileLifecycleStore.markUploadCompleted(recordId, {
-              uploadStatus: result.status === "rejected" ? "rejected" : "failed",
-            });
-          }
+          const patch: Partial<ExternalFileRecord> = result.handle
+            ? {
+                providerFileId: result.handle.providerFileId,
+                uploadStatus: "completed",
+                processingStatus: result.status === "ready" ? "ready" : result.status,
+              }
+            : { uploadStatus: result.status === "rejected" ? "rejected" : "failed" };
+          await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
         }
       }
 

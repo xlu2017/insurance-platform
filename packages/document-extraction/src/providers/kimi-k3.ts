@@ -198,22 +198,13 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
         };
       }
       const file = (await response.json()) as KimiFileObject;
-
-      const finalStatus = await this.pollFileStatus(file.id);
-      if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {
-        return {
-          status: finalStatus.status as ProviderUploadResult["status"],
-          errorCategory: finalStatus.errorCategory ?? "upload_processing_failed",
-        };
-      }
-
       const referenceScheme = (await this.resolveModel()).supportedReferenceSchemes[0] ?? "ms://";
       const handle: ProviderFileHandle = {
         providerFileId: file.id,
         documentId: input.documentId,
         filename: file.filename ?? input.filename,
         mimeType: input.mimeType,
-        bytes: file.bytes,
+        bytes: file.bytes ?? input.bytes.length,
         mode: capability.mode,
         reference: `${referenceScheme}${file.id}`,
         status: file.status,
@@ -224,6 +215,16 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
           purpose: file.purpose,
         },
       };
+
+      const finalStatus = await this.pollFileStatus(file.id);
+      if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {
+        return {
+          status: finalStatus.status as ProviderUploadResult["status"],
+          handle,
+          errorCategory: finalStatus.errorCategory ?? "upload_processing_failed",
+        };
+      }
+
       return { status: "ready", handle };
     } finally {
       clearTimeout(timeout);
