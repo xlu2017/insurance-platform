@@ -133,16 +133,22 @@ describe("approve_candidate_assets_v2", () => {
   it("rejects non-member callers", async () => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const otherUser = createClient(SUPABASE_URL, ANON_KEY);
-    const { data: signUp } = await otherUser.auth.signUp({
-      email: "other-candidate-test@example.com",
-      password: "OtherPass123!",
+    const email = `other-candidate-test-${Date.now()}@example.com`;
+    const password = "OtherPass123!";
+    const { data: createData, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { role: "authenticated" },
     });
-    if (!signUp?.user) throw new Error("failed to create other user");
-    await admin.auth.admin.updateUserById(signUp.user.id, { role: "authenticated" });
+    if (createError || !createData?.user) throw new Error("failed to create other user");
+
+    const { error: signInError } = await otherUser.auth.signInWithPassword({ email, password });
+    if (signInError) throw new Error("failed to sign in other user");
 
     const { data, error } = await otherUser.rpc("approve_candidate_assets_v2" as any, {
       p_household_id: DEMO_HOUSEHOLD_ID,
-      p_actor_profile_id: signUp.user.id,
+      p_actor_profile_id: createData.user.id,
       p_client_request_id: "cross-household-approval-1",
       p_decisions: [],
     });
