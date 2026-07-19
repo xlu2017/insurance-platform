@@ -83,7 +83,12 @@ Deno.serve(async (req) => {
       {
         code: "INVALID_MANDATE",
         message: "Mandate validation failed",
-        errors: mandateResult.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        errors: mandateResult.error.issues.map(
+          (i: { path: (string | number)[]; message: string }) => ({
+            path: i.path,
+            message: i.message,
+          }),
+        ),
       },
       400,
     );
@@ -96,7 +101,12 @@ Deno.serve(async (req) => {
       {
         code: "INVALID_SWITCHING_PREFERENCES",
         message: "Switching preferences validation failed",
-        errors: switchingResult.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        errors: switchingResult.error.issues.map(
+          (i: { path: (string | number)[]; message: string }) => ({
+            path: i.path,
+            message: i.message,
+          }),
+        ),
       },
       400,
     );
@@ -104,8 +114,8 @@ Deno.serve(async (req) => {
   const switching = switchingResult.data;
 
   // Reject duplicate override asset IDs.
-  const vehicleIds = mandate.vehicleOverrides.map((o) => o.vehicleId);
-  const propertyIds = mandate.propertyOverrides.map((o) => o.propertyId);
+  const vehicleIds = mandate.vehicleOverrides.map((o: { vehicleId: string }) => o.vehicleId);
+  const propertyIds = mandate.propertyOverrides.map((o: { propertyId: string }) => o.propertyId);
   if (new Set(vehicleIds).size !== vehicleIds.length) {
     return jsonResponse(
       { code: "DUPLICATE_VEHICLE_OVERRIDE", message: "Duplicate vehicle override IDs" },

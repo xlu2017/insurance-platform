@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "strict": true,
-    "noImplicitAny": false,
-    "noImplicitReturns": false
+    "noImplicitAny": true,
+    "noImplicitReturns": true
   },
   "nodeModulesDir": "auto"
 }

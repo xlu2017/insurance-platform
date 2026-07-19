@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "eslint .",
-    "typecheck": "mkdir -p .next/types && tsc --noEmit"
+    "typecheck": "node -e \"require('fs').mkdirSync('.next/types', { recursive: true })\" && tsc --noEmit"
   },
   "dependencies": {
     "@autopilot/database": "workspace:*",

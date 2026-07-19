@@ -546,8 +546,8 @@ Deno.serve(async (req) => {
     );
   }
 
-  const classifiedComponents = request.components.map((component) =>
-    validateAndClassifyComponent(component as QuoteComponentDraft, householdAssets, saveIntent),
+  const classifiedComponents = request.components.map((component: QuoteComponentDraft) =>
+    validateAndClassifyComponent(component, householdAssets, saveIntent),
   );
 
   if (saveIntent === "validate") {
@@ -561,7 +561,9 @@ Deno.serve(async (req) => {
         422,
       );
     }
-    const invalidComponents = classifiedComponents.filter((c) => c.validation_status !== "valid");
+    const invalidComponents = classifiedComponents.filter(
+      (c: ClassifiedComponent) => c.validation_status !== "valid",
+    );
     if (invalidComponents.length > 0) {
       return jsonResponse(
         {
@@ -600,7 +602,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const statuses = classifiedComponents.map((c) => c.validation_status);
+  const statuses = classifiedComponents.map((c: ClassifiedComponent) => c.validation_status);
   const aggregateStatus: string = statuses.includes("invalid")
     ? "invalid"
     : statuses.includes("incomplete")

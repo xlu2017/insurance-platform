@@ -253,7 +253,11 @@ Deno.serve(async (req) => {
       safeErrorMessage: engineInput.message,
     });
     return jsonResponse(
-      { code: engineInput.code, message: engineInput.message, details: engineInput.details },
+      {
+        code: engineInput.code,
+        message: engineInput.message,
+        details: (engineInput as any).details,
+      },
       400,
     );
   }

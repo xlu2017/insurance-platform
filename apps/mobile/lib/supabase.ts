@@ -49,17 +49,23 @@ const secureStoreAdapter = {
       : withFallback(() => SecureStore.deleteItemAsync(key), (memoryStore.delete(key), undefined)),
 };
 
-export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabase = createClient<Database>(
-  SUPABASE_URL,
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
-  {
-    auth: {
-      storage: secureStoreAdapter,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. " +
+      "Set these environment variables before building or running the app.",
+  );
+}
+
+export const SUPABASE_URL = supabaseUrl;
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: secureStoreAdapter,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
   },
-);
+});

@@ -298,7 +298,7 @@ async function loadPendingCandidateRecords(
   }
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []).map((c) => ({
+  return (data ?? []).map((c: Record<string, unknown>) => ({
     id: String(c.id),
     asset_type: String(c.asset_type),
     identity_fingerprint: String(c.identity_fingerprint),
@@ -637,16 +637,16 @@ Deno.serve(async (req) => {
     analysisRequestId: analysisRunId,
   });
 
-  let analysis;
+  let analysis: any;
   try {
-    analysis = await analyzer.analyze({
+    analysis = (await analyzer.analyze({
       householdId,
       uploadedDocuments,
       existingAssets,
       pendingCandidates,
       priorDocumentSummaries: [],
       jurisdiction: "AB",
-    });
+    })) as any;
   } catch (err) {
     const sanitized = sanitizeProviderError(err) as PublicDocumentError;
     const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";

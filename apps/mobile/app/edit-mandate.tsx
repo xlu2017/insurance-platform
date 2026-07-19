@@ -584,6 +584,11 @@ export default function EditMandate() {
     setVersions(data.loadResult.versions);
   }, [data]);
 
+  const filteredInsurers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (data?.insurers ?? []).filter((i) => i.name.toLowerCase().includes(term));
+  }, [search, data?.insurers]);
+
   if (householdLoading || isLoading || !household || !mandate || !switching) return <Loading />;
 
   const updateAuto = (auto: AutoMandateV2) =>
@@ -608,11 +613,6 @@ export default function EditMandate() {
       return updatePropertyOverrideV2(prev, propertyId, patch);
     });
   };
-
-  const filteredInsurers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (data?.insurers ?? []).filter((i) => i.name.toLowerCase().includes(term));
-  }, [search, data?.insurers]);
 
   const toggleExcludedInsurer = (insurerId: string) => {
     const current = new Set(switching.excludedInsurerIds);
