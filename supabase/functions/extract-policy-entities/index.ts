@@ -494,50 +494,6 @@ Deno.serve(async (req) => {
   );
   const newDocIds = policyDocumentIds.filter((id) => !existingByDigest.has(digestByDocId[id]));
 
-  let sessionId = sessionIdRaw;
-  if (!sessionId) {
-    if (duplicatedDocIds.length > 0 && existingByDigest.size > 0) {
-      const first = existingByDigest.get(digestByDocId[duplicatedDocIds[0]]);
-      sessionId = first?.session_id;
-    }
-    if (!sessionId) {
-      const { data: session, error: sessionErr } = await admin
-        .from("document_extraction_sessions")
-        .insert({ household_id: householdId, status: "open", created_by: user.id })
-        .select()
-        .single();
-      if (sessionErr || !session) {
-        return jsonError("Failed to create extraction session", 500);
-      }
-      sessionId = session.id;
-    }
-  } else {
-    const { data: session } = await supabase
-      .from("document_extraction_sessions")
-      .select("id")
-      .eq("id", sessionId)
-      .maybeSingle();
-    if (!session) {
-      return jsonError("Session not found", 404);
-    }
-  }
-
-  // If every document is a duplicate, return the existing session and candidates.
-  if (newDocIds.length === 0) {
-    const { data: existingCandidates } = await admin
-      .from("asset_candidates")
-      .select("*")
-      .eq("session_id", sessionId);
-    return jsonResponse({
-      session_id: sessionId,
-      extracted_document_ids: duplicatedDocIds.map(
-        (id) => existingByDigest.get(digestByDocId[id])!.id,
-      ),
-      duplicate: true,
-      candidates: existingCandidates ?? [],
-    });
-  }
-
   const uploadedDocuments: InsuranceDocumentAnalysisInput["uploadedDocuments"] = newDocIds.map(
     (id) => ({
       documentId: id,
@@ -547,10 +503,28 @@ Deno.serve(async (req) => {
     }),
   );
 
-  const [existingAssets, pendingCandidates] = await Promise.all([
-    loadExistingAssets(admin, householdId),
-    loadPendingCandidates(admin, householdId, sessionId),
-  ]);
+  // If every document is a duplicate, return the existing session and candidates.
+  if (newDocIds.length === 0) {
+    let duplicateSessionId = sessionIdRaw;
+    if (!duplicateSessionId && duplicatedDocIds.length > 0 && existingByDigest.size > 0) {
+      const first = existingByDigest.get(digestByDocId[duplicatedDocIds[0]]);
+      duplicateSessionId = first?.session_id;
+    }
+    const { data: existingCandidates } = await admin
+      .from("asset_candidates")
+      .select(
+        "id, asset_type, identity_fingerprint, display_label, occupancy, match_classification, decision, review_status, source_document_ids",
+      )
+      .eq("session_id", duplicateSessionId);
+    return jsonResponse({
+      session_id: duplicateSessionId,
+      extracted_document_ids: duplicatedDocIds.map(
+        (id) => existingByDigest.get(digestByDocId[id])!.id,
+      ),
+      duplicate: true,
+      candidates: existingCandidates ?? [],
+    });
+  }
 
   const privacyConfig = privacyPreparationConfigFromEnv(Deno.env.get);
   const { data: consentRows, error: consentErr } = await admin
@@ -588,6 +562,7 @@ Deno.serve(async (req) => {
       : undefined;
 
   const prep = new ConfigAndConsentPrivacyPreparation(privacyConfig, consent);
+  const authorizationStore = new SupabaseAuthorizationStore(admin);
   let authorization;
   try {
     for (const uploaded of uploadedDocuments) {
@@ -599,13 +574,55 @@ Deno.serve(async (req) => {
         bytes,
       });
     }
-    authorization = await prep.authorize(user.id, new SupabaseAuthorizationStore(admin));
+    authorization = await prep.authorize(user.id, authorizationStore);
   } catch (err) {
     return jsonError(sanitizeProviderError(err), 403);
   }
 
+  const analysisRunId = crypto.randomUUID();
+  await authorizationStore.updateAuthorization(authorization.id, {
+    analysisRequestId: analysisRunId,
+    authorizationResult: "processing_started",
+  });
+
+  let sessionId = sessionIdRaw;
+  if (!sessionId) {
+    const { data: session, error: sessionErr } = await admin
+      .from("document_extraction_sessions")
+      .insert({ household_id: householdId, status: "open", created_by: user.id })
+      .select()
+      .single();
+    if (sessionErr || !session) {
+      await authorizationStore.updateAuthorization(authorization.id, {
+        authorizationResult: "authorized_no_transmission",
+      });
+      return jsonError("Failed to create extraction session", 500);
+    }
+    sessionId = session.id;
+  } else {
+    const { data: session } = await supabase
+      .from("document_extraction_sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (!session) {
+      await authorizationStore.updateAuthorization(authorization.id, {
+        authorizationResult: "authorized_no_transmission",
+      });
+      return jsonError("Session not found", 404);
+    }
+  }
+
+  const [existingAssets, pendingCandidates] = await Promise.all([
+    loadExistingAssets(admin, householdId),
+    loadPendingCandidates(admin, householdId, sessionId),
+  ]);
+
   const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
   if (!kimiApiKey) {
+    await authorizationStore.updateAuthorization(authorization.id, {
+      authorizationResult: "authorized_no_transmission",
+    });
     return jsonError(
       sanitizeProviderError(new Error("Document analysis service is not configured")),
       503,
@@ -635,12 +652,14 @@ Deno.serve(async (req) => {
       jurisdiction: "AB",
     });
   } catch (err) {
+    await authorizationStore.updateAuthorization(authorization.id, {
+      authorizationResult: "processing_failed",
+    });
     return jsonError(sanitizeProviderError(err), 502);
   }
 
   // Build the analysis-run payload. A single RPC call will persist the run,
   // extracted documents, and candidate upserts atomically.
-  const analysisRunId = crypto.randomUUID();
   const validatedOutput = { ...analysis };
   delete (validatedOutput as Record<string, unknown>).rawResponse;
 
@@ -905,8 +924,15 @@ Deno.serve(async (req) => {
     },
   );
   if (persistErr || !persistResult) {
+    await authorizationStore.updateAuthorization(authorization.id, {
+      authorizationResult: "processing_failed",
+    });
     return jsonError("Failed to persist analysis", 500);
   }
+
+  await authorizationStore.updateAuthorization(authorization.id, {
+    authorizationResult: "analysis_persisted",
+  });
 
   return jsonResponse({
     session_id: sessionId,
