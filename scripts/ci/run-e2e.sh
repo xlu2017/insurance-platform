@@ -18,6 +18,7 @@ set +a
 mkdir -p supabase/functions
 cat > supabase/functions/.env <<EOF
 EDGE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+PAYMENTS_BYPASS=true
 EOF
 
 cat > apps/admin/.env.local <<EOF
