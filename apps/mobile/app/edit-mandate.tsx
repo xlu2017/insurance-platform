@@ -558,7 +558,7 @@ function diffPropertyMandate(
   const windHailDiff = diffRule(defaults.windHailDeductible, next.windHailDeductible);
   if (windHailDiff) patch.windHailDeductible = windHailDiff;
   const earthquakeDiff = diffRule(defaults.earthquakeDeductible, next.earthquakeDeductible);
-  if (earthquakeDiff) patch.earthquakeDeductible = earthquakeDeductibleDiff;
+  if (earthquakeDiff) patch.earthquakeDeductible = earthquakeDiff;
 
   const sewerDiff = diffWater(defaults.sewerBackup, next.sewerBackup);
   if (sewerDiff) patch.sewerBackup = sewerDiff;
