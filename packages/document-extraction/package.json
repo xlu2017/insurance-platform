@@ -12,7 +12,7 @@
     "lint": "eslint src scripts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:integration": "vitest run test/supabase-adapter.integration.test.ts",
+    "test:integration": "vitest run test/*.integration.test.ts",
     "build:edge": "tsx scripts/build-edge-bundle.ts",
     "check:edge": "pnpm build:edge && git diff --exit-code ../../supabase/functions/_shared/document-extraction.js"
   },
