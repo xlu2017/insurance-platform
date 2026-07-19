@@ -6,6 +6,11 @@ import type {
 
 export class MemoryExternalFileLifecycleStore implements ExternalFileLifecycleStore {
   private records = new Map<string, ExternalFileRecord>();
+  private emergencyCleanup: {
+    providerFileId: string;
+    policyDocumentId?: string;
+    failureCategory?: string;
+  }[] = [];
 
   async recordUpload(
     record: Omit<ExternalFileRecord, "id" | "uploadStartedAt" | "deletionAttempts">,
@@ -66,7 +71,23 @@ export class MemoryExternalFileLifecycleStore implements ExternalFileLifecycleSt
     }
   }
 
+  async recordEmergencyCleanup(
+    providerFileId: string,
+    policyDocumentId?: string,
+    failureCategory?: string,
+  ): Promise<void> {
+    this.emergencyCleanup.push({ providerFileId, policyDocumentId, failureCategory });
+  }
+
   getRecords(): ExternalFileRecord[] {
     return Array.from(this.records.values());
+  }
+
+  getEmergencyCleanup(): {
+    providerFileId: string;
+    policyDocumentId?: string;
+    failureCategory?: string;
+  }[] {
+    return this.emergencyCleanup;
   }
 }

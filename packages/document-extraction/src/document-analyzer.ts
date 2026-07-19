@@ -14,6 +14,7 @@ import {
   type PropertyIdentityInput,
   type VehicleIdentityInput,
 } from "./entity-identity.ts";
+import { generateSupportReference } from "./providers/public-error.ts";
 import type { InsuranceLlmProvider } from "./llm-contract.ts";
 import type {
   DocumentProcessingAuthorization,
@@ -2238,28 +2239,81 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
 
   private async deleteAll(handles: ProviderFileHandle[]): Promise<ProviderFileDeletionResult[]> {
     const results: ProviderFileDeletionResult[] = [];
+    const unhandled: { providerFileId: string; documentId: string }[] = [];
+    const MAX_IMMEDIATE_ATTEMPTS = 3;
+
     for (const handle of handles) {
-      const result = await this.provider.deleteFile(handle);
-      results.push(result);
+      let deletion = await this.provider.deleteFile(handle);
+      let attempts = deletion.attempts ?? 1;
+      while (!deletion.deleted && attempts < MAX_IMMEDIATE_ATTEMPTS) {
+        await delay(Math.min(1000 * Math.pow(2, attempts - 1), 5000));
+        try {
+          deletion = await this.provider.deleteFile(handle);
+          attempts = deletion.attempts ?? attempts + 1;
+        } catch (retryErr) {
+          attempts += 1;
+          deletion = {
+            deleted: false,
+            attempts,
+            failureCategory: retryErr instanceof Error ? retryErr.message : "deletion_retry_failed",
+          };
+        }
+      }
+      results.push(deletion);
+
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(handle.documentId);
         if (recordId) {
-          await this.fileLifecycleStore.recordDeletionAttempt(recordId, result);
-          if (!result.deleted) {
+          let recordErr: unknown;
+          try {
+            await this.fileLifecycleStore.recordDeletionAttempt(recordId, deletion);
+          } catch (err) {
+            recordErr = err;
+          }
+
+          if (!deletion.deleted || recordErr) {
             const nextAttemptAt = new Date();
-            nextAttemptAt.setMinutes(nextAttemptAt.getMinutes() + 5 * result.attempts);
-            await this.fileLifecycleStore.queueCleanup(
-              recordId,
-              result.failureCategory ?? "deletion_failed",
-              nextAttemptAt.toISOString(),
-              handle.providerFileId,
-            );
+            nextAttemptAt.setMinutes(nextAttemptAt.getMinutes() + 5 * attempts);
+            const failureCategory =
+              (deletion.failureCategory ?? "deletion_failed") +
+              (recordErr ? ";ledger_update_failed" : "");
+            try {
+              await this.fileLifecycleStore.queueCleanup(
+                recordId,
+                failureCategory,
+                nextAttemptAt.toISOString(),
+                handle.providerFileId,
+              );
+            } catch {
+              try {
+                await this.fileLifecycleStore.recordEmergencyCleanup(
+                  handle.providerFileId,
+                  handle.documentId,
+                  failureCategory,
+                );
+              } catch {
+                unhandled.push({
+                  providerFileId: handle.providerFileId,
+                  documentId: handle.documentId,
+                });
+              }
+            }
           }
         }
       }
     }
+
+    if (unhandled.length > 0) {
+      throw new Error(
+        `Cleanup persistence failed for ${unhandled.length} provider file(s). Support reference: ${generateSupportReference()}.`,
+      );
+    }
     return results;
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildNativeAnalysisUserPrompt(args: {

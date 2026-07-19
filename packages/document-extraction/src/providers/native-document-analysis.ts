@@ -140,6 +140,11 @@ export interface ExternalFileLifecycleStore {
     nextAttemptAt: string,
     providerFileId?: string,
   ): Promise<void>;
+  recordEmergencyCleanup(
+    providerFileId: string,
+    policyDocumentId?: string,
+    failureCategory?: string,
+  ): Promise<void>;
 }
 
 export interface FileBytesLoader {

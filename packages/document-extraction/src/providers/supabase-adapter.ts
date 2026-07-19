@@ -157,6 +157,19 @@ export class SupabaseFileLifecycleStore implements ExternalFileLifecycleStore {
     });
   }
 
+  async recordEmergencyCleanup(
+    providerFileId: string,
+    policyDocumentId?: string,
+    failureCategory?: string,
+  ): Promise<void> {
+    const { error } = await this.admin.from("document_analysis_emergency_cleanup").insert({
+      provider_file_id: providerFileId,
+      policy_document_id: policyDocumentId,
+      failure_category: failureCategory,
+    });
+    if (error) throw new Error("Failed to record emergency cleanup: " + error.message);
+  }
+
   private async getRecord(
     id: string,
   ): Promise<ExternalFileRecord & { deletionAttempts: number; nextDeletionAttemptAt?: string }> {

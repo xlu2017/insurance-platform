@@ -425,6 +425,7 @@ describe("ConfigAndConsentPrivacyPreparation", () => {
         rawExternalDocumentProcessingApproved: true,
         privacyNoticeVersion: "v1",
         processorContractVersion: "v1",
+        cleanupReadinessCheck: async () => true,
       },
       {
         id: "consent-1",

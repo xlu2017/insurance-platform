@@ -55,6 +55,52 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+async function isCleanupReadinessReady(admin: any): Promise<boolean> {
+  // Reuse a recent, positive readiness status if available.
+  try {
+    const { data: status, error } = await admin
+      .from("cleanup_readiness_status")
+      .select("ready, checked_at")
+      .single();
+    if (!error && status?.ready && status?.checked_at) {
+      const checkedAt = new Date(status.checked_at);
+      const staleThresholdMs = 6 * 60 * 1000;
+      if (Date.now() - checkedAt.getTime() <= staleThresholdMs) {
+        return true;
+      }
+    }
+  } catch {
+    // Fall through to a live check.
+  }
+
+  // Live check: verify durable prerequisites and perform an authenticated
+  // health invocation of the cleanup function.
+  try {
+    const { data: readiness, error: readinessErr } = await admin.rpc("check_cleanup_readiness");
+    if (readinessErr || !readiness?.ready) {
+      return false;
+    }
+
+    const { data: secrets, error: secretsErr } = await admin.rpc("get_cleanup_secrets");
+    if (secretsErr || !secrets?.cleanup_service_url || !secrets?.cleanup_service_role_key) {
+      return false;
+    }
+
+    const healthUrl = `${String(secrets.cleanup_service_url).replace(/\/$/, "")}/functions/v1/cleanup-provider-files`;
+    const resp = await fetch(healthUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secrets.cleanup_service_role_key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ health_check: true }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
@@ -471,7 +517,7 @@ Deno.serve(async (req) => {
     });
 
     return jsonResponse({
-      session_id: duplicateSessionId,
+      session_id: sessionIdsForDuplicates.size === 1 ? duplicateSessionId : null,
       session_ids: Array.from(sessionIdsForDuplicates),
       extracted_document_ids: duplicatedDocIds.map(
         (id) => existingByDigest.get(digestByDocId[id])!.id,
@@ -516,7 +562,13 @@ Deno.serve(async (req) => {
         }
       : undefined;
 
-  const prep = new ConfigAndConsentPrivacyPreparation(privacyConfig, consent);
+  const prep = new ConfigAndConsentPrivacyPreparation(
+    {
+      ...privacyConfig,
+      cleanupReadinessCheck: async () => isCleanupReadinessReady(admin),
+    },
+    consent,
+  );
   const authorizationStore = new SupabaseAuthorizationStore(admin);
   let authorization;
   try {

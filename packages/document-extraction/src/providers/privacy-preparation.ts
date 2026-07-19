@@ -25,6 +25,7 @@ export interface PrivacyGateConfig {
   rawExternalDocumentProcessingApproved: boolean;
   privacyNoticeVersion: string;
   processorContractVersion: string;
+  cleanupReadinessCheck?: () => Promise<boolean>;
 }
 
 export interface ProcessingConsentCheck {
@@ -49,7 +50,7 @@ export class ConfigAndConsentPrivacyPreparation implements DocumentPrivacyPrepar
     this.consent = consent;
   }
 
-  private assertAuthorized(): void {
+  private async assertAuthorized(): Promise<void> {
     if (!this.config.externalDocumentProcessingEnabled) {
       throw new Error(
         "Document processing is not enabled. External document processing must be enabled by the operator.",
@@ -92,10 +93,19 @@ export class ConfigAndConsentPrivacyPreparation implements DocumentPrivacyPrepar
     if (this.consent.processorContractVersion !== this.config.processorContractVersion) {
       throw new Error("The recorded processor contract version is out of date.");
     }
+
+    if (this.config.cleanupReadinessCheck) {
+      const ready = await this.config.cleanupReadinessCheck();
+      if (!ready) {
+        throw new Error(
+          "Cleanup worker readiness has not been verified. External processing is blocked.",
+        );
+      }
+    }
   }
 
   async prepare(input: OriginalFileInput): Promise<PrivacyPreparationResult> {
-    this.assertAuthorized();
+    await this.assertAuthorized();
     const privacyAssessmentId = `privacy-${this.consent!.householdId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     return {
       mode: "raw_original",
@@ -108,7 +118,7 @@ export class ConfigAndConsentPrivacyPreparation implements DocumentPrivacyPrepar
     actorProfileId: string,
     authorizationStore: AuthorizationStore,
   ): Promise<DocumentProcessingAuthorization> {
-    this.assertAuthorized();
+    await this.assertAuthorized();
     return authorizationStore.createAuthorization({
       householdId: this.consent!.householdId,
       actorProfileId,
