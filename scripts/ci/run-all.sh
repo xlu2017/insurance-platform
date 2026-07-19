@@ -10,6 +10,10 @@ pnpm ci:static || FAIL=1
 pnpm ci:database || FAIL=1
 pnpm ci:e2e || FAIL=1
 
+if [ "$FAIL" -eq 0 ]; then
+  LOCAL_CI_RESULT=PASS pnpm test:private-policy-import
+fi
+
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 

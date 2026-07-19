@@ -11,7 +11,8 @@
   "scripts": {
     "lint": "eslint src scripts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run test/supabase-adapter.integration.test.ts",
     "build:edge": "tsx scripts/build-edge-bundle.ts",
     "check:edge": "pnpm build:edge && git diff --exit-code ../../supabase/functions/_shared/document-extraction.js"
   },
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@autopilot/config": "workspace:*",
     "@autopilot/test-fixtures": "workspace:*",
+    "@supabase/supabase-js": "2.47.10",
     "canvas": "^3.2.3",
     "esbuild": "^0.28.1",
     "eslint": "9.17.0",

@@ -252,7 +252,7 @@ importers:
         version: 5.7.2
       vitest:
         specifier: 2.1.8
-        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3)(lightningcss@1.27.0)(terser@5.49.0)
+        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3(canvas@3.2.3))(lightningcss@1.27.0)(terser@5.49.0)
 
   packages/design-tokens:
     devDependencies:
@@ -290,6 +290,9 @@ importers:
       '@autopilot/test-fixtures':
         specifier: workspace:*
         version: link:../test-fixtures
+      '@supabase/supabase-js':
+        specifier: 2.47.10
+        version: 2.47.10
       canvas:
         specifier: ^3.2.3
         version: 3.2.3
@@ -310,7 +313,7 @@ importers:
         version: 6.27.0
       vitest:
         specifier: 2.1.8
-        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3)(lightningcss@1.27.0)(terser@5.49.0)
+        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3(canvas@3.2.3))(lightningcss@1.27.0)(terser@5.49.0)
 
   packages/insurance-engine:
     dependencies:
@@ -341,7 +344,7 @@ importers:
         version: 5.7.2
       vitest:
         specifier: 2.1.8
-        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3)(lightningcss@1.27.0)(terser@5.49.0)
+        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3(canvas@3.2.3))(lightningcss@1.27.0)(terser@5.49.0)
 
   packages/schemas:
     dependencies:
@@ -360,7 +363,7 @@ importers:
         version: 5.7.2
       vitest:
         specifier: 2.1.8
-        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3)(lightningcss@1.27.0)(terser@5.49.0)
+        version: 2.1.8(@types/node@22.10.2)(jsdom@20.0.3(canvas@3.2.3))(lightningcss@1.27.0)(terser@5.49.0)
 
   packages/test-fixtures:
     dependencies:
@@ -14508,7 +14511,7 @@ snapshots:
       lightningcss: 1.27.0
       terser: 5.49.0
 
-  vitest@2.1.8(@types/node@22.10.2)(jsdom@20.0.3)(lightningcss@1.27.0)(terser@5.49.0):
+  vitest@2.1.8(@types/node@22.10.2)(jsdom@20.0.3(canvas@3.2.3))(lightningcss@1.27.0)(terser@5.49.0):
     dependencies:
       '@vitest/expect': 2.1.8
       '@vitest/mocker': 2.1.8(vite@5.4.21(@types/node@22.10.2)(lightningcss@1.27.0)(terser@5.49.0))
