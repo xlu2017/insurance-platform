@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 27afb81fc576cb9aac0767d344cfae064ccb458c7bb4368dad5c09672f758834
+// source-hash: a6dc2a6a91c36fc1a1f987ae6edf72a40f8c1a195cab5a837e2276718763e75e
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -42750,7 +42750,8 @@ ${validationFeedback}` : baseUserPrompt;
             await this.fileLifecycleStore.queueCleanup(
               recordId,
               result2.failureCategory ?? "deletion_failed",
-              nextAttemptAt.toISOString()
+              nextAttemptAt.toISOString(),
+              handle.providerFileId
             );
           }
         }
@@ -43313,12 +43314,16 @@ var SupabaseFileLifecycleStore = class {
       success: result2.deleted
     });
   }
-  async queueCleanup(id, failureCategory, nextAttemptAt) {
-    const { error } = await this.admin.from("document_analysis_provider_files").update({
+  async queueCleanup(id, failureCategory, nextAttemptAt, providerFileId) {
+    const update = {
       deletion_status: "queued",
       last_deletion_error_category: failureCategory,
       next_deletion_attempt_at: nextAttemptAt
-    }).eq("id", id);
+    };
+    if (providerFileId) {
+      update.provider_file_id = providerFileId;
+    }
+    const { error } = await this.admin.from("document_analysis_provider_files").update(update).eq("id", id);
     if (error) throw new Error("Failed to queue cleanup: " + error.message);
     await this.admin.from("document_analysis_cleanup_attempts").insert({
       file_id: id,
@@ -43452,4 +43457,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "27afb81fc576cb9aac0767d344cfae064ccb458c7bb4368dad5c09672f758834";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a6dc2a6a91c36fc1a1f987ae6edf72a40f8c1a195cab5a837e2276718763e75e";
