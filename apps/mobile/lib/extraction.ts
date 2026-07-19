@@ -93,6 +93,31 @@ export function useCandidateFieldReviews(candidateIds: string[] | undefined) {
   });
 }
 
+export interface ApproveCandidateDecision {
+  candidate_id: string;
+  decision: "approve_new" | "link_existing" | "skip" | "needs_correction";
+  existing_asset_id?: string;
+  existing_asset_type?: "vehicle" | "property";
+  identity_confirmed?: boolean;
+}
+
+export async function approveCandidateAssetsV2(
+  householdId: string,
+  actorProfileId: string,
+  clientRequestId: string,
+  decisions: ApproveCandidateDecision[],
+): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc("approve_candidate_assets_v2", {
+    p_household_id: householdId,
+    p_actor_profile_id: actorProfileId,
+    p_client_request_id: clientRequestId,
+    p_decisions: toJson(decisions),
+  });
+  if (error) throw error;
+  if (!data) throw new Error("approve_candidate_assets_v2 returned no data");
+  return data as Record<string, unknown>;
+}
+
 export function useSaveCandidateFieldReview() {
   const queryClient = useQueryClient();
   return useMutation({

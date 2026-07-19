@@ -6,6 +6,9 @@ export type Database = {
       asset_candidates: {
         Row: {
           analysis_run_id: string | null;
+          approved_asset_id: string | null;
+          approved_asset_type: Database["public"]["Enums"]["candidate_asset_type"] | null;
+          approved_policy_id: string | null;
           asset_type: Database["public"]["Enums"]["candidate_asset_type"];
           conflicts_json: Json;
           created_at: string;
@@ -14,6 +17,8 @@ export type Database = {
           household_id: string;
           id: string;
           identity_fingerprint: string;
+          manual_reviewed_at: string | null;
+          manual_reviewed_by: string | null;
           match_classification: Database["public"]["Enums"]["candidate_match_classification"];
           occupancy: string | null;
           review_status: string;
@@ -24,6 +29,9 @@ export type Database = {
         };
         Insert: {
           analysis_run_id?: string | null;
+          approved_asset_id?: string | null;
+          approved_asset_type?: Database["public"]["Enums"]["candidate_asset_type"] | null;
+          approved_policy_id?: string | null;
           asset_type: Database["public"]["Enums"]["candidate_asset_type"];
           conflicts_json?: Json;
           created_at?: string;
@@ -32,6 +40,8 @@ export type Database = {
           household_id: string;
           id?: string;
           identity_fingerprint: string;
+          manual_reviewed_at?: string | null;
+          manual_reviewed_by?: string | null;
           match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
           occupancy?: string | null;
           review_status?: string;
@@ -42,6 +52,9 @@ export type Database = {
         };
         Update: {
           analysis_run_id?: string | null;
+          approved_asset_id?: string | null;
+          approved_asset_type?: Database["public"]["Enums"]["candidate_asset_type"] | null;
+          approved_policy_id?: string | null;
           asset_type?: Database["public"]["Enums"]["candidate_asset_type"];
           conflicts_json?: Json;
           created_at?: string;
@@ -50,6 +63,8 @@ export type Database = {
           household_id?: string;
           id?: string;
           identity_fingerprint?: string;
+          manual_reviewed_at?: string | null;
+          manual_reviewed_by?: string | null;
           match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
           occupancy?: string | null;
           review_status?: string;
@@ -67,10 +82,24 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "asset_candidates_approved_policy_id_fkey";
+            columns: ["approved_policy_id"];
+            isOneToOne: false;
+            referencedRelation: "policies";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "asset_candidates_household_id_fkey";
             columns: ["household_id"];
             isOneToOne: false;
             referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asset_candidates_manual_reviewed_by_fkey";
+            columns: ["manual_reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
           {
@@ -1601,6 +1630,58 @@ export type Database = {
           versioned_at?: string | null;
         };
         Relationships: [];
+      };
+      manual_policy_reviews: {
+        Row: {
+          actor_profile_id: string;
+          candidate_id: string;
+          client_request_id: string;
+          created_at: string;
+          household_id: string;
+          id: string;
+          result_json: Json;
+        };
+        Insert: {
+          actor_profile_id: string;
+          candidate_id: string;
+          client_request_id: string;
+          created_at?: string;
+          household_id: string;
+          id?: string;
+          result_json?: Json;
+        };
+        Update: {
+          actor_profile_id?: string;
+          candidate_id?: string;
+          client_request_id?: string;
+          created_at?: string;
+          household_id?: string;
+          id?: string;
+          result_json?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "manual_policy_reviews_actor_profile_id_fkey";
+            columns: ["actor_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "manual_policy_reviews_candidate_id_fkey";
+            columns: ["candidate_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_candidates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "manual_policy_reviews_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       notifications: {
         Row: {
@@ -3203,6 +3284,19 @@ export type Database = {
         };
         Returns: Json;
       };
+      approve_candidate_assets_v2: {
+        Args: {
+          p_actor_profile_id: string;
+          p_client_request_id: string;
+          p_decisions: Json;
+          p_household_auto_defaults?: Json;
+          p_household_id: string;
+          p_household_property_defaults?: Json;
+          p_jurisdiction?: string;
+          p_switching_preferences?: Json;
+        };
+        Returns: Json;
+      };
       approve_customer_recommendation: {
         Args: { p_expected_rec_version: number; p_recommendation_id: string };
         Returns: Json;
@@ -3402,6 +3496,24 @@ export type Database = {
         };
         Returns: Json;
       };
+      save_manual_policy_review_v1: {
+        Args: {
+          p_actor_profile_id: string;
+          p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          p_candidate_id?: string;
+          p_client_request_id: string;
+          p_display_label: string;
+          p_household_id: string;
+          p_identity_fingerprint: string;
+          p_match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
+          p_occupancy?: string;
+          p_policy_document_id: string;
+          p_provenance_json?: Json;
+          p_selected_facts_json?: Json;
+          p_session_id?: string;
+        };
+        Returns: Json;
+      };
       send_quote_request_email: {
         Args: {
           p_external_success?: boolean;
@@ -3466,13 +3578,15 @@ export type Database = {
         | "link_existing"
         | "skip"
         | "not_sure"
-        | "approved";
+        | "approved"
+        | "needs_correction";
       candidate_field_review_action:
         | "confirm"
         | "correct"
         | "unknown"
         | "change_mandate"
-        | "reset_mandate_to_current";
+        | "reset_mandate_to_current"
+        | "not_applicable";
       candidate_match_classification:
         | "new"
         | "exact_existing_match"
@@ -3735,6 +3849,7 @@ export const Constants = {
         "skip",
         "not_sure",
         "approved",
+        "needs_correction",
       ],
       candidate_field_review_action: [
         "confirm",
@@ -3742,6 +3857,7 @@ export const Constants = {
         "unknown",
         "change_mandate",
         "reset_mandate_to_current",
+        "not_applicable",
       ],
       candidate_match_classification: [
         "new",

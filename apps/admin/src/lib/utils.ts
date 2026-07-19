@@ -18,5 +18,8 @@ export function formatEdmonton(iso: string | null | undefined): string {
 }
 
 export function titleCase(value: string): string {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return value
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

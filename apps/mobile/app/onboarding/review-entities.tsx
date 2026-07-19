@@ -2,8 +2,9 @@ import { router, Stack } from "expo-router";
 import { useMemo, useState } from "react";
 import { View, TextInput } from "react-native";
 import { useHousehold } from "@/lib/household";
-import { invokeEdgeFunction } from "@/lib/edge-functions";
+import { supabase } from "@/lib/supabase";
 import {
+  approveCandidateAssetsV2,
   type CandidateFieldReview,
   type ExtractionCandidate,
   useCandidateFieldReviews,
@@ -137,6 +138,7 @@ export default function ReviewEntities() {
   const saveReview = useSaveCandidateFieldReview();
 
   const [decisions, setDecisions] = useState<Record<string, CandidateDecision["decision"]>>({});
+  const [identityConfirmations, setIdentityConfirmations] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, DraftReview>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +189,12 @@ export default function ReviewEntities() {
   const allApprovedReady = candidates.every((c) => {
     if (decisions[c.id] === "skip") return true;
     if (decisions[c.id] !== "approve_new") return false;
+    if (
+      c.match_classification === "new_identity_confirmation_required" &&
+      !identityConfirmations[c.id]
+    ) {
+      return false;
+    }
     return isCandidateReady(c);
   });
 
@@ -247,10 +255,26 @@ export default function ReviewEntities() {
         return;
       }
 
-      await invokeEdgeFunction("approve-policy-candidates", {
-        household_id: household.id,
-        candidate_ids: approved.map((c) => c.id),
-      });
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setError("You must be signed in to approve candidates.");
+        setBusy(false);
+        return;
+      }
+
+      const clientRequestId = `mobile-${household.id}-${Date.now()}`;
+      const allDecisions = candidates.map((c) => ({
+        candidate_id: c.id,
+        decision: decisions[c.id] === "approve_new" ? ("approve_new" as const) : ("skip" as const),
+        identity_confirmed:
+          c.match_classification === "new_identity_confirmation_required"
+            ? !!identityConfirmations[c.id]
+            : undefined,
+      }));
+
+      await approveCandidateAssetsV2(household.id, user.id, clientRequestId, allDecisions);
 
       router.push("/onboarding/mandate");
     } catch (e) {
@@ -418,8 +442,28 @@ export default function ReviewEntities() {
                 All fields must be reviewed before this asset can be approved.
               </Body>
             ) : null}
+            {candidate.match_classification === "new_identity_confirmation_required" &&
+            !identityConfirmations[candidate.id] ? (
+              <Body style={{ color: "#B45309", marginTop: 8 }}>
+                Confirm the identity below before approving.
+              </Body>
+            ) : null}
 
             <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+              {candidate.match_classification === "new_identity_confirmation_required" ? (
+                <SecondaryButton
+                  label={
+                    identityConfirmations[candidate.id] ? "Identity confirmed" : "Confirm identity"
+                  }
+                  onPress={() =>
+                    setIdentityConfirmations((prev) => ({
+                      ...prev,
+                      [candidate.id]: !prev[candidate.id],
+                    }))
+                  }
+                  disabled={busy}
+                />
+              ) : null}
               <SecondaryButton
                 label="Skip"
                 onPress={() => setDecision(candidate.id, "skip")}

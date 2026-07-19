@@ -7,6 +7,13 @@ set local role service_role;
 set local request.jwt.claims to '{"role":"service_role"}';
 
 -- Test fixtures: a fresh case in comparing_quotes and a current V2 mandate.
+-- Clean any pre-existing V2 mandate for the demo household so the fixture is idempotent.
+delete from vehicle_mandate_overrides
+where mandate_id in (select id from household_coverage_mandates where household_id = '20000000-0000-0000-0000-000000000001');
+delete from property_mandate_overrides
+where mandate_id in (select id from household_coverage_mandates where household_id = '20000000-0000-0000-0000-000000000001');
+delete from household_coverage_mandates where household_id = '20000000-0000-0000-0000-000000000001';
+
 insert into optimization_cases (id, household_id, state, notes) values
   ('31000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', 'comparing_quotes', 'Phase 1D-E pgTAP');
 

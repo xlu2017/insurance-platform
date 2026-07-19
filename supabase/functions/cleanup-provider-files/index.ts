@@ -599,7 +599,8 @@ Deno.serve(async (req) => {
     finalReadiness.ready = false;
     finalReadiness.checks.errors = finalReadiness.checks.errors ?? [];
     finalReadiness.checks.errors.push(
-      "Failed to persist cleanup readiness status: " + String(finalStatusErr.message ?? finalStatusErr),
+      "Failed to persist cleanup readiness status: " +
+        String(finalStatusErr.message ?? finalStatusErr),
     );
     return jsonResponse(
       {

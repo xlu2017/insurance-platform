@@ -599,7 +599,9 @@ describe("cleanup-provider-files worker integration", () => {
     const { data, error } = await admin.rpc("get_cleanup_secrets" as any);
     expect(data).toBeNull();
     expect(error).not.toBeNull();
-    expect(String(error?.message ?? "").toLowerCase()).toMatch(/function|rpc|not found|could not find/);
+    expect(String(error?.message ?? "").toLowerCase()).toMatch(
+      /function|rpc|not found|could not find/,
+    );
   });
 
   it("allows only service_role to execute check_cleanup_readiness", async () => {
@@ -698,6 +700,9 @@ describe("cleanup-provider-files worker integration", () => {
     expect(rpcError).toBeNull();
     expect(rpcData?.checks?.permanent_failure_count).toBe(0);
 
-    await admin.from("document_analysis_emergency_cleanup").delete().eq("id", inserted!.id as string);
+    await admin
+      .from("document_analysis_emergency_cleanup")
+      .delete()
+      .eq("id", inserted!.id as string);
   });
 });
