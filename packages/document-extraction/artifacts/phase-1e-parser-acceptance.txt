@@ -3,12 +3,12 @@ files attempted: 4
 native inputs accepted: 0
 unsupported inputs: 4
 extracted-text mode inputs: 0
-GET /models calls: 1
-POST /files calls: 0
-GET /files/{id} calls: 0
-GET /files/{id}/content calls: 0
-POST /chat/completions calls: 0
-DELETE /files/{id} calls: 0
+provider capability discovery calls: 1
+provider upload calls: 0
+provider upload status calls: 0
+provider content extraction calls: 0
+provider inference calls: 0
+provider deletion calls: 0
 local conversion calls: 0
 inference calls: 0
 candidate summary: not analyzed
@@ -16,4 +16,4 @@ temporary file deletion result: not tested
 native PDF inference supported: BLOCKED
 analysis performed: NO
 phase acceptance: BLOCKED
-local CI result: not tested
+local CI result: PASS

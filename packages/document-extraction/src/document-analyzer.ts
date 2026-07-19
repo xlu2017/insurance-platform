@@ -2169,17 +2169,15 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     }
 
     let createdHandle: ProviderFileHandle | undefined;
-    const recordHandle = (handle: ProviderFileHandle) => {
+    const recordHandle = async (handle: ProviderFileHandle) => {
       createdHandle = handle;
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
         if (recordId) {
-          this.fileLifecycleStore
-            .markUploadCompleted(recordId, {
-              providerFileId: handle.providerFileId,
-              uploadStatus: "completed",
-            })
-            .catch(() => {});
+          await this.fileLifecycleStore.markUploadCompleted(recordId, {
+            providerFileId: handle.providerFileId,
+            uploadStatus: "completed",
+          });
         }
       }
     };

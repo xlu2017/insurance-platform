@@ -78,8 +78,11 @@ class InstrumentedKimiProvider implements Pick<KimiK3Provider, "providerId" | "b
   async resolveInputMode(input: Parameters<KimiK3Provider["resolveInputMode"]>[0]) {
     return this.inner.resolveInputMode(input);
   }
-  async uploadOriginalFile(input: Parameters<KimiK3Provider["uploadOriginalFile"]>[0]) {
-    return this.inner.uploadOriginalFile(input);
+  async uploadOriginalFile(
+    input: Parameters<KimiK3Provider["uploadOriginalFile"]>[0],
+    callbacks?: Parameters<KimiK3Provider["uploadOriginalFile"]>[1],
+  ) {
+    return this.inner.uploadOriginalFile(input, callbacks);
   }
   async analyze(input: NativeDocumentAnalysisRequest) {
     return this.inner.analyze(input);
@@ -263,12 +266,12 @@ async function main() {
     `native inputs accepted: ${nativeAcceptedCount}`,
     `unsupported inputs: ${unsupportedCount}`,
     `extracted-text mode inputs: 0`,
-    `GET /models calls: ${provider.counters.getModels}`,
-    `POST /files calls: ${provider.counters.postFiles}`,
-    `GET /files/{id} calls: ${provider.counters.getFile}`,
-    `GET /files/{id}/content calls: ${contentExtractionCalls}`,
-    `POST /chat/completions calls: ${provider.counters.postChatCompletions}`,
-    `DELETE /files/{id} calls: ${provider.counters.deleteFile}`,
+    `provider capability discovery calls: ${provider.counters.getModels}`,
+    `provider upload calls: ${provider.counters.postFiles}`,
+    `provider upload status calls: ${provider.counters.getFile}`,
+    `provider content extraction calls: ${contentExtractionCalls}`,
+    `provider inference calls: ${provider.counters.postChatCompletions}`,
+    `provider deletion calls: ${provider.counters.deleteFile}`,
     `local conversion calls: ${localConversionCalls}`,
     `inference calls: ${inferenceCallCount}`,
     `candidate summary: ${candidateSummary || "not analyzed"}`,

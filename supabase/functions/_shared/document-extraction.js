@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: d3bebd59f2de589917d579f90ab2414e23cf23b33efd6ef04906f59a845cf7f3
+// source-hash: a47ec1c14d762b4acaf21de847b4dcd49e725e660d49579021361827f3c01c7d
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -42679,15 +42679,14 @@ ${validationFeedback}` : baseUserPrompt;
       this.lifecycleRecords.set(original.documentId, record.id);
     }
     let createdHandle;
-    const recordHandle = (handle) => {
+    const recordHandle = async (handle) => {
       createdHandle = handle;
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
         if (recordId) {
-          this.fileLifecycleStore.markUploadCompleted(recordId, {
+          await this.fileLifecycleStore.markUploadCompleted(recordId, {
             providerFileId: handle.providerFileId,
             uploadStatus: "completed"
-          }).catch(() => {
           });
         }
       }
@@ -43312,4 +43311,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "d3bebd59f2de589917d579f90ab2414e23cf23b33efd6ef04906f59a845cf7f3";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a47ec1c14d762b4acaf21de847b4dcd49e725e660d49579021361827f3c01c7d";
