@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: a47ec1c14d762b4acaf21de847b4dcd49e725e660d49579021361827f3c01c7d
+// source-hash: 27afb81fc576cb9aac0767d344cfae064ccb458c7bb4368dad5c09672f758834
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -42525,6 +42525,7 @@ var NativeDocumentAnalyzer = class {
   requireNativeInput;
   authorization;
   fileLifecycleStore;
+  analysisRequestId;
   lifecycleRecords = /* @__PURE__ */ new Map();
   constructor(options) {
     this.provider = options.provider;
@@ -42532,6 +42533,7 @@ var NativeDocumentAnalyzer = class {
     this.requireNativeInput = options.requireNativeInput ?? true;
     this.authorization = options.authorization;
     this.fileLifecycleStore = options.fileLifecycleStore;
+    this.analysisRequestId = options.analysisRequestId;
   }
   async analyze(input) {
     InsuranceDocumentAnalysisInputSchema.parse(input);
@@ -42672,6 +42674,7 @@ ${validationFeedback}` : baseUserPrompt;
     if (this.fileLifecycleStore && this.authorization) {
       const record = await this.fileLifecycleStore.recordUpload({
         authorizationId: this.authorization.id,
+        analysisRequestId: this.analysisRequestId,
         policyDocumentId: original.documentId,
         providerFileId: "pending",
         uploadStatus: "started"
@@ -42716,7 +42719,10 @@ ${validationFeedback}` : baseUserPrompt;
             uploadStatus: "completed",
             processingStatus: "failed"
           } : { uploadStatus: "failed" };
-          await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
+          try {
+            await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
+          } catch {
+          }
         }
       }
       if (createdHandle) {
@@ -43210,6 +43216,139 @@ function stripMarkdownJsonFence2(text) {
   return trimmed;
 }
 
+// src/providers/supabase-adapter.ts
+var SupabaseAuthorizationStore = class {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(admin) {
+    this.admin = admin;
+  }
+  admin;
+  async createAuthorization(auth) {
+    const { data, error } = await this.admin.from("document_processing_authorizations").insert({
+      household_id: auth.householdId,
+      actor_profile_id: auth.actorProfileId,
+      consent_id: auth.consentId,
+      purpose: auth.purpose,
+      privacy_notice_version: auth.privacyNoticeVersion,
+      processor_contract_version: auth.processorContractVersion,
+      foreign_processing_acknowledged: auth.foreignProcessingAcknowledged,
+      automated_processing_acknowledged: auth.automatedProcessingAcknowledged,
+      raw_processing_approved: auth.rawProcessingApproved,
+      external_processing_enabled: auth.externalProcessingEnabled,
+      authorization_result: auth.authorizationResult
+    }).select().single();
+    if (error || !data) throw new Error("Failed to persist document processing authorization");
+    return { ...auth, id: data.id, authorizedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  }
+  async updateAuthorization(id, patch) {
+    const updates = {};
+    if (patch.analysisRequestId !== void 0) {
+      updates.analysis_request_id = patch.analysisRequestId;
+    }
+    if (patch.authorizationResult !== void 0) {
+      updates.authorization_result = patch.authorizationResult;
+    }
+    if (Object.keys(updates).length === 0) return;
+    const { error } = await this.admin.from("document_processing_authorizations").update(updates).eq("id", id);
+    if (error) throw new Error("Failed to update authorization: " + error.message);
+  }
+};
+var SupabaseFileLifecycleStore = class {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(admin) {
+    this.admin = admin;
+  }
+  admin;
+  async recordUpload(record) {
+    const { data, error } = await this.admin.from("document_analysis_provider_files").insert({
+      authorization_id: record.authorizationId,
+      analysis_request_id: record.analysisRequestId,
+      policy_document_id: record.policyDocumentId,
+      provider_file_id: record.providerFileId,
+      upload_status: record.uploadStatus
+    }).select().single();
+    if (error || !data) throw new Error("Failed to record file upload: " + (error?.message ?? ""));
+    return {
+      ...record,
+      id: data.id,
+      uploadStartedAt: data.upload_started_at ?? (/* @__PURE__ */ new Date()).toISOString(),
+      deletionAttempts: 0
+    };
+  }
+  async markUploadCompleted(id, patch) {
+    const updates = { upload_completed_at: (/* @__PURE__ */ new Date()).toISOString() };
+    if (patch.providerFileId !== void 0) updates.provider_file_id = patch.providerFileId;
+    if (patch.uploadStatus !== void 0) updates.upload_status = patch.uploadStatus;
+    if (patch.processingStatus !== void 0) updates.processing_status = patch.processingStatus;
+    const { error } = await this.admin.from("document_analysis_provider_files").update(updates).eq("id", id);
+    if (error) throw new Error("Failed to mark upload completed: " + error.message);
+  }
+  async recordDeletionAttempt(id, result2) {
+    const record = await this.getRecord(id);
+    const attempts = record.deletionAttempts + 1;
+    const update = { deletion_attempts: attempts };
+    if (result2.deleted) {
+      update.deletion_status = "deleted";
+      update.deleted_at = (/* @__PURE__ */ new Date()).toISOString();
+      update.last_deletion_error_category = null;
+      update.next_deletion_attempt_at = null;
+    } else {
+      update.last_deletion_error_category = result2.failureCategory ?? null;
+      if (attempts >= 3 && (result2.statusCode ?? 0) >= 500) {
+        update.deletion_status = "failed_permanently";
+      } else if (!record.nextDeletionAttemptAt) {
+        update.deletion_status = "queued";
+        const backoffMinutes = Math.min(5 * Math.pow(2, attempts - 1), 60);
+        const next = /* @__PURE__ */ new Date();
+        next.setMinutes(next.getMinutes() + backoffMinutes);
+        update.next_deletion_attempt_at = next.toISOString();
+      }
+    }
+    const { error } = await this.admin.from("document_analysis_provider_files").update(update).eq("id", id);
+    if (error) throw new Error("Failed to record deletion attempt: " + error.message);
+    await this.admin.from("document_analysis_cleanup_attempts").insert({
+      file_id: id,
+      status_code: result2.statusCode ?? null,
+      failure_category: result2.failureCategory ?? null,
+      success: result2.deleted
+    });
+  }
+  async queueCleanup(id, failureCategory, nextAttemptAt) {
+    const { error } = await this.admin.from("document_analysis_provider_files").update({
+      deletion_status: "queued",
+      last_deletion_error_category: failureCategory,
+      next_deletion_attempt_at: nextAttemptAt
+    }).eq("id", id);
+    if (error) throw new Error("Failed to queue cleanup: " + error.message);
+    await this.admin.from("document_analysis_cleanup_attempts").insert({
+      file_id: id,
+      failure_category: failureCategory,
+      success: false,
+      next_attempt_at: nextAttemptAt
+    });
+  }
+  async getRecord(id) {
+    const { data, error } = await this.admin.from("document_analysis_provider_files").select("*").eq("id", id).single();
+    if (error || !data) throw new Error("Failed to load file record: " + (error?.message ?? ""));
+    return {
+      id: String(data.id),
+      authorizationId: String(data.authorization_id),
+      analysisRequestId: data.analysis_request_id ? String(data.analysis_request_id) : void 0,
+      policyDocumentId: String(data.policy_document_id),
+      providerFileId: String(data.provider_file_id),
+      uploadStartedAt: String(data.upload_started_at),
+      uploadCompletedAt: data.upload_completed_at ? String(data.upload_completed_at) : void 0,
+      uploadStatus: String(data.upload_status),
+      processingStatus: data.processing_status ? String(data.processing_status) : void 0,
+      deletionStatus: data.deletion_status ? String(data.deletion_status) : void 0,
+      deletedAt: data.deleted_at ? String(data.deleted_at) : void 0,
+      deletionAttempts: Number(data.deletion_attempts ?? 0),
+      lastDeletionErrorCategory: data.last_deletion_error_category ? String(data.last_deletion_error_category) : void 0,
+      nextDeletionAttemptAt: data.next_deletion_attempt_at ? String(data.next_deletion_attempt_at) : void 0
+    };
+  }
+};
+
 // src/document-loaders/memory-bytes.ts
 var MemoryFileBytesLoader = class {
   bytesByReference;
@@ -43277,6 +43416,8 @@ export {
   MemoryFileBytesLoader,
   PendingEntityCandidateSchema,
   PriorDocumentSummarySchema,
+  SupabaseAuthorizationStore,
+  SupabaseFileLifecycleStore,
   UploadedDocumentSchema,
   assertLlmExtractionSemantics,
   buildCandidateContext,
@@ -43311,4 +43452,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a47ec1c14d762b4acaf21de847b4dcd49e725e660d49579021361827f3c01c7d";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "27afb81fc576cb9aac0767d344cfae064ccb458c7bb4368dad5c09672f758834";
