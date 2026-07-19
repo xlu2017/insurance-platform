@@ -576,6 +576,9 @@ export type Database = {
         Row: {
           analysis_request_id: string | null;
           authorization_id: string;
+          cleanup_claimed_at: string | null;
+          cleanup_lease_expires_at: string | null;
+          cleanup_worker_id: string | null;
           created_at: string;
           deleted_at: string | null;
           deletion_attempts: number;
@@ -594,6 +597,9 @@ export type Database = {
         Insert: {
           analysis_request_id?: string | null;
           authorization_id: string;
+          cleanup_claimed_at?: string | null;
+          cleanup_lease_expires_at?: string | null;
+          cleanup_worker_id?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deletion_attempts?: number;
@@ -612,6 +618,9 @@ export type Database = {
         Update: {
           analysis_request_id?: string | null;
           authorization_id?: string;
+          cleanup_claimed_at?: string | null;
+          cleanup_lease_expires_at?: string | null;
+          cleanup_worker_id?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deletion_attempts?: number;

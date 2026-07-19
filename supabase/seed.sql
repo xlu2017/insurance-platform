@@ -212,3 +212,9 @@ insert into audit_events (actor_profile_id, actor_role, action, entity_type, ent
 -- Notification for the pending question.
 insert into notifications (profile_id, channel, title, body, action_url) values
   ('00000000-0000-0000-0000-000000000001', 'local_log', 'Question from your insurance team', 'Is the basement fully finished? Answer in the app to keep your renewal moving.', '/autopilot');
+
+-- Vault secrets used by the scheduled cleanup worker in local development.
+-- In production these should be created through the Supabase dashboard or Vault API.
+delete from vault.secrets where name in ('cleanup_service_url', 'cleanup_service_role_key');
+select vault.create_secret('http://supabase_kong_insurance-autopilot:8000', 'cleanup_service_url');
+select vault.create_secret('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU', 'cleanup_service_role_key');
