@@ -11,7 +11,7 @@ provider inference calls: 0
 provider deletion calls: 0
 local conversion calls: 0
 inference calls: 0
-candidate summary: not analyzed
+candidate summary: native PDF inference is not supported for these inputs
 temporary file deletion result: not tested
 native PDF inference supported: BLOCKED
 analysis performed: NO

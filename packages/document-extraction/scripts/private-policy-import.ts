@@ -154,14 +154,9 @@ async function main() {
   }
 
   const apiKey = process.env.KIMI_K3_API_KEY ?? "";
-  if (!apiKey) {
-    console.error("BLOCKED: KIMI_K3_API_KEY is not configured.");
-    process.exit(1);
-  }
-
   const nativeInputRequired = process.env.DOCUMENT_ANALYSIS_REQUIRE_NATIVE_INPUT !== "false";
-  const provider = new InstrumentedKimiProvider({ apiKey, baseUrl: process.env.KIMI_API_BASE_URL });
 
+  let provider: InstrumentedKimiProvider | undefined;
   const bytesByReference: Record<string, Uint8Array> = {};
   const nativeCapabilities: Array<{
     file: string;
@@ -170,22 +165,47 @@ async function main() {
     reason?: string;
   }> = [];
 
-  for (const file of files) {
-    const filePath = path.join(dir, file);
-    const bytes = new Uint8Array(fs.readFileSync(filePath));
-    bytesByReference[file] = bytes;
-    const capability = await provider.resolveInputMode({
-      documentId: file,
-      filename: file,
-      mimeType: "application/pdf",
-      bytes,
+  if (apiKey) {
+    provider = new InstrumentedKimiProvider({
+      apiKey,
+      baseUrl: process.env.KIMI_API_BASE_URL,
     });
-    nativeCapabilities.push({
-      file,
-      supported: capability.supported,
-      mode: capability.mode,
-      reason: capability.reason,
-    });
+
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const bytes = new Uint8Array(fs.readFileSync(filePath));
+      bytesByReference[file] = bytes;
+      try {
+        const capability = await provider.resolveInputMode({
+          documentId: file,
+          filename: file,
+          mimeType: "application/pdf",
+          bytes,
+        });
+        nativeCapabilities.push({
+          file,
+          supported: capability.supported,
+          mode: capability.mode,
+          reason: capability.reason,
+        });
+      } catch (err) {
+        nativeCapabilities.push({
+          file,
+          supported: false,
+          mode: "unsupported",
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } else {
+    for (const file of files) {
+      nativeCapabilities.push({
+        file,
+        supported: false,
+        mode: "unsupported",
+        reason: "KIMI_K3_API_KEY not configured",
+      });
+    }
   }
 
   const unsupportedCount = nativeCapabilities.filter((c) => !c.supported).length;
@@ -195,7 +215,7 @@ async function main() {
   let deletionResult = "not tested";
   let candidateSummary = "";
 
-  if (nativeAcceptedCount === files.length) {
+  if (nativeAcceptedCount === files.length && provider) {
     const authStore = new MemoryAuthorizationStore();
     const authorization = await authStore.createAuthorization({
       householdId: "private-household",
@@ -253,12 +273,14 @@ async function main() {
     } catch (err) {
       candidateSummary = `analysis error: ${err instanceof Error ? err.message : String(err)}`;
     }
+  } else if (nativeAcceptedCount === 0) {
+    candidateSummary = "native PDF inference is not supported for these inputs";
   }
 
-  const contentExtractionCalls = provider.counters.getFileContent;
+  const contentExtractionCalls = provider?.counters.getFileContent ?? 0;
   const localConversionCalls = 0;
   const analysisPerformed =
-    nativeAcceptedCount === files.length && provider.counters.postChatCompletions > 0;
+    nativeAcceptedCount === files.length && (provider?.counters.postChatCompletions ?? 0) > 0;
 
   const artifactLines = [
     `native-input requirement enabled: ${nativeInputRequired ? "PASS" : "FAIL"}`,
@@ -266,12 +288,12 @@ async function main() {
     `native inputs accepted: ${nativeAcceptedCount}`,
     `unsupported inputs: ${unsupportedCount}`,
     `extracted-text mode inputs: 0`,
-    `provider capability discovery calls: ${provider.counters.getModels}`,
-    `provider upload calls: ${provider.counters.postFiles}`,
-    `provider upload status calls: ${provider.counters.getFile}`,
+    `provider capability discovery calls: ${provider?.counters.getModels ?? 0}`,
+    `provider upload calls: ${provider?.counters.postFiles ?? 0}`,
+    `provider upload status calls: ${provider?.counters.getFile ?? 0}`,
     `provider content extraction calls: ${contentExtractionCalls}`,
-    `provider inference calls: ${provider.counters.postChatCompletions}`,
-    `provider deletion calls: ${provider.counters.deleteFile}`,
+    `provider inference calls: ${provider?.counters.postChatCompletions ?? 0}`,
+    `provider deletion calls: ${provider?.counters.deleteFile ?? 0}`,
     `local conversion calls: ${localConversionCalls}`,
     `inference calls: ${inferenceCallCount}`,
     `candidate summary: ${candidateSummary || "not analyzed"}`,
