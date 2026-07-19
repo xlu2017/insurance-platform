@@ -9,6 +9,14 @@ const DEMO_HOUSEHOLD_ID = "20000000-0000-0000-0000-000000000001";
 const DEMO_PROFILE_ID = "00000000-0000-0000-0000-000000000001";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "http://127.0.0.1:54321";
+
+function assertLocalSupabase() {
+  const host = new URL(SUPABASE_URL).hostname;
+  if (host !== "127.0.0.1" && host !== "localhost") {
+    throw new Error("Destructive integration tests may only run against local Supabase.");
+  }
+}
+
 const SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
@@ -28,6 +36,7 @@ async function getUserClient() {
 
 describe("cleanup-provider-files worker integration", () => {
   beforeAll(async () => {
+    assertLocalSupabase();
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     // Clean up any leftover rows from interrupted prior test runs so the
     // readiness check can observe a known, healthy baseline.
@@ -385,6 +394,192 @@ describe("cleanup-provider-files worker integration", () => {
     await admin.from("document_analysis_provider_files").delete().eq("id", id);
     await admin.from("document_processing_authorizations").delete().eq("id", auth.id);
     await admin.from("policy_documents").delete().eq("id", policyDoc!.id);
+  });
+
+  it("reclaims an emergency cleanup row stuck in processing with an expired lease", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const providerFileId = `emergency_expired_${crypto.randomUUID()}`;
+    const pastLease = new Date(Date.now() - 1000).toISOString();
+    const now = new Date().toISOString();
+
+    const { data: inserted } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .insert({
+        provider_file_id: providerFileId,
+        policy_document_id: "policy-expired-lease",
+        cleanup_status: "processing",
+        cleanup_claimed_at: pastLease,
+        cleanup_lease_expires_at: pastLease,
+        cleanup_worker_id: "crashed-worker",
+        next_attempt_at: null,
+      })
+      .select("id")
+      .single();
+
+    const id = inserted!.id as string;
+    const newWorker = "worker-reclaim";
+    const newLease = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    const { data: claimed } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .update({
+        cleanup_status: "processing",
+        cleanup_claimed_at: now,
+        cleanup_lease_expires_at: newLease,
+        cleanup_worker_id: newWorker,
+      })
+      .eq("id", id)
+      .eq("cleanup_status", "processing")
+      .lt("cleanup_lease_expires_at", now)
+      .select("cleanup_worker_id, cleanup_lease_expires_at")
+      .single();
+
+    expect(claimed?.cleanup_worker_id).toBe(newWorker);
+    expect(new Date(String(claimed?.cleanup_lease_expires_at)).getTime()).toBeGreaterThan(
+      Date.now(),
+    );
+
+    await admin.from("document_analysis_emergency_cleanup").delete().eq("id", id);
+  });
+
+  it("prevents a stale normal cleanup worker from finalizing a row reclaimed by another worker", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const authStore = new SupabaseAuthorizationStore(admin);
+    const workerA = "stale-worker-a";
+    const workerB = "fresh-worker-b";
+
+    const auth = await authStore.createAuthorization({
+      householdId: DEMO_HOUSEHOLD_ID,
+      actorProfileId: DEMO_PROFILE_ID,
+      purpose: "document_extraction",
+      privacyNoticeVersion: "1.0",
+      processorContractVersion: "1.0",
+      foreignProcessingAcknowledged: true,
+      automatedProcessingAcknowledged: true,
+      rawProcessingApproved: true,
+      externalProcessingEnabled: true,
+      authorizationResult: "authorized",
+    });
+
+    const user = await getUserClient();
+    const { data: policyDoc, error: policyDocErr } = await user
+      .from("policy_documents")
+      .insert({
+        household_id: DEMO_HOUSEHOLD_ID,
+        file_name: "test.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 0,
+        storage_path: "test",
+      })
+      .select("id")
+      .single();
+    expect(policyDocErr).toBeNull();
+
+    const providerFileId = `fence-test-file-${crypto.randomUUID()}`;
+    const { data: inserted } = await admin
+      .from("document_analysis_provider_files")
+      .insert({
+        authorization_id: auth.id,
+        policy_document_id: policyDoc!.id,
+        provider_file_id: providerFileId,
+        upload_status: "completed",
+        deletion_status: "queued",
+        next_deletion_attempt_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    const id = inserted!.id as string;
+
+    const claimTime = new Date().toISOString();
+    const leaseExpires = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    await admin
+      .from("document_analysis_provider_files")
+      .update({
+        deletion_status: "deleting",
+        cleanup_claimed_at: claimTime,
+        cleanup_lease_expires_at: leaseExpires,
+        cleanup_worker_id: workerA,
+      })
+      .eq("id", id)
+      .eq("deletion_status", "queued");
+
+    // Lease expires and worker B reclaims the row.
+    const pastLease = new Date(Date.now() - 1000).toISOString();
+    const reclaimTime = new Date().toISOString();
+    const newLease = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    await admin
+      .from("document_analysis_provider_files")
+      .update({
+        cleanup_lease_expires_at: pastLease,
+      })
+      .eq("id", id)
+      .eq("cleanup_worker_id", workerA);
+
+    const { data: reclaimed } = await admin
+      .from("document_analysis_provider_files")
+      .update({
+        cleanup_worker_id: workerB,
+        cleanup_lease_expires_at: newLease,
+        cleanup_claimed_at: reclaimTime,
+      })
+      .eq("id", id)
+      .eq("deletion_status", "deleting")
+      .lt("cleanup_lease_expires_at", reclaimTime)
+      .select("cleanup_worker_id")
+      .single();
+    expect(reclaimed?.cleanup_worker_id).toBe(workerB);
+
+    // Worker A attempts to finalize the row it no longer owns.
+    const { data: staleFinalized, error: staleFinalizedErr } = await admin
+      .from("document_analysis_provider_files")
+      .update({
+        deletion_status: "deleted",
+        deleted_at: new Date().toISOString(),
+        next_deletion_attempt_at: null,
+        cleanup_claimed_at: null,
+        cleanup_lease_expires_at: null,
+        cleanup_worker_id: null,
+      })
+      .eq("id", id)
+      .eq("deletion_status", "deleting")
+      .eq("cleanup_worker_id", workerA)
+      .select("id");
+    expect(staleFinalizedErr).toBeNull();
+    expect(staleFinalized).toEqual([]);
+
+    const { data: finalRow } = await admin
+      .from("document_analysis_provider_files")
+      .select("cleanup_worker_id, deletion_status")
+      .eq("id", id)
+      .single();
+    expect(finalRow?.cleanup_worker_id).toBe(workerB);
+    expect(finalRow?.deletion_status).toBe("deleting");
+
+    await admin.from("document_analysis_provider_files").delete().eq("id", id);
+    await admin.from("document_processing_authorizations").delete().eq("id", auth.id);
+    await admin.from("policy_documents").delete().eq("id", policyDoc!.id);
+  });
+
+  it("reports cleanup readiness as false when an emergency permanent failure exists", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const providerFileId = `emergency_permanent_${crypto.randomUUID()}`;
+
+    await admin.from("document_analysis_emergency_cleanup").insert({
+      provider_file_id: providerFileId,
+      policy_document_id: "policy-permanent",
+      cleanup_status: "failed_permanently",
+      operator_action_required: true,
+    });
+
+    const { data, error } = await admin.rpc("check_cleanup_readiness");
+    expect(error).toBeNull();
+    expect(data.ready).toBe(false);
+    expect(data.checks.permanent_failure_count).toBeGreaterThanOrEqual(1);
+
+    await admin
+      .from("document_analysis_emergency_cleanup")
+      .delete()
+      .eq("provider_file_id", providerFileId);
   });
 
   it("rejects unauthorized access to the cleanup worker endpoint", async () => {

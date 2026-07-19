@@ -1,11 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   SupabaseAuthorizationStore,
   SupabaseFileLifecycleStore,
 } from "../src/providers/supabase-adapter.ts";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "http://127.0.0.1:54321";
+
+function assertLocalSupabase() {
+  const host = new URL(SUPABASE_URL).hostname;
+  if (host !== "127.0.0.1" && host !== "localhost") {
+    throw new Error("Destructive integration tests may only run against local Supabase.");
+  }
+}
+
 const SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
@@ -27,6 +35,10 @@ async function getUserClient() {
 }
 
 describe("Supabase document extraction adapters", () => {
+  beforeAll(() => {
+    assertLocalSupabase();
+  });
+
   it("persists and updates authorization snapshots using snake_case columns", async () => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const authStore = new SupabaseAuthorizationStore(admin);
