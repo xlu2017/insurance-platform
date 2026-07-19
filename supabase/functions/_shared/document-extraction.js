@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: dcc2b51d96d1cdafff0cba7205733519a58a82352d60ae6c64ec8fd7b1b32d22
+// source-hash: ace995bdb63096de02a722b200214145b8e2ff314d1317adc3c27967318d8c9c
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -42547,8 +42547,8 @@ var NativeDocumentAnalyzer = class {
       fileDigestByDocumentId.set(original.documentId, digest);
     }
     const resolved = await this.provider.resolveModel();
-    const fileHandles = [];
     let normalizedResult;
+    const allHandles = [];
     try {
       const capabilities = await Promise.all(
         originalInputs.map((o) => this.provider.resolveInputMode(o))
@@ -42565,6 +42565,8 @@ var NativeDocumentAnalyzer = class {
       const settled = await Promise.allSettled(
         originalInputs.map((original) => this.uploadAndRecord(original))
       );
+      const uploadResults = [];
+      const readyHandles = [];
       const uploadFailures = [];
       for (let i = 0; i < settled.length; i++) {
         const result2 = settled[i];
@@ -42573,6 +42575,10 @@ var NativeDocumentAnalyzer = class {
           continue;
         }
         const uploadResult = result2.value;
+        uploadResults[i] = uploadResult;
+        if (uploadResult.handle) {
+          allHandles.push(uploadResult.handle);
+        }
         if (uploadResult.status !== "ready" || !uploadResult.handle) {
           uploadFailures.push(uploadResult.errorCategory ?? "upload_failed");
           continue;
@@ -42583,7 +42589,7 @@ var NativeDocumentAnalyzer = class {
           );
           continue;
         }
-        fileHandles.push(uploadResult.handle);
+        readyHandles.push(uploadResult.handle);
       }
       if (uploadFailures.length > 0) {
         throw new Error(`Document upload failed: ${uploadFailures.join("; ")}`);
@@ -42591,7 +42597,7 @@ var NativeDocumentAnalyzer = class {
       const syntheticExtractedDocs = originalInputs.map((original, i) => ({
         documentId: original.documentId,
         fileDigest: fileDigestByDocumentId.get(original.documentId) ?? "unknown",
-        pageCount: fileHandles[i]?.mode === "native_image_reference" ? 1 : 0,
+        pageCount: uploadResults[i]?.handle?.mode === "native_image_reference" ? 1 : uploadResults[i]?.handle?.mode === "native_video_reference" ? 0 : 0,
         pages: []
       }));
       const documentAliasMap = /* @__PURE__ */ new Map();
@@ -42621,7 +42627,7 @@ ${validationFeedback}` : baseUserPrompt;
           model: resolved.modelId,
           systemPrompt: buildInsuranceAnalysisSystemPrompt(),
           userPrompt,
-          files: fileHandles,
+          files: readyHandles,
           responseFormat: { type: "json_object" }
         });
         try {
@@ -42644,16 +42650,16 @@ ${validationFeedback}` : baseUserPrompt;
         throw lastError ?? new Error("Document analysis failed after validation repair attempt");
       }
     } catch (err) {
-      await this.deleteAll(fileHandles);
+      await this.deleteAll(allHandles);
       throw err;
     }
-    const deletionResults = await this.deleteAll(fileHandles);
+    const deletionResults = await this.deleteAll(allHandles);
     normalizedResult.modelProvider = GENERIC_PARSER_ID;
     normalizedResult.modelId = GENERIC_PARSER_VERSION;
     normalizedResult.providerMetadata = {
       providerId: this.provider.providerId,
       modelId: resolved.modelId,
-      providerFiles: fileHandles.map((h) => ({
+      providerFiles: allHandles.map((h) => ({
         documentId: h.documentId,
         mode: h.mode,
         bytes: h.bytes
@@ -42677,17 +42683,12 @@ ${validationFeedback}` : baseUserPrompt;
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
         if (recordId) {
-          if (result2.status === "ready" && result2.handle) {
-            await this.fileLifecycleStore.markUploadCompleted(recordId, {
-              providerFileId: result2.handle.providerFileId,
-              uploadStatus: "completed",
-              processingStatus: "ready"
-            });
-          } else {
-            await this.fileLifecycleStore.markUploadCompleted(recordId, {
-              uploadStatus: result2.status === "rejected" ? "rejected" : "failed"
-            });
-          }
+          const patch = result2.handle ? {
+            providerFileId: result2.handle.providerFileId,
+            uploadStatus: "completed",
+            processingStatus: result2.status === "ready" ? "ready" : result2.status
+          } : { uploadStatus: result2.status === "rejected" ? "rejected" : "failed" };
+          await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
         }
       }
       return result2;
@@ -43028,20 +43029,13 @@ var KimiK3Provider = class {
         };
       }
       const file = await response.json();
-      const finalStatus = await this.pollFileStatus(file.id);
-      if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {
-        return {
-          status: finalStatus.status,
-          errorCategory: finalStatus.errorCategory ?? "upload_processing_failed"
-        };
-      }
       const referenceScheme = (await this.resolveModel()).supportedReferenceSchemes[0] ?? "ms://";
       const handle = {
         providerFileId: file.id,
         documentId: input.documentId,
         filename: file.filename ?? input.filename,
         mimeType: input.mimeType,
-        bytes: file.bytes,
+        bytes: file.bytes ?? input.bytes.length,
         mode: capability.mode,
         reference: `${referenceScheme}${file.id}`,
         status: file.status,
@@ -43052,6 +43046,14 @@ var KimiK3Provider = class {
           purpose: file.purpose
         }
       };
+      const finalStatus = await this.pollFileStatus(file.id);
+      if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {
+        return {
+          status: finalStatus.status,
+          handle,
+          errorCategory: finalStatus.errorCategory ?? "upload_processing_failed"
+        };
+      }
       return { status: "ready", handle };
     } finally {
       clearTimeout(timeout);
@@ -43279,4 +43281,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "dcc2b51d96d1cdafff0cba7205733519a58a82352d60ae6c64ec8fd7b1b32d22";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "ace995bdb63096de02a722b200214145b8e2ff314d1317adc3c27967318d8c9c";
