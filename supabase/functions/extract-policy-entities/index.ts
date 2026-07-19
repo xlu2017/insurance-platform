@@ -22,6 +22,7 @@ import {
 } from "../_shared/document-extraction.js";
 import type {
   CandidateComparisonContext,
+  CandidateIdentity,
   DetectedInsuranceEntity,
   ExistingHouseholdAsset,
   InsuranceDocumentAnalysisInput,
@@ -159,7 +160,10 @@ async function loadExistingAssets(
       model: typeof v.model === "string" ? v.model : null,
       trim: null,
     };
-    const candidateIdentity = await buildCandidateIdentity(identity, "vehicle");
+    const candidateIdentity = (await buildCandidateIdentity(
+      identity,
+      "vehicle",
+    )) as CandidateIdentity;
     const fingerprint =
       candidateIdentity.exactIdentityFingerprint ?? candidateIdentity.provisionalCandidateKey;
     assets.push({
@@ -182,7 +186,10 @@ async function loadExistingAssets(
         | "principal_residence"
         | "rental",
     };
-    const candidateIdentity = await buildCandidateIdentity(identity, "property");
+    const candidateIdentity = (await buildCandidateIdentity(
+      identity,
+      "property",
+    )) as CandidateIdentity;
     const fingerprint =
       candidateIdentity.exactIdentityFingerprint ?? candidateIdentity.provisionalCandidateKey;
     assets.push({
@@ -391,13 +398,18 @@ Deno.serve(async (req) => {
     .in("file_digest", Object.values(digestByDocId));
 
   const existingByDigest = new Map<string, { id: string; session_id: string }>();
+  const extractedIdsByDigest = new Map<string, Set<string>>();
   const sessionIdsForDuplicates = new Set<string>();
   for (const row of existingExtractedDocs ?? []) {
     const digest = String(row.file_digest);
+    const extractedId = String(row.id);
     const sessionId = String(row.session_id);
     sessionIdsForDuplicates.add(sessionId);
+    const ids = extractedIdsByDigest.get(digest) ?? new Set<string>();
+    ids.add(extractedId);
+    extractedIdsByDigest.set(digest, ids);
     if (!existingByDigest.has(digest)) {
-      existingByDigest.set(digest, { id: String(row.id), session_id: sessionId });
+      existingByDigest.set(digest, { id: extractedId, session_id: sessionId });
     }
   }
 
@@ -434,6 +446,15 @@ Deno.serve(async (req) => {
     if (!duplicateSessionId || sessionIdsForDuplicates.size === 0) {
       return jsonError("No existing session found for duplicate documents", 404);
     }
+
+    const requestedExtractedIds = new Set<string>();
+    for (const id of duplicatedDocIds) {
+      const digest = digestByDocId[id];
+      for (const extractedId of extractedIdsByDigest.get(digest) ?? []) {
+        requestedExtractedIds.add(extractedId);
+      }
+    }
+
     const { data: existingCandidates } = await admin
       .from("asset_candidates")
       .select(
@@ -441,13 +462,22 @@ Deno.serve(async (req) => {
       )
       .in("session_id", Array.from(sessionIdsForDuplicates))
       .eq("household_id", householdId);
+
+    const overlappingCandidates = (existingCandidates ?? []).filter((c) => {
+      const sources = Array.isArray(c.source_document_ids)
+        ? (c.source_document_ids as string[])
+        : [];
+      return sources.some((sid) => requestedExtractedIds.has(String(sid)));
+    });
+
     return jsonResponse({
       session_id: duplicateSessionId,
+      session_ids: Array.from(sessionIdsForDuplicates),
       extracted_document_ids: duplicatedDocIds.map(
         (id) => existingByDigest.get(digestByDocId[id])!.id,
       ),
       duplicate: true,
-      candidates: existingCandidates ?? [],
+      candidates: overlappingCandidates,
     });
   }
 
@@ -501,7 +531,7 @@ Deno.serve(async (req) => {
     }
     authorization = await prep.authorize(user.id, authorizationStore);
   } catch (err) {
-    return jsonError(sanitizeProviderError(err), 403);
+    return jsonError(sanitizeProviderError(err) as PublicDocumentError, 403);
   }
 
   const analysisRunId = crypto.randomUUID();
@@ -549,7 +579,9 @@ Deno.serve(async (req) => {
       authorizationResult: "authorized_no_transmission",
     });
     return jsonError(
-      sanitizeProviderError(new Error("Document analysis service is not configured")),
+      sanitizeProviderError(
+        new Error("Document analysis service is not configured"),
+      ) as PublicDocumentError,
       503,
     );
   }
@@ -578,7 +610,7 @@ Deno.serve(async (req) => {
       jurisdiction: "AB",
     });
   } catch (err) {
-    const sanitized = sanitizeProviderError(err);
+    const sanitized = sanitizeProviderError(err) as PublicDocumentError;
     const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";
     await authorizationStore.updateAuthorization(authorization.id, {
       authorizationResult: isUnsupported ? "blocked_no_transmission" : "processing_failed",
