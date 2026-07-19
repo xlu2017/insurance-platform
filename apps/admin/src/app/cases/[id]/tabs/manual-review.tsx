@@ -59,7 +59,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
           "id, asset_type, display_label, match_classification, review_status, decision, selected_facts_json",
         )
         .eq("household_id", caseRow.household_id)
-        .eq("source", "manual_review")
+        .not("manual_reviewed_by", "is", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ManualCandidateRow[];
