@@ -101,6 +101,9 @@ insert into coverage_requirements (id, household_id, version, auto_requirements,
 insert into switching_preferences (id, household_id, version, min_net_annual_savings_cents, max_premium_increase_cents, max_deductible_increase_cents, renewal_only_switching, household_optimization_enabled, split_insurers_allowed, allow_bundle_breakup, excluded_insurer_ids, deductible_increases_allowed, material_coverage_reductions_allowed, customer_approval_required, switch_only_after_customer_approval, preferred_payment_frequency, preferred_billing_method, broker_direct_preference, minimum_insurer_financial_rating, is_current) values
   ('26000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 1, 20000, 0, 0, true, true, true, false, '{}', false, false, true, true, 'annual', 'automatic_bank', 'indifferent', 'any', true);
 
+-- Backfill the authoritative V2 mandate snapshot from the legacy coverage_requirements row.
+select backfill_coverage_mandate_v2();
+
 insert into consents (profile_id, household_id, consent_type, granted, disclosure_version) values
   ('00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'store_documents', true, 'v1'),
   ('00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'share_for_quotation', true, 'v1'),
@@ -190,11 +193,30 @@ insert into customer_questions (id, case_id, question_type, status, prompt, opti
   ('34000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'yes_no', 'pending', 'Is the basement fully finished?', null, '00000000-0000-0000-0000-000000000002');
 
 -- Recommendation awaiting licensed review: Alternative B, net savings C$250.
-insert into recommendations (id, case_id, status, version, mandate_version, quote_ids, current_total_cents, proposed_total_cents, net_savings_cents, effective_date, reason_codes, comparison, disclosure_version) values
-  ('35000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'awaiting_review', 1, 1,
-   '{32000000-0000-0000-0000-000000000004}', 295000, 270000, 25000, '2026-09-01',
-   '{BUNDLED_CONFIGURATION,MEETS_ALL_HARD_REQUIREMENTS,MEETS_SAVINGS_THRESHOLD}',
-   '{"proposedInsurer": "Bow River Assurance", "bundled": true, "materialDifferences": [], "deductibleDifferences": []}', 'v1');
+insert into recommendations (
+  id, case_id, status, version, mandate_id, mandate_version, mandate_schema_version, mandate_jurisdiction,
+  switching_preferences_id, switching_preferences_version, quote_ids, current_total_cents,
+  proposed_total_cents, net_savings_cents, effective_date, reason_codes, comparison, disclosure_version
+) values (
+  '35000000-0000-0000-0000-000000000001',
+  '30000000-0000-0000-0000-000000000001',
+  'awaiting_review',
+  1,
+  (select id from household_coverage_mandates where household_id = '20000000-0000-0000-0000-000000000001' and is_current = true limit 1),
+  1,
+  2,
+  'AB',
+  '26000000-0000-0000-0000-000000000001',
+  1,
+  '{32000000-0000-0000-0000-000000000004}',
+  295000,
+  270000,
+  25000,
+  '2026-09-01',
+  '{BUNDLED_CONFIGURATION,MEETS_ALL_HARD_REQUIREMENTS,MEETS_SAVINGS_THRESHOLD}',
+  '{"proposedInsurer": "Bow River Assurance", "bundled": true, "materialDifferences": [], "deductibleDifferences": []}',
+  'v1'
+);
 
 insert into recommendation_options (recommendation_id, rank, auto_quote_id, property_quote_id, bundled, total_cents, net_savings_cents, eligible, reason_codes) values
   ('35000000-0000-0000-0000-000000000001', 1, '32000000-0000-0000-0000-000000000004', '32000000-0000-0000-0000-000000000004', true, 270000, 25000, true, '{BUNDLED_CONFIGURATION,MEETS_ALL_HARD_REQUIREMENTS,MEETS_SAVINGS_THRESHOLD}'),

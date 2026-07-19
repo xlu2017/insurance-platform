@@ -31,7 +31,7 @@ describe("mandate save/reload integration", () => {
 
     const saveResult = await saveHouseholdMandateV2(supabase, {
       householdId: DEMO_HOUSEHOLD_ID,
-      expectedMandateVersion: 0,
+      expectedMandateVersion: 1,
       expectedSwitchingVersion: 1,
       mandate,
       switching,
