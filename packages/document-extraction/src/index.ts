@@ -22,4 +22,8 @@ export * from "./providers/privacy-preparation.ts";
 export { KimiK3Provider } from "./providers/kimi-k3.ts";
 export { MemoryAuthorizationStore } from "./providers/document-processing-authorization.ts";
 export { MemoryExternalFileLifecycleStore } from "./providers/external-file-lifecycle.ts";
+export {
+  SupabaseAuthorizationStore,
+  SupabaseFileLifecycleStore,
+} from "./providers/supabase-adapter.ts";
 export { FileSystemFileBytesLoader } from "./document-loaders/node-bytes.ts";
