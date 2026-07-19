@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: a6dc2a6a91c36fc1a1f987ae6edf72a40f8c1a195cab5a837e2276718763e75e
+// source-hash: a691cbb8cd2a5e814671908d71f4542d5fa7a36e4d27c8bfebac044b1692341b
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -20732,9 +20732,9 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
             return;
           }
           if (reason instanceof RenderingCancelledException) {
-            let delay = RENDERING_CANCELLED_TIMEOUT;
+            let delay2 = RENDERING_CANCELLED_TIMEOUT;
             if (reason.extraDelay > 0 && reason.extraDelay < 1e3) {
-              delay += reason.extraDelay;
+              delay2 += reason.extraDelay;
             }
             intentState.streamReaderCancelTimeout = setTimeout(() => {
               intentState.streamReaderCancelTimeout = null;
@@ -20743,7 +20743,7 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
                 reason,
                 force: true
               });
-            }, delay);
+            }, delay2);
             return;
           }
         }
@@ -41024,6 +41024,51 @@ function resolveParsedDocuments({
   return { candidates, documents, conflicts };
 }
 
+// src/providers/public-error.ts
+var CUSTOMER_FACING_MESSAGES = {
+  DOCUMENT_FILE_UNSUPPORTED: "This file type is not currently supported for document analysis.",
+  DOCUMENT_FILE_TOO_LARGE: "This file is too large for document analysis.",
+  DOCUMENT_PROCESSING_FAILED: "Document processing failed. Please try again or contact support.",
+  DOCUMENT_ANALYSIS_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later.",
+  DOCUMENT_ANALYSIS_FAILED: "Document analysis failed. Please try again or contact support.",
+  DOCUMENT_MODEL_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later.",
+  DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED: "Review and accept the document-processing notice before analyzing these files."
+};
+function sanitizeProviderError(error, supportReference) {
+  const supportId = supportReference ?? generateSupportReference();
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  let code = "DOCUMENT_ANALYSIS_FAILED";
+  let retryable = false;
+  if (lower.includes("not authorized") || lower.includes("consent required") || lower.includes("consent withdrawn") || lower.includes("privacy notice")) {
+    code = "DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED";
+    retryable = false;
+  } else if (lower.includes("unsupported file") || lower.includes("file type") || lower.includes("invalid file") || lower.includes("not currently supported")) {
+    code = "DOCUMENT_FILE_UNSUPPORTED";
+  } else if (lower.includes("too large")) {
+    code = "DOCUMENT_FILE_TOO_LARGE";
+  } else if (lower.includes("rate limit") || lower.includes("temporarily unavailable") || lower.includes("503") || lower.includes("timeout") || lower.includes("not enabled") || lower.includes("not approved") || lower.includes("consent") || lower.includes("privacy notice")) {
+    code = "DOCUMENT_ANALYSIS_UNAVAILABLE";
+    retryable = !lower.includes("not enabled") && !lower.includes("not approved");
+  } else if (lower.includes("model unavailable") || lower.includes("model is not available") || lower.includes("not found")) {
+    code = "DOCUMENT_MODEL_UNAVAILABLE";
+  } else if (lower.includes("processing failed")) {
+    code = "DOCUMENT_PROCESSING_FAILED";
+  }
+  return {
+    code,
+    message: CUSTOMER_FACING_MESSAGES[code],
+    retryable,
+    supportReference: supportId
+  };
+}
+function generateSupportReference() {
+  return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+function publicErrorResponse(error) {
+  return { error };
+}
+
 // src/document-analyzer.ts
 var AnalysisVersion = z.literal("1");
 var GENERIC_PARSER_ID = "native-document-analysis";
@@ -42737,29 +42782,75 @@ ${validationFeedback}` : baseUserPrompt;
   }
   async deleteAll(handles) {
     const results = [];
+    const unhandled = [];
+    const MAX_IMMEDIATE_ATTEMPTS = 3;
     for (const handle of handles) {
-      const result2 = await this.provider.deleteFile(handle);
-      results.push(result2);
+      let deletion = await this.provider.deleteFile(handle);
+      let attempts = deletion.attempts ?? 1;
+      while (!deletion.deleted && attempts < MAX_IMMEDIATE_ATTEMPTS) {
+        await delay(Math.min(1e3 * Math.pow(2, attempts - 1), 5e3));
+        try {
+          deletion = await this.provider.deleteFile(handle);
+          attempts = deletion.attempts ?? attempts + 1;
+        } catch (retryErr) {
+          attempts += 1;
+          deletion = {
+            deleted: false,
+            attempts,
+            failureCategory: retryErr instanceof Error ? retryErr.message : "deletion_retry_failed"
+          };
+        }
+      }
+      results.push(deletion);
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(handle.documentId);
         if (recordId) {
-          await this.fileLifecycleStore.recordDeletionAttempt(recordId, result2);
-          if (!result2.deleted) {
+          let recordErr;
+          try {
+            await this.fileLifecycleStore.recordDeletionAttempt(recordId, deletion);
+          } catch (err) {
+            recordErr = err;
+          }
+          if (!deletion.deleted || recordErr) {
             const nextAttemptAt = /* @__PURE__ */ new Date();
-            nextAttemptAt.setMinutes(nextAttemptAt.getMinutes() + 5 * result2.attempts);
-            await this.fileLifecycleStore.queueCleanup(
-              recordId,
-              result2.failureCategory ?? "deletion_failed",
-              nextAttemptAt.toISOString(),
-              handle.providerFileId
-            );
+            nextAttemptAt.setMinutes(nextAttemptAt.getMinutes() + 5 * attempts);
+            const failureCategory = (deletion.failureCategory ?? "deletion_failed") + (recordErr ? ";ledger_update_failed" : "");
+            try {
+              await this.fileLifecycleStore.queueCleanup(
+                recordId,
+                failureCategory,
+                nextAttemptAt.toISOString(),
+                handle.providerFileId
+              );
+            } catch {
+              try {
+                await this.fileLifecycleStore.recordEmergencyCleanup(
+                  handle.providerFileId,
+                  handle.documentId,
+                  failureCategory
+                );
+              } catch {
+                unhandled.push({
+                  providerFileId: handle.providerFileId,
+                  documentId: handle.documentId
+                });
+              }
+            }
           }
         }
       }
     }
+    if (unhandled.length > 0) {
+      throw new Error(
+        `Cleanup persistence failed for ${unhandled.length} provider file(s). Support reference: ${generateSupportReference()}.`
+      );
+    }
     return results;
   }
 };
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 function buildNativeAnalysisUserPrompt(args) {
   const lines = [
     `Jurisdiction: ${args.jurisdiction}`,
@@ -42801,51 +42892,6 @@ var MemoryDocumentLoader = class {
   }
 };
 
-// src/providers/public-error.ts
-var CUSTOMER_FACING_MESSAGES = {
-  DOCUMENT_FILE_UNSUPPORTED: "This file type is not currently supported for document analysis.",
-  DOCUMENT_FILE_TOO_LARGE: "This file is too large for document analysis.",
-  DOCUMENT_PROCESSING_FAILED: "Document processing failed. Please try again or contact support.",
-  DOCUMENT_ANALYSIS_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later.",
-  DOCUMENT_ANALYSIS_FAILED: "Document analysis failed. Please try again or contact support.",
-  DOCUMENT_MODEL_UNAVAILABLE: "Document analysis is temporarily unavailable. Please try again later.",
-  DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED: "Review and accept the document-processing notice before analyzing these files."
-};
-function sanitizeProviderError(error, supportReference) {
-  const supportId = supportReference ?? generateSupportReference();
-  const message = error instanceof Error ? error.message : String(error);
-  const lower = message.toLowerCase();
-  let code = "DOCUMENT_ANALYSIS_FAILED";
-  let retryable = false;
-  if (lower.includes("not authorized") || lower.includes("consent required") || lower.includes("consent withdrawn") || lower.includes("privacy notice")) {
-    code = "DOCUMENT_PROCESSING_AUTHORIZATION_REQUIRED";
-    retryable = false;
-  } else if (lower.includes("unsupported file") || lower.includes("file type") || lower.includes("invalid file") || lower.includes("not currently supported")) {
-    code = "DOCUMENT_FILE_UNSUPPORTED";
-  } else if (lower.includes("too large")) {
-    code = "DOCUMENT_FILE_TOO_LARGE";
-  } else if (lower.includes("rate limit") || lower.includes("temporarily unavailable") || lower.includes("503") || lower.includes("timeout") || lower.includes("not enabled") || lower.includes("not approved") || lower.includes("consent") || lower.includes("privacy notice")) {
-    code = "DOCUMENT_ANALYSIS_UNAVAILABLE";
-    retryable = !lower.includes("not enabled") && !lower.includes("not approved");
-  } else if (lower.includes("model unavailable") || lower.includes("model is not available") || lower.includes("not found")) {
-    code = "DOCUMENT_MODEL_UNAVAILABLE";
-  } else if (lower.includes("processing failed")) {
-    code = "DOCUMENT_PROCESSING_FAILED";
-  }
-  return {
-    code,
-    message: CUSTOMER_FACING_MESSAGES[code],
-    retryable,
-    supportReference: supportId
-  };
-}
-function generateSupportReference() {
-  return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-function publicErrorResponse(error) {
-  return { error };
-}
-
 // src/providers/privacy-preparation.ts
 var ConfigAndConsentPrivacyPreparation = class {
   config;
@@ -42854,7 +42900,7 @@ var ConfigAndConsentPrivacyPreparation = class {
     this.config = config;
     this.consent = consent;
   }
-  assertAuthorized() {
+  async assertAuthorized() {
     if (!this.config.externalDocumentProcessingEnabled) {
       throw new Error(
         "Document processing is not enabled. External document processing must be enabled by the operator."
@@ -42897,9 +42943,17 @@ var ConfigAndConsentPrivacyPreparation = class {
     if (this.consent.processorContractVersion !== this.config.processorContractVersion) {
       throw new Error("The recorded processor contract version is out of date.");
     }
+    if (this.config.cleanupReadinessCheck) {
+      const ready = await this.config.cleanupReadinessCheck();
+      if (!ready) {
+        throw new Error(
+          "Cleanup worker readiness has not been verified. External processing is blocked."
+        );
+      }
+    }
   }
   async prepare(input) {
-    this.assertAuthorized();
+    await this.assertAuthorized();
     const privacyAssessmentId = `privacy-${this.consent.householdId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     return {
       mode: "raw_original",
@@ -42908,7 +42962,7 @@ var ConfigAndConsentPrivacyPreparation = class {
     };
   }
   async authorize(actorProfileId, authorizationStore) {
-    this.assertAuthorized();
+    await this.assertAuthorized();
     return authorizationStore.createAuthorization({
       householdId: this.consent.householdId,
       actorProfileId,
@@ -43332,6 +43386,14 @@ var SupabaseFileLifecycleStore = class {
       next_attempt_at: nextAttemptAt
     });
   }
+  async recordEmergencyCleanup(providerFileId, policyDocumentId, failureCategory) {
+    const { error } = await this.admin.from("document_analysis_emergency_cleanup").insert({
+      provider_file_id: providerFileId,
+      policy_document_id: policyDocumentId,
+      failure_category: failureCategory
+    });
+    if (error) throw new Error("Failed to record emergency cleanup: " + error.message);
+  }
   async getRecord(id) {
     const { data, error } = await this.admin.from("document_analysis_provider_files").select("*").eq("id", id).single();
     if (error || !data) throw new Error("Failed to load file record: " + (error?.message ?? ""));
@@ -43457,4 +43519,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a6dc2a6a91c36fc1a1f987ae6edf72a40f8c1a195cab5a837e2276718763e75e";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a691cbb8cd2a5e814671908d71f4542d5fa7a36e4d27c8bfebac044b1692341b";

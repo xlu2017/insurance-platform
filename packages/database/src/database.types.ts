@@ -342,6 +342,57 @@ export type Database = {
           },
         ];
       };
+      cleanup_readiness_status: {
+        Row: {
+          checked_at: string;
+          checks: Json;
+          id: string;
+          ready: boolean;
+          stale_deleting_count: number;
+        };
+        Insert: {
+          checked_at?: string;
+          checks?: Json;
+          id?: string;
+          ready?: boolean;
+          stale_deleting_count?: number;
+        };
+        Update: {
+          checked_at?: string;
+          checks?: Json;
+          id?: string;
+          ready?: boolean;
+          stale_deleting_count?: number;
+        };
+        Relationships: [];
+      };
+      cleanup_readiness_synthetic: {
+        Row: {
+          attempts: number;
+          claimed_at: string | null;
+          created_at: string;
+          id: string;
+          resolved_at: string | null;
+          worker_id: string | null;
+        };
+        Insert: {
+          attempts?: number;
+          claimed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          resolved_at?: string | null;
+          worker_id?: string | null;
+        };
+        Update: {
+          attempts?: number;
+          claimed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          resolved_at?: string | null;
+          worker_id?: string | null;
+        };
+        Relationships: [];
+      };
       consents: {
         Row: {
           consent_type: Database["public"]["Enums"]["consent_type"];
@@ -571,6 +622,36 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      document_analysis_emergency_cleanup: {
+        Row: {
+          created_at: string;
+          failure_category: string | null;
+          id: string;
+          policy_document_id: string | null;
+          provider_file_id: string;
+          resolved_at: string | null;
+          retries: number;
+        };
+        Insert: {
+          created_at?: string;
+          failure_category?: string | null;
+          id?: string;
+          policy_document_id?: string | null;
+          provider_file_id: string;
+          resolved_at?: string | null;
+          retries?: number;
+        };
+        Update: {
+          created_at?: string;
+          failure_category?: string | null;
+          id?: string;
+          policy_document_id?: string | null;
+          provider_file_id?: string;
+          resolved_at?: string | null;
+          retries?: number;
+        };
+        Relationships: [];
       };
       document_analysis_provider_files: {
         Row: {
@@ -3127,6 +3208,7 @@ export type Database = {
         Returns: Json;
       };
       canonicalize_v2_monetary_rules: { Args: { input: Json }; Returns: Json };
+      check_cleanup_readiness: { Args: never; Returns: Json };
       complete_recommendation_generation_attempt: {
         Args: {
           p_attempt_id: string;
@@ -3161,6 +3243,7 @@ export type Database = {
         };
         Returns: undefined;
       };
+      get_cleanup_secrets: { Args: never; Returns: Json };
       is_admin: { Args: never; Returns: boolean };
       is_household_member: { Args: { hid: string }; Returns: boolean };
       is_staff: { Args: never; Returns: boolean };
