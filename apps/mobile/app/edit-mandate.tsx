@@ -558,7 +558,7 @@ function diffPropertyMandate(
   const windHailDiff = diffRule(defaults.windHailDeductible, next.windHailDeductible);
   if (windHailDiff) patch.windHailDeductible = windHailDiff;
   const earthquakeDiff = diffRule(defaults.earthquakeDeductible, next.earthquakeDeductible);
-  if (earthquakeDiff) patch.earthquakeDeductible = earthquakeDiff;
+  if (earthquakeDiff) patch.earthquakeDeductible = earthquakeDeductibleDiff;
 
   const sewerDiff = diffWater(defaults.sewerBackup, next.sewerBackup);
   if (sewerDiff) patch.sewerBackup = sewerDiff;
@@ -688,6 +688,11 @@ export default function EditMandate() {
     setVersions(data.loadResult.versions);
   }, [data]);
 
+  const filteredInsurers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (data?.insurers ?? []).filter((insurer) => insurer.name.toLowerCase().includes(term));
+  }, [search, data?.insurers]);
+
   if (householdLoading || isLoading || !household || !mandate || !switching) return <Loading />;
 
   const updateAuto = (auto: AutoMandateV2) =>
@@ -714,11 +719,6 @@ export default function EditMandate() {
       return updatePropertyOverrideV2(previous, propertyId, patch);
     });
   };
-
-  const filteredInsurers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (data?.insurers ?? []).filter((insurer) => insurer.name.toLowerCase().includes(term));
-  }, [search, data?.insurers]);
 
   const toggleExcludedInsurer = (insurerId: string) => {
     const current = new Set(switching.excludedInsurerIds);
