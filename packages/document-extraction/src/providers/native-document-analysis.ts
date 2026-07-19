@@ -134,7 +134,12 @@ export interface ExternalFileLifecycleStore {
   ): Promise<ExternalFileRecord>;
   markUploadCompleted(id: string, patch: Partial<ExternalFileRecord>): Promise<void>;
   recordDeletionAttempt(id: string, result: ProviderFileDeletionResult): Promise<void>;
-  queueCleanup(id: string, failureCategory: string, nextAttemptAt: string): Promise<void>;
+  queueCleanup(
+    id: string,
+    failureCategory: string,
+    nextAttemptAt: string,
+    providerFileId?: string,
+  ): Promise<void>;
 }
 
 export interface FileBytesLoader {

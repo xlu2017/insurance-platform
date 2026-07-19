@@ -130,14 +130,23 @@ export class SupabaseFileLifecycleStore implements ExternalFileLifecycleStore {
     });
   }
 
-  async queueCleanup(id: string, failureCategory: string, nextAttemptAt: string): Promise<void> {
+  async queueCleanup(
+    id: string,
+    failureCategory: string,
+    nextAttemptAt: string,
+    providerFileId?: string,
+  ): Promise<void> {
+    const update: Record<string, unknown> = {
+      deletion_status: "queued",
+      last_deletion_error_category: failureCategory,
+      next_deletion_attempt_at: nextAttemptAt,
+    };
+    if (providerFileId) {
+      update.provider_file_id = providerFileId;
+    }
     const { error } = await this.admin
       .from("document_analysis_provider_files")
-      .update({
-        deletion_status: "queued",
-        last_deletion_error_category: failureCategory,
-        next_deletion_attempt_at: nextAttemptAt,
-      })
+      .update(update)
       .eq("id", id);
     if (error) throw new Error("Failed to queue cleanup: " + error.message);
     await this.admin.from("document_analysis_cleanup_attempts").insert({

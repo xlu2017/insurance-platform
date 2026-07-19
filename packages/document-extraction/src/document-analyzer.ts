@@ -2252,6 +2252,7 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
               recordId,
               result.failureCategory ?? "deletion_failed",
               nextAttemptAt.toISOString(),
+              handle.providerFileId,
             );
           }
         }

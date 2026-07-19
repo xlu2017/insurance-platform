@@ -50,12 +50,20 @@ export class MemoryExternalFileLifecycleStore implements ExternalFileLifecycleSt
     }
   }
 
-  async queueCleanup(id: string, failureCategory: string, nextAttemptAt: string): Promise<void> {
+  async queueCleanup(
+    id: string,
+    failureCategory: string,
+    nextAttemptAt: string,
+    providerFileId?: string,
+  ): Promise<void> {
     const rec = this.records.get(id);
     if (!rec) throw new Error(`File record ${id} not found`);
     rec.deletionStatus = "queued";
     rec.lastDeletionErrorCategory = failureCategory;
     rec.nextDeletionAttemptAt = nextAttemptAt;
+    if (providerFileId) {
+      rec.providerFileId = providerFileId;
+    }
   }
 
   getRecords(): ExternalFileRecord[] {
