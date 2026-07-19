@@ -1,12 +1,18 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Linking, ScrollView, View } from "react-native";
+import { Alert, Linking, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { documentCategories, type DocumentCategory } from "@autopilot/schemas";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
-import { pickDocument, pickImage, uploadPolicyDocument, type PickedFile } from "@/lib/upload";
+import {
+  deletePolicyDocument,
+  pickDocument,
+  pickImage,
+  uploadPolicyDocument,
+  type PickedFile,
+} from "@/lib/upload";
 import { formatEdmontonDate } from "@/lib/format";
 import {
   Body,
@@ -107,6 +113,34 @@ export default function Documents() {
     if (data?.signedUrl) await Linking.openURL(data.signedUrl);
   };
 
+  const remove = (doc: DocumentRow) => {
+    Alert.alert(
+      "Remove document?",
+      `${doc.file_name} will be removed from your household documents.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                await deletePolicyDocument(doc.id);
+                await queryClient.invalidateQueries({ queryKey: ["documents", household.id] });
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Remove failed");
+              } finally {
+                setBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
@@ -162,6 +196,12 @@ export default function Documents() {
               </View>
               <View style={{ height: 8 }} />
               <SecondaryButton label="View (secure link)" onPress={() => download(doc)} />
+              <View style={{ height: 8 }} />
+              <SecondaryButton
+                label="Remove document"
+                onPress={() => remove(doc)}
+                disabled={busy}
+              />
             </Card>
           ))}
         </ScrollView>
