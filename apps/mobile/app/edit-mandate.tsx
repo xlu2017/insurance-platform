@@ -34,11 +34,7 @@ import {
   propertyOptionalCoverageLabels,
   propertySettlementOptions,
 } from "@/lib/mandate";
-import {
-  autoEndorsementHelp,
-  mandateHelp,
-  propertyOptionalCoverageHelp,
-} from "@/lib/mandate-help";
+import { autoEndorsementHelp, mandateHelp, propertyOptionalCoverageHelp } from "@/lib/mandate-help";
 import {
   loadHouseholdMandateV2,
   MandateValidationError,
@@ -696,9 +692,7 @@ export default function EditMandate() {
   if (householdLoading || isLoading || !household || !mandate || !switching) return <Loading />;
 
   const updateAuto = (auto: AutoMandateV2) =>
-    setMandate((previous) =>
-      previous ? { ...previous, householdAutoDefaults: auto } : previous,
-    );
+    setMandate((previous) => (previous ? { ...previous, householdAutoDefaults: auto } : previous));
   const updateProperty = (property: PropertyMandateV2) =>
     setMandate((previous) =>
       previous ? { ...previous, householdPropertyDefaults: property } : previous,
@@ -785,7 +779,10 @@ export default function EditMandate() {
           <View style={{ height: 16 }} />
 
           <Card>
-            <Collapsible title="Auto household defaults" helpText={mandateHelp.autoHouseholdDefaults}>
+            <Collapsible
+              title="Auto household defaults"
+              helpText={mandateHelp.autoHouseholdDefaults}
+            >
               <AutoMandateEditorV2
                 value={mandate.householdAutoDefaults}
                 onChange={updateAuto}
@@ -813,7 +810,9 @@ export default function EditMandate() {
               <Body muted>No vehicles on file.</Body>
             ) : (
               (data?.vehicles ?? []).map((vehicle) => {
-                const override = mandate.vehicleOverrides.find((item) => item.vehicleId === vehicle.id);
+                const override = mandate.vehicleOverrides.find(
+                  (item) => item.vehicleId === vehicle.id,
+                );
                 const effective = resolveEffectiveVehicleMandateV2(mandate, vehicle.id);
                 return (
                   <View key={vehicle.id} style={{ marginBottom: 16 }}>
