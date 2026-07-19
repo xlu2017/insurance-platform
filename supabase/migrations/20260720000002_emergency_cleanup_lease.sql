@@ -26,6 +26,12 @@ create index idx_emergency_cleanup_due
   where cleanup_status in ('pending', 'failed_permanently')
     and operator_action_required = false;
 
+-- Index to reclaim emergency rows left in `processing` after a worker crash.
+create index if not exists idx_emergency_cleanup_expired_processing
+  on document_analysis_emergency_cleanup (cleanup_lease_expires_at, created_at)
+  where cleanup_status = 'processing'
+    and operator_action_required = false;
+
 comment on table document_analysis_emergency_cleanup is
   'Append-only durable queue for provider files that could not be queued through the normal ledger. Rows are leased and never resolved until deletion is confirmed.';
 
@@ -42,6 +48,7 @@ create or replace function check_cleanup_readiness()
 returns jsonb
 language plpgsql
 security definer
+set search_path = public, pg_temp
 as $$
 declare
   v_ready boolean := true;
@@ -49,6 +56,7 @@ declare
   v_cron_active boolean;
   v_vault_count int;
   v_stale int;
+  v_stale_emergency int;
   v_permanent int;
   v_synthetic_id uuid;
   v_now timestamptz := now();
@@ -84,7 +92,17 @@ begin
     v_ready := false;
   end if;
 
-  -- 4. Count unresolved permanent failures. Any operator-action incident blocks readiness.
+  -- 4. Count emergency rows stuck in `processing` with an expired lease (worker crash).
+  select count(*) into v_stale_emergency
+  from document_analysis_emergency_cleanup
+  where cleanup_status = 'processing'
+    and cleanup_lease_expires_at < v_now - interval '10 minutes';
+  v_checks := v_checks || jsonb_build_object('stale_emergency_processing_count', v_stale_emergency);
+  if v_stale_emergency > 0 then
+    v_ready := false;
+  end if;
+
+  -- 5. Count unresolved permanent failures. Any operator-action incident blocks readiness.
   select coalesce(
     (select count(*) from document_analysis_provider_files where deletion_status = 'failed_permanently') +
     (select count(*) from document_analysis_emergency_cleanup
@@ -127,6 +145,12 @@ begin
   return jsonb_build_object('ready', v_ready, 'checks', v_checks);
 end;
 $$;
+
+-- Restrict execution to the internal service role and remove the default PUBLIC grant.
+revoke all on function public.check_cleanup_readiness() from public;
+revoke all on function public.check_cleanup_readiness() from anon;
+revoke all on function public.check_cleanup_readiness() from authenticated;
+grant execute on function public.check_cleanup_readiness() to service_role;
 
 comment on function check_cleanup_readiness() is
   'Service-role RPC that verifies the cleanup worker schedule, Vault secrets, stale leases, permanent failures and a synthetic probe.';

@@ -3270,7 +3270,6 @@ export type Database = {
         };
         Returns: undefined;
       };
-      get_cleanup_secrets: { Args: never; Returns: Json };
       is_admin: { Args: never; Returns: boolean };
       is_household_member: { Args: { hid: string }; Returns: boolean };
       is_staff: { Args: never; Returns: boolean };
