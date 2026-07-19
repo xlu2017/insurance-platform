@@ -75,7 +75,9 @@ export interface NativeDocumentAnalysisProvider {
     },
   ): Promise<ProviderUploadResult>;
   analyze(input: NativeDocumentAnalysisRequest): Promise<unknown>;
-  deleteFile(handle: ProviderFileHandle): Promise<ProviderFileDeletionResult>;
+  deleteFile(
+    handle: Pick<ProviderFileHandle, "providerFileId">,
+  ): Promise<ProviderFileDeletionResult>;
 }
 
 export interface DocumentProcessingAuthorization {
@@ -94,6 +96,7 @@ export interface DocumentProcessingAuthorization {
     | "authorized"
     | "denied"
     | "authorized_no_transmission"
+    | "blocked_no_transmission"
     | "processing_started"
     | "processing_failed"
     | "analysis_persisted";

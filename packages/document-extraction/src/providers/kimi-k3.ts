@@ -324,7 +324,9 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     }
   }
 
-  async deleteFile(handle: ProviderFileHandle): Promise<ProviderFileDeletionResult> {
+  async deleteFile(
+    handle: Pick<ProviderFileHandle, "providerFileId">,
+  ): Promise<ProviderFileDeletionResult> {
     const maxAttempts = 3;
     let attempts = 0;
     while (attempts < maxAttempts) {

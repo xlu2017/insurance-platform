@@ -1977,6 +1977,7 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
   private requireNativeInput: boolean;
   private authorization?: DocumentProcessingAuthorization;
   private fileLifecycleStore?: ExternalFileLifecycleStore;
+  private analysisRequestId?: string;
   private lifecycleRecords = new Map<string, string>();
 
   constructor(options: {
@@ -1985,12 +1986,14 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     requireNativeInput?: boolean;
     authorization?: DocumentProcessingAuthorization;
     fileLifecycleStore?: ExternalFileLifecycleStore;
+    analysisRequestId?: string;
   }) {
     this.provider = options.provider;
     this.bytesLoader = options.bytesLoader;
     this.requireNativeInput = options.requireNativeInput ?? true;
     this.authorization = options.authorization;
     this.fileLifecycleStore = options.fileLifecycleStore;
+    this.analysisRequestId = options.analysisRequestId;
   }
 
   async analyze(input: InsuranceDocumentAnalysisInput): Promise<InsuranceDocumentAnalysisResult> {
@@ -2161,6 +2164,7 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     if (this.fileLifecycleStore && this.authorization) {
       const record = await this.fileLifecycleStore.recordUpload({
         authorizationId: this.authorization.id,
+        analysisRequestId: this.analysisRequestId,
         policyDocumentId: original.documentId,
         providerFileId: "pending",
         uploadStatus: "started",
@@ -2213,7 +2217,12 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
                 processingStatus: "failed",
               }
             : { uploadStatus: "failed" };
-          await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
+          try {
+            await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
+          } catch {
+            // The provider handle is already known; record the ledger failure
+            // and return the handle so the caller can still attempt deletion.
+          }
         }
       }
       if (createdHandle) {

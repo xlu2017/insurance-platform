@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Analyze all selected policy documents together and extract stable asset candidates.
 //
 // The PDFs are downloaded from the private policy-documents bucket and submitted
@@ -18,119 +17,18 @@ import {
   sanitizeProviderError,
   ConfigAndConsentPrivacyPreparation,
   privacyPreparationConfigFromEnv,
-  type PublicDocumentError,
-  type ProcessingConsentCheck,
+  SupabaseAuthorizationStore,
+  SupabaseFileLifecycleStore,
 } from "../_shared/document-extraction.js";
-
-class SupabaseAuthorizationStore {
-  constructor(private admin) {}
-  async createAuthorization(auth) {
-    const { data, error } = await this.admin
-      .from("document_processing_authorizations")
-      .insert({
-        household_id: auth.householdId,
-        actor_profile_id: auth.actorProfileId,
-        consent_id: auth.consentId,
-        purpose: auth.purpose,
-        privacy_notice_version: auth.privacyNoticeVersion,
-        processor_contract_version: auth.processorContractVersion,
-        foreign_processing_acknowledged: auth.foreignProcessingAcknowledged,
-        automated_processing_acknowledged: auth.automatedProcessingAcknowledged,
-        raw_processing_approved: auth.rawProcessingApproved,
-        external_processing_enabled: auth.externalProcessingEnabled,
-        authorization_result: auth.authorizationResult,
-      })
-      .select("id")
-      .single();
-    if (error || !data) throw new Error("Failed to persist document processing authorization");
-    return { ...auth, id: data.id, authorizedAt: new Date().toISOString() };
-  }
-  async updateAuthorization(id, patch) {
-    const updates = {};
-    if (patch.analysisRequestId !== undefined) {
-      updates.analysis_request_id = patch.analysisRequestId;
-    }
-    if (patch.authorizationResult !== undefined) {
-      updates.authorization_result = patch.authorizationResult;
-    }
-    if (Object.keys(updates).length === 0) return;
-    const { error } = await this.admin
-      .from("document_processing_authorizations")
-      .update(updates)
-      .eq("id", id);
-    if (error) throw new Error("Failed to update authorization: " + error.message);
-  }
-}
-
-class SupabaseFileLifecycleStore {
-  constructor(private admin) {}
-  async recordUpload(record) {
-    const { data, error } = await this.admin
-      .from("document_analysis_provider_files")
-      .insert({
-        authorization_id: record.authorizationId,
-        analysis_request_id: record.analysisRequestId,
-        policy_document_id: record.policyDocumentId,
-        provider_file_id: record.providerFileId,
-        upload_status: record.uploadStatus,
-      })
-      .select("id")
-      .single();
-    if (error || !data) throw new Error("Failed to record provider file upload: " + error?.message);
-    return {
-      ...record,
-      id: data.id,
-      uploadStartedAt: new Date().toISOString(),
-      deletionAttempts: 0,
-    };
-  }
-  async markUploadCompleted(id, patch) {
-    const updates = { upload_completed_at: new Date().toISOString() };
-    if (patch.providerFileId !== undefined) updates.provider_file_id = patch.providerFileId;
-    if (patch.uploadStatus !== undefined) updates.upload_status = patch.uploadStatus;
-    if (patch.processingStatus !== undefined) updates.processing_status = patch.processingStatus;
-    const { error } = await this.admin
-      .from("document_analysis_provider_files")
-      .update(updates)
-      .eq("id", id);
-    if (error) throw new Error("Failed to mark upload completed: " + error.message);
-  }
-  async recordDeletionAttempt(id, result) {
-    const { error } = await this.admin
-      .from("document_analysis_provider_files")
-      .update({
-        deletion_status: result.deleted ? "deleted" : "queued",
-        deletion_attempts: result.attempts,
-        last_deletion_error_category: result.failureCategory,
-        deleted_at: result.deleted ? new Date().toISOString() : null,
-      })
-      .eq("id", id);
-    if (error) throw new Error("Failed to record deletion attempt: " + error.message);
-    await this.admin.from("document_analysis_cleanup_attempts").insert({
-      file_id: id,
-      status_code: result.statusCode,
-      failure_category: result.failureCategory,
-      success: result.deleted,
-    });
-  }
-  async queueCleanup(id, failureCategory, nextAttemptAt) {
-    const { error } = await this.admin
-      .from("document_analysis_provider_files")
-      .update({
-        deletion_status: "queued",
-        last_deletion_error_category: failureCategory,
-        next_deletion_attempt_at: nextAttemptAt,
-      })
-      .eq("id", id);
-    if (error) throw new Error("Failed to queue cleanup: " + error.message);
-    await this.admin.from("document_analysis_cleanup_attempts").insert({
-      file_id: id,
-      failure_category: failureCategory,
-      success: false,
-      next_attempt_at: nextAttemptAt,
-    });
-  }
-}
+import type {
+  CandidateComparisonContext,
+  DetectedInsuranceEntity,
+  ExistingHouseholdAsset,
+  InsuranceDocumentAnalysisInput,
+  PendingEntityCandidate,
+  ProcessingConsentCheck,
+  PublicDocumentError,
+} from "./types.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -237,7 +135,7 @@ function candidateDisplayLabel(entity: DetectedInsuranceEntity): string {
 }
 
 async function loadExistingAssets(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   householdId: string,
 ): Promise<ExistingHouseholdAsset[]> {
   const { data: vehicles, error: vehicleErr } = await admin
@@ -300,7 +198,7 @@ async function loadExistingAssets(
 }
 
 async function loadPendingCandidates(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   householdId: string,
   excludeSessionId?: string,
 ): Promise<PendingEntityCandidate[]> {
@@ -333,7 +231,7 @@ async function loadPendingCandidates(
 }
 
 async function loadPendingCandidateRecords(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   householdId: string,
   excludeSessionId?: string,
 ): Promise<
@@ -493,11 +391,14 @@ Deno.serve(async (req) => {
     .in("file_digest", Object.values(digestByDocId));
 
   const existingByDigest = new Map<string, { id: string; session_id: string }>();
+  const sessionIdsForDuplicates = new Set<string>();
   for (const row of existingExtractedDocs ?? []) {
-    existingByDigest.set(String(row.file_digest), {
-      id: String(row.id),
-      session_id: String(row.session_id),
-    });
+    const digest = String(row.file_digest);
+    const sessionId = String(row.session_id);
+    sessionIdsForDuplicates.add(sessionId);
+    if (!existingByDigest.has(digest)) {
+      existingByDigest.set(digest, { id: String(row.id), session_id: sessionId });
+    }
   }
 
   const duplicatedDocIds = policyDocumentIds.filter((id) =>
@@ -514,7 +415,7 @@ Deno.serve(async (req) => {
     }),
   );
 
-  // If every document is a duplicate, return the existing session and candidates.
+  // If every document is a duplicate, return the existing sessions and candidates.
   if (newDocIds.length === 0) {
     let duplicateSessionId = sessionIdRaw;
     if (duplicateSessionId) {
@@ -527,11 +428,10 @@ Deno.serve(async (req) => {
       if (!session) {
         return jsonError("Session not found", 404);
       }
-    } else if (duplicatedDocIds.length > 0 && existingByDigest.size > 0) {
-      const first = existingByDigest.get(digestByDocId[duplicatedDocIds[0]]);
-      duplicateSessionId = first?.session_id;
+    } else if (sessionIdsForDuplicates.size > 0) {
+      duplicateSessionId = Array.from(sessionIdsForDuplicates)[0];
     }
-    if (!duplicateSessionId) {
+    if (!duplicateSessionId || sessionIdsForDuplicates.size === 0) {
       return jsonError("No existing session found for duplicate documents", 404);
     }
     const { data: existingCandidates } = await admin
@@ -539,7 +439,7 @@ Deno.serve(async (req) => {
       .select(
         "id, asset_type, identity_fingerprint, display_label, occupancy, match_classification, decision, review_status, source_document_ids",
       )
-      .eq("session_id", duplicateSessionId)
+      .in("session_id", Array.from(sessionIdsForDuplicates))
       .eq("household_id", householdId);
     return jsonResponse({
       session_id: duplicateSessionId,
@@ -664,6 +564,7 @@ Deno.serve(async (req) => {
     requireNativeInput: Deno.env.get("DOCUMENT_ANALYSIS_REQUIRE_NATIVE_INPUT") !== "false",
     authorization,
     fileLifecycleStore,
+    analysisRequestId: analysisRunId,
   });
 
   let analysis;
@@ -677,10 +578,12 @@ Deno.serve(async (req) => {
       jurisdiction: "AB",
     });
   } catch (err) {
+    const sanitized = sanitizeProviderError(err);
+    const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";
     await authorizationStore.updateAuthorization(authorization.id, {
-      authorizationResult: "processing_failed",
+      authorizationResult: isUnsupported ? "blocked_no_transmission" : "processing_failed",
     });
-    return jsonError(sanitizeProviderError(err), 502);
+    return jsonError(sanitized, 502);
   }
 
   // Build the analysis-run payload. A single RPC call will persist the run,
@@ -844,7 +747,7 @@ Deno.serve(async (req) => {
       const extractedId = extractedDocIdByInputId.get(ref.documentId);
       if (extractedId) group.sourceDocIds.add(extractedId);
     }
-    for (const cv of Object.values(entity.currentCoverage)) {
+    for (const cv of Object.values(entity.currentCoverage) as any[]) {
       for (const ref of cv.evidence ?? []) {
         const extractedId = extractedDocIdByInputId.get(ref.documentId);
         if (extractedId) group.sourceDocIds.add(extractedId);
