@@ -10,6 +10,7 @@ import {
   Body,
   Card,
   Field,
+  InfoTooltip,
   Loading,
   PrimaryButton,
   Screen,
@@ -33,6 +34,7 @@ import {
   propertyOptionalCoverageLabels,
   propertySettlementOptions,
 } from "@/lib/mandate";
+import { autoEndorsementHelp, mandateHelp, propertyOptionalCoverageHelp } from "@/lib/mandate-help";
 import {
   loadHouseholdMandateV2,
   MandateValidationError,
@@ -56,28 +58,58 @@ import type {
   WaterCoverageRequirementV2,
 } from "@autopilot/schemas";
 
-function Collapsible({ title, children }: { title: string; children: React.ReactNode }) {
+function Collapsible({
+  title,
+  helpText,
+  children,
+}: {
+  title: string;
+  helpText?: string;
+  children: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <View style={{ marginBottom: 12 }}>
-      <Pressable onPress={() => setOpen((v) => !v)}>
-        <Body style={{ color: "#2563EB", fontWeight: "600" }}>
-          {open ? "▾ " : "▸ "}
-          {title}
-        </Body>
-      </Pressable>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={title}
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen((value) => !value)}
+          style={{ flexShrink: 1 }}
+        >
+          <Body style={{ color: "#2563EB", fontWeight: "600" }}>
+            {open ? "▾ " : "▸ "}
+            {title}
+          </Body>
+        </Pressable>
+        {helpText ? <InfoTooltip label={title} text={helpText} /> : null}
+      </View>
       {open ? <View style={{ marginTop: 8 }}>{children}</View> : null}
+    </View>
+  );
+}
+
+function SectionHeading({ title, helpText }: { title: string; helpText: string }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <Subtitle>{title}</Subtitle>
+      <InfoTooltip label={title} text={helpText} />
     </View>
   );
 }
 
 function RuleField<T extends { rule: string } & Record<string, unknown>>({
   label,
+  helpText,
+  amountHelpText,
   options,
   value,
   onChange,
 }: {
   label: string;
+  helpText: string;
+  amountHelpText: string;
   options: { value: T["rule"]; label: string }[];
   value: T;
   onChange: (next: T) => void;
@@ -89,6 +121,7 @@ function RuleField<T extends { rule: string } & Record<string, unknown>>({
     <View style={{ marginBottom: 8 }}>
       <Select
         label={`${label} rule`}
+        helpText={helpText}
         options={options}
         value={value.rule}
         onValueChange={(rule) => {
@@ -102,6 +135,7 @@ function RuleField<T extends { rule: string } & Record<string, unknown>>({
       {showAmount ? (
         <Field
           label={`${label} amount (C$)`}
+          helpText={amountHelpText}
           keyboardType="numeric"
           value={dollarsFromCents(amountCents)}
           onChangeText={(text) =>
@@ -118,6 +152,8 @@ function RuleField<T extends { rule: string } & Record<string, unknown>>({
 
 function LimitRuleField(props: {
   label: string;
+  helpText: string;
+  amountHelpText: string;
   options: { value: LimitRuleV2["rule"]; label: string }[];
   value: LimitRuleV2;
   onChange: (next: LimitRuleV2) => void;
@@ -127,6 +163,8 @@ function LimitRuleField(props: {
 
 function DeductibleRuleField(props: {
   label: string;
+  helpText: string;
+  amountHelpText: string;
   options: { value: DeductibleRuleV2["rule"]; label: string }[];
   value: DeductibleRuleV2;
   onChange: (next: DeductibleRuleV2) => void;
@@ -136,16 +174,19 @@ function DeductibleRuleField(props: {
 
 function PreferenceSelect({
   label,
+  helpText,
   value,
   onChange,
 }: {
   label: string;
+  helpText: string;
   value: CoveragePreference;
-  onChange: (v: CoveragePreference) => void;
+  onChange: (value: CoveragePreference) => void;
 }) {
   return (
     <Select
       label={label}
+      helpText={helpText}
       options={coveragePreferenceOptions}
       value={value}
       onValueChange={onChange}
@@ -155,10 +196,12 @@ function PreferenceSelect({
 
 function WaterEditorV2({
   name,
+  helpText,
   value,
   onChange,
 }: {
   name: string;
+  helpText: string;
   value: WaterCoverageRequirementV2;
   onChange: (next: WaterCoverageRequirementV2) => void;
 }) {
@@ -166,17 +209,22 @@ function WaterEditorV2({
     <View style={{ marginBottom: 8 }}>
       <PreferenceSelect
         label={`${name} preference`}
+        helpText={`${helpText} ${mandateHelp.coveragePreference}`}
         value={value.preference}
         onChange={(preference) => onChange({ ...value, preference })}
       />
       <LimitRuleField
         label={`${name} limit`}
+        helpText={`${helpText} ${mandateHelp.limitRule}`}
+        amountHelpText={`${helpText} ${mandateHelp.limitAmount}`}
         options={limitRuleOptions}
         value={value.limit}
         onChange={(limit) => onChange({ ...value, limit })}
       />
       <DeductibleRuleField
         label={`${name} deductible`}
+        helpText={`${helpText} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${helpText} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.deductible}
         onChange={(deductible) => onChange({ ...value, deductible })}
@@ -199,40 +247,50 @@ function AutoMandateEditorV2({
       {titleText ? <Subtitle>{titleText}</Subtitle> : null}
       <Select
         label="Coverage form"
+        helpText={mandateHelp.autoCoverageForm}
         options={autoCoverageFormOptions}
         value={value.coverageForm.value}
-        onValueChange={(v) =>
-          onChange({ ...value, coverageForm: { ...value.coverageForm, value: v } })
+        onValueChange={(nextValue) =>
+          onChange({ ...value, coverageForm: { ...value.coverageForm, value: nextValue } })
         }
       />
       <Select
         label="Coverage form preference"
+        helpText={mandateHelp.coveragePreference}
         options={coveragePreferenceOptions}
         value={value.coverageForm.preference}
-        onValueChange={(v) =>
-          onChange({ ...value, coverageForm: { ...value.coverageForm, preference: v } })
+        onValueChange={(preference) =>
+          onChange({ ...value, coverageForm: { ...value.coverageForm, preference } })
         }
       />
       <LimitRuleField
         label="Liability"
+        helpText={`${mandateHelp.autoLiability} ${mandateHelp.limitRule}`}
+        amountHelpText={`${mandateHelp.autoLiability} ${mandateHelp.limitAmount}`}
         options={limitRuleOptions}
         value={value.liability}
         onChange={(liability) => onChange({ ...value, liability })}
       />
       <DeductibleRuleField
         label="Collision deductible"
+        helpText={`${mandateHelp.collisionDeductible} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${mandateHelp.collisionDeductible} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.collisionDeductible}
         onChange={(collisionDeductible) => onChange({ ...value, collisionDeductible })}
       />
       <DeductibleRuleField
         label="Comprehensive deductible"
+        helpText={`${mandateHelp.comprehensiveDeductible} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${mandateHelp.comprehensiveDeductible} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.comprehensiveDeductible}
         onChange={(comprehensiveDeductible) => onChange({ ...value, comprehensiveDeductible })}
       />
       <DeductibleRuleField
         label="Glass deductible"
+        helpText={`${mandateHelp.glassDeductible} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${mandateHelp.glassDeductible} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.glassDeductible}
         onChange={(glassDeductible) => onChange({ ...value, glassDeductible })}
@@ -243,9 +301,13 @@ function AutoMandateEditorV2({
         <PreferenceSelect
           key={key}
           label={label}
+          helpText={`${autoEndorsementHelp[key]} ${mandateHelp.coveragePreference}`}
           value={value.endorsements[key]}
-          onChange={(v) =>
-            onChange({ ...value, endorsements: { ...value.endorsements, [key]: v } })
+          onChange={(preference) =>
+            onChange({
+              ...value,
+              endorsements: { ...value.endorsements, [key]: preference },
+            })
           }
         />
       ))}
@@ -267,62 +329,76 @@ function PropertyMandateEditorV2({
       {titleText ? <Subtitle>{titleText}</Subtitle> : null}
       <Select
         label="Coverage form"
+        helpText={mandateHelp.propertyCoverageForm}
         options={propertyCoverageFormOptions}
         value={value.coverageForm.value}
-        onValueChange={(v) =>
-          onChange({ ...value, coverageForm: { ...value.coverageForm, value: v } })
+        onValueChange={(nextValue) =>
+          onChange({ ...value, coverageForm: { ...value.coverageForm, value: nextValue } })
         }
       />
       <Select
         label="Coverage form preference"
+        helpText={mandateHelp.coveragePreference}
         options={coveragePreferenceOptions}
         value={value.coverageForm.preference}
-        onValueChange={(v) =>
-          onChange({ ...value, coverageForm: { ...value.coverageForm, preference: v } })
+        onValueChange={(preference) =>
+          onChange({ ...value, coverageForm: { ...value.coverageForm, preference } })
         }
       />
       <Select
         label="Settlement basis"
+        helpText={mandateHelp.settlementBasis}
         options={propertySettlementOptions}
         value={value.settlementBasis.value}
-        onValueChange={(v) =>
-          onChange({ ...value, settlementBasis: { ...value.settlementBasis, value: v } })
+        onValueChange={(nextValue) =>
+          onChange({ ...value, settlementBasis: { ...value.settlementBasis, value: nextValue } })
         }
       />
       <Select
         label="Settlement preference"
+        helpText={mandateHelp.coveragePreference}
         options={coveragePreferenceOptions}
         value={value.settlementBasis.preference}
-        onValueChange={(v) =>
-          onChange({ ...value, settlementBasis: { ...value.settlementBasis, preference: v } })
+        onValueChange={(preference) =>
+          onChange({ ...value, settlementBasis: { ...value.settlementBasis, preference } })
         }
       />
       <LimitRuleField
         label="Dwelling limit"
+        helpText={`${mandateHelp.dwellingLimit} ${mandateHelp.limitRule}`}
+        amountHelpText={`${mandateHelp.dwellingLimit} ${mandateHelp.limitAmount}`}
         options={limitRuleOptions}
         value={value.dwellingLimit}
         onChange={(dwellingLimit) => onChange({ ...value, dwellingLimit })}
       />
       <LimitRuleField
         label="Contents limit"
+        helpText={`${mandateHelp.contentsLimit} ${mandateHelp.limitRule}`}
+        amountHelpText={`${mandateHelp.contentsLimit} ${mandateHelp.limitAmount}`}
         options={limitRuleOptions}
         value={value.contentsLimit}
         onChange={(contentsLimit) => onChange({ ...value, contentsLimit })}
       />
       <LimitRuleField
         label="Detached structures limit"
+        helpText={`${mandateHelp.detachedStructuresLimit} ${mandateHelp.limitRule}`}
+        amountHelpText={`${mandateHelp.detachedStructuresLimit} ${mandateHelp.limitAmount}`}
         options={limitRuleOptions}
         value={value.detachedStructuresLimit}
         onChange={(detachedStructuresLimit) => onChange({ ...value, detachedStructuresLimit })}
       />
       <LimitRuleField
         label="Personal liability limit"
+        helpText={`${mandateHelp.personalLiabilityLimit} ${mandateHelp.limitRule}`}
+        amountHelpText={`${mandateHelp.personalLiabilityLimit} ${mandateHelp.limitAmount}`}
         options={limitRuleOptions}
         value={value.personalLiabilityLimit}
         onChange={(personalLiabilityLimit) => onChange({ ...value, personalLiabilityLimit })}
       />
       <LimitRuleField
         label="Additional living expense limit"
+        helpText={`${mandateHelp.additionalLivingExpenseLimit} ${mandateHelp.limitRule}`}
+        amountHelpText={`${mandateHelp.additionalLivingExpenseLimit} ${mandateHelp.limitAmount}`}
         options={limitRuleOptions}
         value={value.additionalLivingExpenseLimit}
         onChange={(additionalLivingExpenseLimit) =>
@@ -331,35 +407,45 @@ function PropertyMandateEditorV2({
       />
       <DeductibleRuleField
         label="Base deductible"
+        helpText={`${mandateHelp.baseDeductible} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${mandateHelp.baseDeductible} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.baseDeductible}
         onChange={(baseDeductible) => onChange({ ...value, baseDeductible })}
       />
       <DeductibleRuleField
         label="Water deductible"
+        helpText={`${mandateHelp.waterDeductible} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${mandateHelp.waterDeductible} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.waterDeductible}
         onChange={(waterDeductible) => onChange({ ...value, waterDeductible })}
       />
       <DeductibleRuleField
         label="Wind/hail deductible"
+        helpText={`${mandateHelp.windHailDeductible} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${mandateHelp.windHailDeductible} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.windHailDeductible}
         onChange={(windHailDeductible) => onChange({ ...value, windHailDeductible })}
       />
       <DeductibleRuleField
         label="Earthquake deductible"
+        helpText={`${mandateHelp.earthquakeDeductible} ${mandateHelp.deductibleRule}`}
+        amountHelpText={`${mandateHelp.earthquakeDeductible} ${mandateHelp.deductibleAmount}`}
         options={deductibleRuleOptions}
         value={value.earthquakeDeductible}
         onChange={(earthquakeDeductible) => onChange({ ...value, earthquakeDeductible })}
       />
       <WaterEditorV2
         name="Sewer backup"
+        helpText={mandateHelp.sewerBackup}
         value={value.sewerBackup}
         onChange={(sewerBackup) => onChange({ ...value, sewerBackup })}
       />
       <WaterEditorV2
         name="Overland water"
+        helpText={mandateHelp.overlandWater}
         value={value.overlandWater}
         onChange={(overlandWater) => onChange({ ...value, overlandWater })}
       />
@@ -372,9 +458,13 @@ function PropertyMandateEditorV2({
         <PreferenceSelect
           key={key}
           label={label}
+          helpText={`${propertyOptionalCoverageHelp[key]} ${mandateHelp.coveragePreference}`}
           value={value.optionalCoverages[key]}
-          onChange={(v) =>
-            onChange({ ...value, optionalCoverages: { ...value.optionalCoverages, [key]: v } })
+          onChange={(preference) =>
+            onChange({
+              ...value,
+              optionalCoverages: { ...value.optionalCoverages, [key]: preference },
+            })
           }
         />
       ))}
@@ -487,12 +577,14 @@ function diffPropertyMandate(
 
 function Toggle({
   label,
+  helpText,
   value,
   onChange,
 }: {
   label: string;
+  helpText: string;
   value: boolean;
-  onChange: (v: boolean) => void;
+  onChange: (value: boolean) => void;
 }) {
   return (
     <View
@@ -503,8 +595,16 @@ function Toggle({
         paddingVertical: 6,
       }}
     >
-      <Body>{label}</Body>
-      <Switch value={value} onValueChange={onChange} />
+      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", marginRight: 12 }}>
+        <Body>{label}</Body>
+        <InfoTooltip label={label} text={helpText} />
+      </View>
+      <Switch
+        accessibilityLabel={label}
+        accessibilityHint={helpText}
+        value={value}
+        onValueChange={onChange}
+      />
     </View>
   );
 }
@@ -549,7 +649,7 @@ export default function EditMandate() {
         loadHouseholdMandateV2(supabase, household.id).catch((err) => {
           if (err instanceof MandateValidationError) {
             throw new Error(
-              `Mandate validation failed: ${err.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`,
+              `Mandate validation failed: ${err.issues.map((issue) => issue.path.join(".") + " " + issue.message).join("; ")}`,
             );
           }
           throw err;
@@ -586,31 +686,31 @@ export default function EditMandate() {
 
   const filteredInsurers = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return (data?.insurers ?? []).filter((i) => i.name.toLowerCase().includes(term));
+    return (data?.insurers ?? []).filter((insurer) => insurer.name.toLowerCase().includes(term));
   }, [search, data?.insurers]);
 
   if (householdLoading || isLoading || !household || !mandate || !switching) return <Loading />;
 
   const updateAuto = (auto: AutoMandateV2) =>
-    setMandate((prev) => (prev ? { ...prev, householdAutoDefaults: auto } : prev));
+    setMandate((previous) => (previous ? { ...previous, householdAutoDefaults: auto } : previous));
   const updateProperty = (property: PropertyMandateV2) =>
-    setMandate((prev) => (prev ? { ...prev, householdPropertyDefaults: property } : prev));
+    setMandate((previous) =>
+      previous ? { ...previous, householdPropertyDefaults: property } : previous,
+    );
 
   const handleVehicleOverrideChange = (vehicleId: string, next: AutoMandateV2) => {
-    setMandate((prev) => {
-      if (!prev) return prev;
-      const defaults = prev.householdAutoDefaults;
-      const patch = diffAutoMandate(defaults, next);
-      return updateVehicleOverrideV2(prev, vehicleId, patch);
+    setMandate((previous) => {
+      if (!previous) return previous;
+      const patch = diffAutoMandate(previous.householdAutoDefaults, next);
+      return updateVehicleOverrideV2(previous, vehicleId, patch);
     });
   };
 
   const handlePropertyOverrideChange = (propertyId: string, next: PropertyMandateV2) => {
-    setMandate((prev) => {
-      if (!prev) return prev;
-      const defaults = prev.householdPropertyDefaults;
-      const patch = diffPropertyMandate(defaults, next);
-      return updatePropertyOverrideV2(prev, propertyId, patch);
+    setMandate((previous) => {
+      if (!previous) return previous;
+      const patch = diffPropertyMandate(previous.householdPropertyDefaults, next);
+      return updatePropertyOverrideV2(previous, propertyId, patch);
     });
   };
 
@@ -626,7 +726,7 @@ export default function EditMandate() {
     setBusy(true);
     setError(null);
     try {
-      const { data: result, error } = await invokeEdgeFunction<{
+      const { data: result, error: saveError } = await invokeEdgeFunction<{
         success: boolean;
         mandateVersion?: number;
         switchingVersion?: number;
@@ -639,12 +739,12 @@ export default function EditMandate() {
         mandate,
         switching,
       });
-      if (error) {
-        if (error.code === "STALE_VERSION") {
+      if (saveError) {
+        if (saveError.code === "STALE_VERSION") {
           setError("The mandate was changed by another session. Please review and save again.");
           queryClient.invalidateQueries({ queryKey: ["edit-mandate", household.id] });
         } else {
-          setError(error.message ?? "Save failed");
+          setError(saveError.message ?? "Save failed");
         }
         setBusy(false);
         return;
@@ -658,9 +758,9 @@ export default function EditMandate() {
       queryClient.invalidateQueries({ queryKey: ["edit-mandate", household.id] });
       setBusy(false);
       router.back();
-    } catch (err) {
+    } catch (caughtError) {
       setBusy(false);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
     }
   };
 
@@ -674,11 +774,15 @@ export default function EditMandate() {
           <Title>Coverage mandate</Title>
           <Body muted>
             Edit your household defaults, then customize per-vehicle and per-property rules below.
+            Tap any question mark for a plain-language explanation.
           </Body>
           <View style={{ height: 16 }} />
 
           <Card>
-            <Collapsible title="Auto household defaults">
+            <Collapsible
+              title="Auto household defaults"
+              helpText={mandateHelp.autoHouseholdDefaults}
+            >
               <AutoMandateEditorV2
                 value={mandate.householdAutoDefaults}
                 onChange={updateAuto}
@@ -688,7 +792,10 @@ export default function EditMandate() {
           </Card>
 
           <Card>
-            <Collapsible title="Property household defaults">
+            <Collapsible
+              title="Property household defaults"
+              helpText={mandateHelp.propertyHouseholdDefaults}
+            >
               <PropertyMandateEditorV2
                 value={mandate.householdPropertyDefaults}
                 onChange={updateProperty}
@@ -698,12 +805,14 @@ export default function EditMandate() {
           </Card>
 
           <Card>
-            <Subtitle>Vehicles</Subtitle>
+            <SectionHeading title="Vehicles" helpText={mandateHelp.vehicles} />
             {(data?.vehicles ?? []).length === 0 ? (
               <Body muted>No vehicles on file.</Body>
             ) : (
               (data?.vehicles ?? []).map((vehicle) => {
-                const override = mandate.vehicleOverrides.find((o) => o.vehicleId === vehicle.id);
+                const override = mandate.vehicleOverrides.find(
+                  (item) => item.vehicleId === vehicle.id,
+                );
                 const effective = resolveEffectiveVehicleMandateV2(mandate, vehicle.id);
                 return (
                   <View key={vehicle.id} style={{ marginBottom: 16 }}>
@@ -718,6 +827,7 @@ export default function EditMandate() {
                     </Body>
                     <Collapsible
                       title={override ? "Override household defaults" : "Use household defaults"}
+                      helpText={mandateHelp.vehicleOverride}
                     >
                       <AutoMandateEditorV2
                         value={effective}
@@ -728,8 +838,8 @@ export default function EditMandate() {
                         <PrimaryButton
                           label="Use household defaults"
                           onPress={() =>
-                            setMandate((prev) =>
-                              prev ? clearVehicleOverrideV2(prev, vehicle.id) : prev,
+                            setMandate((previous) =>
+                              previous ? clearVehicleOverrideV2(previous, vehicle.id) : previous,
                             )
                           }
                         />
@@ -742,13 +852,13 @@ export default function EditMandate() {
           </Card>
 
           <Card>
-            <Subtitle>Properties</Subtitle>
+            <SectionHeading title="Properties" helpText={mandateHelp.properties} />
             {(data?.properties ?? []).length === 0 ? (
               <Body muted>No properties on file.</Body>
             ) : (
               (data?.properties ?? []).map((property) => {
                 const override = mandate.propertyOverrides.find(
-                  (o) => o.propertyId === property.id,
+                  (item) => item.propertyId === property.id,
                 );
                 const effective = resolveEffectivePropertyMandateV2(mandate, property.id);
                 return (
@@ -759,6 +869,7 @@ export default function EditMandate() {
                     <Body muted>{property.property_type.replace("_", " ")}</Body>
                     <Collapsible
                       title={override ? "Override household defaults" : "Use household defaults"}
+                      helpText={mandateHelp.propertyOverride}
                     >
                       <PropertyMandateEditorV2
                         value={effective}
@@ -769,8 +880,8 @@ export default function EditMandate() {
                         <PrimaryButton
                           label="Use household defaults"
                           onPress={() =>
-                            setMandate((prev) =>
-                              prev ? clearPropertyOverrideV2(prev, property.id) : prev,
+                            setMandate((previous) =>
+                              previous ? clearPropertyOverrideV2(previous, property.id) : previous,
                             )
                           }
                         />
@@ -783,47 +894,64 @@ export default function EditMandate() {
           </Card>
 
           <Card>
-            <Collapsible title="Switching rules">
+            <Collapsible title="Switching rules" helpText={mandateHelp.switchingRules}>
               <Field
                 label="Minimum net annual savings before switching (C$)"
+                helpText={mandateHelp.minimumSavings}
                 keyboardType="numeric"
                 value={dollarsFromCents(switching.minNetAnnualSavingsCents)}
                 onChangeText={(text) =>
-                  setSwitching({ ...switching, minNetAnnualSavingsCents: centsFromDollars(text) })
+                  setSwitching({
+                    ...switching,
+                    minNetAnnualSavingsCents: centsFromDollars(text),
+                  })
                 }
               />
               <Field
                 label="Maximum acceptable deductible increase (C$)"
+                helpText={mandateHelp.maximumDeductibleIncrease}
                 keyboardType="numeric"
                 value={dollarsFromCents(switching.maxDeductibleIncreaseCents)}
                 onChangeText={(text) =>
-                  setSwitching({ ...switching, maxDeductibleIncreaseCents: centsFromDollars(text) })
+                  setSwitching({
+                    ...switching,
+                    maxDeductibleIncreaseCents: centsFromDollars(text),
+                  })
                 }
               />
               <Toggle
                 label="Only switch at renewal"
+                helpText={mandateHelp.renewalOnly}
                 value={switching.renewalOnlySwitching}
-                onChange={(v) => setSwitching({ ...switching, renewalOnlySwitching: v })}
+                onChange={(value) => setSwitching({ ...switching, renewalOnlySwitching: value })}
               />
               <Toggle
                 label="Optimize home and auto together"
+                helpText={mandateHelp.householdOptimization}
                 value={switching.householdOptimizationEnabled}
-                onChange={(v) => setSwitching({ ...switching, householdOptimizationEnabled: v })}
+                onChange={(value) =>
+                  setSwitching({ ...switching, householdOptimizationEnabled: value })
+                }
               />
               <Toggle
                 label="Allow different insurers per policy"
+                helpText={mandateHelp.splitInsurers}
                 value={switching.splitInsurersAllowed}
-                onChange={(v) => setSwitching({ ...switching, splitInsurersAllowed: v })}
+                onChange={(value) => setSwitching({ ...switching, splitInsurersAllowed: value })}
               />
               <Toggle
                 label="Allow bundle breakup"
+                helpText={mandateHelp.bundleBreakup}
                 value={switching.allowBundleBreakup}
-                onChange={(v) => setSwitching({ ...switching, allowBundleBreakup: v })}
+                onChange={(value) => setSwitching({ ...switching, allowBundleBreakup: value })}
               />
               <Toggle
                 label="Allow deductible increases"
+                helpText={mandateHelp.deductibleIncreases}
                 value={switching.deductibleIncreasesAllowed}
-                onChange={(v) => setSwitching({ ...switching, deductibleIncreasesAllowed: v })}
+                onChange={(value) =>
+                  setSwitching({ ...switching, deductibleIncreasesAllowed: value })
+                }
               />
               <View
                 style={{
@@ -833,39 +961,60 @@ export default function EditMandate() {
                   paddingVertical: 6,
                 }}
               >
-                <Body>Customer approval required</Body>
+                <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+                  <Body>Customer approval required</Body>
+                  <InfoTooltip
+                    label="Customer approval required"
+                    text={mandateHelp.customerApproval}
+                  />
+                </View>
                 <Body>Yes</Body>
               </View>
               <Select
                 label="Preferred payment frequency"
+                helpText={mandateHelp.paymentFrequency}
                 options={paymentFrequencyOptions}
                 value={switching.preferredPaymentFrequency}
-                onValueChange={(v) => setSwitching({ ...switching, preferredPaymentFrequency: v })}
+                onValueChange={(value) =>
+                  setSwitching({ ...switching, preferredPaymentFrequency: value })
+                }
               />
               <Select
                 label="Preferred billing method"
+                helpText={mandateHelp.billingMethod}
                 options={billingMethodOptions}
                 value={switching.preferredBillingMethod}
-                onValueChange={(v) => setSwitching({ ...switching, preferredBillingMethod: v })}
+                onValueChange={(value) =>
+                  setSwitching({ ...switching, preferredBillingMethod: value })
+                }
               />
               <Select
                 label="Broker/direct preference"
+                helpText={mandateHelp.brokerDirect}
                 options={brokerDirectOptions}
                 value={switching.brokerDirectPreference}
-                onValueChange={(v) => setSwitching({ ...switching, brokerDirectPreference: v })}
+                onValueChange={(value) =>
+                  setSwitching({ ...switching, brokerDirectPreference: value })
+                }
               />
               <Select
                 label="Minimum insurer financial rating"
+                helpText={mandateHelp.financialRating}
                 options={financialRatingOptions}
                 value={switching.minimumInsurerFinancialRating}
-                onValueChange={(v) =>
-                  setSwitching({ ...switching, minimumInsurerFinancialRating: v })
+                onValueChange={(value) =>
+                  setSwitching({ ...switching, minimumInsurerFinancialRating: value })
                 }
               />
 
               <View style={{ marginTop: 12 }}>
-                <Subtitle>Excluded insurers</Subtitle>
-                <Field label="Search insurers" value={search} onChangeText={setSearch} />
+                <SectionHeading title="Excluded insurers" helpText={mandateHelp.excludedInsurers} />
+                <Field
+                  label="Search insurers"
+                  helpText={mandateHelp.insurerSearch}
+                  value={search}
+                  onChangeText={setSearch}
+                />
                 {filteredInsurers.map((insurer) => {
                   const selected = switching.excludedInsurerIds.includes(insurer.id);
                   return (
@@ -880,6 +1029,8 @@ export default function EditMandate() {
                     >
                       <Body>{insurer.name}</Body>
                       <Switch
+                        accessibilityLabel={`Exclude ${insurer.name}`}
+                        accessibilityHint="When enabled, this insurer cannot be recommended"
                         value={selected}
                         onValueChange={() => toggleExcludedInsurer(insurer.id)}
                       />

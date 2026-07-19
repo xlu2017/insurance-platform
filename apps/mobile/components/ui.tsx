@@ -116,11 +116,60 @@ export function SecondaryButton({
   );
 }
 
-export function Field(props: TextInputProps & { label: string; error?: string }) {
-  const { label, error, ...inputProps } = props;
+export function InfoTooltip({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`About ${label}`}
+        accessibilityHint="Shows an explanation of this setting"
+        hitSlop={8}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.helpButton, pressed && styles.buttonPressed]}
+      >
+        <Text style={styles.helpButtonText}>?</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.selectOverlay} onPress={() => setOpen(false)}>
+          <Pressable
+            accessibilityViewIsModal
+            style={styles.tooltipSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={styles.subtitle}>{label}</Text>
+            <Text style={styles.tooltipBody}>{text}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Close ${label} explanation`}
+              onPress={() => setOpen(false)}
+              style={({ pressed }) => [styles.tooltipClose, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.tooltipCloseText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+export function FormLabel({ label, helpText }: { label: string; helpText?: string }) {
+  return (
+    <View style={styles.fieldLabelRow}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {helpText ? <InfoTooltip label={label} text={helpText} /> : null}
+    </View>
+  );
+}
+
+export function Field(
+  props: TextInputProps & { label: string; error?: string; helpText?: string },
+) {
+  const { label, error, helpText, ...inputProps } = props;
   return (
     <View style={{ marginBottom: spacing.md }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <FormLabel label={label} helpText={helpText} />
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={colors.inkMuted}
@@ -134,11 +183,13 @@ export function Field(props: TextInputProps & { label: string; error?: string })
 
 export function Select<T extends string>({
   label,
+  helpText,
   options,
   value,
   onValueChange,
 }: {
   label: string;
+  helpText?: string;
   options: { value: T; label: string }[];
   value: T;
   onValueChange: (value: T) => void;
@@ -147,8 +198,15 @@ export function Select<T extends string>({
   const selected = options.find((o) => o.value === value)?.label ?? value;
   return (
     <View style={{ marginBottom: spacing.md }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <Pressable onPress={() => setOpen(true)} style={styles.selectTrigger}>
+      <FormLabel label={label} helpText={helpText} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityValue={{ text: selected }}
+        accessibilityHint="Opens the available choices"
+        onPress={() => setOpen(true)}
+        style={styles.selectTrigger}
+      >
         <Text style={styles.selectTriggerText}>{selected}</Text>
         <Text style={{ color: colors.inkMuted, fontSize: typography.sizes.body }}>▾</Text>
       </Pressable>
@@ -158,6 +216,8 @@ export function Select<T extends string>({
             <Text style={styles.subtitle}>{label}</Text>
             {options.map((option) => (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: option.value === value }}
                 key={option.value}
                 onPress={() => {
                   onValueChange(option.value);
@@ -290,11 +350,33 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.5 },
   buttonPressed: { opacity: 0.85 },
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
   fieldLabel: {
+    flexShrink: 1,
     fontSize: typography.sizes.caption,
     fontWeight: "500",
     color: colors.inkMuted,
-    marginBottom: 6,
+  },
+  helpButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
+    backgroundColor: colors.surface,
+  },
+  helpButtonText: {
+    color: colors.accent,
+    fontSize: typography.sizes.caption,
+    fontWeight: "700",
+    lineHeight: 16,
   },
   input: {
     borderWidth: 1,
@@ -374,6 +456,30 @@ const styles = StyleSheet.create({
   },
   selectOptionSelected: {
     backgroundColor: colors.accentSoft,
+  },
+  tooltipSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    maxWidth: 520,
+    alignSelf: "center",
+    width: "100%",
+  },
+  tooltipBody: {
+    fontSize: typography.sizes.body,
+    color: colors.ink,
+    lineHeight: 22,
+  },
+  tooltipClose: {
+    alignSelf: "flex-end",
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  tooltipCloseText: {
+    color: colors.accent,
+    fontSize: typography.sizes.body,
+    fontWeight: "600",
   },
   loading: {
     flex: 1,
