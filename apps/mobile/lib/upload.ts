@@ -95,3 +95,23 @@ export async function uploadPolicyDocument(
 
   return { path: payload.path, id: payload.id };
 }
+
+export async function deletePolicyDocument(documentId: string): Promise<void> {
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session?.access_token) {
+    throw new Error("You must be signed in to remove documents");
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-document`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session.session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ documentId }),
+  });
+  const payload = (await response.json()) as { message?: string };
+  if (!response.ok) {
+    throw new Error(payload.message ?? `Remove failed (${response.status})`);
+  }
+}

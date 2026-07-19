@@ -23,4 +23,5 @@ deno check \
   send-quote-request/index.ts \
   extract-policy-entities/index.ts \
   approve-policy-candidates/index.ts \
-  cleanup-provider-files/index.ts
+  cleanup-provider-files/index.ts \
+  delete-document/index.ts

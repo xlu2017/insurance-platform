@@ -1,0 +1,90 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+  if (req.method !== "POST") {
+    return jsonResponse({ message: "Method not allowed" }, 405);
+  }
+
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return jsonResponse({ message: "Unauthorized" }, 401);
+
+  let payload: { documentId?: unknown };
+  try {
+    payload = (await req.json()) as { documentId?: unknown };
+  } catch {
+    return jsonResponse({ message: "Invalid JSON body" }, 400);
+  }
+
+  const documentId = typeof payload.documentId === "string" ? payload.documentId : "";
+  if (!isUuid(documentId)) {
+    return jsonResponse({ message: "Missing or invalid documentId" }, 400);
+  }
+
+  const { data: document, error: documentError } = await supabase
+    .from("policy_documents")
+    .select("id, household_id, storage_path")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (documentError) return jsonResponse({ message: "Failed to load document" }, 500);
+  if (!document) return jsonResponse({ message: "Document not found" }, 404);
+
+  const [{ data: household }, { data: membership }] = await Promise.all([
+    supabase
+      .from("households")
+      .select("id")
+      .eq("id", document.household_id)
+      .eq("owner_profile_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("household_members")
+      .select("household_id")
+      .eq("household_id", document.household_id)
+      .eq("profile_id", user.id)
+      .maybeSingle(),
+  ]);
+  if (!household && !membership) return jsonResponse({ message: "Forbidden" }, 403);
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+  const { error: storageError } = await admin.storage
+    .from("policy-documents")
+    .remove([document.storage_path]);
+  if (storageError) return jsonResponse({ message: "Failed to remove stored file" }, 502);
+
+  const { error: deleteError } = await admin
+    .from("policy_documents")
+    .delete()
+    .eq("id", document.id)
+    .eq("household_id", document.household_id);
+  if (deleteError) return jsonResponse({ message: "Failed to remove document record" }, 500);
+
+  return jsonResponse({ id: document.id });
+});
