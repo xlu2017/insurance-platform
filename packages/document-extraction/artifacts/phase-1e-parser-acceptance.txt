@@ -16,4 +16,4 @@ temporary file deletion result: not tested
 native PDF inference supported: BLOCKED
 analysis performed: NO
 phase acceptance: BLOCKED
-local CI result: not tested
+local CI result: PASS
