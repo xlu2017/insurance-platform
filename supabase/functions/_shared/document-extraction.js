@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: ace995bdb63096de02a722b200214145b8e2ff314d1317adc3c27967318d8c9c
+// source-hash: d3bebd59f2de589917d579f90ab2414e23cf23b33efd6ef04906f59a845cf7f3
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -42678,8 +42678,24 @@ ${validationFeedback}` : baseUserPrompt;
       });
       this.lifecycleRecords.set(original.documentId, record.id);
     }
+    let createdHandle;
+    const recordHandle = (handle) => {
+      createdHandle = handle;
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(original.documentId);
+        if (recordId) {
+          this.fileLifecycleStore.markUploadCompleted(recordId, {
+            providerFileId: handle.providerFileId,
+            uploadStatus: "completed"
+          }).catch(() => {
+          });
+        }
+      }
+    };
     try {
-      const result2 = await this.provider.uploadOriginalFile(original);
+      const result2 = await this.provider.uploadOriginalFile(original, {
+        onHandleCreated: recordHandle
+      });
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
         if (recordId) {
@@ -42696,8 +42712,20 @@ ${validationFeedback}` : baseUserPrompt;
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
         if (recordId) {
-          await this.fileLifecycleStore.markUploadCompleted(recordId, { uploadStatus: "failed" });
+          const patch = createdHandle ? {
+            providerFileId: createdHandle.providerFileId,
+            uploadStatus: "completed",
+            processingStatus: "failed"
+          } : { uploadStatus: "failed" };
+          await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
         }
+      }
+      if (createdHandle) {
+        return {
+          status: "failed",
+          handle: createdHandle,
+          errorCategory: err instanceof Error ? err.message : "upload_failed"
+        };
       }
       throw err;
     }
@@ -43001,7 +43029,7 @@ var KimiK3Provider = class {
       reason: "Native file reference is not supported for this file type"
     };
   }
-  async uploadOriginalFile(input) {
+  async uploadOriginalFile(input, callbacks) {
     const capability = await this.resolveInputMode(input);
     if (!capability.supported) {
       return {
@@ -43046,6 +43074,9 @@ var KimiK3Provider = class {
           purpose: file.purpose
         }
       };
+      if (callbacks?.onHandleCreated) {
+        await callbacks.onHandleCreated(handle);
+      }
       const finalStatus = await this.pollFileStatus(file.id);
       if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {
         return {
@@ -43281,4 +43312,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "ace995bdb63096de02a722b200214145b8e2ff314d1317adc3c27967318d8c9c";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "d3bebd59f2de589917d579f90ab2414e23cf23b33efd6ef04906f59a845cf7f3";

@@ -160,7 +160,12 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     };
   }
 
-  async uploadOriginalFile(input: OriginalFileInput): Promise<ProviderUploadResult> {
+  async uploadOriginalFile(
+    input: OriginalFileInput,
+    callbacks?: {
+      onHandleCreated?: (handle: ProviderFileHandle) => void | Promise<void>;
+    },
+  ): Promise<ProviderUploadResult> {
     const capability = await this.resolveInputMode(input);
 
     if (!capability.supported) {
@@ -215,6 +220,11 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
           purpose: file.purpose,
         },
       };
+
+      // Persist the real provider file ID before polling so a crash or timeout can still be cleaned up.
+      if (callbacks?.onHandleCreated) {
+        await callbacks.onHandleCreated(handle);
+      }
 
       const finalStatus = await this.pollFileStatus(file.id);
       if (finalStatus.status !== "ok" && finalStatus.status !== "processed") {

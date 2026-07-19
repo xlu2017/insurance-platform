@@ -6,8 +6,20 @@
 
 alter table document_processing_consent
   add column if not exists authority_basis text not null default 'household_owner',
-  add column if not exists status text not null default 'active',
+  add column if not exists status text,
   add column if not exists superseded_by uuid references document_processing_consent(id) on delete set null;
+
+-- Backfill existing consent history before enforcing the active-state unique index.
+update document_processing_consent
+set status = case
+  when withdrawn_at is not null then 'withdrawn'
+  else 'active'
+end
+where status is null;
+
+alter table document_processing_consent
+  alter column status set default 'active',
+  alter column status set not null;
 
 -- Remove all direct authenticated and anonymous access; authenticated customers must use RPCs.
 revoke all on document_processing_consent from authenticated, anon;
@@ -405,7 +417,9 @@ begin
       v_run_id
     );
 
-    v_doc_map := v_doc_map || jsonb_build_object(v_document->>'policy_document_id', v_extracted_id::text);
+    if v_document->>'policy_document_id' is not null then
+      v_doc_map := v_doc_map || jsonb_build_object(v_document->>'policy_document_id', v_extracted_id::text);
+    end if;
     v_result_documents := v_result_documents || jsonb_build_object(
       'id', v_extracted_id,
       'policy_document_id', nullif(v_document->>'policy_document_id', '')::uuid
@@ -422,9 +436,9 @@ begin
     v_asset_type := (v_candidate->>'asset_type')::candidate_asset_type;
     v_match_classification := (v_candidate->>'match_classification')::candidate_match_classification;
     v_source_doc_ids := coalesce(
-      (select array_agg(distinct (elem::text)::uuid)
-       from jsonb_array_elements(v_candidate->'source_document_ids') as elem
-       where elem::text <> 'null'),
+      (select array_agg(distinct elem::uuid)
+       from jsonb_array_elements_text(v_candidate->'source_document_ids') as elem
+       where elem is not null and elem <> 'null' and elem <> ''),
       '{}'::uuid[]
     );
 

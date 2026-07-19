@@ -46,9 +46,17 @@ class SupabaseAuthorizationStore {
     return { ...auth, id: data.id, authorizedAt: new Date().toISOString() };
   }
   async updateAuthorization(id, patch) {
+    const updates = {};
+    if (patch.analysisRequestId !== undefined) {
+      updates.analysis_request_id = patch.analysisRequestId;
+    }
+    if (patch.authorizationResult !== undefined) {
+      updates.authorization_result = patch.authorizationResult;
+    }
+    if (Object.keys(updates).length === 0) return;
     const { error } = await this.admin
       .from("document_processing_authorizations")
-      .update(patch)
+      .update(updates)
       .eq("id", id);
     if (error) throw new Error("Failed to update authorization: " + error.message);
   }
@@ -77,7 +85,10 @@ class SupabaseFileLifecycleStore {
     };
   }
   async markUploadCompleted(id, patch) {
-    const updates = { ...patch, upload_completed_at: new Date().toISOString() };
+    const updates = { upload_completed_at: new Date().toISOString() };
+    if (patch.providerFileId !== undefined) updates.provider_file_id = patch.providerFileId;
+    if (patch.uploadStatus !== undefined) updates.upload_status = patch.uploadStatus;
+    if (patch.processingStatus !== undefined) updates.processing_status = patch.processingStatus;
     const { error } = await this.admin
       .from("document_analysis_provider_files")
       .update(updates)
@@ -506,16 +517,30 @@ Deno.serve(async (req) => {
   // If every document is a duplicate, return the existing session and candidates.
   if (newDocIds.length === 0) {
     let duplicateSessionId = sessionIdRaw;
-    if (!duplicateSessionId && duplicatedDocIds.length > 0 && existingByDigest.size > 0) {
+    if (duplicateSessionId) {
+      const { data: session } = await admin
+        .from("document_extraction_sessions")
+        .select("id")
+        .eq("id", duplicateSessionId)
+        .eq("household_id", householdId)
+        .maybeSingle();
+      if (!session) {
+        return jsonError("Session not found", 404);
+      }
+    } else if (duplicatedDocIds.length > 0 && existingByDigest.size > 0) {
       const first = existingByDigest.get(digestByDocId[duplicatedDocIds[0]]);
       duplicateSessionId = first?.session_id;
+    }
+    if (!duplicateSessionId) {
+      return jsonError("No existing session found for duplicate documents", 404);
     }
     const { data: existingCandidates } = await admin
       .from("asset_candidates")
       .select(
         "id, asset_type, identity_fingerprint, display_label, occupancy, match_classification, decision, review_status, source_document_ids",
       )
-      .eq("session_id", duplicateSessionId);
+      .eq("session_id", duplicateSessionId)
+      .eq("household_id", householdId);
     return jsonResponse({
       session_id: duplicateSessionId,
       extracted_document_ids: duplicatedDocIds.map(

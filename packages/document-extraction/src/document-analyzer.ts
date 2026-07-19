@@ -2168,8 +2168,26 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       this.lifecycleRecords.set(original.documentId, record.id);
     }
 
+    let createdHandle: ProviderFileHandle | undefined;
+    const recordHandle = (handle: ProviderFileHandle) => {
+      createdHandle = handle;
+      if (this.fileLifecycleStore && this.authorization) {
+        const recordId = this.lifecycleRecords.get(original.documentId);
+        if (recordId) {
+          this.fileLifecycleStore
+            .markUploadCompleted(recordId, {
+              providerFileId: handle.providerFileId,
+              uploadStatus: "completed",
+            })
+            .catch(() => {});
+        }
+      }
+    };
+
     try {
-      const result = await this.provider.uploadOriginalFile(original);
+      const result = await this.provider.uploadOriginalFile(original, {
+        onHandleCreated: recordHandle,
+      });
 
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
@@ -2190,8 +2208,22 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       if (this.fileLifecycleStore && this.authorization) {
         const recordId = this.lifecycleRecords.get(original.documentId);
         if (recordId) {
-          await this.fileLifecycleStore.markUploadCompleted(recordId, { uploadStatus: "failed" });
+          const patch: Partial<ExternalFileRecord> = createdHandle
+            ? {
+                providerFileId: createdHandle.providerFileId,
+                uploadStatus: "completed",
+                processingStatus: "failed",
+              }
+            : { uploadStatus: "failed" };
+          await this.fileLifecycleStore.markUploadCompleted(recordId, patch);
         }
+      }
+      if (createdHandle) {
+        return {
+          status: "failed",
+          handle: createdHandle,
+          errorCategory: err instanceof Error ? err.message : "upload_failed",
+        };
       }
       throw err;
     }

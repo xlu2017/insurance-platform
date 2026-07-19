@@ -76,24 +76,29 @@ class FakeNativeProvider implements NativeDocumentAnalysisProvider {
     );
   }
 
-  async uploadOriginalFile(input: OriginalFileInput): Promise<ProviderUploadResult> {
+  async uploadOriginalFile(
+    input: OriginalFileInput,
+    callbacks?: { onHandleCreated?: (handle: ProviderFileHandle) => void | Promise<void> },
+  ): Promise<ProviderUploadResult> {
     this.uploadCalls += 1;
-    return (
-      this.uploadResult ?? {
-        status: "ready",
-        handle: {
-          providerFileId: "file-1",
-          documentId: input.documentId,
-          filename: input.filename,
-          mimeType: input.mimeType,
-          bytes: input.bytes.length,
-          mode: "native_image_reference",
-          reference: "test://file-1",
-          status: "ok",
-          providerMetadata: {},
-        },
-      }
-    );
+    const result = this.uploadResult ?? {
+      status: "ready",
+      handle: {
+        providerFileId: "file-1",
+        documentId: input.documentId,
+        filename: input.filename,
+        mimeType: input.mimeType,
+        bytes: input.bytes.length,
+        mode: "native_image_reference",
+        reference: "test://file-1",
+        status: "ok",
+        providerMetadata: {},
+      },
+    };
+    if (result.handle && callbacks?.onHandleCreated) {
+      await callbacks.onHandleCreated(result.handle);
+    }
+    return result;
   }
 
   async analyze(input: NativeDocumentAnalysisRequest): Promise<unknown> {

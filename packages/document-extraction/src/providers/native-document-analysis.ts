@@ -68,7 +68,12 @@ export interface NativeDocumentAnalysisProvider {
   readonly baseUrl: string;
   resolveModel(): Promise<ResolvedDocumentModel>;
   resolveInputMode(input: OriginalFileInput): Promise<ResolvedInputCapability>;
-  uploadOriginalFile(input: OriginalFileInput): Promise<ProviderUploadResult>;
+  uploadOriginalFile(
+    input: OriginalFileInput,
+    callbacks?: {
+      onHandleCreated?: (handle: ProviderFileHandle) => void | Promise<void>;
+    },
+  ): Promise<ProviderUploadResult>;
   analyze(input: NativeDocumentAnalysisRequest): Promise<unknown>;
   deleteFile(handle: ProviderFileHandle): Promise<ProviderFileDeletionResult>;
 }
