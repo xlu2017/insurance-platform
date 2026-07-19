@@ -330,16 +330,21 @@ Deno.serve(async (req) => {
       };
     }
 
-    const { error: finalUpdateErr } = await admin
+    const { data: finalData, error: finalUpdateErr } = await admin
       .from("document_analysis_emergency_cleanup")
       .update(finalUpdate)
       .eq("id", claimed.id)
       .eq("cleanup_status", "processing")
-      .eq("cleanup_worker_id", workerId);
+      .eq("cleanup_worker_id", workerId)
+      .select("id");
 
     if (finalUpdateErr) {
       emergencyPermanentFailure = true;
       emergencyResults.push({ id: String(claimed.id), status: "final_update_failed" });
+      continue;
+    }
+    if (!finalData || finalData.length === 0) {
+      emergencyResults.push({ id: String(claimed.id), status: "lease_lost" });
       continue;
     }
 
@@ -407,7 +412,7 @@ Deno.serve(async (req) => {
         results.push({ id: String(row.id), status: "attempt_log_failed" });
         continue;
       }
-      const { error: missingUpdateErr } = await admin
+      const { data: missingFinalData, error: missingUpdateErr } = await admin
         .from("document_analysis_provider_files")
         .update({
           deletion_status: "failed_permanently",
@@ -419,10 +424,15 @@ Deno.serve(async (req) => {
         })
         .eq("id", missingClaimed.id)
         .eq("deletion_status", "deleting")
-        .eq("cleanup_worker_id", workerId);
+        .eq("cleanup_worker_id", workerId)
+        .select("id");
       if (missingUpdateErr) {
         normalPermanentFailure = true;
         results.push({ id: String(row.id), status: "update_failed" });
+        continue;
+      }
+      if (!missingFinalData || missingFinalData.length === 0) {
+        results.push({ id: String(row.id), status: "lease_lost" });
         continue;
       }
       results.push({ id: String(row.id), status: "failed_permanently" });
@@ -496,7 +506,7 @@ Deno.serve(async (req) => {
     }
 
     if (deleted) {
-      const { error: finalUpdateErr } = await admin
+      const { data: finalData, error: finalUpdateErr } = await admin
         .from("document_analysis_provider_files")
         .update({
           deletion_status: "deleted",
@@ -509,10 +519,15 @@ Deno.serve(async (req) => {
         })
         .eq("id", claimed.id)
         .eq("deletion_status", "deleting")
-        .eq("cleanup_worker_id", workerId);
+        .eq("cleanup_worker_id", workerId)
+        .select("id");
       if (finalUpdateErr) {
         normalPermanentFailure = true;
         results.push({ id: String(claimed.id), status: "update_failed" });
+        continue;
+      }
+      if (!finalData || finalData.length === 0) {
+        results.push({ id: String(claimed.id), status: "lease_lost" });
         continue;
       }
       results.push({ id: String(claimed.id), status: "deleted" });
@@ -521,7 +536,7 @@ Deno.serve(async (req) => {
       const nextAttempt = addMinutes(attemptedAt, backoffMinutes);
       const permanent = attempts >= MAX_ATTEMPTS;
       const nextAt = permanent ? null : nextAttempt;
-      const { error: finalUpdateErr } = await admin
+      const { data: finalData, error: finalUpdateErr } = await admin
         .from("document_analysis_provider_files")
         .update({
           deletion_status: permanent ? "failed_permanently" : "queued",
@@ -534,10 +549,15 @@ Deno.serve(async (req) => {
         })
         .eq("id", claimed.id)
         .eq("deletion_status", "deleting")
-        .eq("cleanup_worker_id", workerId);
+        .eq("cleanup_worker_id", workerId)
+        .select("id");
       if (finalUpdateErr) {
         normalPermanentFailure = true;
         results.push({ id: String(claimed.id), status: "update_failed" });
+        continue;
+      }
+      if (!finalData || finalData.length === 0) {
+        results.push({ id: String(claimed.id), status: "lease_lost" });
         continue;
       }
       if (permanent) {
@@ -566,7 +586,7 @@ Deno.serve(async (req) => {
   }
 
   const finalCheckedAt = new Date().toISOString();
-  await admin.from("cleanup_readiness_status").upsert({
+  const { error: finalStatusErr } = await admin.from("cleanup_readiness_status").upsert({
     id: "00000000-0000-0000-0000-000000000001",
     ready: finalReadiness.ready,
     checked_at: finalCheckedAt,
@@ -574,6 +594,27 @@ Deno.serve(async (req) => {
     permanent_failure_count: finalReadiness.checks.permanent_failure_count ?? 0,
     checks: finalReadiness.checks,
   });
+
+  if (finalStatusErr) {
+    finalReadiness.ready = false;
+    finalReadiness.checks.errors = finalReadiness.checks.errors ?? [];
+    finalReadiness.checks.errors.push(
+      "Failed to persist cleanup readiness status: " + String(finalStatusErr.message ?? finalStatusErr),
+    );
+    return jsonResponse(
+      {
+        worker_id: workerId,
+        readiness: finalReadiness,
+        emergency_processed: emergencyResults.length,
+        emergency_results: emergencyResults,
+        processed: results.length,
+        results,
+        error: "Failed to write final readiness status",
+        details: String(finalStatusErr.message ?? finalStatusErr),
+      },
+      500,
+    );
+  }
 
   return jsonResponse({
     worker_id: workerId,

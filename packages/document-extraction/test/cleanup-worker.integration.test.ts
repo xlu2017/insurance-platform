@@ -593,4 +593,111 @@ describe("cleanup-provider-files worker integration", () => {
     });
     expect(resp.status).toBe(401);
   });
+
+  it("does not expose a get_cleanup_secrets RPC", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data, error } = await admin.rpc("get_cleanup_secrets" as any);
+    expect(data).toBeNull();
+    expect(error).not.toBeNull();
+    expect(String(error?.message ?? "").toLowerCase()).toMatch(/function|rpc|not found|could not find/);
+  });
+
+  it("allows only service_role to execute check_cleanup_readiness", async () => {
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    const { data: anonData, error: anonError } = await anon.rpc("check_cleanup_readiness" as any);
+    expect(anonData).toBeNull();
+    expect(anonError).not.toBeNull();
+
+    const user = await getUserClient();
+    const { data: authData, error: authError } = await user.rpc("check_cleanup_readiness" as any);
+    expect(authData).toBeNull();
+    expect(authError).not.toBeNull();
+
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data: svcData, error: svcError } = await admin.rpc("check_cleanup_readiness");
+    expect(svcError).toBeNull();
+    expect(svcData?.ready).toBe(true);
+  });
+
+  it("does not report a fenced emergency final update as successful when the lease is lost", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const providerFileId = `emergency_zero_row_${crypto.randomUUID()}`;
+    const workerA = "emergency-stale-a";
+    const workerB = "emergency-reclaim-b";
+    const now = new Date().toISOString();
+    const pastLease = new Date(Date.now() - 1000).toISOString();
+    const futureLease = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    const { data: inserted } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .insert({
+        provider_file_id: providerFileId,
+        policy_document_id: "policy-zero-row",
+        cleanup_status: "processing",
+        cleanup_claimed_at: pastLease,
+        cleanup_lease_expires_at: pastLease,
+        cleanup_worker_id: workerA,
+      })
+      .select("id")
+      .single();
+    const id = inserted!.id as string;
+
+    // Worker B reclaims the expired processing row.
+    const { data: reclaimed } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .update({
+        cleanup_worker_id: workerB,
+        cleanup_claimed_at: now,
+        cleanup_lease_expires_at: futureLease,
+      })
+      .eq("id", id)
+      .eq("cleanup_status", "processing")
+      .lt("cleanup_lease_expires_at", now)
+      .select("cleanup_worker_id")
+      .single();
+    expect(reclaimed?.cleanup_worker_id).toBe(workerB);
+
+    // Worker A attempts to finalize the row it no longer owns.
+    const { data: staleFinalData, error: staleFinalErr } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .update({
+        cleanup_status: "deleted",
+        resolved_at: now,
+        cleanup_claimed_at: null,
+        cleanup_lease_expires_at: null,
+        cleanup_worker_id: null,
+      })
+      .eq("id", id)
+      .eq("cleanup_status", "processing")
+      .eq("cleanup_worker_id", workerA)
+      .select("id");
+    expect(staleFinalErr).toBeNull();
+    expect(staleFinalData).toEqual([]);
+
+    await admin.from("document_analysis_emergency_cleanup").delete().eq("id", id);
+  });
+
+  it("survives a forward repair migration with existing queued and emergency records", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const providerFileId = `survival_${crypto.randomUUID()}`;
+
+    const { data: inserted } = await admin
+      .from("document_analysis_emergency_cleanup")
+      .insert({
+        provider_file_id: providerFileId,
+        policy_document_id: "policy-survival",
+        cleanup_status: "pending",
+      })
+      .select("id, cleanup_status, cleanup_claimed_at, cleanup_lease_expires_at, cleanup_worker_id")
+      .single();
+    expect(inserted?.cleanup_status).toBe("pending");
+    expect(inserted?.cleanup_worker_id).toBeNull();
+
+    // The cleanup RPC and the worker must still see the row after the repair migration.
+    const { data: rpcData, error: rpcError } = await admin.rpc("check_cleanup_readiness");
+    expect(rpcError).toBeNull();
+    expect(rpcData?.checks?.permanent_failure_count).toBe(0);
+
+    await admin.from("document_analysis_emergency_cleanup").delete().eq("id", inserted!.id as string);
+  });
 });
