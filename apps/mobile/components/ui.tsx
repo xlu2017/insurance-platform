@@ -60,8 +60,14 @@ export function Body({
   return <Text style={[styles.body, muted && styles.muted, style]}>{children}</Text>;
 }
 
-export function Caption({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.caption}>{children}</Text>;
+export function Caption({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.ComponentProps<typeof Text>["style"];
+}) {
+  return <Text style={[styles.caption, style]}>{children}</Text>;
 }
 
 export function PrimaryButton({

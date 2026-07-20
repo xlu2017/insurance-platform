@@ -80,6 +80,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function formatFieldLabel(fieldPath: string): string {
+  const raw = fieldPath.split(".").pop() ?? fieldPath;
+  const spaced = raw
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]/g, " ")
+    .toLowerCase();
+  return spaced
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function getFacts(candidate: ExtractionCandidate): Record<string, unknown> {
   return isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
 }
@@ -293,7 +306,7 @@ export default function ReviewEntities() {
     const value = getFieldValue(candidate, fieldPath);
     const mandate = getMandateSuggestion(candidate, fieldPath);
     const isCoverage = isCoverageField(fieldPath);
-    const fieldLabel = fieldPath.split(".").pop() ?? fieldPath;
+    const fieldLabel = formatFieldLabel(fieldPath);
 
     const setAction = (next: ReviewAction) => {
       setDrafts((prev) => ({
@@ -326,8 +339,8 @@ export default function ReviewEntities() {
 
     return (
       <View style={{ marginBottom: 12 }}>
-        <Caption>{fieldLabel}</Caption>
-        <Body>{displayValue}</Body>
+        <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
+        <Body style={styles.fieldValue}>{displayValue}</Body>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           {REVIEW_ACTIONS.map((a) => (
             <SecondaryButton
@@ -519,6 +532,20 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 16,
     minWidth: 160,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "capitalize",
+    letterSpacing: 0.5,
+    color: colors.ink,
+    marginBottom: 2,
+  },
+  fieldValue: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: colors.ink,
+    marginBottom: 6,
   },
   fieldAction: {
     borderRadius: 999,
