@@ -3,6 +3,10 @@ create extension if not exists pgtap with schema extensions;
 
 select plan(16);
 
+-- Set a minimal JWT claim so policy_document triggers populate uploaded_by without
+-- triggering the server-digest guard (which fires only when auth.role() is not null).
+set local request.jwt.claims to '{"sub":"70000000-0000-0000-0000-00000000a001"}';
+
 insert into auth.users (id, email, raw_user_meta_data)
 values (
   '70000000-0000-0000-0000-00000000a001',
