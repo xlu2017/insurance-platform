@@ -26,7 +26,6 @@ export default function RootLayout() {
           <View style={Platform.OS === "web" ? styles.webPhoneFrame : styles.nativeFrame}>
             <Stack
               screenOptions={{
-                headerShown: false,
                 header: StackHeader,
                 headerStyle: { backgroundColor: colors.surface },
                 headerTintColor: colors.ink,

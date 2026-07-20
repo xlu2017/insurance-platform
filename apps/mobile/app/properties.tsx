@@ -124,7 +124,6 @@ export default function Properties() {
   return (
     <AssetListScreen<PropertyListItem>
       title="Properties"
-      backRoute="/coverage"
       searchPlaceholder="Search properties"
       emptyTitle="No properties yet"
       emptyBody="Upload an insurance document to add your properties."

@@ -12,7 +12,6 @@ import {
   Screen,
   StatusPill,
   Subtitle,
-  Title,
 } from "@/components/ui";
 
 const customerStages: { states: string[]; label: string }[] = [
@@ -66,7 +65,6 @@ export default function Autopilot() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Title>Autopilot</Title>
           <Body muted style={{ marginBottom: 16 }}>
             {activeCase
               ? "We are working through your current review. We will notify you when a recommendation is ready."

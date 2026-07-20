@@ -81,6 +81,7 @@ export function PageHeader({
   onBack?: () => void;
   right?: React.ReactNode;
 }) {
+  const showBack = Boolean(onBack ?? backRoute);
   return (
     <View
       style={{
@@ -95,42 +96,92 @@ export function PageHeader({
         borderBottomColor: colors.border,
       }}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={() => {
-          if (onBack) {
-            onBack();
-          } else if (backRoute) {
-            router.navigate(backRoute);
-          } else {
-            router.back();
-          }
-        }}
-        style={{
-          position: "absolute",
-          left: spacing.lg,
-          padding: spacing.sm,
-          minWidth: 44,
-          minHeight: 44,
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <CaretLeftIcon color={colors.ink} size={28} />
-      </Pressable>
+      {showBack ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => {
+            if (onBack) {
+              onBack();
+            } else if (backRoute) {
+              router.navigate(backRoute);
+            } else {
+              router.back();
+            }
+          }}
+          style={{
+            position: "absolute",
+            left: spacing.lg,
+            padding: spacing.sm,
+            minWidth: 44,
+            minHeight: 44,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <CaretLeftIcon color={colors.ink} size={28} />
+        </Pressable>
+      ) : null}
       <Title style={{ marginBottom: 0 }}>{title}</Title>
       {right ? <View style={{ position: "absolute", right: spacing.lg }}>{right}</View> : null}
     </View>
   );
 }
 
-export function StackHeader({ options, navigation }: NativeStackHeaderProps) {
+function titleForRoute(routeName: string): string {
+  const titles: Record<string, string> = {
+    home: "Home",
+    coverage: "Coverage",
+    autopilot: "Autopilot",
+    documents: "Documents",
+    profile: "Profile",
+    vehicles: "Vehicles",
+    properties: "Properties",
+    "vehicle/[id]": "Vehicle coverage",
+    "property/[id]": "Property coverage",
+    "compare-coverage": "Compare coverage",
+    "coverage-defaults": "Coverage defaults",
+    "switching-conditions": "Switching conditions",
+    "edit-mandate": "Edit mandate",
+    recommendation: "Recommendation",
+    "confirm-details": "Confirm details",
+    welcome: "Welcome",
+    register: "Register",
+    "sign-in": "Sign in",
+    "(tabs)": "Insurance Autopilot",
+  };
+  if (titles[routeName]) {
+    return titles[routeName];
+  }
+  return (
+    routeName
+      .split("/")
+      .pop()
+      ?.replace(/[-_]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase()) ?? ""
+  );
+}
+
+const PRIMARY_TAB_ROUTES = new Set([
+  "home",
+  "(tabs)/home",
+  "coverage",
+  "(tabs)/coverage",
+  "autopilot",
+  "(tabs)/autopilot",
+  "documents",
+  "(tabs)/documents",
+  "profile",
+  "(tabs)/profile",
+]);
+
+export function StackHeader({ options, navigation, route }: NativeStackHeaderProps) {
   const canGoBack = Boolean(navigation.canGoBack?.());
+  const isPrimaryTab = PRIMARY_TAB_ROUTES.has(route.name);
   return (
     <PageHeader
-      title={options.title ?? ""}
-      onBack={canGoBack ? () => navigation.goBack() : undefined}
+      title={options.title ?? titleForRoute(route.name)}
+      onBack={!isPrimaryTab && canGoBack ? () => navigation.goBack() : undefined}
     />
   );
 }

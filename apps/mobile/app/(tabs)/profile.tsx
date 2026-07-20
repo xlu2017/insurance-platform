@@ -20,7 +20,6 @@ import {
   SecondaryButton,
   StatusPill,
   Subtitle,
-  Title,
 } from "@/components/ui";
 import { loadDangerousModeSetting, updateDangerousModeSetting } from "@/lib/document-processing";
 
@@ -239,7 +238,6 @@ export default function Profile() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Title>Profile</Title>
           <Body muted style={{ marginBottom: spacing.md }}>
             Manage your account, preferences, and permissions.
           </Body>

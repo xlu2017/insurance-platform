@@ -1,10 +1,10 @@
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AssetEditModal } from "@/components/asset-edit-modal";
-import { Body, Card, Loading, PageHeader, Row, Screen, Title } from "@/components/ui";
+import { Body, Card, Loading, Row, Screen, Title } from "@/components/ui";
 import { PropertyMandateRows } from "@/components/coverage-rules";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
@@ -77,10 +77,7 @@ export default function PropertyDetail() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
-      <Stack.Screen options={{ headerShown: false }} />
       <Screen style={{ flex: 1, padding: 0 }}>
-        <PageHeader title="Property coverage" backRoute="/properties" />
-
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{

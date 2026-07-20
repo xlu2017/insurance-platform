@@ -1,16 +1,13 @@
-import { router, Stack } from "expo-router";
+import { router } from "expo-router";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { PageHeader, Screen, SettingsNavigationRow, Subtitle } from "@/components/ui";
+import { Screen, SettingsNavigationRow, Subtitle } from "@/components/ui";
 import { colors, spacing } from "@autopilot/design-tokens";
 
 export default function Coverage() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
-      <Stack.Screen options={{ headerShown: false }} />
       <Screen style={{ flex: 1, padding: 0 }}>
-        <PageHeader title="Coverage" backRoute="/home" />
-
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{

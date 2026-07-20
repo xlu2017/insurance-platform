@@ -1,4 +1,4 @@
-import { router, Stack } from "expo-router";
+import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Switch, View } from "react-native";
 import { CaretDownIcon, CaretRightIcon } from "phosphor-react-native";
@@ -13,7 +13,6 @@ import {
   Field,
   InfoTooltip,
   Loading,
-  PageHeader,
   PrimaryButton,
   Screen,
   Select,
@@ -773,8 +772,6 @@ export default function EditMandate() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <PageHeader title="Edit mandate" onBack={() => router.back()} />
       <Screen style={{ flex: 1, padding: 0 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}

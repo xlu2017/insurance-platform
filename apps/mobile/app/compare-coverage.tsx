@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -20,7 +19,7 @@ import {
   SlidersHorizontalIcon,
   XIcon,
 } from "phosphor-react-native";
-import { Body, Loading, PageHeader, Title } from "@/components/ui";
+import { Body, Loading, Title } from "@/components/ui";
 import {
   autoCoverageSpecs,
   coverageSpecsByType,
@@ -926,8 +925,6 @@ export default function CompareCoverage() {
   if (!allAssets || allAssets.length === 0) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <PageHeader title="Compare coverage" backRoute="/coverage" />
         <View
           style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: spacing.lg }}
         >
@@ -950,10 +947,7 @@ export default function CompareCoverage() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
-      <Stack.Screen options={{ headerShown: false }} />
       <View style={{ flex: 1 }}>
-        <PageHeader title="Compare coverage" backRoute="/coverage" />
-
         {/* Table header */}
         <View style={{ flexDirection: "row", height: TABLE_HEADER_HEIGHT }}>
           <SpecColumnHeader onConfig={() => setConfigOpen(true)} />

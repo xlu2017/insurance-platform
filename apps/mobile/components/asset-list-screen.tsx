@@ -1,16 +1,7 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, TextInput, View } from "react-native";
-import { Stack } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  Body,
-  PageHeader,
-  PrimaryButton,
-  Screen,
-  SecondaryButton,
-  Subtitle,
-  Title,
-} from "@/components/ui";
+import { Body, PrimaryButton, Screen, SecondaryButton, Subtitle, Title } from "@/components/ui";
 import { AssetNavigationRow } from "@/components/asset-navigation-row";
 import { matchesSearch } from "@/lib/search";
 import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
@@ -24,7 +15,6 @@ export interface AssetListItem {
 
 export interface AssetListScreenProps<T extends AssetListItem> {
   title: string;
-  backRoute?: string;
   searchPlaceholder: string;
   emptyTitle: string;
   emptyBody: string;
@@ -57,7 +47,6 @@ function SkeletonRow() {
 
 export function AssetListScreen<T extends AssetListItem>({
   title,
-  backRoute,
   searchPlaceholder,
   emptyTitle,
   emptyBody,
@@ -128,10 +117,7 @@ export function AssetListScreen<T extends AssetListItem>({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
-      <Stack.Screen options={{ headerShown: false }} />
       <Screen style={{ flex: 1, padding: 0 }}>
-        <PageHeader title={title} backRoute={backRoute} />
-
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{

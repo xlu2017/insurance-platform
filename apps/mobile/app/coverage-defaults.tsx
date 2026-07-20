@@ -1,8 +1,8 @@
-import { router, Stack } from "expo-router";
+import { router } from "expo-router";
 import { ScrollView } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Body, Card, Loading, PageHeader, Screen } from "@/components/ui";
+import { Body, Card, Loading, Screen } from "@/components/ui";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
 import { AutoMandateRows, PropertyMandateRows } from "@/components/coverage-rules";
@@ -24,10 +24,7 @@ export default function CoverageDefaults() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
-      <Stack.Screen options={{ headerShown: false }} />
       <Screen style={{ flex: 1, padding: 0 }}>
-        <PageHeader title="Coverage defaults" backRoute="/coverage" />
-
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
