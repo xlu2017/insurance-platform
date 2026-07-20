@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Screen, Title, Body, Caption, PrimaryButton } from "@/components/ui";
+import { Screen, Title, Body } from "@/components/ui";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { AddressVerification } from "./review-entities";
 import type { ExtractionCandidate } from "@/lib/extraction";
@@ -25,8 +24,6 @@ const PREVIEW_CANDIDATE: ExtractionCandidate = {
 };
 
 export default function AddressPreviewScreen() {
-  const [verifiedAddress, setVerifiedAddress] = useState<string | null>(null);
-
   return (
     <Screen style={styles.container}>
       <Title>Address verification preview</Title>
@@ -34,19 +31,8 @@ export default function AddressPreviewScreen() {
         Type below to test the multi-source address suggestions dropdown.
       </Body>
       <View style={styles.card}>
-        <AddressVerification candidate={PREVIEW_CANDIDATE} onVerified={setVerifiedAddress} />
+        <AddressVerification candidate={PREVIEW_CANDIDATE} onVerified={() => {}} />
       </View>
-      {verifiedAddress ? (
-        <View style={styles.result}>
-          <Caption style={{ color: colors.inkMuted }}>Verified / selected address</Caption>
-          <Body>{verifiedAddress}</Body>
-          <PrimaryButton
-            label="Clear"
-            onPress={() => setVerifiedAddress(null)}
-            style={{ marginTop: spacing.md }}
-          />
-        </View>
-      ) : null}
     </Screen>
   );
 }
@@ -62,11 +48,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: spacing.md,
     backgroundColor: colors.surface,
-  },
-  result: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceSubtle,
   },
 });

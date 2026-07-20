@@ -73,13 +73,12 @@ export function AddressVerification({
   const identity = isRecord(identityValue) ? identityValue : {};
   const original = String(identity.fullAddress ?? "");
   const [query, setQuery] = useState(draft?.correctedValue || original);
-  const [status, setStatus] = useState<"idle" | "loading" | "found" | "not_found">(
+  const [status, setStatus] = useState<"idle" | "found">(
     draft?.action === "correct" ? "found" : "idle",
   );
   const [result, setResult] = useState<string | null>(draft?.correctedValue ?? null);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [touched, setTouched] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const searchSuggestions = async (q: string) => {
     const trimmed = q.trim();
@@ -113,30 +112,6 @@ export function AddressVerification({
     onVerified(suggestion.displayName);
   };
 
-  const verify = async () => {
-    setStatus("loading");
-    setError(null);
-    setSuggestions([]);
-    try {
-      const { data, error: invokeError } = await supabase.functions.invoke("verify-address", {
-        body: { q: query },
-      });
-      if (invokeError) throw new Error(invokeError.message);
-      const response = data as { found?: boolean; result?: { displayName?: string } | null };
-      if (response?.found && response.result?.displayName) {
-        setResult(response.result.displayName);
-        setStatus("found");
-        onVerified(response.result.displayName);
-        return;
-      }
-      setStatus("not_found");
-      setResult(null);
-    } catch (e) {
-      setStatus("not_found");
-      setError(e instanceof Error ? e.message : "Address lookup failed");
-    }
-  };
-
   const saveManual = () => {
     if (!query.trim()) return;
     setSuggestions([]);
@@ -151,7 +126,7 @@ export function AddressVerification({
         <View style={{ gap: 8 }}>
           <Body>{result}</Body>
           <Caption style={{ color: "#16A34A" }}>Address verified</Caption>
-          <SecondaryButton label="Re-verify" onPress={() => setStatus("idle")} />
+          <SecondaryButton label="Edit" onPress={() => setStatus("idle")} />
         </View>
       ) : (
         <View style={{ gap: 8 }}>
@@ -193,24 +168,12 @@ export function AddressVerification({
           ) : null}
           <View style={{ flexDirection: "row", gap: 8 }}>
             <SecondaryButton
-              label="Verify"
-              onPress={verify}
-              disabled={status === "loading"}
-              style={{ flex: 1 }}
-            />
-            <SecondaryButton
               label="Save"
               onPress={saveManual}
               disabled={!query.trim()}
               style={{ flex: 1 }}
             />
           </View>
-          {status === "not_found" ? (
-            <Caption style={{ color: "#B45309" }}>
-              We could not verify that address. Please enter the full street address and save.
-            </Caption>
-          ) : null}
-          {error ? <Caption style={{ color: "#B45309" }}>{error}</Caption> : null}
         </View>
       )}
     </View>
