@@ -29,11 +29,15 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.inkMuted,
-        tabBarLabelStyle: { fontSize: typography.sizes.caption, fontWeight: "500" },
+        tabBarLabelStyle: { fontSize: typography.sizes.caption, fontWeight: "500", marginTop: 2 },
+        tabBarIconStyle: { marginBottom: 4 },
+        tabBarItemStyle: { paddingVertical: 8 },
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopWidth: 1,
           borderTopColor: colors.border,
+          height: 72,
+          paddingBottom: 4,
         },
       }}
     >
