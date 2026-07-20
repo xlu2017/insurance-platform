@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { router, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -16,12 +16,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ArrowsHorizontalIcon,
   CaretDownIcon,
-  CaretLeftIcon,
   CheckIcon,
   SlidersHorizontalIcon,
   XIcon,
 } from "phosphor-react-native";
-import { Body, Loading, Title } from "@/components/ui";
+import { Body, Loading, PageHeader, Title } from "@/components/ui";
 import {
   autoCoverageSpecs,
   coverageSpecsByType,
@@ -42,7 +41,6 @@ const MIN_COL_WIDTH = 30;
 const MAX_COL_WIDTH_RATIO = 0.45;
 const ROW_HEIGHT = 44;
 const TABLE_HEADER_HEIGHT = 44;
-const APP_BAR_HEIGHT = 56;
 const HANDLE_SIZE = 32;
 const clipTextStyle = { textOverflow: "clip" } as unknown as TextStyle;
 
@@ -929,26 +927,7 @@ export default function CompareCoverage() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.md,
-            minHeight: APP_BAR_HEIGHT,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={() => router.navigate("/coverage")}
-            style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
-          >
-            <CaretLeftIcon color={colors.ink} size={28} />
-          </Pressable>
-          <Title style={{ marginBottom: 0 }}>Compare coverage</Title>
-        </View>
+        <PageHeader title="Compare coverage" backRoute="/coverage" />
         <View
           style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: spacing.lg }}
         >
@@ -973,29 +952,7 @@ export default function CompareCoverage() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={{ flex: 1 }}>
-        {/* App bar */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.md,
-            minHeight: APP_BAR_HEIGHT,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={() => router.navigate("/coverage")}
-            style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
-          >
-            <CaretLeftIcon color={colors.ink} size={28} />
-          </Pressable>
-          <Title style={{ marginBottom: 0 }}>Compare coverage</Title>
-        </View>
+        <PageHeader title="Compare coverage" backRoute="/coverage" />
 
         {/* Table header */}
         <View style={{ flexDirection: "row", height: TABLE_HEADER_HEIGHT }}>

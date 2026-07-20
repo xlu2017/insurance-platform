@@ -1,9 +1,16 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, TextInput, View } from "react-native";
-import { CaretLeftIcon } from "phosphor-react-native";
-import { router, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Body, PrimaryButton, Screen, SecondaryButton, Subtitle, Title } from "@/components/ui";
+import {
+  Body,
+  PageHeader,
+  PrimaryButton,
+  Screen,
+  SecondaryButton,
+  Subtitle,
+  Title,
+} from "@/components/ui";
 import { AssetNavigationRow } from "@/components/asset-navigation-row";
 import { matchesSearch } from "@/lib/search";
 import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
@@ -119,40 +126,11 @@ export function AssetListScreen<T extends AssetListItem>({
     }
   };
 
-  const headerTitle = title;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen style={{ flex: 1, padding: 0 }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.md,
-            minHeight: 56,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={() => (backRoute ? router.navigate(backRoute) : router.back())}
-            style={{
-              position: "absolute",
-              left: spacing.lg,
-              padding: spacing.sm,
-              minWidth: 44,
-              minHeight: 44,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <CaretLeftIcon color={colors.ink} size={28} />
-          </Pressable>
-          <Title style={{ marginBottom: 0 }}>{headerTitle}</Title>
-        </View>
+        <PageHeader title={title} backRoute={backRoute} />
 
         <ScrollView
           showsVerticalScrollIndicator={false}

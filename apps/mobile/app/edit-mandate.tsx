@@ -13,12 +13,14 @@ import {
   Field,
   InfoTooltip,
   Loading,
+  PageHeader,
   PrimaryButton,
   Screen,
   Select,
   Subtitle,
   Title,
 } from "@/components/ui";
+import { spacing } from "@autopilot/design-tokens";
 import {
   autoCoverageFormOptions,
   autoEndorsementLabels,
@@ -771,11 +773,13 @@ export default function EditMandate() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
-      <Stack.Screen
-        options={{ headerShown: true, headerBackTitle: "Back", title: "Edit mandate" }}
-      />
-      <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <PageHeader title="Edit mandate" onBack={() => router.back()} />
+      <Screen style={{ flex: 1, padding: 0 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl }}
+        >
           <Title>Coverage mandate</Title>
           <Body muted>
             Edit your household defaults, then customize per-vehicle and per-property rules below.

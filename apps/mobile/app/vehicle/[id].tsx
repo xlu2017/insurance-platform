@@ -1,11 +1,10 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
-import { CaretLeftIcon } from "phosphor-react-native";
+import { Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AssetEditModal } from "@/components/asset-edit-modal";
-import { Body, Card, Loading, Row, Screen, Title } from "@/components/ui";
+import { Body, Card, Loading, PageHeader, Row, Screen, Title } from "@/components/ui";
 import { AutoMandateRows } from "@/components/coverage-rules";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
@@ -88,26 +87,7 @@ export default function VehicleDetail() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen style={{ flex: 1, padding: 0 }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.md,
-            minHeight: 56,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={() => router.navigate("/vehicles")}
-            style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
-          >
-            <CaretLeftIcon color={colors.ink} size={28} />
-          </Pressable>
-          <Title style={{ marginBottom: 0 }}>Vehicle coverage</Title>
-        </View>
+        <PageHeader title="Vehicle coverage" backRoute="/vehicles" />
 
         <ScrollView
           showsVerticalScrollIndicator={false}

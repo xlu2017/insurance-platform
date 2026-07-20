@@ -1,8 +1,7 @@
 import { router, Stack } from "expo-router";
-import { Pressable, ScrollView, View } from "react-native";
-import { CaretLeftIcon } from "phosphor-react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Screen, SettingsNavigationRow, Subtitle, Title } from "@/components/ui";
+import { PageHeader, Screen, SettingsNavigationRow, Subtitle } from "@/components/ui";
 import { colors, spacing } from "@autopilot/design-tokens";
 
 export default function Coverage() {
@@ -10,26 +9,7 @@ export default function Coverage() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen style={{ flex: 1, padding: 0 }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.md,
-            minHeight: 56,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={() => router.navigate("/home")}
-            style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
-          >
-            <CaretLeftIcon color={colors.ink} size={28} />
-          </Pressable>
-          <Title style={{ marginBottom: 0 }}>Coverage</Title>
-        </View>
+        <PageHeader title="Coverage" backRoute="/home" />
 
         <ScrollView
           showsVerticalScrollIndicator={false}

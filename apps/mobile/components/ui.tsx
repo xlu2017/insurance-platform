@@ -10,7 +10,9 @@ import {
   View,
   type ViewProps,
 } from "react-native";
-import { CaretDownIcon, CaretRightIcon } from "phosphor-react-native";
+import { router } from "expo-router";
+import type { NativeStackHeaderProps } from "@react-navigation/native-stack";
+import { CaretDownIcon, CaretLeftIcon, CaretRightIcon } from "phosphor-react-native";
 import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
 
 export function Screen({ children, style, ...props }: ViewProps) {
@@ -66,6 +68,71 @@ export function Title({
   style?: React.ComponentProps<typeof Text>["style"];
 }) {
   return <Text style={[styles.title, style]}>{children}</Text>;
+}
+
+export function PageHeader({
+  title,
+  backRoute,
+  onBack,
+  right,
+}: {
+  title: string;
+  backRoute?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+        minHeight: 56,
+        backgroundColor: colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={() => {
+          if (onBack) {
+            onBack();
+          } else if (backRoute) {
+            router.navigate(backRoute);
+          } else {
+            router.back();
+          }
+        }}
+        style={{
+          position: "absolute",
+          left: spacing.lg,
+          padding: spacing.sm,
+          minWidth: 44,
+          minHeight: 44,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <CaretLeftIcon color={colors.ink} size={28} />
+      </Pressable>
+      <Title style={{ marginBottom: 0 }}>{title}</Title>
+      {right ? <View style={{ position: "absolute", right: spacing.lg }}>{right}</View> : null}
+    </View>
+  );
+}
+
+export function StackHeader({ options, navigation }: NativeStackHeaderProps) {
+  const canGoBack = Boolean(navigation.canGoBack?.());
+  return (
+    <PageHeader
+      title={options.title ?? ""}
+      onBack={canGoBack ? () => navigation.goBack() : undefined}
+    />
+  );
 }
 
 export function Subtitle({
