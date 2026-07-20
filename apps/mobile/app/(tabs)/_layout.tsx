@@ -1,4 +1,5 @@
 import { Tabs } from "expo-router";
+import { View } from "react-native";
 import {
   FileTextIcon,
   HouseIcon,
@@ -6,7 +7,7 @@ import {
   ShieldCheckIcon,
   UserIcon,
 } from "phosphor-react-native";
-import { colors, typography } from "@autopilot/design-tokens";
+import { colors } from "@autopilot/design-tokens";
 
 function TabIcon({
   icon: Icon,
@@ -19,7 +20,22 @@ function TabIcon({
   color: string;
   size?: number;
 }) {
-  return <Icon color={color} size={size} weight={focused ? "fill" : "regular"} />;
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center", padding: 8 }}>
+      <Icon color={color} size={size} weight={focused ? "fill" : "regular"} />
+      {focused ? (
+        <View
+          style={{
+            width: 4,
+            height: 4,
+            borderRadius: 2,
+            backgroundColor: color,
+            marginTop: 4,
+          }}
+        />
+      ) : null}
+    </View>
+  );
 }
 
 export default function TabsLayout() {
@@ -27,17 +43,14 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.inkMuted,
-        tabBarLabelStyle: { fontSize: typography.sizes.caption, fontWeight: "500", marginTop: 2 },
-        tabBarIconStyle: { marginBottom: 4 },
-        tabBarItemStyle: { paddingVertical: 8 },
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 72,
-          paddingBottom: 4,
+          height: 64,
         },
       }}
     >
