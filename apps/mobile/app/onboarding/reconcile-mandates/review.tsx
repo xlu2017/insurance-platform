@@ -74,6 +74,7 @@ export default function MandateReconciliationReview() {
     (item) => item.material_conflict && (!item.is_complete || item.action === "unresolved"),
   );
   const incomplete = items.filter((item) => !item.is_complete);
+  const hasReviewItems = items.length > 0;
 
   if (householdLoading || itemsLoading || candidatesLoading || !mandate) return <Loading />;
   if (!household) {
@@ -153,8 +154,9 @@ export default function MandateReconciliationReview() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <Title>Review mandate changes</Title>
         <Body muted>
-          Document values remain evidenced suggestions. Only the proposed current values below will
-          be persisted.
+          {hasReviewItems
+            ? "Document values remain evidenced suggestions. Only the proposed current values below will be persisted."
+            : "No mandate changes, corrections, or conflicts were found for the reviewed assets. Nothing needs to be persisted."}
         </Body>
 
         <Subtitle>Changed current mandates</Subtitle>
@@ -204,25 +206,27 @@ export default function MandateReconciliationReview() {
           ))
         )}
 
-        <View style={{ marginTop: 12 }}>
-          <SecondaryButton
-            label={`${showUnchanged ? "Hide" : "Show"} unchanged reviewed specifications (${unchanged.length})`}
-            onPress={() => setShowUnchanged((value) => !value)}
-          />
-          {showUnchanged
-            ? unchanged.map((item) => (
-                <Card key={item.id}>
-                  <Body>{item.specification_title ?? item.field_path}</Body>
-                  <Body muted>{item.asset_candidate?.display_label ?? "Affected asset"}</Body>
-                  <Body>{formatMandateValue(item.current_mandate_value)}</Body>
-                </Card>
-              ))
-            : null}
-        </View>
+        {unchanged.length > 0 ? (
+          <View style={{ marginTop: 12 }}>
+            <SecondaryButton
+              label={`${showUnchanged ? "Hide" : "Show"} unchanged reviewed specifications (${unchanged.length})`}
+              onPress={() => setShowUnchanged((value) => !value)}
+            />
+            {showUnchanged
+              ? unchanged.map((item) => (
+                  <Card key={item.id}>
+                    <Body>{item.specification_title ?? item.field_path}</Body>
+                    <Body muted>{item.asset_candidate?.display_label ?? "Affected asset"}</Body>
+                    <Body>{formatMandateValue(item.current_mandate_value)}</Body>
+                  </Card>
+                ))
+              : null}
+          </View>
+        ) : null}
 
         {error ? <Body style={{ color: "#B91C1C" }}>{error}</Body> : null}
         <PrimaryButton
-          label="Save mandate and continue"
+          label={hasReviewItems ? "Save mandate and continue" : "Continue to preferences"}
           onPress={save}
           loading={busy}
           disabled={busy || incomplete.length > 0 || unresolved.length > 0}
