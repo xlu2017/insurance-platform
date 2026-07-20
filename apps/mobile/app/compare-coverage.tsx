@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import type { TextStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ArrowsHorizontalIcon,
@@ -42,6 +43,7 @@ const ROW_HEIGHT = 44;
 const TABLE_HEADER_HEIGHT = 44;
 const APP_BAR_HEIGHT = 56;
 const HANDLE_SIZE = 32;
+const clipTextStyle = { textOverflow: "clip" } as unknown as TextStyle;
 
 type PickerMode = "add" | "replace";
 
@@ -220,7 +222,7 @@ function AssetColumnHeader({
                 <Body
                   numberOfLines={1}
                   ellipsizeMode="clip"
-                  style={{ fontWeight: "600", textAlign: "center", width: "100%" }}
+                  style={[{ fontWeight: "600", textAlign: "center", width: "100%" }, clipTextStyle]}
                 >
                   {asset.displayName}
                 </Body>
@@ -284,7 +286,7 @@ function AssetColumnBody({
           <Body
             numberOfLines={1}
             ellipsizeMode="clip"
-            style={{ width: "100%", textAlign: "center" }}
+            style={[{ width: "100%", textAlign: "center" }, clipTextStyle]}
           >
             {asset ? canonicalValue(asset, spec) : "—"}
           </Body>
@@ -364,7 +366,7 @@ function SpecColumnBody({
             borderBottomColor: colors.border,
           }}
         >
-          <Body numberOfLines={1} ellipsizeMode="clip" style={{ width: "100%" }}>
+          <Body numberOfLines={1} ellipsizeMode="clip" style={[{ width: "100%" }, clipTextStyle]}>
             {spec.label}
           </Body>
         </Pressable>
@@ -404,7 +406,9 @@ function SpecExpandOverlay({
         boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
       }}
     >
-      <Body numberOfLines={1}>{specs[expandedIndex].label}</Body>
+      <Body numberOfLines={1} style={clipTextStyle}>
+        {specs[expandedIndex].label}
+      </Body>
     </Pressable>
   );
 }
