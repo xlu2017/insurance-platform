@@ -55,13 +55,13 @@ const STEPS: PreferenceStep[] = [
     key: "coverage",
     question: "Never reduce important coverage",
     description: "We will not recommend coverage reductions as a way to save money.",
-    type: "info",
+    type: "toggle",
   },
   {
     key: "approval",
     question: "Always ask me before starting a switch",
     description: "We never start a switch without your approval.",
-    type: "info",
+    type: "toggle",
   },
 ];
 
@@ -72,6 +72,8 @@ export default function Preferences() {
   const [optimizeTogether, setOptimizeTogether] = useState(true);
   const [splitAllowed, setSplitAllowed] = useState(true);
   const [deductibleIncreases, setDeductibleIncreases] = useState(false);
+  const [coverage, setCoverage] = useState(true);
+  const [approval, setApproval] = useState(true);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,6 +93,8 @@ export default function Preferences() {
         setOptimizeTogether(data.household_optimization_enabled ?? true);
         setSplitAllowed(data.split_insurers_allowed ?? true);
         setDeductibleIncreases(data.deductible_increases_allowed ?? false);
+        setCoverage(!(data.material_coverage_reductions_allowed ?? false));
+        setApproval(data.customer_approval_required ?? true);
       });
   }, [household]);
 
@@ -123,9 +127,9 @@ export default function Preferences() {
       split_insurers_allowed: splitAllowed,
       excluded_insurer_ids: [] as string[],
       deductible_increases_allowed: deductibleIncreases,
-      customer_approval_required: true,
-      material_coverage_reductions_allowed: false,
-      switch_only_after_customer_approval: true,
+      customer_approval_required: approval,
+      material_coverage_reductions_allowed: !coverage,
+      switch_only_after_customer_approval: approval,
       updated_by: profileId,
     };
 
@@ -183,6 +187,12 @@ export default function Preferences() {
         break;
       case "deductibleIncreases":
         setDeductibleIncreases(value as boolean);
+        break;
+      case "coverage":
+        setCoverage(value as boolean);
+        break;
+      case "approval":
+        setApproval(value as boolean);
         break;
     }
   };
