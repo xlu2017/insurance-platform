@@ -6,7 +6,7 @@ import {
   ShieldCheckIcon,
   UserIcon,
 } from "phosphor-react-native";
-import { colors } from "@autopilot/design-tokens";
+import { colors, typography } from "@autopilot/design-tokens";
 
 function TabIcon({
   icon: Icon,
@@ -29,7 +29,12 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.inkMuted,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+        tabBarLabelStyle: { fontSize: typography.sizes.caption, fontWeight: "500" },
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+        },
       }}
     >
       <Tabs.Screen
