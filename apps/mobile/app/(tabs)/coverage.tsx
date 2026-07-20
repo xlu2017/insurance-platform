@@ -23,6 +23,7 @@ import {
   PrimaryButton,
   Row,
   Screen,
+  SecondaryButton,
   Subtitle,
   Title,
 } from "@/components/ui";
@@ -52,6 +53,7 @@ import {
 import type {
   AutoMandateV2,
   FinancingStatus,
+  HouseholdCoverageMandateV2,
   MonetaryRule,
   PropertyMandateV2,
   PropertyType,
@@ -110,7 +112,13 @@ function currentPolicyValue(value: unknown): string {
   return String(value);
 }
 
-function CurrentCoverageCard({ candidate }: { candidate: ExtractionCandidate }) {
+function CurrentCoverageCard({
+  candidate,
+  showHeader = true,
+}: {
+  candidate: ExtractionCandidate;
+  showHeader?: boolean;
+}) {
   const facts = isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
   const identity = isRecord(facts.identity) ? facts.identity : {};
   const currentPolicy = isRecord(facts.currentPolicy) ? facts.currentPolicy : {};
@@ -127,33 +135,35 @@ function CurrentCoverageCard({ candidate }: { candidate: ExtractionCandidate }) 
 
   return (
     <Card>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: spacing.sm,
-        }}
-      >
+      {showHeader ? (
         <View
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            backgroundColor: colors.accentSoft,
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
-            marginRight: spacing.sm,
+            marginBottom: spacing.sm,
           }}
         >
-          <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
-            {isVehicle ? "AUTO" : "HOME"}
-          </Body>
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: colors.accentSoft,
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: spacing.sm,
+            }}
+          >
+            <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
+              {isVehicle ? "AUTO" : "HOME"}
+            </Body>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>{candidate.display_label}</Subtitle>
+            {useLabel ? <Caption numberOfLines={1}>{useLabel}</Caption> : null}
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>{candidate.display_label}</Subtitle>
-          {useLabel ? <Caption numberOfLines={1}>{useLabel}</Caption> : null}
-        </View>
-      </View>
+      ) : null}
 
       <Subtitle style={{ fontSize: 14, marginBottom: spacing.sm }}>Current policy</Subtitle>
       {currentPolicy.insurer !== undefined && currentPolicy.insurer !== null ? (
@@ -191,31 +201,167 @@ function CurrentCoverageCard({ candidate }: { candidate: ExtractionCandidate }) 
   );
 }
 
-function AutoSummary({ auto }: { auto: AutoMandateV2 }) {
+function VehicleDetailsCard({
+  vehicle,
+  candidate,
+}: {
+  vehicle: {
+    id: string;
+    year: number;
+    make: string;
+    model: string;
+    financing_status: string | null;
+    vehicle_use_class: string | null;
+    is_classic: boolean;
+    is_modified: boolean;
+  };
+  candidate?: ExtractionCandidate | null;
+}) {
+  const facts =
+    candidate && isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
+  const identity = isRecord(facts.identity) ? facts.identity : {};
+  const use = identity.vehicleUse
+    ? (VEHICLE_USE_LABELS[String(identity.vehicleUse).toLowerCase()] ?? String(identity.vehicleUse))
+    : labelForValue(vehicleUseClassOptions, vehicle.vehicle_use_class as VehicleUseClass);
+  const financing = labelForValue(
+    financingStatusOptions,
+    vehicle.financing_status as FinancingStatus,
+  );
+  const tags = [
+    financing,
+    use,
+    vehicle.is_classic ? "Classic" : null,
+    vehicle.is_modified ? "Modified" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const vin = identity.vin ? String(identity.vin) : null;
+
   return (
-    <>
-      <Row label="Liability" value={displayMonetaryRule(auto.liability)} />
-      <Row label="Collision deductible" value={displayDeductibleRule(auto.collisionDeductible)} />
-      <Row
-        label="Comprehensive deductible"
-        value={displayDeductibleRule(auto.comprehensiveDeductible)}
-      />
-      <Row label="Telematics" value={displayPreference(auto.endorsements.telematics)} />
-    </>
+    <Card>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: spacing.sm }}>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: colors.accentSoft,
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: spacing.sm,
+          }}
+        >
+          <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>AUTO</Body>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>
+            {vehicle.year} {vehicle.make} {vehicle.model}
+          </Subtitle>
+          {tags ? <Caption numberOfLines={1}>{tags}</Caption> : null}
+        </View>
+      </View>
+      {vin ? <Row label="VIN" value={vin} /> : null}
+    </Card>
   );
 }
 
-function PropertySummary({ property }: { property: PropertyMandateV2 }) {
+function PropertyDetailsCard({
+  property,
+  candidate,
+}: {
+  property: {
+    id: string;
+    address_line1: string | null;
+    city: string | null;
+    property_type: string | null;
+  };
+  candidate?: ExtractionCandidate | null;
+}) {
+  const facts =
+    candidate && isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
+  const identity = isRecord(facts.identity) ? facts.identity : {};
+  const occupancy = identity.occupancy
+    ? (OCCUPANCY_LABELS[String(identity.occupancy).toLowerCase()] ?? String(identity.occupancy))
+    : null;
+  const type = labelForValue(propertyTypeOptions, property.property_type as PropertyType);
+  const tags = [type, occupancy].filter(Boolean).join(" · ");
+
   return (
-    <>
-      <Row
-        label="Replacement-cost coverage"
-        value={labelForValue(propertySettlementOptions, property.settlementBasis.value)}
-      />
-      <Row label="Base deductible" value={displayDeductibleRule(property.baseDeductible)} />
-      <Row label="Sewer backup" value={displayPreference(property.sewerBackup.preference)} />
-      <Row label="Overland water" value={displayPreference(property.overlandWater.preference)} />
-    </>
+    <Card>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: spacing.sm }}>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: colors.accentSoft,
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: spacing.sm,
+          }}
+        >
+          <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>HOME</Body>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>
+            {property.address_line1}, {property.city}
+          </Subtitle>
+          {tags ? <Caption numberOfLines={1}>{tags}</Caption> : null}
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+function AssetRulesCard({
+  type,
+  assetId,
+  mandate,
+}: {
+  type: "vehicle" | "property";
+  assetId: string;
+  mandate: HouseholdCoverageMandateV2 | null | undefined;
+}) {
+  if (!mandate) {
+    return (
+      <Card>
+        <Body muted>Loading rules…</Body>
+      </Card>
+    );
+  }
+  if (type === "vehicle") {
+    const effective = resolveEffectiveVehicleMandateV2(mandate, assetId);
+    const override = mandate.vehicleOverrides.find((o) => o.vehicleId === assetId);
+    return (
+      <Card>
+        {override ? (
+          <View style={{ marginBottom: spacing.sm }}>
+            <Body muted>Overrides apply to this vehicle</Body>
+          </View>
+        ) : null}
+        {effective ? (
+          <AutoMandateRows auto={effective} />
+        ) : (
+          <Body muted>No vehicle rules set.</Body>
+        )}
+      </Card>
+    );
+  }
+  const effective = resolveEffectivePropertyMandateV2(mandate, assetId);
+  const override = mandate.propertyOverrides.find((o) => o.propertyId === assetId);
+  return (
+    <Card>
+      {override ? (
+        <View style={{ marginBottom: spacing.sm }}>
+          <Body muted>Overrides apply to this property</Body>
+        </View>
+      ) : null}
+      {effective ? (
+        <PropertyMandateRows property={effective} />
+      ) : (
+        <Body muted>No property rules set.</Body>
+      )}
+    </Card>
   );
 }
 
@@ -411,7 +557,9 @@ export default function Coverage() {
           loadHouseholdMandateV2(supabase, household.id),
           supabase
             .from("asset_candidates")
-            .select("id, display_label, asset_type, selected_facts_json, review_status, decision")
+            .select(
+              "id, display_label, asset_type, selected_facts_json, review_status, decision, approved_asset_id, approved_asset_type",
+            )
             .eq("household_id", household.id)
             .in("review_status", ["approved", "confirmed"]),
         ]);
@@ -431,7 +579,8 @@ export default function Coverage() {
     },
   });
 
-  const [showDetails, setShowDetails] = useState(false);
+  const [showCurrentCoverage, setShowCurrentCoverage] = useState<Record<string, boolean>>({});
+  const [showAssetRules, setShowAssetRules] = useState<Record<string, boolean>>({});
 
   if (isLoadingHousehold || isLoadingCoverage) return <Loading />;
   if (!household) {
@@ -470,9 +619,9 @@ export default function Coverage() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Title>Your coverage rules</Title>
+          <Title>Your coverage</Title>
           <Body muted style={{ marginBottom: spacing.md }}>
-            These are the rules we use when comparing your insurance and finding better options.
+            Compare your current coverage, per-asset rules, and default coverage rules.
           </Body>
 
           <Card>
@@ -484,198 +633,163 @@ export default function Coverage() {
                 marginBottom: spacing.sm,
               }}
             >
-              <Subtitle style={{ marginBottom: 0 }}>Your household</Subtitle>
+              <Subtitle style={{ marginBottom: 0 }}>Your assets</Subtitle>
               <Caption>
                 {(data?.drivers ?? []).length} driver{(data?.drivers ?? []).length !== 1 ? "s" : ""}
+                {" · "}
+                {(data?.vehicles ?? []).length} car{(data?.vehicles ?? []).length !== 1 ? "s" : ""}
+                {" · "}
+                {(data?.properties ?? []).length} propert
+                {(data?.properties ?? []).length !== 1 ? "ies" : "y"}
               </Caption>
             </View>
-            <Row
-              label="Vehicles"
-              value={
-                (data?.vehicles ?? []).map((v) => `${v.year} ${v.make} ${v.model}`).join(", ") ||
-                "—"
-              }
-            />
-            <Row
-              label="Properties"
-              value={
-                (data?.properties ?? []).map((p) => `${p.address_line1}, ${p.city}`).join("; ") ||
-                "—"
-              }
-            />
-          </Card>
 
-          {(data?.assetCandidates ?? []).length > 0 ? (
-            <>
-              <Subtitle>Current coverage from your policies</Subtitle>
-              {(data?.assetCandidates ?? []).map((candidate) => (
-                <CurrentCoverageCard key={candidate.id} candidate={candidate} />
-              ))}
-            </>
-          ) : null}
-
-          <PrimaryButton
-            label={showDetails ? "Hide all coverage details" : "View all coverage details"}
-            onPress={() => setShowDetails((value) => !value)}
-            testID="toggle-coverage-details"
-            style={{ marginBottom: spacing.md }}
-          />
-
-          <Card>
-            <Subtitle>Rules for all vehicles</Subtitle>
-            {mandate ? (
-              showDetails ? (
-                <AutoMandateRows auto={mandate.householdAutoDefaults} />
-              ) : (
-                <AutoSummary auto={mandate.householdAutoDefaults} />
-              )
+            <Subtitle style={{ fontSize: 14, marginTop: spacing.md, marginBottom: spacing.sm }}>
+              Cars
+            </Subtitle>
+            {(data?.vehicles ?? []).length === 0 ? (
+              <Body muted>No vehicles on file.</Body>
             ) : (
-              <Body muted>Loading…</Body>
+              (data?.vehicles ?? []).map((vehicle, index) => {
+                const candidate = data?.assetCandidates.find(
+                  (c) => c.approved_asset_id === vehicle.id && c.approved_asset_type === "vehicle",
+                );
+                const currentOpen = !!showCurrentCoverage[vehicle.id];
+                const rulesOpen = !!showAssetRules[vehicle.id];
+                return (
+                  <View key={vehicle.id} style={{ marginBottom: spacing.lg }}>
+                    <Body style={{ fontWeight: "700", marginBottom: spacing.xs }}>
+                      {index + 1}. {vehicle.year} {vehicle.make} {vehicle.model}
+                    </Body>
+                    <VehicleDetailsCard vehicle={vehicle} candidate={candidate} />
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: spacing.sm }}>
+                      <SecondaryButton
+                        label={currentOpen ? "Hide current coverage" : "Current coverage"}
+                        onPress={() =>
+                          setShowCurrentCoverage((prev) => ({
+                            ...prev,
+                            [vehicle.id]: !prev[vehicle.id],
+                          }))
+                        }
+                        style={{ flex: 1, paddingVertical: 8 }}
+                      />
+                      <SecondaryButton
+                        label={rulesOpen ? "Hide car rules" : "Car rules"}
+                        onPress={() =>
+                          setShowAssetRules((prev) => ({
+                            ...prev,
+                            [vehicle.id]: !prev[vehicle.id],
+                          }))
+                        }
+                        style={{ flex: 1, paddingVertical: 8 }}
+                      />
+                    </View>
+                    {currentOpen && candidate ? (
+                      <CurrentCoverageCard candidate={candidate} showHeader={false} />
+                    ) : currentOpen ? (
+                      <Body muted style={{ marginTop: spacing.sm }}>
+                        No current coverage details.
+                      </Body>
+                    ) : null}
+                    {rulesOpen ? (
+                      <AssetRulesCard type="vehicle" assetId={vehicle.id} mandate={mandate} />
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
+
+            <Subtitle style={{ fontSize: 14, marginTop: spacing.md, marginBottom: spacing.sm }}>
+              Properties
+            </Subtitle>
+            {(data?.properties ?? []).length === 0 ? (
+              <Body muted>No properties on file.</Body>
+            ) : (
+              (data?.properties ?? []).map((property, index) => {
+                const candidate = data?.assetCandidates.find(
+                  (c) =>
+                    c.approved_asset_id === property.id && c.approved_asset_type === "property",
+                );
+                const currentOpen = !!showCurrentCoverage[property.id];
+                const rulesOpen = !!showAssetRules[property.id];
+                return (
+                  <View key={property.id} style={{ marginBottom: spacing.lg }}>
+                    <Body style={{ fontWeight: "700", marginBottom: spacing.xs }}>
+                      {index + 1}. {property.address_line1}, {property.city}
+                    </Body>
+                    <PropertyDetailsCard property={property} candidate={candidate} />
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: spacing.sm }}>
+                      <SecondaryButton
+                        label={currentOpen ? "Hide current coverage" : "Current coverage"}
+                        onPress={() =>
+                          setShowCurrentCoverage((prev) => ({
+                            ...prev,
+                            [property.id]: !prev[property.id],
+                          }))
+                        }
+                        style={{ flex: 1, paddingVertical: 8 }}
+                      />
+                      <SecondaryButton
+                        label={rulesOpen ? "Hide property rules" : "Property rules"}
+                        onPress={() =>
+                          setShowAssetRules((prev) => ({
+                            ...prev,
+                            [property.id]: !prev[property.id],
+                          }))
+                        }
+                        style={{ flex: 1, paddingVertical: 8 }}
+                      />
+                    </View>
+                    {currentOpen && candidate ? (
+                      <CurrentCoverageCard candidate={candidate} showHeader={false} />
+                    ) : currentOpen ? (
+                      <Body muted style={{ marginTop: spacing.sm }}>
+                        No current coverage details.
+                      </Body>
+                    ) : null}
+                    {rulesOpen ? (
+                      <AssetRulesCard type="property" assetId={property.id} mandate={mandate} />
+                    ) : null}
+                  </View>
+                );
+              })
             )}
           </Card>
 
-          {showDetails
-            ? (data?.vehicles ?? []).map((vehicle) => {
-                const effective = mandate
-                  ? resolveEffectiveVehicleMandateV2(mandate, vehicle.id)
-                  : undefined;
-                const override = mandate?.vehicleOverrides.find((o) => o.vehicleId === vehicle.id);
-                return (
-                  <Card key={vehicle.id}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginBottom: spacing.sm,
-                      }}
-                    >
-                      <View
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          backgroundColor: colors.accentSoft,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: spacing.sm,
-                        }}
-                      >
-                        <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
-                          AUTO
-                        </Body>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>
-                          {vehicle.year} {vehicle.make} {vehicle.model}
-                        </Subtitle>
-                        <Caption numberOfLines={1}>
-                          {labelForValue(
-                            financingStatusOptions,
-                            vehicle.financing_status as FinancingStatus,
-                          )}{" "}
-                          ·{" "}
-                          {labelForValue(
-                            vehicleUseClassOptions,
-                            vehicle.vehicle_use_class as VehicleUseClass,
-                          )}
-                          {vehicle.is_classic ? " · Classic" : ""}
-                          {vehicle.is_modified ? " · Modified" : ""}
-                        </Caption>
-                      </View>
-                    </View>
-                    {override ? (
-                      <View style={{ marginVertical: spacing.sm }}>
-                        <Body muted>Overrides apply to this vehicle</Body>
-                      </View>
-                    ) : null}
-                    {effective ? <AutoMandateRows auto={effective} /> : null}
-                  </Card>
-                );
-              })
-            : null}
-
           <Card>
-            <Subtitle>Rules for all properties</Subtitle>
-            {mandate ? (
-              showDetails ? (
-                <PropertyMandateRows property={mandate.householdPropertyDefaults} />
-              ) : (
-                <PropertySummary property={mandate.householdPropertyDefaults} />
-              )
-            ) : (
-              <Body muted>Loading…</Body>
-            )}
-          </Card>
+            <Subtitle style={{ marginBottom: spacing.sm }}>Coverage rules</Subtitle>
 
-          {showDetails
-            ? (data?.properties ?? []).map((property) => {
-                const effective = mandate
-                  ? resolveEffectivePropertyMandateV2(mandate, property.id)
-                  : undefined;
-                const override = mandate?.propertyOverrides.find(
-                  (o) => o.propertyId === property.id,
-                );
-                return (
-                  <Card key={property.id}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginBottom: spacing.sm,
-                      }}
-                    >
-                      <View
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          backgroundColor: colors.accentSoft,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: spacing.sm,
-                        }}
-                      >
-                        <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
-                          HOME
-                        </Body>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>
-                          {property.address_line1}, {property.city}
-                        </Subtitle>
-                        <Caption numberOfLines={1}>
-                          {labelForValue(
-                            propertyTypeOptions,
-                            property.property_type as PropertyType,
-                          )}
-                        </Caption>
-                      </View>
-                    </View>
-                    {override ? (
-                      <View style={{ marginVertical: spacing.sm }}>
-                        <Body muted>Overrides apply to this property</Body>
-                      </View>
-                    ) : null}
-                    {effective ? <PropertyMandateRows property={effective} /> : null}
-                  </Card>
-                );
-              })
-            : null}
-
-          {showDetails ? (
-            <Card>
-              <Subtitle>Switching preferences</Subtitle>
-              {data?.switching ? (
+            <Subtitle style={{ fontSize: 14, marginBottom: spacing.sm }}>Switching rules</Subtitle>
+            {data?.switching ? (
+              <>
                 <SwitchingRows prefs={data.switching} />
-              ) : (
-                <Body muted>Loading…</Body>
-              )}
-              <Row
-                label="Excluded insurers"
-                value={data?.excludedNames.length ? data.excludedNames.join(", ") : "None"}
-              />
-            </Card>
-          ) : null}
+                <Row
+                  label="Excluded insurers"
+                  value={data?.excludedNames.length ? data.excludedNames.join(", ") : "None"}
+                />
+              </>
+            ) : (
+              <Body muted>Loading…</Body>
+            )}
+
+            <Subtitle style={{ fontSize: 14, marginTop: spacing.md, marginBottom: spacing.sm }}>
+              Default rules for cars
+            </Subtitle>
+            {mandate ? (
+              <AutoMandateRows auto={mandate.householdAutoDefaults} />
+            ) : (
+              <Body muted>Loading…</Body>
+            )}
+
+            <Subtitle style={{ fontSize: 14, marginTop: spacing.md, marginBottom: spacing.sm }}>
+              Default rules for properties
+            </Subtitle>
+            {mandate ? (
+              <PropertyMandateRows property={mandate.householdPropertyDefaults} />
+            ) : (
+              <Body muted>Loading…</Body>
+            )}
+          </Card>
         </ScrollView>
       </Screen>
     </SafeAreaView>
