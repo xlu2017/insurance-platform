@@ -15,7 +15,8 @@ values (
   'batchowner@example.com',
   'Batch Owner',
   'customer'
-);
+)
+on conflict (id) do update set full_name = excluded.full_name, role = excluded.role;
 insert into households (id, name, province, owner_profile_id, onboarding_step, autopilot_active)
 values (
   '70000000-0000-0000-0000-00000000b001',
@@ -24,16 +25,19 @@ values (
   '70000000-0000-0000-0000-00000000a001',
   'documents',
   false
-);
+)
+on conflict (id) do nothing;
 insert into household_members (household_id, profile_id, member_role)
 values (
   '70000000-0000-0000-0000-00000000b001',
   '70000000-0000-0000-0000-00000000a001',
   'owner'
-);
+)
+on conflict (household_id, profile_id) do nothing;
 
 insert into household_document_processing_settings (household_id)
-values ('70000000-0000-0000-0000-00000000b001');
+values ('70000000-0000-0000-0000-00000000b001')
+on conflict (household_id) do nothing;
 
 select is(
   (select dangerous_mode_enabled from household_document_processing_settings where household_id = '70000000-0000-0000-0000-00000000b001'),
@@ -47,7 +51,8 @@ values (
   '70000000-0000-0000-0000-00000000b001',
   '70000000-0000-0000-0000-00000000a001',
   'open'
-);
+)
+on conflict (id) do nothing;
 insert into document_processing_batches (
   id, household_id, created_by, client_request_id, session_id, mode_snapshot, settings_version
 ) values (
@@ -58,7 +63,8 @@ insert into document_processing_batches (
   '70000000-0000-0000-0000-00000000c001',
   'safe',
   1
-);
+)
+on conflict (id) do nothing;
 
 insert into policy_documents (
   id, household_id, category, status, storage_path, file_name, mime_type, size_bytes, uploaded_by, content_sha256

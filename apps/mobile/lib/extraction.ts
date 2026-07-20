@@ -231,7 +231,7 @@ export async function saveMandateReviewItem(
     p_action: input.action,
     p_current_mandate_value: toJson(input.currentMandateValue),
     p_corrected_value: input.correctedValue === undefined ? null : toJson(input.correctedValue),
-    p_correction_reason: input.correctionReason ?? null,
+    p_correction_reason: input.correctionReason ?? undefined,
     p_is_complete: input.isComplete,
   });
   if (error) throw error;
