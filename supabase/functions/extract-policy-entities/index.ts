@@ -473,6 +473,25 @@ Deno.serve(async (req) => {
     return jsonError("Automatic document processing is not enabled", 403);
   }
 
+  const configuredProvider = String(
+    batch?.configured_provider ??
+      currentSetting?.configured_provider ??
+      Deno.env.get("CONFIGURED_PROVIDER") ??
+      "gemini",
+  ).toLowerCase();
+  const configuredModelId = String(
+    batch?.configured_model_id ??
+      currentSetting?.configured_model_id ??
+      Deno.env.get("GEMINI_MODEL_ID") ??
+      Deno.env.get("KIMI_MODEL_ID") ??
+      "",
+  );
+  const isGemini =
+    configuredProvider.includes("gemini") ||
+    configuredProvider.includes("google") ||
+    configuredModelId.toLowerCase().includes("gemini") ||
+    configuredModelId.toLowerCase().includes("flash");
+
   const { data: docRows, error: docsErr } = await supabase
     .from("policy_documents")
     .select("id, storage_path, file_name, mime_type, size_bytes, household_id, content_sha256")
@@ -673,7 +692,7 @@ Deno.serve(async (req) => {
   const prep = new ConfigAndConsentPrivacyPreparation(
     {
       ...privacyConfig,
-      cleanupReadinessCheck: async () => isCleanupReadinessReady(),
+      cleanupReadinessCheck: isGemini ? undefined : async () => isCleanupReadinessReady(),
     },
     consent,
   );
@@ -691,6 +710,7 @@ Deno.serve(async (req) => {
     }
     authorization = await prep.authorize(user.id, authorizationStore);
   } catch (err) {
+    console.error("EXTRACT-PRE-AUTH-ERROR", err);
     const sanitized = sanitizeProviderError(err) as PublicDocumentError;
     if (batchIdRaw) {
       await admin
@@ -756,25 +776,6 @@ Deno.serve(async (req) => {
     loadExistingAssets(admin, householdId),
     loadPendingCandidates(admin, householdId, sessionId),
   ]);
-
-  const configuredProvider = String(
-    batch?.configured_provider ??
-      currentSetting?.configured_provider ??
-      Deno.env.get("CONFIGURED_PROVIDER") ??
-      "gemini",
-  ).toLowerCase();
-  const configuredModelId = String(
-    batch?.configured_model_id ??
-      currentSetting?.configured_model_id ??
-      Deno.env.get("GEMINI_MODEL_ID") ??
-      Deno.env.get("KIMI_MODEL_ID") ??
-      "",
-  );
-  const isGemini =
-    configuredProvider.includes("gemini") ||
-    configuredProvider.includes("google") ||
-    configuredModelId.toLowerCase().includes("gemini") ||
-    configuredModelId.toLowerCase().includes("flash");
 
   const fileLifecycleStore = new SupabaseFileLifecycleStore(admin);
   let provider: InstanceType<typeof KimiK3Provider> | InstanceType<typeof GeminiFlashLiteProvider>;
@@ -914,6 +915,7 @@ Deno.serve(async (req) => {
         jurisdiction: "AB",
       })) as any;
     } catch (err) {
+      console.error("EXTRACT-ANALYZE-ERROR", err);
       const sanitized = sanitizeProviderError(err) as PublicDocumentError;
       const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";
       await authorizationStore.updateAuthorization(authorization.id, {

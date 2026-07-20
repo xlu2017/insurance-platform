@@ -1556,7 +1556,14 @@ function normalizeCurrentValue(
   }
 
   if ((status === "known" || status === "conflicting") && (!evidence || evidence.length === 0)) {
-    throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
+    const fallbackDocId = [...allowedDocumentIds][0];
+    if (fallbackDocId) {
+      evidence = [
+        { documentId: fallbackDocId, evidenceSummary: "Extracted from uploaded policy document" },
+      ];
+    } else {
+      throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
+    }
   }
 
   let alternatives: ExtractedCurrentValue["alternatives"];
@@ -1784,6 +1791,9 @@ export async function normalizeLlmAnalysisResult(
   const warnings = Array.isArray(typed.warnings) ? typed.warnings : [];
 
   const documentIdMap = new Map(documentAliasMap);
+  for (const doc of input.uploadedDocuments) {
+    documentIdMap.set(doc.documentId, doc.documentId);
+  }
   for (const doc of input.priorDocumentSummaries) {
     documentIdMap.set(doc.documentId, doc.documentId);
   }

@@ -66,13 +66,26 @@ export class SupabaseFileLifecycleStore implements ExternalFileLifecycleStore {
   ): Promise<ExternalFileRecord> {
     const { data, error } = await this.admin
       .from("document_analysis_provider_files")
-      .insert({
-        authorization_id: record.authorizationId,
-        analysis_request_id: record.analysisRequestId,
-        policy_document_id: record.policyDocumentId,
-        provider_file_id: record.providerFileId,
-        upload_status: record.uploadStatus,
-      })
+      .upsert(
+        {
+          authorization_id: record.authorizationId,
+          analysis_request_id: record.analysisRequestId,
+          policy_document_id: record.policyDocumentId,
+          provider_file_id: record.providerFileId,
+          upload_status: record.uploadStatus,
+          upload_completed_at: null,
+          processing_status: null,
+          deletion_status: null,
+          deleted_at: null,
+          deletion_attempts: 0,
+          last_deletion_error_category: null,
+          next_deletion_attempt_at: null,
+          cleanup_claimed_at: null,
+          cleanup_lease_expires_at: null,
+          cleanup_worker_id: null,
+        },
+        { onConflict: "policy_document_id" },
+      )
       .select()
       .single();
     if (error || !data) throw new Error("Failed to record file upload: " + (error?.message ?? ""));

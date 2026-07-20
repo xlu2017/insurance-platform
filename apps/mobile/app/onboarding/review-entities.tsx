@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
-import { View, ScrollView, StyleSheet } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { formatEdmontonDate } from "@/lib/format";
@@ -40,16 +40,56 @@ interface DraftReview {
   mandateAmount: string;
 }
 
-const REVIEW_ACTIONS: { value: ReviewAction; label: string }[] = [
-  { value: "confirm", label: "Looks right" },
-  { value: "correct", label: "Edit" },
-  { value: "unknown", label: "Not sure" },
+const FIELD_LABEL_OVERRIDES: Record<string, string> = {
+  fullAddress: "Address",
+  postalCode: "Postal code",
+  vehicleUse: "Vehicle use",
+  vin: "VIN",
+  insurer: "Insurer",
+  policyNumber: "Policy number",
+  expiryDate: "Expiry date",
+  annualPremiumCents: "Annual premium",
+};
+
+const VEHICLE_USE_LABELS: Record<string, string> = {
+  commute: "Commute",
+  pleasure: "Pleasure",
+  business: "Business",
+  farm: "Farm",
+  unknown: "Unknown",
+};
+
+const OCCUPANCY_LABELS: Record<string, string> = {
+  principal_residence: "Principal residence",
+  rental: "Rental",
+  other: "Other",
+  unknown: "Unknown",
+};
+
+const VEHICLE_REVIEW_FIELDS = [
+  "identity.vin",
+  "identity.year",
+  "identity.make",
+  "identity.model",
+  "identity.vehicleUse",
+  "currentPolicy.insurer",
+  "currentPolicy.policyNumber",
+  "currentPolicy.expiryDate",
+  "currentPolicy.annualPremiumCents",
 ];
 
-const MANDATE_ACTIONS: { value: ReviewAction; label: string }[] = [
-  { value: "reset_mandate_to_current", label: "Reset" },
-  { value: "change_mandate", label: "Change" },
+const PROPERTY_REVIEW_FIELDS = [
+  "identity.fullAddress",
+  "identity.occupancy",
+  "currentPolicy.insurer",
+  "currentPolicy.policyNumber",
+  "currentPolicy.expiryDate",
+  "currentPolicy.annualPremiumCents",
 ];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function formatFieldValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -68,35 +108,6 @@ function renderCents(value: unknown): string {
   return `C$${(num / 100).toFixed(2)}`;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-const FIELD_LABEL_OVERRIDES: Record<string, string> = {
-  fullAddress: "Address",
-  postalCode: "Postal code",
-  vehicleUse: "Vehicle use",
-  vin: "VIN",
-  insurerName: "Insurer",
-  policyNumber: "Policy number",
-  expiryDate: "Expiry date",
-  annualPremiumCents: "Annual premium",
-};
-
-const VEHICLE_USE_LABELS: Record<string, string> = {
-  commute: "Commute",
-  pleasure: "Pleasure",
-  business: "Business",
-  farm: "Farm",
-  unknown: "Unknown",
-};
-
-const OCCUPANCY_LABELS: Record<string, string> = {
-  principal_residence: "Principal residence",
-  rental: "Rental",
-  unknown: "Unknown",
-};
-
 function formatFieldLabel(fieldPath: string): string {
   const raw = fieldPath.split(".").pop() ?? fieldPath;
   if (FIELD_LABEL_OVERRIDES[raw]) return FIELD_LABEL_OVERRIDES[raw];
@@ -114,11 +125,21 @@ function formatFieldLabel(fieldPath: string): string {
 function displayValueForField(fieldPath: string, value: unknown): string {
   const key = fieldPath.split(".").pop();
   if (typeof value === "string") {
-    if (key === "vehicleUse") return VEHICLE_USE_LABELS[value] ?? value;
-    if (key === "occupancy") return OCCUPANCY_LABELS[value] ?? value;
+    const normalized = value.toLowerCase();
+    if (key === "vehicleUse") return VEHICLE_USE_LABELS[normalized] ?? value;
+    if (key === "occupancy") return OCCUPANCY_LABELS[normalized] ?? value;
     if (key === "expiryDate") return formatEdmontonDate(value);
   }
+  if (key === "annualPremiumCents") return renderCents(value);
   return formatFieldValue(value);
+}
+
+function parseCorrectedValue(fieldPath: string, raw: string): unknown {
+  if (fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")) {
+    const dollars = Number(raw.replace(/[C$\s,]/g, ""));
+    if (!Number.isNaN(dollars)) return Math.round(dollars * 100);
+  }
+  return raw;
 }
 
 function getFacts(candidate: ExtractionCandidate): Record<string, unknown> {
@@ -138,154 +159,305 @@ function getFieldValue(candidate: ExtractionCandidate, fieldPath: string): unkno
   return current;
 }
 
-function getMandateSuggestion(
+function getEffectiveDisplay(
   candidate: ExtractionCandidate,
   fieldPath: string,
-): Record<string, unknown> | undefined {
-  const facts = getFacts(candidate);
-  const suggestions = isRecord(facts.mandateSuggestions) ? facts.mandateSuggestions : undefined;
-  const suggestion = suggestions?.[fieldPath];
-  return isRecord(suggestion) ? suggestion : undefined;
-}
-
-const VEHICLE_IDENTITY_FIELDS = new Set(["vin", "year", "make", "model", "trim", "vehicleUse"]);
-
-const PROPERTY_IDENTITY_FIELDS = new Set([
-  "fullAddress",
-  "city",
-  "province",
-  "postalCode",
-  "occupancy",
-]);
-
-function identityFieldsFor(assetType: string | undefined, keys: string[]): Set<string> {
-  if (assetType === "vehicle") return VEHICLE_IDENTITY_FIELDS;
-  if (assetType === "property") return PROPERTY_IDENTITY_FIELDS;
-  return new Set(keys);
+  draft?: DraftReview | null,
+): string {
+  if (draft?.correctedValue) return draft.correctedValue;
+  return displayValueForField(fieldPath, getFieldValue(candidate, fieldPath));
 }
 
 function fieldPathsForCandidate(candidate: ExtractionCandidate): string[] {
-  const paths: string[] = [];
+  const base = candidate.asset_type === "vehicle" ? VEHICLE_REVIEW_FIELDS : PROPERTY_REVIEW_FIELDS;
+  return base.filter((path) => {
+    const value = getFieldValue(candidate, path);
+    return value !== null && value !== undefined && value !== "";
+  });
+}
+
+function AddressVerification({
+  candidate,
+  draft,
+  onVerified,
+}: {
+  candidate: ExtractionCandidate;
+  draft?: DraftReview | null;
+  onVerified: (displayName: string) => void;
+}) {
   const facts = getFacts(candidate);
-  const identity = isRecord(facts.identity) ? facts.identity : undefined;
-  if (identity) {
-    const allowed = identityFieldsFor(candidate.asset_type, Object.keys(identity));
-    Object.keys(identity)
-      .filter((k) => allowed.has(k))
-      .forEach((k) => paths.push(`identity.${k}`));
-  }
-  const currentPolicy = isRecord(facts.currentPolicy) ? facts.currentPolicy : undefined;
-  if (currentPolicy) {
-    Object.keys(currentPolicy).forEach((k) => paths.push(`currentPolicy.${k}`));
-  }
-  return paths;
+  const identityValue = facts.identity;
+  const identity = isRecord(identityValue) ? identityValue : {};
+  const original = String(identity.fullAddress ?? "");
+  const [query, setQuery] = useState(draft?.correctedValue || original);
+  const [status, setStatus] = useState<"idle" | "loading" | "found" | "not_found">(
+    draft?.action === "correct" ? "found" : "idle",
+  );
+  const [result, setResult] = useState<string | null>(draft?.correctedValue ?? null);
+  const [error, setError] = useState<string | null>(null);
+
+  const verify = async () => {
+    setStatus("loading");
+    setError(null);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("verify-address", {
+        body: { q: query },
+      });
+      if (invokeError) throw new Error(invokeError.message);
+      const response = data as { found?: boolean; result?: { displayName?: string } | null };
+      if (response?.found && response.result?.displayName) {
+        setResult(response.result.displayName);
+        setStatus("found");
+        onVerified(response.result.displayName);
+        return;
+      }
+      setStatus("not_found");
+      setResult(null);
+    } catch (e) {
+      setStatus("not_found");
+      setError(e instanceof Error ? e.message : "Address lookup failed");
+    }
+  };
+
+  const saveManual = () => {
+    if (!query.trim()) return;
+    setResult(query.trim());
+    setStatus("found");
+    onVerified(query.trim());
+  };
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Caption style={styles.sectionTitle}>Address</Caption>
+      {status === "found" && result ? (
+        <View style={{ gap: 8 }}>
+          <Body>{result}</Body>
+          <Caption style={{ color: "#16A34A" }}>Address verified</Caption>
+          <SecondaryButton label="Re-verify" onPress={() => setStatus("idle")} />
+        </View>
+      ) : (
+        <View style={{ gap: 8 }}>
+          <Field
+            label="Full address"
+            value={query}
+            onChangeText={setQuery}
+            multiline
+            numberOfLines={2}
+          />
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <SecondaryButton
+              label="Verify"
+              onPress={verify}
+              disabled={status === "loading"}
+              style={{ flex: 1 }}
+            />
+            <SecondaryButton
+              label="Save"
+              onPress={saveManual}
+              disabled={!query.trim()}
+              style={{ flex: 1 }}
+            />
+          </View>
+          {status === "not_found" ? (
+            <Caption style={{ color: "#B45309" }}>
+              We could not verify that address. Please enter the full street address and save.
+            </Caption>
+          ) : null}
+          {error ? <Caption style={{ color: "#B45309" }}>{error}</Caption> : null}
+        </View>
+      )}
+    </View>
+  );
 }
 
-function isCoverageField(fieldPath: string): boolean {
-  return fieldPath.startsWith("currentCoverage.");
-}
-
-function parseCorrectedValue(fieldPath: string, raw: string): unknown {
-  if (fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")) {
-    const dollars = Number(raw.replace(/[C$\s,]/g, ""));
-    if (!Number.isNaN(dollars)) return Math.round(dollars * 100);
-  }
-  return raw;
-}
-
-function FieldReviewStep({
+function FieldEditStep({
   candidate,
   fieldPath,
-  existing,
+  draft,
   onComplete,
 }: {
   candidate: ExtractionCandidate;
   fieldPath: string;
-  existing?: CandidateFieldReview | null;
+  draft?: DraftReview | null;
   onComplete: (action: ReviewAction, correctedValue?: string) => void;
 }) {
   const value = getFieldValue(candidate, fieldPath);
-  const mandate = getMandateSuggestion(candidate, fieldPath);
-  const isCoverage = isCoverageField(fieldPath);
-  const fieldLabel = formatFieldLabel(fieldPath);
   const isCents =
     fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium");
+  const label = formatFieldLabel(fieldPath);
   const [editing, setEditing] = useState(false);
   const [corrected, setCorrected] = useState(() => {
-    if (existing?.corrected_value !== undefined && existing?.corrected_value !== null) {
-      return formatFieldValue(existing.corrected_value);
-    }
-    return isCents ? renderCents(value) : formatFieldValue(value);
+    if (draft?.action === "correct" && draft.correctedValue) return draft.correctedValue;
+    return isCents ? renderCents(value) : displayValueForField(fieldPath, value);
   });
 
   const displayValue = isCents ? renderCents(value) : displayValueForField(fieldPath, value);
 
   if (editing) {
     return (
-      <View style={{ gap: 12 }}>
-        <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
+      <Card style={{ flex: 1, justifyContent: "center" }}>
+        <Caption style={styles.fieldLabel}>{`Edit ${label}`}</Caption>
         <Field
-          label="Edit value"
+          label={label}
           value={corrected}
           onChangeText={setCorrected}
           autoCorrect={false}
           keyboardType={isCents ? "numeric" : "default"}
           prefix={isCents ? "C$" : undefined}
+          multiline={fieldPath.endsWith("fullAddress")}
+          numberOfLines={fieldPath.endsWith("fullAddress") ? 2 : 1}
         />
         <View style={{ gap: 8 }}>
           <PrimaryButton label="Save" onPress={() => onComplete("correct", corrected)} />
-          <SecondaryButton label="Cancel" onPress={() => setEditing(false)} />
+          <SecondaryButton
+            label="Cancel"
+            onPress={() => {
+              setEditing(false);
+              setCorrected(isCents ? renderCents(value) : displayValueForField(fieldPath, value));
+            }}
+          />
         </View>
-      </View>
+      </Card>
     );
   }
 
   return (
-    <View style={{ gap: 16 }}>
-      <View>
-        <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
-        <Body style={styles.fieldValue}>{displayValue}</Body>
+    <Card style={{ flex: 1, justifyContent: "center" }}>
+      <Caption style={styles.fieldLabel}>{label}</Caption>
+      <Body style={styles.fieldValue}>{displayValue}</Body>
+      <Body muted>{`Is this ${label.toLowerCase()} correct?`}</Body>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+        <SecondaryButton label="Confirm" onPress={() => onComplete("confirm")} />
+        <SecondaryButton label="Edit" onPress={() => setEditing(true)} />
+        <SecondaryButton label="Unknown" onPress={() => onComplete("unknown")} />
       </View>
-      <View style={{ gap: 10 }}>
-        <Body muted>Is this {fieldLabel.toLowerCase()} correct?</Body>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {REVIEW_ACTIONS.map((a) => (
-            <SecondaryButton
-              key={a.value}
-              label={a.label}
-              onPress={() => onComplete(a.value)}
-              style={styles.fieldAction}
-            />
-          ))}
-        </View>
-        {isCoverage && mandate && (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {MANDATE_ACTIONS.map((a) => (
-              <SecondaryButton
-                key={a.value}
-                label={a.label}
-                onPress={() => onComplete(a.value)}
-                style={styles.mandateAction}
-              />
-            ))}
-          </View>
-        )}
-      </View>
-      {actionLabel(existing?.action) ? (
-        <Body style={{ color: "#16A34A" }}>{actionLabel(existing?.action)}</Body>
-      ) : null}
+    </Card>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ marginTop: 16 }}>
+      <Caption style={styles.sectionTitle}>{title}</Caption>
+      {children}
     </View>
   );
 }
 
-function actionLabel(action: ReviewAction | null | undefined): string | null {
-  if (!action) return null;
-  if (action === "confirm") return "Looks right";
-  if (action === "unknown") return "Not sure";
-  if (action === "correct") return "Edited";
-  if (action === "reset_mandate_to_current") return "Coverage rule reset to current";
-  if (action === "change_mandate") return "Coverage rule changed";
-  return null;
+function FieldRow({
+  candidate,
+  fieldPath,
+  draft,
+  onPress,
+}: {
+  candidate: ExtractionCandidate;
+  fieldPath: string;
+  draft?: DraftReview | null;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.fieldRow}>
+      <View style={{ flex: 1 }}>
+        <Caption style={styles.fieldLabel}>{formatFieldLabel(fieldPath)}</Caption>
+        <Body style={styles.fieldValue}>{getEffectiveDisplay(candidate, fieldPath, draft)}</Body>
+      </View>
+      <Caption style={styles.editLabel}>Edit</Caption>
+    </Pressable>
+  );
+}
+
+function CandidateSummary({
+  candidate,
+  drafts,
+  addressVerified,
+  onEdit,
+  onAdd,
+  onSkip,
+  onAddressVerified,
+  busy,
+}: {
+  candidate: ExtractionCandidate;
+  drafts: Record<string, DraftReview>;
+  addressVerified: Record<string, boolean>;
+  onEdit: (fieldPath: string) => void;
+  onAdd: () => void;
+  onSkip: () => void;
+  onAddressVerified: (displayName: string) => void;
+  busy: boolean;
+}) {
+  const allPaths = fieldPathsForCandidate(candidate);
+  const propertyAddressPath = `${candidate.id}:identity.fullAddress`;
+  const addressDraft = drafts[propertyAddressPath];
+  const identityPaths = allPaths
+    .filter((p) => p.startsWith("identity."))
+    .filter((p) => p !== "identity.fullAddress");
+  const policyPaths = allPaths.filter((p) => p.startsWith("currentPolicy."));
+  const typeLabel = candidate.asset_type === "vehicle" ? "Vehicle" : "Property";
+  const isProperty = candidate.asset_type === "property";
+  const canAdd = isProperty
+    ? addressVerified[candidate.id] || addressDraft?.action === "correct"
+    : true;
+
+  return (
+    <Card style={{ flex: 1, justifyContent: "center" }}>
+      <Subtitle style={styles.subtitle}>{typeLabel}</Subtitle>
+      <Title style={styles.title}>{candidate.display_label}</Title>
+      {candidate.occupancy ? (
+        <Caption>
+          {OCCUPANCY_LABELS[candidate.occupancy.toLowerCase()] ?? candidate.occupancy}
+        </Caption>
+      ) : null}
+
+      {isProperty ? (
+        <Section title="Address">
+          <AddressVerification
+            candidate={candidate}
+            draft={addressDraft}
+            onVerified={onAddressVerified}
+          />
+        </Section>
+      ) : null}
+
+      {identityPaths.length > 0 ? (
+        <Section title={typeLabel === "Vehicle" ? "Vehicle details" : "Property details"}>
+          {identityPaths.map((path) => (
+            <FieldRow
+              key={path}
+              candidate={candidate}
+              fieldPath={path}
+              draft={drafts[`${candidate.id}:${path}`]}
+              onPress={() => onEdit(path)}
+            />
+          ))}
+        </Section>
+      ) : null}
+
+      {policyPaths.length > 0 ? (
+        <Section title="Policy details">
+          {policyPaths.map((path) => (
+            <FieldRow
+              key={path}
+              candidate={candidate}
+              fieldPath={path}
+              draft={drafts[`${candidate.id}:${path}`]}
+              onPress={() => onEdit(path)}
+            />
+          ))}
+        </Section>
+      ) : null}
+
+      {!canAdd ? (
+        <Caption style={{ color: "#B45309", marginTop: 16 }}>
+          Please verify or enter the full address before adding this property.
+        </Caption>
+      ) : null}
+
+      <View style={{ gap: 12, marginTop: 24 }}>
+        <PrimaryButton label="Add" onPress={onAdd} disabled={busy || !canAdd} />
+        <SecondaryButton label="Skip" onPress={onSkip} disabled={busy} />
+      </View>
+    </Card>
+  );
 }
 
 export default function ReviewEntities() {
@@ -301,165 +473,31 @@ export default function ReviewEntities() {
   const saveReview = useSaveCandidateFieldReview();
 
   const [decisions, setDecisions] = useState<Record<string, CandidateDecision["decision"]>>({});
-  const [identityConfirmations, setIdentityConfirmations] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, DraftReview>>({});
   const [candidateIndex, setCandidateIndex] = useState(0);
-  const [fieldIndex, setFieldIndex] = useState(0);
-  const [phase, setPhase] = useState<"decision" | "field" | "summary">("decision");
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const [addressVerified, setAddressVerified] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reviewsByKey = useMemo(() => {
-    const map = new Map<string, CandidateFieldReview>();
-    for (const r of fieldReviews ?? []) {
-      map.set(`${r.candidate_id}:${r.field_path}`, r);
-    }
-    return map;
-  }, [fieldReviews]);
-
-  const currentCandidate = candidates?.[candidateIndex];
-  const currentFields = useMemo(() => {
-    if (!currentCandidate) return [];
-    return fieldPathsForCandidate(currentCandidate).filter(
-      (path) => !reviewsByKey.has(`${currentCandidate.id}:${path}`),
-    );
-  }, [currentCandidate, reviewsByKey]);
-
-  const totalQuestions = useMemo(() => {
-    if (!candidates) return 0;
-    return candidates.reduce((sum, c) => sum + 1 + fieldPathsForCandidate(c).length, 0);
-  }, [candidates]);
-
-  const currentQuestion = useMemo(() => {
-    if (!candidates) return 0;
-    let count = 0;
-    for (let i = 0; i < candidateIndex; i++) {
-      const c = candidates[i];
-      if (!c) continue;
-      count += 1 + fieldPathsForCandidate(c).length;
-    }
-    if (phase === "field") {
-      count += 2 + fieldIndex;
-    } else if (phase === "decision") {
-      count += 1;
-    } else if (phase === "summary") {
-      count = totalQuestions;
-    }
-    return count;
-  }, [candidates, candidateIndex, fieldIndex, phase, totalQuestions]);
-
-  if (householdLoading || sessionLoading || candidatesLoading || reviewsLoading) return <Loading />;
-  if (!household) {
-    return (
-      <Screen>
-        <Title style={styles.title}>No household</Title>
-        <Body muted>Please sign in and create a household first.</Body>
-      </Screen>
-    );
-  }
-  if (!candidates || candidates.length === 0) {
-    return (
-      <Screen>
-        <Stack.Screen options={{ title: "Confirm what we found" }} />
-        <Title style={styles.title}>Nothing to review</Title>
-        <Body muted>Upload your policies first so we can show you what we found.</Body>
-        <PrimaryButton
-          label="Upload"
-          onPress={() => router.push("/onboarding/documents")}
-          style={styles.uploadButton}
-        />
-      </Screen>
-    );
-  }
-
-  const setDecision = (candidateId: string, decision: CandidateDecision["decision"]) => {
-    setDecisions((prev) => ({ ...prev, [candidateId]: decision }));
-  };
-
-  const isCandidateReady = (candidate: ExtractionCandidate): boolean => {
-    const paths = fieldPathsForCandidate(candidate);
-    return paths.every(
-      (path) =>
-        reviewsByKey.has(`${candidate.id}:${path}`) || drafts[`${candidate.id}:${path}`]?.action,
-    );
-  };
-
-  const allApprovedReady = candidates.every((c) => {
-    if (decisions[c.id] === "skip") return true;
-    if (decisions[c.id] !== "approve_new") return false;
-    if (
-      c.match_classification === "new_identity_confirmation_required" &&
-      !identityConfirmations[c.id]
-    ) {
-      return false;
-    }
-    return isCandidateReady(c);
-  });
-
-  const advanceCandidate = () => {
-    const nextIndex = candidateIndex + 1;
-    if (nextIndex >= candidates.length) {
-      setPhase("summary");
-    } else {
-      setCandidateIndex(nextIndex);
-      setFieldIndex(0);
-      setPhase("decision");
-    }
-  };
-
-  const handleDecision = (decision: "approve_new" | "skip") => {
-    if (!currentCandidate) return;
-    setDecision(currentCandidate.id, decision);
-    if (decision === "approve_new") {
-      if (currentCandidate.match_classification === "new_identity_confirmation_required") {
-        setIdentityConfirmations((prev) => ({ ...prev, [currentCandidate.id]: true }));
-      }
-      if (currentFields.length === 0) {
-        advanceCandidate();
-      } else {
-        setFieldIndex(0);
-        setPhase("field");
-      }
-    } else {
-      advanceCandidate();
-    }
-  };
-
-  const handleFieldComplete = (action: ReviewAction, correctedValue?: string) => {
-    if (!currentCandidate) return;
-    const fieldPath = currentFields[fieldIndex];
-    if (!fieldPath) return;
-    const key = `${currentCandidate.id}:${fieldPath}`;
-    const value = getFieldValue(currentCandidate, fieldPath);
-    const mandate = getMandateSuggestion(currentCandidate, fieldPath);
-
+  useEffect(() => {
+    if (!fieldReviews) return;
     setDrafts((prev) => {
-      const existing = prev[key];
-      const isCents =
-        fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium");
-      const corrected =
-        action === "correct"
-          ? String(parseCorrectedValue(fieldPath, correctedValue ?? formatFieldValue(value)))
-          : isCents
-            ? renderCents(value)
-            : formatFieldValue(value);
-      return {
-        ...prev,
-        [key]: {
-          action,
-          correctedValue: corrected,
-          mandateRule: existing?.mandateRule ?? (mandate?.rule as string) ?? "minimum",
-          mandateAmount: existing?.mandateAmount ?? "",
-        },
-      };
+      const next = { ...prev };
+      for (const r of fieldReviews) {
+        const key = `${r.candidate_id}:${r.field_path}`;
+        if (!next[key]) {
+          next[key] = {
+            action: r.action,
+            correctedValue: formatFieldValue(r.corrected_value),
+            mandateRule: "",
+            mandateAmount: "",
+          };
+        }
+      }
+      return next;
     });
-
-    if (fieldIndex + 1 < currentFields.length) {
-      setFieldIndex((i) => i + 1);
-    } else {
-      advanceCandidate();
-    }
-  };
+  }, [fieldReviews]);
 
   const persistReview = async (
     candidate: ExtractionCandidate,
@@ -473,66 +511,149 @@ export default function ReviewEntities() {
       correctedValue = parseCorrectedValue(fieldPath, correctedValue);
     }
 
-    let mandateRuleJson: Record<string, unknown> | undefined;
-    if (draft.action === "change_mandate") {
-      const amount = Number(draft.mandateAmount);
-      mandateRuleJson = {
-        rule: draft.mandateRule,
-        amountCents: Number.isNaN(amount) ? undefined : Math.round(amount * 100),
-      };
-    } else if (draft.action === "reset_mandate_to_current") {
-      const suggestion = getMandateSuggestion(candidate, fieldPath);
-      mandateRuleJson = suggestion ?? { rule: "any" };
-    }
-
     await saveReview.mutateAsync({
       candidate_id: candidate.id,
-      household_id: household.id,
+      household_id: household!.id,
       field_path: fieldPath,
       action: draft.action,
       corrected_value: correctedValue,
-      mandate_rule_json: mandateRuleJson,
     });
+  };
+
+  if (householdLoading || sessionLoading || candidatesLoading || reviewsLoading) return <Loading />;
+  if (!household) {
+    return (
+      <Screen>
+        <Title style={styles.title}>No household</Title>
+        <Body muted>Please sign in and create a household first.</Body>
+      </Screen>
+    );
+  }
+  if (!candidates || candidates.length === 0) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: "Review" }} />
+        <Title style={styles.title}>Nothing to review</Title>
+        <Body muted>Upload your policies first so we can show you what we found.</Body>
+        <PrimaryButton
+          label="Upload"
+          onPress={() => router.push("/onboarding/documents")}
+          style={styles.uploadButton}
+        />
+      </Screen>
+    );
+  }
+
+  const currentCandidate = candidates[candidateIndex]!;
+
+  const allCandidatesDecided = candidates.every(
+    (c) => decisions[c.id] === "skip" || decisions[c.id] === "approve_new",
+  );
+
+  const advanceCandidate = () => {
+    setCandidateIndex((i) => Math.min(i + 1, candidates.length));
+    setEditingPath(null);
+  };
+
+  const handleFieldComplete = (action: ReviewAction, correctedValue?: string) => {
+    if (!currentCandidate || !editingPath) return;
+    const key = `${currentCandidate.id}:${editingPath}`;
+    const value = getFieldValue(currentCandidate, editingPath);
+    const isCents =
+      editingPath.toLowerCase().includes("cents") || editingPath.toLowerCase().includes("premium");
+    const corrected =
+      action === "correct"
+        ? String(parseCorrectedValue(editingPath, correctedValue ?? formatFieldValue(value)))
+        : isCents
+          ? renderCents(value)
+          : formatFieldValue(value);
+
+    setDrafts((prev) => ({
+      ...prev,
+      [key]: {
+        action,
+        correctedValue: action === "correct" ? corrected : corrected,
+        mandateRule: "",
+        mandateAmount: "",
+      },
+    }));
+    setEditingPath(null);
+  };
+
+  const handleAddressVerified = (displayName: string) => {
+    if (!currentCandidate) return;
+    const key = `${currentCandidate.id}:identity.fullAddress`;
+    setDrafts((prev) => ({
+      ...prev,
+      [key]: { action: "correct", correctedValue: displayName, mandateRule: "", mandateAmount: "" },
+    }));
+    setAddressVerified((prev) => ({ ...prev, [currentCandidate.id]: true }));
+  };
+
+  const handleAdd = async () => {
+    if (!currentCandidate || !household) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const paths = fieldPathsForCandidate(currentCandidate);
+      const nextDrafts = { ...drafts };
+      for (const path of paths) {
+        const key = `${currentCandidate.id}:${path}`;
+        if (nextDrafts[key]) continue;
+        const value = getFieldValue(currentCandidate, path);
+        const isCents =
+          path.toLowerCase().includes("cents") || path.toLowerCase().includes("premium");
+        nextDrafts[key] = {
+          action: "confirm",
+          correctedValue: isCents ? renderCents(value) : formatFieldValue(value),
+          mandateRule: "",
+          mandateAmount: "",
+        };
+      }
+      setDrafts(nextDrafts);
+      setDecisions((prev) => ({ ...prev, [currentCandidate.id]: "approve_new" }));
+      advanceCandidate();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add candidate");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSkip = () => {
+    if (!currentCandidate) return;
+    setDecisions((prev) => ({ ...prev, [currentCandidate.id]: "skip" }));
+    advanceCandidate();
   };
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      const pendingDrafts = Object.entries(drafts);
-      for (const [key, draft] of pendingDrafts) {
+      for (const [key, draft] of Object.entries(drafts)) {
         const [candidateId, ...pathParts] = key.split(":");
         const fieldPath = pathParts.join(":");
-        const candidate = candidates.find((c) => c.id === candidateId);
+        const candidate = candidates?.find((c) => c.id === candidateId);
         if (candidate) {
           await persistReview(candidate, fieldPath, draft);
         }
-      }
-
-      if (!allApprovedReady) {
-        setError("Please confirm or edit every field before adding it to your account.");
-        setBusy(false);
-        return;
       }
 
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        setError("You must be signed in to approve candidates.");
+        setError("You must be signed in to continue.");
         setBusy(false);
         return;
       }
 
       for (const candidate of candidates) {
         const { error: draftError } = await supabase.rpc("save_candidate_review_draft_v1", {
-          p_household_id: household.id,
+          p_household_id: household!.id,
           p_candidate_id: candidate.id,
           p_decision: decisions[candidate.id] === "approve_new" ? "approve_new" : "skip",
-          p_identity_confirmed:
-            candidate.match_classification === "new_identity_confirmation_required"
-              ? !!identityConfirmations[candidate.id]
-              : false,
+          p_identity_confirmed: decisions[candidate.id] === "approve_new",
         });
         if (draftError) throw draftError;
       }
@@ -545,109 +666,69 @@ export default function ReviewEntities() {
     }
   };
 
-  const renderDecisionStep = () => {
-    if (!currentCandidate) return null;
-    const typeLabel = currentCandidate.asset_type === "vehicle" ? "vehicle" : "property";
+  if (candidateIndex >= candidates.length) {
     return (
-      <Card style={{ flex: 1, justifyContent: "center" }}>
-        <Subtitle style={styles.subtitle}>
-          {currentCandidate.asset_type === "vehicle" ? "Vehicle" : "Property"}
-        </Subtitle>
-        <Title style={styles.title}>{currentCandidate.display_label}</Title>
-        {currentCandidate.occupancy ? (
-          <Caption>
-            {currentCandidate.occupancy === "rental" ? "Rental / tenant" : "Principal residence"}
-          </Caption>
-        ) : null}
-        <View style={{ gap: 8, marginTop: 8 }}>
-          {currentCandidate.match_classification === "new_identity_confirmation_required" ? (
-            <Body style={{ color: "#B45309" }}>
-              {`We could not confirm the full ${typeLabel} identity. Please verify this is the correct ${typeLabel} before adding it.`}
-            </Body>
-          ) : null}
-          {(currentCandidate.conflicts_json?.length ?? 0) > 0 ? (
-            <Body style={{ color: "#B45309" }}>
-              Your documents contain different information about this {typeLabel}. You will review
-              the details next.
-            </Body>
-          ) : null}
-        </View>
-        <View style={{ gap: 12, marginTop: 32 }}>
+      <Screen style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
+          contentContainerStyle={{
+            padding: spacing.lg,
+            paddingBottom: spacing.xl * 2,
+            minHeight: "100%",
+          }}
+        >
+          <Stack.Screen options={{ title: "Review complete" }} />
+          <Title style={styles.title}>Ready to continue</Title>
+          <Body muted>Review what we found before continuing to your coverage rules.</Body>
+          <View style={{ gap: 12, marginVertical: 16 }}>
+            {candidates.map((candidate) => {
+              const decision = decisions[candidate.id];
+              return (
+                <View key={candidate.id}>
+                  <Body>{candidate.display_label}</Body>
+                  <Caption>
+                    {decision === "approve_new"
+                      ? "Will be added to your account"
+                      : "Will not be added"}
+                  </Caption>
+                </View>
+              );
+            })}
+          </View>
+          {error ? <Body muted>{error}</Body> : null}
           <PrimaryButton
-            label={`Add this ${typeLabel}`}
-            onPress={() => handleDecision("approve_new")}
-            disabled={busy}
+            label="Continue"
+            onPress={submit}
+            loading={busy || saveReview.isPending}
+            disabled={busy || saveReview.isPending || !allCandidatesDecided}
           />
-          <SecondaryButton
-            label={`Skip this ${typeLabel}`}
-            onPress={() => handleDecision("skip")}
-            disabled={busy}
-          />
-        </View>
-      </Card>
+        </ScrollView>
+      </Screen>
     );
-  };
+  }
 
-  const renderFieldStep = () => {
-    if (!currentCandidate) return null;
-    if (currentFields.length === 0) {
-      advanceCandidate();
-      return null;
-    }
-    const fieldPath = currentFields[fieldIndex];
-    if (!fieldPath) return null;
-    const existing = reviewsByKey.get(`${currentCandidate.id}:${fieldPath}`);
-    const progressLabel = `Question ${currentQuestion} of ${totalQuestions}`;
+  if (editingPath) {
     return (
-      <Card style={{ flex: 1, justifyContent: "center" }}>
-        <Caption>{progressLabel}</Caption>
-        <View style={{ marginVertical: 8 }}>
-          <Subtitle style={styles.subtitle}>
-            {`${currentCandidate.asset_type === "vehicle" ? "Vehicle" : "Property"}: ${currentCandidate.display_label}`}
-          </Subtitle>
-        </View>
-        <FieldReviewStep
-          candidate={currentCandidate}
-          fieldPath={fieldPath}
-          existing={existing}
-          onComplete={handleFieldComplete}
-        />
-      </Card>
+      <Screen style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
+          contentContainerStyle={{
+            padding: spacing.lg,
+            paddingBottom: spacing.xl * 2,
+            minHeight: "100%",
+          }}
+        >
+          <Stack.Screen options={{ title: `Edit ${formatFieldLabel(editingPath)}` }} />
+          <FieldEditStep
+            candidate={currentCandidate}
+            fieldPath={editingPath}
+            draft={drafts[`${currentCandidate.id}:${editingPath}`]}
+            onComplete={handleFieldComplete}
+          />
+        </ScrollView>
+      </Screen>
     );
-  };
-
-  const renderSummary = () => (
-    <Card style={{ flex: 1, justifyContent: "center" }}>
-      <Title style={styles.title}>Ready to continue</Title>
-      <Body muted>Review what we found before continuing to your coverage rules.</Body>
-      <View style={{ gap: 12, marginVertical: 16 }}>
-        {candidates?.map((candidate) => {
-          const decision = decisions[candidate.id];
-          return (
-            <View key={candidate.id}>
-              <Body>{candidate.display_label}</Body>
-              <Caption>
-                {decision === "approve_new" ? "Will be added to your account" : "Will not be added"}
-              </Caption>
-            </View>
-          );
-        })}
-      </View>
-      {error ? <Body muted>{error}</Body> : null}
-      <PrimaryButton
-        label="Continue to coverage"
-        onPress={submit}
-        loading={busy || saveReview.isPending}
-        disabled={busy || saveReview.isPending || !allApprovedReady}
-      />
-    </Card>
-  );
-
-  const renderStep = () => {
-    if (phase === "decision") return renderDecisionStep();
-    if (phase === "field") return renderFieldStep();
-    return renderSummary();
-  };
+  }
 
   return (
     <Screen style={{ flex: 1 }}>
@@ -659,11 +740,24 @@ export default function ReviewEntities() {
           minHeight: "100%",
         }}
       >
-        <Stack.Screen options={{ title: "Confirm what we found" }} />
-        <Title style={styles.title}>Confirm what we found</Title>
-        <Body muted>Review each vehicle and property before adding it to your account.</Body>
-        <View style={{ height: 16 }} />
-        {renderStep()}
+        <Stack.Screen options={{ title: "Review" }} />
+        <Caption>{`Asset ${candidateIndex + 1} of ${candidates.length}`}</Caption>
+        <Title style={styles.title}>
+          {currentCandidate.asset_type === "vehicle"
+            ? "Is this your vehicle?"
+            : "Is this your property?"}
+        </Title>
+        {error ? <Body muted>{error}</Body> : null}
+        <CandidateSummary
+          candidate={currentCandidate}
+          drafts={drafts}
+          addressVerified={addressVerified}
+          onEdit={setEditingPath}
+          onAdd={handleAdd}
+          onSkip={handleSkip}
+          onAddressVerified={handleAddressVerified}
+          busy={busy}
+        />
       </ScrollView>
     </Screen>
   );
@@ -682,10 +776,13 @@ const styles = StyleSheet.create({
     color: colors.accent,
     marginBottom: 4,
   },
-  uploadButton: {
-    borderRadius: 999,
-    paddingVertical: 16,
-    minWidth: 160,
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: colors.ink,
+    marginBottom: 6,
   },
   fieldLabel: {
     fontSize: 12,
@@ -696,20 +793,24 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   fieldValue: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "600",
     color: colors.ink,
-    marginBottom: 6,
   },
-  fieldAction: {
-    borderRadius: 999,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    minWidth: 80,
-  },
-  mandateAction: {
-    borderRadius: 999,
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceSubtle,
+  },
+  editLabel: {
+    color: colors.accent,
+    fontWeight: "700",
+  },
+  uploadButton: {
+    borderRadius: 999,
+    paddingVertical: 16,
+    minWidth: 160,
   },
 });

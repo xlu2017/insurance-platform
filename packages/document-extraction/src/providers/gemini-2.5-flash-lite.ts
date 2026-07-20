@@ -22,7 +22,8 @@ interface GeminiContent {
   parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
 }
 
-const DEFAULT_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash"];
 const CONTEXT_LENGTH = 1_048_576;
 
 function isGeminiModel(modelId: string): boolean {
@@ -263,7 +264,7 @@ function transformGeminiResponse(raw: unknown, documentIds: string[]): Record<st
 }
 
 export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
-  readonly providerId = "gemini-2.5-flash-lite";
+  readonly providerId = "gemini";
   readonly baseUrl: string;
   private apiKey: string;
   private requestedModel?: string;
@@ -315,7 +316,7 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
       mimeType: input.mimeType,
       mode: "unsupported",
       supported: false,
-      reason: "Gemini 2.5 Flash-Lite only supports PDF and image inputs in this integration",
+      reason: "Gemini only supports PDF and image inputs in this integration",
     };
   }
 
@@ -360,6 +361,39 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
 
   async analyze(input: NativeDocumentAnalysisRequest): Promise<unknown> {
     await this.resolveModel();
+    const models = [input.model, ...FALLBACK_MODELS];
+    let lastError: unknown;
+
+    for (const modelId of models) {
+      try {
+        return await this.tryAnalyzeWithModel(input, modelId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (
+          message.includes("503") ||
+          message.includes("429") ||
+          message.includes("high demand") ||
+          message.includes("temporarily unavailable") ||
+          message.includes("UNAVAILABLE") ||
+          message.includes("overloaded") ||
+          message.includes("not found") ||
+          message.includes("404") ||
+          message.includes("no longer available")
+        ) {
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw lastError ?? new Error("Document analysis failed on all Gemini models");
+  }
+
+  private async tryAnalyzeWithModel(
+    input: NativeDocumentAnalysisRequest,
+    modelId: string,
+  ): Promise<unknown> {
     const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
       { text: input.userPrompt },
     ];
@@ -377,7 +411,7 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
     }
     const contents: GeminiContent[] = [{ role: "user", parts }];
     const body: Record<string, unknown> = {
-      model: input.model,
+      model: modelId,
       contents,
       systemInstruction: { parts: [{ text: input.systemPrompt }] },
       generationConfig: {
@@ -391,7 +425,7 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
 
     try {
       const response = await this.fetch(
-        `${this.baseUrl}/models/${input.model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+        `${this.baseUrl}/models/${modelId}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

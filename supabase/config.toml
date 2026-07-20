@@ -40,6 +40,9 @@ enable_confirmations = false
 [functions.stripe-webhook]
 verify_jwt = false
 
+[functions.verify-address]
+verify_jwt = true
+
 [edge_runtime]
 enabled = true
 policy = "per_worker"

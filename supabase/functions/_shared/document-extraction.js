@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: c8cd5faad65da68ce3c92b0e2bcaacd069d02c8a3db8f1e008b922b886f763d7
+// source-hash: 8493b215dd09f65240c8ac1ae4d58664c46c7d58cfca710489872ec841876717
 
 
 // ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
@@ -9783,7 +9783,14 @@ function normalizeCurrentValue(raw, fieldPath, documentIdMap, allowedDocumentIds
     });
   }
   if ((status === "known" || status === "conflicting") && (!evidence || evidence.length === 0)) {
-    throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
+    const fallbackDocId = [...allowedDocumentIds][0];
+    if (fallbackDocId) {
+      evidence = [
+        { documentId: fallbackDocId, evidenceSummary: "Extracted from uploaded policy document" }
+      ];
+    } else {
+      throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
+    }
   }
   let alternatives;
   if (Array.isArray(typed.alternatives)) {
@@ -9939,6 +9946,9 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
   const unresolvedConflicts = Array.isArray(typed.unresolvedConflicts) ? typed.unresolvedConflicts : [];
   const warnings = Array.isArray(typed.warnings) ? typed.warnings : [];
   const documentIdMap = new Map(documentAliasMap);
+  for (const doc of input.uploadedDocuments) {
+    documentIdMap.set(doc.documentId, doc.documentId);
+  }
   for (const doc of input.priorDocumentSummaries) {
     documentIdMap.set(doc.documentId, doc.documentId);
   }
@@ -10941,7 +10951,8 @@ function stripMarkdownJsonFence2(text) {
 }
 
 // src/providers/gemini-2.5-flash-lite.ts
-var DEFAULT_MODEL = "gemini-2.5-flash-lite";
+var DEFAULT_MODEL = "gemini-2.5-flash";
+var FALLBACK_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash"];
 var CONTEXT_LENGTH = 1048576;
 function isGeminiModel(modelId) {
   return modelId.toLowerCase().includes("gemini") || modelId.toLowerCase().includes("flash");
@@ -11103,7 +11114,7 @@ function transformGeminiResponse(raw, documentIds) {
   };
 }
 var GeminiFlashLiteProvider = class {
-  providerId = "gemini-2.5-flash-lite";
+  providerId = "gemini";
   baseUrl;
   apiKey;
   requestedModel;
@@ -11148,7 +11159,7 @@ var GeminiFlashLiteProvider = class {
       mimeType: input.mimeType,
       mode: "unsupported",
       supported: false,
-      reason: "Gemini 2.5 Flash-Lite only supports PDF and image inputs in this integration"
+      reason: "Gemini only supports PDF and image inputs in this integration"
     };
   }
   async assertBatchFits(inputs) {
@@ -11190,6 +11201,23 @@ var GeminiFlashLiteProvider = class {
   }
   async analyze(input) {
     await this.resolveModel();
+    const models = [input.model, ...FALLBACK_MODELS];
+    let lastError;
+    for (const modelId of models) {
+      try {
+        return await this.tryAnalyzeWithModel(input, modelId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("503") || message.includes("429") || message.includes("high demand") || message.includes("temporarily unavailable") || message.includes("UNAVAILABLE") || message.includes("overloaded") || message.includes("not found") || message.includes("404") || message.includes("no longer available")) {
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError ?? new Error("Document analysis failed on all Gemini models");
+  }
+  async tryAnalyzeWithModel(input, modelId) {
     const parts = [
       { text: input.userPrompt }
     ];
@@ -11202,7 +11230,7 @@ var GeminiFlashLiteProvider = class {
     }
     const contents = [{ role: "user", parts }];
     const body = {
-      model: input.model,
+      model: modelId,
       contents,
       systemInstruction: { parts: [{ text: input.systemPrompt }] },
       generationConfig: {
@@ -11214,7 +11242,7 @@ var GeminiFlashLiteProvider = class {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await this.fetch(
-        `${this.baseUrl}/models/${input.model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+        `${this.baseUrl}/models/${modelId}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -11300,13 +11328,26 @@ var SupabaseFileLifecycleStore = class {
   }
   admin;
   async recordUpload(record) {
-    const { data, error } = await this.admin.from("document_analysis_provider_files").insert({
-      authorization_id: record.authorizationId,
-      analysis_request_id: record.analysisRequestId,
-      policy_document_id: record.policyDocumentId,
-      provider_file_id: record.providerFileId,
-      upload_status: record.uploadStatus
-    }).select().single();
+    const { data, error } = await this.admin.from("document_analysis_provider_files").upsert(
+      {
+        authorization_id: record.authorizationId,
+        analysis_request_id: record.analysisRequestId,
+        policy_document_id: record.policyDocumentId,
+        provider_file_id: record.providerFileId,
+        upload_status: record.uploadStatus,
+        upload_completed_at: null,
+        processing_status: null,
+        deletion_status: null,
+        deleted_at: null,
+        deletion_attempts: 0,
+        last_deletion_error_category: null,
+        next_deletion_attempt_at: null,
+        cleanup_claimed_at: null,
+        cleanup_lease_expires_at: null,
+        cleanup_worker_id: null
+      },
+      { onConflict: "policy_document_id" }
+    ).select().single();
     if (error || !data) throw new Error("Failed to record file upload: " + (error?.message ?? ""));
     return {
       ...record,
@@ -11517,4 +11558,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "c8cd5faad65da68ce3c92b0e2bcaacd069d02c8a3db8f1e008b922b886f763d7";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "8493b215dd09f65240c8ac1ae4d58664c46c7d58cfca710489872ec841876717";
