@@ -115,6 +115,13 @@ export default function Home() {
         : "Last case was cancelled."
     : null;
 
+  const isOnboardingComplete = household?.onboarding_step === "complete";
+  const hasPolicies = (policies ?? []).length > 0;
+  const showSetupAction = !requiredAction && (!isOnboardingComplete || !hasPolicies);
+  const setupAction = isOnboardingComplete
+    ? { label: "Upload documents", route: "/(tabs)/documents" }
+    : { label: "Continue setup", route: "/onboarding/documents" };
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
@@ -138,6 +145,22 @@ export default function Home() {
                 label="Open"
                 onPress={requiredAction.action}
                 testID="required-action"
+              />
+            </Card>
+          ) : null}
+          {showSetupAction ? (
+            <Card>
+              <Subtitle>{isOnboardingComplete ? "Get started" : "Finish setup"}</Subtitle>
+              <Body muted>
+                {isOnboardingComplete
+                  ? "Upload your current policies so Autopilot can monitor renewals and compare options."
+                  : "Complete your setup so Autopilot can extract your coverage and start comparing."}
+              </Body>
+              <View style={{ height: 12 }} />
+              <PrimaryButton
+                label={setupAction.label}
+                onPress={() => router.push(setupAction.route)}
+                testID="setup-action"
               />
             </Card>
           ) : null}
