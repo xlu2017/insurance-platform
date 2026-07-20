@@ -29,11 +29,12 @@ Deno.serve(async (req) => {
   if (!query) {
     return jsonResponse({ error: "Address query is required" }, 400);
   }
+  const limit = Math.min(Math.max(Number(body.limit) || 5, 1), 10);
 
   const url = new URL(NOMINATIM_URL);
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
-  url.searchParams.set("limit", "1");
+  url.searchParams.set("limit", String(limit));
   url.searchParams.set("addressdetails", "1");
 
   try {
@@ -53,18 +54,17 @@ Deno.serve(async (req) => {
       lon: string;
       address?: Record<string, string>;
     }>;
-    const best = results[0];
+    const formatted = results.map((r) => ({
+      displayName: r.display_name,
+      latitude: Number(r.lat),
+      longitude: Number(r.lon),
+      address: r.address,
+    }));
     return jsonResponse({
-      found: !!best,
+      found: formatted.length > 0,
       query,
-      result: best
-        ? {
-            displayName: best.display_name,
-            latitude: Number(best.lat),
-            longitude: Number(best.lon),
-            address: best.address,
-          }
-        : null,
+      results: formatted,
+      result: formatted[0] ?? null,
     });
   } catch (err) {
     return jsonResponse(

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
-import { formatEdmontonDate } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import {
   type CandidateFieldReview,
@@ -25,6 +24,20 @@ import {
   Subtitle,
   Title,
 } from "@/components/ui";
+import {
+  type DraftReview,
+  OCCUPANCY_LABELS,
+  PROPERTY_REVIEW_FIELDS,
+  VEHICLE_REVIEW_FIELDS,
+  displayValueForField,
+  formatFieldLabel,
+  formatFieldValue,
+  getEffectiveDisplay,
+  getFieldValue,
+  isRecord,
+  parseCorrectedValue,
+  renderCents,
+} from "@/lib/review-entities-helpers";
 
 interface CandidateDecision {
   candidateId: string;
@@ -33,147 +46,18 @@ interface CandidateDecision {
 
 type ReviewAction = CandidateFieldReview["action"];
 
-interface DraftReview {
-  action: ReviewAction;
-  correctedValue: string;
-  mandateRule: string;
-  mandateAmount: string;
-}
-
-const FIELD_LABEL_OVERRIDES: Record<string, string> = {
-  fullAddress: "Address",
-  postalCode: "Postal code",
-  vehicleUse: "Vehicle use",
-  vin: "VIN",
-  insurer: "Insurer",
-  policyNumber: "Policy number",
-  expiryDate: "Expiry date",
-  annualPremiumCents: "Annual premium",
-};
-
-const VEHICLE_USE_LABELS: Record<string, string> = {
-  commute: "Commute",
-  pleasure: "Pleasure",
-  business: "Business",
-  farm: "Farm",
-  unknown: "Unknown",
-};
-
-const OCCUPANCY_LABELS: Record<string, string> = {
-  principal_residence: "Principal residence",
-  rental: "Rental",
-  other: "Other",
-  unknown: "Unknown",
-};
-
-const VEHICLE_REVIEW_FIELDS = [
-  "identity.vin",
-  "identity.year",
-  "identity.make",
-  "identity.model",
-  "identity.vehicleUse",
-  "currentPolicy.insurer",
-  "currentPolicy.policyNumber",
-  "currentPolicy.expiryDate",
-  "currentPolicy.annualPremiumCents",
-];
-
-const PROPERTY_REVIEW_FIELDS = [
-  "identity.fullAddress",
-  "identity.occupancy",
-  "currentPolicy.insurer",
-  "currentPolicy.policyNumber",
-  "currentPolicy.expiryDate",
-  "currentPolicy.annualPremiumCents",
-];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function formatFieldValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "object") {
-    if (Array.isArray(value)) return value.map((v) => formatFieldValue(v)).join(", ");
-    if ("value" in value) return formatFieldValue((value as { value: unknown }).value);
-    return JSON.stringify(value);
-  }
-  return String(value);
-}
-
-function renderCents(value: unknown): string {
-  const num = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(num)) return "—";
-  return `C$${(num / 100).toFixed(2)}`;
-}
-
-function formatFieldLabel(fieldPath: string): string {
-  const raw = fieldPath.split(".").pop() ?? fieldPath;
-  if (FIELD_LABEL_OVERRIDES[raw]) return FIELD_LABEL_OVERRIDES[raw];
-  const spaced = raw
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_-]/g, " ")
-    .toLowerCase();
-  return spaced
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-function displayValueForField(fieldPath: string, value: unknown): string {
-  const key = fieldPath.split(".").pop();
-  if (typeof value === "string") {
-    const normalized = value.toLowerCase();
-    if (key === "vehicleUse") return VEHICLE_USE_LABELS[normalized] ?? value;
-    if (key === "occupancy") return OCCUPANCY_LABELS[normalized] ?? value;
-    if (key === "expiryDate") return formatEdmontonDate(value);
-  }
-  if (key === "annualPremiumCents") return renderCents(value);
-  return formatFieldValue(value);
-}
-
-function parseCorrectedValue(fieldPath: string, raw: string): unknown {
-  if (fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")) {
-    const dollars = Number(raw.replace(/[C$\s,]/g, ""));
-    if (!Number.isNaN(dollars)) return Math.round(dollars * 100);
-  }
-  return raw;
-}
-
-function getFacts(candidate: ExtractionCandidate): Record<string, unknown> {
-  return isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
-}
-
-function getFieldValue(candidate: ExtractionCandidate, fieldPath: string): unknown {
-  const parts = fieldPath.split(".");
-  let current: unknown = getFacts(candidate);
-  for (const part of parts) {
-    if (isRecord(current) && part in current) {
-      current = current[part];
-    } else {
-      return undefined;
-    }
-  }
-  return current;
-}
-
-function getEffectiveDisplay(
-  candidate: ExtractionCandidate,
-  fieldPath: string,
-  draft?: DraftReview | null,
-): string {
-  if (draft?.correctedValue) return draft.correctedValue;
-  return displayValueForField(fieldPath, getFieldValue(candidate, fieldPath));
-}
-
 function fieldPathsForCandidate(candidate: ExtractionCandidate): string[] {
   const base = candidate.asset_type === "vehicle" ? VEHICLE_REVIEW_FIELDS : PROPERTY_REVIEW_FIELDS;
   return base.filter((path) => {
     const value = getFieldValue(candidate, path);
     return value !== null && value !== undefined && value !== "";
   });
+}
+
+interface AddressSuggestion {
+  displayName: string;
+  latitude: number;
+  longitude: number;
 }
 
 function AddressVerification({
@@ -185,8 +69,7 @@ function AddressVerification({
   draft?: DraftReview | null;
   onVerified: (displayName: string) => void;
 }) {
-  const facts = getFacts(candidate);
-  const identityValue = facts.identity;
+  const identityValue = getFieldValue(candidate, "identity");
   const identity = isRecord(identityValue) ? identityValue : {};
   const original = String(identity.fullAddress ?? "");
   const [query, setQuery] = useState(draft?.correctedValue || original);
@@ -194,11 +77,46 @@ function AddressVerification({
     draft?.action === "correct" ? "found" : "idle",
   );
   const [result, setResult] = useState<string | null>(draft?.correctedValue ?? null);
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [touched, setTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const searchSuggestions = async (q: string) => {
+    const trimmed = q.trim();
+    if (trimmed.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("verify-address", {
+        body: { q: trimmed, limit: 5 },
+      });
+      if (invokeError) throw new Error(invokeError.message);
+      const response = data as { results?: AddressSuggestion[] };
+      setSuggestions(response?.results?.slice(0, 5) ?? []);
+    } catch {
+      setSuggestions([]);
+    }
+  };
+
+  useEffect(() => {
+    if (status === "found" || !touched) return;
+    const timeout = setTimeout(() => searchSuggestions(query), 400);
+    return () => clearTimeout(timeout);
+  }, [query, status, touched]);
+
+  const selectSuggestion = (suggestion: AddressSuggestion) => {
+    setQuery(suggestion.displayName);
+    setResult(suggestion.displayName);
+    setSuggestions([]);
+    setStatus("found");
+    onVerified(suggestion.displayName);
+  };
 
   const verify = async () => {
     setStatus("loading");
     setError(null);
+    setSuggestions([]);
     try {
       const { data, error: invokeError } = await supabase.functions.invoke("verify-address", {
         body: { q: query },
@@ -221,6 +139,7 @@ function AddressVerification({
 
   const saveManual = () => {
     if (!query.trim()) return;
+    setSuggestions([]);
     setResult(query.trim());
     setStatus("found");
     onVerified(query.trim());
@@ -228,7 +147,6 @@ function AddressVerification({
 
   return (
     <View style={{ gap: 8 }}>
-      <Caption style={styles.sectionTitle}>Address</Caption>
       {status === "found" && result ? (
         <View style={{ gap: 8 }}>
           <Body>{result}</Body>
@@ -238,12 +156,33 @@ function AddressVerification({
       ) : (
         <View style={{ gap: 8 }}>
           <Field
-            label="Full address"
+            accessibilityLabel="Full address"
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(text: string) => {
+              setTouched(true);
+              setQuery(text);
+            }}
             multiline
             numberOfLines={2}
           />
+          {suggestions.length > 0 ? (
+            <View>
+              <Caption style={{ marginBottom: 4, color: colors.inkMuted }}>Suggestions</Caption>
+              <View style={styles.suggestions}>
+                {suggestions.map((suggestion) => (
+                  <Pressable
+                    key={suggestion.displayName}
+                    onPress={() => selectSuggestion(suggestion)}
+                    style={styles.suggestionItem}
+                  >
+                    <Caption numberOfLines={2} ellipsizeMode="tail">
+                      {suggestion.displayName}
+                    </Caption>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
           <View style={{ flexDirection: "row", gap: 8 }}>
             <SecondaryButton
               label="Verify"
@@ -325,11 +264,11 @@ function FieldEditStep({
     <Card style={{ flex: 1, justifyContent: "center" }}>
       <Caption style={styles.fieldLabel}>{label}</Caption>
       <Body style={styles.fieldValue}>{displayValue}</Body>
-      <Body muted>{`Is this ${label.toLowerCase()} correct?`}</Body>
+      <Body muted>{`Is the ${label} correct?`}</Body>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
         <SecondaryButton label="Confirm" onPress={() => onComplete("confirm")} />
         <SecondaryButton label="Edit" onPress={() => setEditing(true)} />
-        <SecondaryButton label="Unknown" onPress={() => onComplete("unknown")} />
+        <SecondaryButton label="Unsure" onPress={() => onComplete("unknown")} />
       </View>
     </Card>
   );
@@ -489,7 +428,8 @@ export default function ReviewEntities() {
         if (!next[key]) {
           next[key] = {
             action: r.action,
-            correctedValue: formatFieldValue(r.corrected_value),
+            correctedValue:
+              r.action === "correct" ? formatFieldValue(r.corrected_value) : undefined,
             mandateRule: "",
             mandateAmount: "",
           };
@@ -559,20 +499,21 @@ export default function ReviewEntities() {
     if (!currentCandidate || !editingPath) return;
     const key = `${currentCandidate.id}:${editingPath}`;
     const value = getFieldValue(currentCandidate, editingPath);
-    const isCents =
-      editingPath.toLowerCase().includes("cents") || editingPath.toLowerCase().includes("premium");
     const corrected =
       action === "correct"
-        ? String(parseCorrectedValue(editingPath, correctedValue ?? formatFieldValue(value)))
-        : isCents
-          ? renderCents(value)
-          : formatFieldValue(value);
+        ? String(
+            parseCorrectedValue(
+              editingPath,
+              correctedValue ?? displayValueForField(editingPath, value),
+            ),
+          )
+        : undefined;
 
     setDrafts((prev) => ({
       ...prev,
       [key]: {
         action,
-        correctedValue: action === "correct" ? corrected : corrected,
+        correctedValue: corrected,
         mandateRule: "",
         mandateAmount: "",
       },
@@ -600,12 +541,9 @@ export default function ReviewEntities() {
       for (const path of paths) {
         const key = `${currentCandidate.id}:${path}`;
         if (nextDrafts[key]) continue;
-        const value = getFieldValue(currentCandidate, path);
-        const isCents =
-          path.toLowerCase().includes("cents") || path.toLowerCase().includes("premium");
         nextDrafts[key] = {
           action: "confirm",
-          correctedValue: isCents ? renderCents(value) : formatFieldValue(value),
+          correctedValue: undefined,
           mandateRule: "",
           mandateAmount: "",
         };
@@ -812,5 +750,18 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 16,
     minWidth: 160,
+  },
+  suggestions: {
+    borderWidth: 1,
+    borderColor: colors.surfaceSubtle,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    maxHeight: 200,
+  },
+  suggestionItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceSubtle,
   },
 });

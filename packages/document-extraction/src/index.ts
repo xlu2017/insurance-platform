@@ -23,6 +23,8 @@ export * from "./providers/native-document-analysis.ts";
 export * from "./providers/public-error.ts";
 export * from "./providers/privacy-preparation.ts";
 export { KimiK3Provider } from "./providers/kimi-k3.ts";
+export { GeminiFlashLiteProvider } from "./providers/gemini-2.5-flash-lite.ts";
+export { OpenAiGpt5MiniProvider } from "./providers/openai-gpt-5-mini.ts";
 export { MemoryAuthorizationStore } from "./providers/document-processing-authorization.ts";
 export { MemoryExternalFileLifecycleStore } from "./providers/external-file-lifecycle.ts";
 export {

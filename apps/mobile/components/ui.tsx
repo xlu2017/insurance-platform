@@ -198,12 +198,12 @@ export function FormLabel({ label, helpText }: { label: string; helpText?: strin
 }
 
 export function Field(
-  props: TextInputProps & { label: string; error?: string; helpText?: string; prefix?: string },
+  props: TextInputProps & { label?: string; error?: string; helpText?: string; prefix?: string },
 ) {
   const { label, error, helpText, prefix, ...inputProps } = props;
   return (
     <View style={{ marginBottom: spacing.md }}>
-      <FormLabel label={label} helpText={helpText} />
+      {label ? <FormLabel label={label} helpText={helpText} /> : null}
       {prefix ? (
         <View style={styles.inputWithPrefix}>
           <Text style={styles.inputPrefix}>{prefix}</Text>
