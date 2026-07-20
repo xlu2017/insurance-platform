@@ -516,6 +516,7 @@ function CandidateSummary({
       {isProperty ? (
         <Section title="Address">
           <AddressVerification
+            key={candidate.id}
             candidate={candidate}
             draft={addressDraft}
             onVerified={onAddressVerified}
