@@ -11,6 +11,7 @@ import {
   PrimaryButton,
   Screen,
   StatusPill,
+  Subtitle,
   Title,
 } from "@/components/ui";
 
@@ -66,21 +67,27 @@ export default function Autopilot() {
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Autopilot</Title>
+          <Body muted style={{ marginBottom: 16 }}>
+            {activeCase
+              ? "We are working through your current review. We will notify you when a recommendation is ready."
+              : "Your insurance is being monitored. A new review starts automatically before your renewal."}
+          </Body>
+
           {!activeCase && historicalCase ? (
             <Card>
               <StatusPill label="No review in progress" tone="neutral" />
-              <View style={{ height: 8 }} />
+              <View style={{ height: 12 }} />
               <Body muted>{outcomeText[historicalCase.state] ?? "Last case completed."}</Body>
               <View style={{ height: 8 }} />
-              <Body muted>
+              <Caption>
                 A new renewal review will start when your policy renewal date approaches.
-              </Body>
+              </Caption>
             </Card>
           ) : null}
           {!activeCase && !historicalCase ? (
             <Card>
               <StatusPill label="Autopilot active" />
-              <View style={{ height: 8 }} />
+              <View style={{ height: 12 }} />
               <Body muted>
                 Your insurance is being monitored. We will notify you before your next renewal.
               </Body>
@@ -89,6 +96,17 @@ export default function Autopilot() {
           {activeCase ? (
             <>
               <Card testID="case-timeline">
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <Subtitle style={{ marginBottom: 0 }}>Current review</Subtitle>
+                  {subStatus ? <StatusPill label={subStatus} tone="accent" /> : null}
+                </View>
                 {customerStages.map((step, i) => {
                   const done = currentStageIndex > i;
                   const current = currentStageIndex === i;
@@ -134,9 +152,6 @@ export default function Autopilot() {
                         >
                           {step.label}
                         </Body>
-                        {current && subStatus ? (
-                          <Caption style={{ color: colors.ink }}>{subStatus}</Caption>
-                        ) : null}
                       </View>
                     </View>
                   );

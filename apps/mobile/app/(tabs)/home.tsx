@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
+import { colors } from "@autopilot/design-tokens";
 import { formatCad, formatEdmontonDate } from "@/lib/format";
 import {
   Body,
@@ -149,47 +150,53 @@ export default function Home() {
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>
-            {requiredAction
-              ? "One item needs your attention"
-              : "Your insurance is covered and monitored"}
+            {requiredAction ? "One item needs your attention" : "Your insurance is covered"}
           </Title>
+          <Body muted style={{ marginBottom: 16 }}>
+            {requiredAction
+              ? requiredAction.label
+              : "Autopilot is monitoring your policies and will alert you before renewal."}
+          </Body>
+
           <Card testID="autopilot-status-card">
-            <StatusPill
-              label={household.autopilot_active ? "Autopilot active" : "Autopilot paused"}
-              tone={household.autopilot_active ? "accent" : "neutral"}
-            />
-            <View style={{ height: 8 }} />
-            <Body muted>{requiredAction ? "Action required" : "No action required"}</Body>
-            {historicalOutcome && !requiredAction ? <Caption>{historicalOutcome}</Caption> : null}
-          </Card>
-          {requiredAction ? (
-            <Card>
-              <Subtitle>Required action</Subtitle>
-              <Body muted>{requiredAction.label}</Body>
-              <View style={{ height: 12 }} />
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <StatusPill
+                label={household.autopilot_active ? "Autopilot active" : "Autopilot paused"}
+                tone={household.autopilot_active ? "accent" : "neutral"}
+              />
+              {historicalOutcome && !requiredAction ? <Caption>{historicalOutcome}</Caption> : null}
+            </View>
+            {requiredAction ? (
               <PrimaryButton
                 label={requiredAction.buttonLabel}
                 onPress={requiredAction.action}
                 testID="required-action"
               />
-            </Card>
-          ) : null}
-          {showSetupAction ? (
-            <Card>
-              <Subtitle>{isOnboardingComplete ? "Get started" : "Finish setup"}</Subtitle>
-              <Body muted>
-                {isOnboardingComplete
-                  ? "Upload your current policies so we can monitor renewals and compare options."
-                  : "Complete your setup so we can extract your coverage and start comparing."}
-              </Body>
-              <View style={{ height: 12 }} />
-              <PrimaryButton
-                label={setupAction.label}
-                onPress={() => router.push(setupAction.route)}
-                testID="setup-action"
-              />
-            </Card>
-          ) : null}
+            ) : null}
+            {showSetupAction ? (
+              <>
+                <Body muted style={{ marginBottom: 12 }}>
+                  {isOnboardingComplete
+                    ? "Upload your current policies so we can monitor renewals and compare options."
+                    : "Complete your setup so we can extract your coverage and start comparing."}
+                </Body>
+                <PrimaryButton
+                  label={setupAction.label}
+                  onPress={() => router.push(setupAction.route)}
+                  testID="setup-action"
+                />
+              </>
+            ) : null}
+            {!requiredAction && !showSetupAction ? <Body muted>No action required</Body> : null}
+          </Card>
+
           <Card>
             <Subtitle>Your insurance</Subtitle>
             <Row label="Auto insurer" value={auto?.insurer_name ?? "—"} />
@@ -197,9 +204,10 @@ export default function Home() {
             <Row label="Combined annual premium" value={combined > 0 ? formatCad(combined) : "—"} />
             <Row label="Next renewal" value={formatEdmontonDate(nextRenewal)} />
           </Card>
+
           <Card>
             <Subtitle>Savings so far</Subtitle>
-            <Title>{formatCad(savings ?? 0)}</Title>
+            <Title style={{ color: colors.accent, marginTop: 4 }}>{formatCad(savings ?? 0)}</Title>
             <Caption>Total annual savings from completed switches.</Caption>
           </Card>
         </ScrollView>

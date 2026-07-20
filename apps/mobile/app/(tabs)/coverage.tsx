@@ -5,7 +5,18 @@ import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
-import { Body, Card, Loading, PrimaryButton, Row, Screen, Subtitle, Title } from "@/components/ui";
+import { colors, spacing } from "@autopilot/design-tokens";
+import {
+  Body,
+  Caption,
+  Card,
+  Loading,
+  PrimaryButton,
+  Row,
+  Screen,
+  Subtitle,
+  Title,
+} from "@/components/ui";
 import {
   autoCoverageFormOptions,
   autoEndorsementLabels,
@@ -341,21 +352,24 @@ export default function Coverage() {
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Your coverage rules</Title>
-          <Body muted>
-            These are the coverage and switching rules we will use when comparing your insurance.
+          <Body muted style={{ marginBottom: spacing.md }}>
+            These are the rules we use when comparing your insurance and finding better options.
           </Body>
-          <PrimaryButton
-            label={showDetails ? "Hide all coverage details" : "View all coverage details"}
-            onPress={() => setShowDetails((value) => !value)}
-            testID="toggle-coverage-details"
-          />
-          <View style={{ height: 12 }} />
+
           <Card>
-            <Subtitle>Your household</Subtitle>
-            <Row
-              label="Drivers"
-              value={(data?.drivers ?? []).map((d) => d.full_name).join(", ") || "—"}
-            />
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: spacing.sm,
+              }}
+            >
+              <Subtitle style={{ marginBottom: 0 }}>Your household</Subtitle>
+              <Caption>
+                {(data?.drivers ?? []).length} driver{(data?.drivers ?? []).length !== 1 ? "s" : ""}
+              </Caption>
+            </View>
             <Row
               label="Vehicles"
               value={
@@ -371,6 +385,13 @@ export default function Coverage() {
               }
             />
           </Card>
+
+          <PrimaryButton
+            label={showDetails ? "Hide all coverage details" : "View all coverage details"}
+            onPress={() => setShowDetails((value) => !value)}
+            testID="toggle-coverage-details"
+            style={{ marginBottom: spacing.md }}
+          />
 
           <Card>
             <Subtitle>Rules for all vehicles</Subtitle>
@@ -393,24 +414,49 @@ export default function Coverage() {
                 const override = mandate?.vehicleOverrides.find((o) => o.vehicleId === vehicle.id);
                 return (
                   <Card key={vehicle.id}>
-                    <Subtitle>
-                      Vehicle: {vehicle.year} {vehicle.make} {vehicle.model}
-                    </Subtitle>
-                    <Body muted>
-                      {labelForValue(
-                        financingStatusOptions,
-                        vehicle.financing_status as FinancingStatus,
-                      )}{" "}
-                      ·{" "}
-                      {labelForValue(
-                        vehicleUseClassOptions,
-                        vehicle.vehicle_use_class as VehicleUseClass,
-                      )}
-                      {vehicle.is_classic ? " · Classic" : ""}
-                      {vehicle.is_modified ? " · Modified" : ""}
-                    </Body>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: spacing.sm,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          backgroundColor: colors.accentSoft,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: spacing.sm,
+                        }}
+                      >
+                        <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
+                          AUTO
+                        </Body>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>
+                          {vehicle.year} {vehicle.make} {vehicle.model}
+                        </Subtitle>
+                        <Caption numberOfLines={1}>
+                          {labelForValue(
+                            financingStatusOptions,
+                            vehicle.financing_status as FinancingStatus,
+                          )}{" "}
+                          ·{" "}
+                          {labelForValue(
+                            vehicleUseClassOptions,
+                            vehicle.vehicle_use_class as VehicleUseClass,
+                          )}
+                          {vehicle.is_classic ? " · Classic" : ""}
+                          {vehicle.is_modified ? " · Modified" : ""}
+                        </Caption>
+                      </View>
+                    </View>
                     {override ? (
-                      <View style={{ marginVertical: 8 }}>
+                      <View style={{ marginVertical: spacing.sm }}>
                         <Body muted>Overrides apply to this vehicle</Body>
                       </View>
                     ) : null}
@@ -443,14 +489,42 @@ export default function Coverage() {
                 );
                 return (
                   <Card key={property.id}>
-                    <Subtitle>
-                      Property: {property.address_line1}, {property.city}
-                    </Subtitle>
-                    <Body muted>
-                      {labelForValue(propertyTypeOptions, property.property_type as PropertyType)}
-                    </Body>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: spacing.sm,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          backgroundColor: colors.accentSoft,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: spacing.sm,
+                        }}
+                      >
+                        <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
+                          HOME
+                        </Body>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>
+                          {property.address_line1}, {property.city}
+                        </Subtitle>
+                        <Caption numberOfLines={1}>
+                          {labelForValue(
+                            propertyTypeOptions,
+                            property.property_type as PropertyType,
+                          )}
+                        </Caption>
+                      </View>
+                    </View>
                     {override ? (
-                      <View style={{ marginVertical: 8 }}>
+                      <View style={{ marginVertical: spacing.sm }}>
                         <Body muted>Overrides apply to this property</Body>
                       </View>
                     ) : null}

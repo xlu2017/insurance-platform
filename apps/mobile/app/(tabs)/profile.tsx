@@ -4,6 +4,7 @@ import { ScrollView, Switch, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as LocalAuthentication from "expo-local-authentication";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { colors, spacing } from "@autopilot/design-tokens";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { formatEdmontonDate } from "@/lib/format";
@@ -17,6 +18,7 @@ import {
   Row,
   Screen,
   SecondaryButton,
+  StatusPill,
   Subtitle,
   Title,
 } from "@/components/ui";
@@ -152,6 +154,17 @@ export default function Profile() {
     router.replace("/welcome");
   };
 
+  const latestConsents = (consents ?? []).reduce(
+    (acc, consent) => {
+      const current = acc[consent.consent_type];
+      if (!current || current.created_at < consent.created_at) {
+        acc[consent.consent_type] = consent;
+      }
+      return acc;
+    },
+    {} as Record<string, NonNullable<typeof consents>[number]>,
+  );
+
   const disableDangerousMode = async () => {
     if (!household) return;
     setDangerousBusy(true);
@@ -227,55 +240,67 @@ export default function Profile() {
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Profile</Title>
+          <Body muted style={{ marginBottom: spacing.md }}>
+            Manage your account, preferences, and permissions.
+          </Body>
+
           <Card>
             <Subtitle>Identity</Subtitle>
             <Row label="Name" value={profile?.full_name ?? "—"} />
             <Row label="Email" value={profile?.email ?? "—"} />
             <Row label="Household" value={household?.name ?? "—"} />
           </Card>
+
           <Card>
-            <Subtitle>Autopilot</Subtitle>
+            <Subtitle>Settings</Subtitle>
             <View
               style={{
                 flexDirection: "row",
                 justifyContent: "space-between",
                 alignItems: "center",
+                paddingVertical: spacing.sm,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.border,
               }}
             >
-              <Body>Monitor renewals and prepare better options</Body>
+              <View style={{ flex: 1, marginRight: spacing.md }}>
+                <Body>Monitor renewals</Body>
+                <Caption>Find better options before renewal. You approve every switch.</Caption>
+              </View>
               <Switch value={autopilot} onValueChange={toggleAutopilot} />
             </View>
-            <Caption>
-              We review your insurance before renewal and notify you when an eligible option is
-              ready. You approve every switch.
-            </Caption>
-          </Card>
-          <Card>
-            <Subtitle>Security</Subtitle>
             <View
               style={{
                 flexDirection: "row",
                 justifyContent: "space-between",
                 alignItems: "center",
+                paddingVertical: spacing.sm,
               }}
             >
-              <Body>Biometric unlock</Body>
+              <View style={{ flex: 1, marginRight: spacing.md }}>
+                <Body>Biometric unlock</Body>
+                <Caption>Approving a switch always requires reauthentication.</Caption>
+              </View>
               <Switch value={biometrics} onValueChange={toggleBiometrics} />
             </View>
-            <Caption>Approving a switch always requires reauthentication.</Caption>
           </Card>
+
           <Card>
-            <Subtitle>Document review</Subtitle>
             <View
               style={{
                 flexDirection: "row",
                 justifyContent: "space-between",
                 alignItems: "center",
+                marginBottom: spacing.sm,
               }}
             >
-              <View style={{ flex: 1, marginRight: 12 }}>
-                <Body>{dangerousMode?.enabled ? "Instant AI review" : "Standard review"}</Body>
-                <Caption>{dangerousMode?.enabled ? "Experimental" : "Recommended"}</Caption>
+              <View style={{ flex: 1, marginRight: spacing.md }}>
+                <Subtitle style={{ marginBottom: 0 }}>Document review</Subtitle>
+                <Caption>
+                  {dangerousMode?.enabled
+                    ? "Instant AI review is on"
+                    : "Standard review is recommended"}
+                </Caption>
               </View>
               <Switch
                 accessibilityLabel="Instant AI review"
@@ -289,8 +314,8 @@ export default function Profile() {
             </View>
             <Caption>{DANGEROUS_MODE_DISCLOSURE}</Caption>
             {showDangerousConfirmation && !(dangerousMode?.enabled ?? false) ? (
-              <View style={{ marginTop: 12, gap: 10 }}>
-                <Subtitle>Turn on instant AI review?</Subtitle>
+              <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+                <Body>Turn on instant AI review?</Body>
                 {[
                   [
                     "explicit",
@@ -300,8 +325,15 @@ export default function Profile() {
                   ["automated", "I understand AI-generated information may be incorrect."],
                   ["raw", "I agree to review the results before they are saved."],
                 ].map(([key, label]) => (
-                  <View key={key} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Body style={{ flex: 1 }}>{label}</Body>
+                  <View
+                    key={key}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingVertical: spacing.xs,
+                    }}
+                  >
+                    <Body style={{ flex: 1, marginRight: spacing.sm }}>{label}</Body>
                     <Switch
                       accessibilityLabel={label}
                       value={
@@ -335,28 +367,61 @@ export default function Profile() {
                 />
               </View>
             ) : null}
-            {dangerousError ? <Body muted>{dangerousError}</Body> : null}
+            {dangerousError ? (
+              <Body muted style={{ marginTop: spacing.sm }}>
+                {dangerousError}
+              </Body>
+            ) : null}
           </Card>
+
           <Card>
             <Subtitle>Membership</Subtitle>
-            <Row
-              label="Status"
-              value={
-                membershipStatusLabel[subscription?.status ?? ""] ?? subscription?.status ?? "—"
-              }
-            />
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: spacing.sm,
+              }}
+            >
+              <Body>Status</Body>
+              <StatusPill
+                label={
+                  membershipStatusLabel[subscription?.status ?? ""] ?? subscription?.status ?? "—"
+                }
+              />
+            </View>
             <Row label="Renews" value={formatEdmontonDate(subscription?.current_period_end)} />
           </Card>
+
           <Card>
             <Subtitle>Privacy and permissions</Subtitle>
-            {(consents ?? []).map((c, i) => (
-              <Row
-                key={i}
-                label={consentTypeLabel[c.consent_type] ?? c.consent_type}
-                value={`${c.granted ? "Granted" : "Withdrawn"} ${formatEdmontonDate(c.created_at)}`}
-              />
+            {Object.values(latestConsents).map((c) => (
+              <View
+                key={c.consent_type}
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingVertical: spacing.sm,
+                  borderBottomWidth: 1,
+                  borderBottomColor: colors.border,
+                }}
+              >
+                <Body style={{ flex: 1, marginRight: spacing.sm }}>
+                  {consentTypeLabel[c.consent_type] ?? c.consent_type}
+                </Body>
+                <View style={{ alignItems: "flex-end" }}>
+                  <StatusPill
+                    label={c.granted ? "Granted" : "Withdrawn"}
+                    tone={c.granted ? "accent" : "neutral"}
+                  />
+                  <Caption>{formatEdmontonDate(c.created_at)}</Caption>
+                </View>
+              </View>
             ))}
           </Card>
+
           <SecondaryButton label="Sign out" onPress={signOut} testID="sign-out" />
           <View style={{ height: 24 }} />
         </ScrollView>
