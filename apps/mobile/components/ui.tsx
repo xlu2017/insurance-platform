@@ -52,22 +52,32 @@ export function Body({
   children,
   muted,
   style,
+  ...rest
 }: {
   children: React.ReactNode;
   muted?: boolean;
   style?: React.ComponentProps<typeof Text>["style"];
-}) {
-  return <Text style={[styles.body, muted && styles.muted, style]}>{children}</Text>;
+} & Omit<React.ComponentProps<typeof Text>, "style" | "children">) {
+  return (
+    <Text style={[styles.body, muted && styles.muted, style]} {...rest}>
+      {children}
+    </Text>
+  );
 }
 
 export function Caption({
   children,
   style,
+  ...rest
 }: {
   children: React.ReactNode;
   style?: React.ComponentProps<typeof Text>["style"];
-}) {
-  return <Text style={[styles.caption, style]}>{children}</Text>;
+} & Omit<React.ComponentProps<typeof Text>, "style" | "children">) {
+  return (
+    <Text style={[styles.caption, style]} {...rest}>
+      {children}
+    </Text>
+  );
 }
 
 export function PrimaryButton({

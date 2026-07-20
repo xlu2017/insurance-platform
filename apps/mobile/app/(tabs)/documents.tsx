@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Linking, Modal, Platform, ScrollView, View } from "react-native";
+import { Alert, Linking, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
 import { documentCategories, type DocumentCategory } from "@autopilot/schemas";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
@@ -272,53 +273,87 @@ export default function Documents() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Title>Documents</Title>
+          <Title>Policy documents</Title>
+          <Body muted style={{ marginBottom: spacing.md }}>
+            Upload or photograph your current insurance documents so we can review your coverage.
+          </Body>
+
           <Card>
-            <Subtitle>Files ready to upload</Subtitle>
             <Select
-              label="Category for the next files (or leave Auto-detect)"
+              label="Document type"
+              helpText="Leave Auto-detect if you are unsure."
               options={categoryOptions}
               value={category}
               onValueChange={setCategory}
             />
-            <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: "row", gap: 8 }}>
               <SecondaryButton
-                label="Add PDF or image files"
+                label="Files"
                 onPress={() => choose("document")}
                 disabled={busy || !!batch}
+                style={{ flex: 1, paddingVertical: 10 }}
               />
               <SecondaryButton
-                label="Take a photo"
+                label="Camera"
                 onPress={() => choose("camera")}
                 disabled={busy || !!batch}
+                style={{ flex: 1, paddingVertical: 10 }}
               />
               <SecondaryButton
-                label="Add photos from library"
+                label="Library"
                 onPress={() => choose("library")}
                 disabled={busy || !!batch}
+                style={{ flex: 1, paddingVertical: 10 }}
               />
             </View>
-            {pending.map((item) => (
-              <View key={item.clientItemId} style={{ marginTop: 12 }}>
-                <Body>{item.file.name}</Body>
-                <Caption>
-                  {categoryLabels[item.category]} ·{" "}
-                  {documentItemStatusLabel(item.status, currentBatch)}
-                </Caption>
-                {item.error ? <Caption>{item.error}</Caption> : null}
-                {item.status === "pending" ? (
-                  <SecondaryButton
-                    label="Remove"
-                    onPress={() =>
-                      setPending((current) =>
-                        current.filter((candidate) => candidate.clientItemId !== item.clientItemId),
-                      )
-                    }
-                    disabled={busy}
-                  />
-                ) : null}
+
+            {pending.length > 0 ? (
+              <View style={{ marginTop: spacing.md }}>
+                <Subtitle style={{ fontSize: typography.sizes.body, marginBottom: spacing.sm }}>
+                  Ready to upload
+                </Subtitle>
+                {pending.map((item) => (
+                  <View
+                    key={item.clientItemId}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingVertical: spacing.sm,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border,
+                    }}
+                  >
+                    <View style={{ flex: 1, marginRight: spacing.sm }}>
+                      <Body numberOfLines={1}>{item.file.name}</Body>
+                      <Caption>
+                        {categoryLabels[item.category]} ·{" "}
+                        {documentItemStatusLabel(item.status, currentBatch)}
+                      </Caption>
+                      {item.error ? (
+                        <Caption style={{ color: colors.danger }}>{item.error}</Caption>
+                      ) : null}
+                    </View>
+                    {item.status === "pending" ? (
+                      <Pressable
+                        onPress={() =>
+                          setPending((current) =>
+                            current.filter(
+                              (candidate) => candidate.clientItemId !== item.clientItemId,
+                            ),
+                          )
+                        }
+                        disabled={busy}
+                        hitSlop={8}
+                      >
+                        <Body style={{ color: colors.danger }}>Remove</Body>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ))}
               </View>
-            ))}
+            ) : null}
+
             {!batchSubmitted ? (
               <PrimaryButton
                 label={
@@ -331,18 +366,35 @@ export default function Documents() {
                 onPress={uploadAndAnalyze}
                 loading={busy}
                 disabled={pending.length === 0}
+                style={{ marginTop: spacing.md }}
               />
             ) : null}
-            {error ? <Body muted>{error}</Body> : null}
+            {error ? (
+              <Body muted style={{ marginTop: spacing.sm }}>
+                {error}
+              </Body>
+            ) : null}
           </Card>
 
           {currentBatch ? (
             <Card>
-              <StatusPill
-                label={documentBatchStatusLabels[currentBatch.status]}
-                tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
-              />
-              <Caption>{`${currentBatch.document_count} ${currentBatch.document_count === 1 ? "file" : "files"} added`}</Caption>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: spacing.sm,
+                }}
+              >
+                <StatusPill
+                  label={documentBatchStatusLabels[currentBatch.status]}
+                  tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
+                />
+                <Caption>
+                  {currentBatch.document_count}{" "}
+                  {currentBatch.document_count === 1 ? "file" : "files"} added
+                </Caption>
+              </View>
               {!currentBatch.automatic_processing && currentBatch.is_terminal ? (
                 <Body muted>We are preparing the details for your review.</Body>
               ) : null}
@@ -369,17 +421,31 @@ export default function Documents() {
             </Card>
           ) : null}
 
+          {(documents ?? []).length > 0 ? (
+            <Subtitle style={{ marginTop: spacing.md, marginBottom: spacing.sm }}>
+              Uploaded documents
+            </Subtitle>
+          ) : null}
           {(documents ?? []).map((doc) => (
             <Card key={doc.id}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <Body>{doc.file_name}</Body>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: radii.md,
+                    backgroundColor: colors.accentSoft,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: spacing.md,
+                  }}
+                >
+                  <Body style={{ color: colors.accent, fontWeight: "700" }}>
+                    {doc.mime_type?.startsWith("image/") ? "IMG" : "PDF"}
+                  </Body>
+                </View>
+                <View style={{ flex: 1, marginRight: spacing.sm }}>
+                  <Body numberOfLines={1}>{doc.file_name}</Body>
                   <Caption>
                     {categoryLabels[doc.category as DocumentCategory] ?? doc.category} ·{" "}
                     {formatEdmontonDate(doc.created_at)}
@@ -390,14 +456,19 @@ export default function Documents() {
                   tone={doc.status === "extracted" ? "accent" : "neutral"}
                 />
               </View>
-              <View style={{ height: 8 }} />
-              <SecondaryButton label="View" onPress={() => viewDocument(doc)} />
-              <View style={{ height: 8 }} />
-              <SecondaryButton
-                label="Remove document"
-                onPress={() => remove(doc)}
-                disabled={busy}
-              />
+              <View style={{ flexDirection: "row", gap: 8, marginTop: spacing.md }}>
+                <SecondaryButton
+                  label="View"
+                  onPress={() => viewDocument(doc)}
+                  style={{ flex: 1, paddingVertical: 10 }}
+                />
+                <SecondaryButton
+                  label="Remove"
+                  onPress={() => remove(doc)}
+                  disabled={busy}
+                  style={{ flex: 1, paddingVertical: 10 }}
+                />
+              </View>
             </Card>
           ))}
         </ScrollView>
