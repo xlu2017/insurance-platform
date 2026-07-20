@@ -28,12 +28,24 @@ export function Card({ children, style, ...props }: ViewProps) {
   );
 }
 
-export function Title({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.title}>{children}</Text>;
+export function Title({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.ComponentProps<typeof Text>["style"];
+}) {
+  return <Text style={[styles.title, style]}>{children}</Text>;
 }
 
-export function Subtitle({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.subtitle}>{children}</Text>;
+export function Subtitle({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.ComponentProps<typeof Text>["style"];
+}) {
+  return <Text style={[styles.subtitle, style]}>{children}</Text>;
 }
 
 export function Body({
@@ -58,12 +70,14 @@ export function PrimaryButton({
   disabled,
   loading,
   testID,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
   testID?: string;
+  style?: React.ComponentProps<typeof Pressable>["style"];
 }) {
   return (
     <Pressable
@@ -74,6 +88,7 @@ export function PrimaryButton({
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.primaryButton,
+        typeof style === "function" ? style({ pressed }) : style,
         (disabled || loading) && styles.buttonDisabled,
         pressed && styles.buttonPressed,
       ]}
@@ -92,11 +107,13 @@ export function SecondaryButton({
   onPress,
   disabled,
   testID,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   testID?: string;
+  style?: React.ComponentProps<typeof Pressable>["style"];
 }) {
   return (
     <Pressable
@@ -107,6 +124,7 @@ export function SecondaryButton({
       disabled={disabled}
       style={({ pressed }) => [
         styles.secondaryButton,
+        typeof style === "function" ? style({ pressed }) : style,
         disabled && styles.buttonDisabled,
         pressed && styles.buttonPressed,
       ]}

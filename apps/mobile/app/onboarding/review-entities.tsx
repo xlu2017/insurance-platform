@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
-import { View, TextInput, ScrollView } from "react-native";
+import { View, TextInput, ScrollView, StyleSheet } from "react-native";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
@@ -155,7 +155,7 @@ export default function ReviewEntities() {
   if (!household) {
     return (
       <Screen>
-        <Title>No household</Title>
+        <Title style={styles.title}>No household</Title>
         <Body muted>Please sign in and create a household first.</Body>
       </Screen>
     );
@@ -164,9 +164,13 @@ export default function ReviewEntities() {
     return (
       <Screen>
         <Stack.Screen options={{ title: "Review extracted details" }} />
-        <Title>Nothing to review</Title>
+        <Title style={styles.title}>Nothing to review</Title>
         <Body muted>Upload your policies first so we can extract your assets.</Body>
-        <PrimaryButton label="Upload" onPress={() => router.push("/onboarding/documents")} />
+        <PrimaryButton
+          label="Upload"
+          onPress={() => router.push("/onboarding/documents")}
+          style={styles.uploadButton}
+        />
       </Screen>
     );
   }
@@ -331,6 +335,7 @@ export default function ReviewEntities() {
               label={a.label}
               disabled={saveReview.isPending}
               onPress={() => setAction(a.value)}
+              style={styles.fieldAction}
             />
           ))}
         </View>
@@ -342,6 +347,7 @@ export default function ReviewEntities() {
                 label={a.label}
                 disabled={saveReview.isPending}
                 onPress={() => setAction(a.value)}
+                style={styles.mandateAction}
               />
             ))}
           </View>
@@ -396,7 +402,7 @@ export default function ReviewEntities() {
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl * 2 }}
     >
       <Stack.Screen options={{ title: "Review extracted assets" }} />
-      <Title>Review extracted assets</Title>
+      <Title style={styles.title}>Review extracted assets</Title>
       <Body muted>
         Confirm or edit the asset identity and current-policy facts. Document-informed mandate
         specifications are reviewed one at a time next.
@@ -411,7 +417,9 @@ export default function ReviewEntities() {
 
         return (
           <Card key={candidate.id}>
-            <Subtitle>{candidate.asset_type === "vehicle" ? "Vehicle" : "Property"}</Subtitle>
+            <Subtitle style={styles.subtitle}>
+              {candidate.asset_type === "vehicle" ? "Vehicle" : "Property"}
+            </Subtitle>
             <Body>{candidate.display_label}</Body>
             {candidate.occupancy ? (
               <Caption>
@@ -454,17 +462,20 @@ export default function ReviewEntities() {
                     }))
                   }
                   disabled={busy}
+                  style={styles.identityButton}
                 />
               ) : null}
               <SecondaryButton
                 label="Skip"
                 onPress={() => setDecision(candidate.id, "skip")}
                 disabled={busy}
+                style={styles.skipButton}
               />
               <PrimaryButton
                 label="Approve"
                 onPress={() => setDecision(candidate.id, "approve_new")}
                 disabled={busy}
+                style={styles.approveButton}
               />
             </View>
             {decision ? (
@@ -485,7 +496,58 @@ export default function ReviewEntities() {
         onPress={submit}
         loading={busy || saveReview.isPending}
         disabled={busy || saveReview.isPending || !allApprovedReady}
+        style={styles.submitButton}
       />
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.accent,
+    marginBottom: 4,
+  },
+  uploadButton: {
+    borderRadius: 999,
+    paddingVertical: 16,
+    minWidth: 160,
+  },
+  fieldAction: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minWidth: 72,
+  },
+  mandateAction: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  identityButton: {
+    borderRadius: 999,
+    paddingVertical: 12,
+  },
+  approveButton: {
+    borderRadius: 999,
+    paddingVertical: 14,
+    flex: 1,
+  },
+  skipButton: {
+    borderRadius: 999,
+    paddingVertical: 14,
+    minWidth: 80,
+  },
+  submitButton: {
+    borderRadius: 999,
+    paddingVertical: 16,
+    width: "100%",
+  },
+});
