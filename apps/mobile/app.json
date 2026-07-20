@@ -19,6 +19,14 @@
       "expo-secure-store",
       "expo-local-authentication",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Insurance Autopilot to select photos of insurance documents.",
+          "cameraPermission": "Allow Insurance Autopilot to photograph insurance documents.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-notifications",
         {
           "defaultChannel": "default"
