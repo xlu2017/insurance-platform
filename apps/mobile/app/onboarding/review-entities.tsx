@@ -1,6 +1,7 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
-import { View, TextInput } from "react-native";
+import { View, TextInput, ScrollView } from "react-native";
+import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
 import {
@@ -393,7 +394,10 @@ export default function ReviewEntities() {
   };
 
   return (
-    <Screen>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
+      contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl * 2 }}
+    >
       <Stack.Screen options={{ title: "Review extracted assets" }} />
       <Title>Review extracted assets</Title>
       <Body muted>
@@ -487,6 +491,6 @@ export default function ReviewEntities() {
         loading={busy || saveReview.isPending}
         disabled={busy || saveReview.isPending || !allApprovedReady}
       />
-    </Screen>
+    </ScrollView>
   );
 }
