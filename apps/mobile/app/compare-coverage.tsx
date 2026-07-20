@@ -256,6 +256,7 @@ function AssetColumnBody({
   asset,
   colWidth,
   specs,
+  onToggleCell,
   onResize,
   onAutoSize,
   onResizeStart,
@@ -264,6 +265,7 @@ function AssetColumnBody({
   asset?: CompareAsset;
   colWidth: number;
   specs: CoverageSpec[];
+  onToggleCell?: (rowIndex: number) => void;
   onResize: (dx: number) => void;
   onAutoSize: () => void;
   onResizeStart?: () => void;
@@ -271,27 +273,43 @@ function AssetColumnBody({
 }) {
   return (
     <View style={{ width: colWidth, position: "relative" }}>
-      {specs.map((spec) => (
-        <View
-          key={spec.key}
-          style={{
-            height: ROW_HEIGHT,
-            justifyContent: "center",
-            alignItems: "center",
-            paddingHorizontal: spacing.sm,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-          }}
-        >
-          <Body
-            numberOfLines={1}
-            ellipsizeMode="clip"
-            style={[{ width: "100%", textAlign: "center" }, clipTextStyle]}
+      {specs.map((spec, rowIndex) => {
+        const value = asset ? canonicalValue(asset, spec) : "—";
+        const cell = (
+          <View
+            key={spec.key}
+            style={{
+              height: ROW_HEIGHT,
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: spacing.sm,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+            }}
           >
-            {asset ? canonicalValue(asset, spec) : "—"}
-          </Body>
-        </View>
-      ))}
+            <Body
+              numberOfLines={1}
+              ellipsizeMode="clip"
+              style={[{ width: "100%", textAlign: "center" }, clipTextStyle]}
+            >
+              {value}
+            </Body>
+          </View>
+        );
+        return asset ? (
+          <Pressable
+            key={spec.key}
+            accessibilityRole="button"
+            accessibilityLabel={`${spec.label}: ${value}`}
+            onPress={() => onToggleCell?.(rowIndex)}
+            style={{ height: ROW_HEIGHT }}
+          >
+            {cell}
+          </Pressable>
+        ) : (
+          cell
+        );
+      })}
       <Divider />
       {asset
         ? specs.map((spec, rowIndex) => {
@@ -378,14 +396,16 @@ function SpecColumnBody({
 
 function SpecExpandOverlay({
   specs,
-  expandedIndex,
+  expandedCell,
   onCollapse,
 }: {
   specs: CoverageSpec[];
-  expandedIndex: number | null;
+  expandedCell: { row: number; col: "spec" | number } | null;
   onCollapse: () => void;
 }) {
-  if (expandedIndex === null || !specs[expandedIndex]) return null;
+  if (expandedCell?.col !== "spec") return null;
+  const spec = specs[expandedCell.row];
+  if (!spec) return null;
   return (
     <Pressable
       accessibilityRole="button"
@@ -394,7 +414,8 @@ function SpecExpandOverlay({
       style={{
         position: "absolute",
         left: 0,
-        top: expandedIndex * ROW_HEIGHT,
+        top: expandedCell.row * ROW_HEIGHT,
+        minWidth: SPEC_WIDTH,
         height: ROW_HEIGHT,
         paddingHorizontal: spacing.sm,
         justifyContent: "center",
@@ -407,7 +428,55 @@ function SpecExpandOverlay({
       }}
     >
       <Body numberOfLines={1} style={clipTextStyle}>
-        {specs[expandedIndex].label}
+        {spec.label}
+      </Body>
+    </Pressable>
+  );
+}
+
+function AssetExpandOverlay({
+  specs,
+  selectedAssets,
+  colWidths,
+  expandedCell,
+  onCollapse,
+}: {
+  specs: CoverageSpec[];
+  selectedAssets: CompareAsset[];
+  colWidths: number[];
+  expandedCell: { row: number; col: "spec" | number } | null;
+  onCollapse: () => void;
+}) {
+  if (expandedCell?.col === "spec" || expandedCell === null) return null;
+  const colIndex = expandedCell.col;
+  const asset = selectedAssets[colIndex];
+  const spec = specs[expandedCell.row];
+  if (!asset || !spec) return null;
+  const left = colWidths.slice(0, colIndex).reduce((sum, w) => sum + w, 0);
+  const minWidth = colWidths[colIndex] ?? DEFAULT_COL_WIDTH;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Collapse expanded value"
+      onPress={onCollapse}
+      style={{
+        position: "absolute",
+        left,
+        top: expandedCell.row * ROW_HEIGHT,
+        minWidth,
+        height: ROW_HEIGHT,
+        paddingHorizontal: spacing.sm,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+        zIndex: 30,
+        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+      }}
+    >
+      <Body numberOfLines={1} style={[{ textAlign: "center" }, clipTextStyle]}>
+        {canonicalValue(asset, spec)}
       </Body>
     </Pressable>
   );
@@ -701,7 +770,9 @@ export default function CompareCoverage() {
 
   const [selectedAssets, setSelectedAssets] = useState<CompareAsset[]>([]);
   const [colWidths, setColWidths] = useState<number[]>([]);
-  const [expandedSpecIndex, setExpandedSpecIndex] = useState<number | null>(null);
+  const [expandedCell, setExpandedCell] = useState<{ row: number; col: "spec" | number } | null>(
+    null,
+  );
   const [hiddenSpecKeys, setHiddenSpecKeys] = useState<Set<string>>(new Set());
   const [showMode, setShowMode] = useState<"all" | "differences" | "identical">("all");
   const [picker, setPicker] = useState<{ open: boolean; index: number; mode: PickerMode } | null>(
@@ -749,10 +820,14 @@ export default function CompareCoverage() {
   }, [baseSpecs, hiddenSpecKeys, selectedAssets, showMode]);
 
   useEffect(() => {
-    if (expandedSpecIndex !== null && expandedSpecIndex >= visibleSpecs.length) {
-      setExpandedSpecIndex(null);
+    if (
+      expandedCell !== null &&
+      expandedCell.col === "spec" &&
+      expandedCell.row >= visibleSpecs.length
+    ) {
+      setExpandedCell(null);
     }
-  }, [expandedSpecIndex, visibleSpecs]);
+  }, [expandedCell, visibleSpecs]);
 
   const handleSelectAsset = useCallback((asset: CompareAsset, index: number, mode: PickerMode) => {
     setSelectedAssets((prev) => {
@@ -772,7 +847,7 @@ export default function CompareCoverage() {
       }
       return deduped.slice(0, MAX_COLUMNS);
     });
-    setExpandedSpecIndex(null);
+    setExpandedCell(null);
   }, []);
 
   const handleResize = useCallback(
@@ -809,7 +884,7 @@ export default function CompareCoverage() {
     setColWidths(selectedAssets.map(() => Math.min(DEFAULT_COL_WIDTH, maxColWidth)));
     setHiddenSpecKeys(new Set());
     setShowMode("all");
-    setExpandedSpecIndex(null);
+    setExpandedCell(null);
   }, [maxColWidth, selectedAssets]);
 
   const syncHeaderScroll = useCallback((x: number) => {
@@ -932,7 +1007,7 @@ export default function CompareCoverage() {
         {/* Table body */}
         <ScrollView
           showsVerticalScrollIndicator={false}
-          onScrollBeginDrag={() => setExpandedSpecIndex(null)}
+          onScrollBeginDrag={() => setExpandedCell(null)}
           scrollEnabled={!resizing}
           contentContainerStyle={{ flexGrow: 1 }}
           style={{ flex: 1 }}
@@ -940,7 +1015,11 @@ export default function CompareCoverage() {
           <View style={{ flexDirection: "row" }}>
             <SpecColumnBody
               specs={visibleSpecs}
-              onToggle={(i) => setExpandedSpecIndex(expandedSpecIndex === i ? null : i)}
+              onToggle={(i) =>
+                setExpandedCell((current) =>
+                  current?.row === i && current?.col === "spec" ? null : { row: i, col: "spec" },
+                )
+              }
             />
             <ScrollView
               ref={bodyHScrollRef}
@@ -958,6 +1037,13 @@ export default function CompareCoverage() {
                   asset={asset}
                   colWidth={colWidths[index] ?? DEFAULT_COL_WIDTH}
                   specs={visibleSpecs}
+                  onToggleCell={(rowIndex) =>
+                    setExpandedCell((current) =>
+                      current?.row === rowIndex && current?.col === index
+                        ? null
+                        : { row: rowIndex, col: index },
+                    )
+                  }
                   onResize={(dx) => handleResize(index, dx)}
                   onAutoSize={() => handleAutoSize(index)}
                   onResizeStart={() => setResizing(true)}
@@ -978,11 +1064,18 @@ export default function CompareCoverage() {
                     );
                   })
                 : null}
+              <AssetExpandOverlay
+                specs={visibleSpecs}
+                selectedAssets={selectedAssets}
+                colWidths={colWidths}
+                expandedCell={expandedCell}
+                onCollapse={() => setExpandedCell(null)}
+              />
             </ScrollView>
             <SpecExpandOverlay
               specs={visibleSpecs}
-              expandedIndex={expandedSpecIndex}
-              onCollapse={() => setExpandedSpecIndex(null)}
+              expandedCell={expandedCell}
+              onCollapse={() => setExpandedCell(null)}
             />
           </View>
         </ScrollView>
