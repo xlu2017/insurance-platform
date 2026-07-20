@@ -1,10 +1,9 @@
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { View, TextInput } from "react-native";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
 import {
-  approveCandidateAssetsV2,
   type CandidateFieldReview,
   type ExtractionCandidate,
   useCandidateFieldReviews,
@@ -118,10 +117,6 @@ function fieldPathsForCandidate(candidate: ExtractionCandidate): string[] {
   if (currentPolicy) {
     Object.keys(currentPolicy).forEach((k) => paths.push(`currentPolicy.${k}`));
   }
-  const currentCoverage = isRecord(facts.currentCoverage) ? facts.currentCoverage : undefined;
-  if (currentCoverage) {
-    Object.keys(currentCoverage).forEach((k) => paths.push(`currentCoverage.${k}`));
-  }
   return paths;
 }
 
@@ -130,9 +125,13 @@ function isCoverageField(fieldPath: string): boolean {
 }
 
 export default function ReviewEntities() {
+  const { sessionId } = useLocalSearchParams<{ sessionId?: string }>();
   const { data: household, isLoading: householdLoading } = useHousehold();
   const { isLoading: sessionLoading } = useOpenExtractionSession(household?.id);
-  const { data: candidates, isLoading: candidatesLoading } = useExtractionCandidates(household?.id);
+  const { data: candidates, isLoading: candidatesLoading } = useExtractionCandidates(
+    household?.id,
+    sessionId,
+  );
   const candidateIds = useMemo(() => candidates?.map((c) => c.id) ?? [], [candidates]);
   const { data: fieldReviews, isLoading: reviewsLoading } = useCandidateFieldReviews(candidateIds);
   const saveReview = useSaveCandidateFieldReview();
@@ -242,13 +241,6 @@ export default function ReviewEntities() {
         }
       }
 
-      const approved = candidates.filter((c) => decisions[c.id] === "approve_new");
-      if (approved.length === 0) {
-        setError("Please approve or skip each candidate.");
-        setBusy(false);
-        return;
-      }
-
       if (!allApprovedReady) {
         setError("Please confirm or correct every field before approving an asset.");
         setBusy(false);
@@ -264,19 +256,20 @@ export default function ReviewEntities() {
         return;
       }
 
-      const clientRequestId = `mobile-${household.id}-${Date.now()}`;
-      const allDecisions = candidates.map((c) => ({
-        candidate_id: c.id,
-        decision: decisions[c.id] === "approve_new" ? ("approve_new" as const) : ("skip" as const),
-        identity_confirmed:
-          c.match_classification === "new_identity_confirmation_required"
-            ? !!identityConfirmations[c.id]
-            : undefined,
-      }));
+      for (const candidate of candidates) {
+        const { error: draftError } = await supabase.rpc("save_candidate_review_draft_v1", {
+          p_household_id: household.id,
+          p_candidate_id: candidate.id,
+          p_decision: decisions[candidate.id] === "approve_new" ? "approve_new" : "skip",
+          p_identity_confirmed:
+            candidate.match_classification === "new_identity_confirmation_required"
+              ? !!identityConfirmations[candidate.id]
+              : false,
+        });
+        if (draftError) throw draftError;
+      }
 
-      await approveCandidateAssetsV2(household.id, user.id, clientRequestId, allDecisions);
-
-      router.push("/onboarding/mandate");
+      router.push({ pathname: "/onboarding/reconcile-mandates", params: { sessionId } });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Approval failed");
     } finally {
@@ -404,8 +397,8 @@ export default function ReviewEntities() {
       <Stack.Screen options={{ title: "Review extracted assets" }} />
       <Title>Review extracted assets</Title>
       <Body muted>
-        Confirm or correct the facts we extracted from your policies. Coverage fields also let you
-        accept or change the mandate we derived from your current policy.
+        Confirm or correct the asset identity and current-policy facts. Document-informed mandate
+        specifications are reviewed one at a time next.
       </Body>
       <View style={{ height: 16 }} />
 

@@ -14,6 +14,12 @@ export type Database = {
           created_at: string;
           decision: Database["public"]["Enums"]["candidate_decision"];
           display_label: string;
+          draft_decision: string | null;
+          draft_existing_asset_id: string | null;
+          draft_existing_asset_type: Database["public"]["Enums"]["candidate_asset_type"] | null;
+          draft_identity_confirmed: boolean;
+          draft_updated_at: string | null;
+          draft_updated_by: string | null;
           household_id: string;
           id: string;
           identity_fingerprint: string;
@@ -37,6 +43,12 @@ export type Database = {
           created_at?: string;
           decision?: Database["public"]["Enums"]["candidate_decision"];
           display_label: string;
+          draft_decision?: string | null;
+          draft_existing_asset_id?: string | null;
+          draft_existing_asset_type?: Database["public"]["Enums"]["candidate_asset_type"] | null;
+          draft_identity_confirmed?: boolean;
+          draft_updated_at?: string | null;
+          draft_updated_by?: string | null;
           household_id: string;
           id?: string;
           identity_fingerprint: string;
@@ -60,6 +72,12 @@ export type Database = {
           created_at?: string;
           decision?: Database["public"]["Enums"]["candidate_decision"];
           display_label?: string;
+          draft_decision?: string | null;
+          draft_existing_asset_id?: string | null;
+          draft_existing_asset_type?: Database["public"]["Enums"]["candidate_asset_type"] | null;
+          draft_identity_confirmed?: boolean;
+          draft_updated_at?: string | null;
+          draft_updated_by?: string | null;
           household_id?: string;
           id?: string;
           identity_fingerprint?: string;
@@ -86,6 +104,13 @@ export type Database = {
             columns: ["approved_policy_id"];
             isOneToOne: false;
             referencedRelation: "policies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asset_candidates_draft_updated_by_fkey";
+            columns: ["draft_updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
           {
@@ -271,41 +296,102 @@ export type Database = {
       candidate_field_reviews: {
         Row: {
           action: Database["public"]["Enums"]["candidate_field_review_action"];
+          batch_id: string | null;
           candidate_id: string;
+          completed_at: string | null;
+          confidence: number | null;
+          conflict_values_json: Json;
+          correction_reason: string | null;
           corrected_value: Json | null;
           created_at: string;
+          current_mandate_value: Json | null;
+          document_implied_mandate_value: Json | null;
+          document_implied_value: Json | null;
           field_path: string;
           household_id: string;
           id: string;
+          is_complete: boolean;
+          mandate_path: string | null;
           mandate_rule_json: Json | null;
+          material_conflict: boolean;
+          original_extracted_value: Json | null;
+          prior_mandate_value: Json | null;
           reviewed_by: string | null;
+          source_document_id: string | null;
+          source_page_number: number | null;
+          source_section: string | null;
+          specification_title: string | null;
           updated_at: string;
+          value_state: string | null;
         };
         Insert: {
           action: Database["public"]["Enums"]["candidate_field_review_action"];
+          batch_id?: string | null;
           candidate_id: string;
+          completed_at?: string | null;
+          confidence?: number | null;
+          conflict_values_json?: Json;
+          correction_reason?: string | null;
           corrected_value?: Json | null;
           created_at?: string;
+          current_mandate_value?: Json | null;
+          document_implied_mandate_value?: Json | null;
+          document_implied_value?: Json | null;
           field_path: string;
           household_id: string;
           id?: string;
+          is_complete?: boolean;
+          mandate_path?: string | null;
           mandate_rule_json?: Json | null;
+          material_conflict?: boolean;
+          original_extracted_value?: Json | null;
+          prior_mandate_value?: Json | null;
           reviewed_by?: string | null;
+          source_document_id?: string | null;
+          source_page_number?: number | null;
+          source_section?: string | null;
+          specification_title?: string | null;
           updated_at?: string;
+          value_state?: string | null;
         };
         Update: {
           action?: Database["public"]["Enums"]["candidate_field_review_action"];
+          batch_id?: string | null;
           candidate_id?: string;
+          completed_at?: string | null;
+          confidence?: number | null;
+          conflict_values_json?: Json;
+          correction_reason?: string | null;
           corrected_value?: Json | null;
           created_at?: string;
+          current_mandate_value?: Json | null;
+          document_implied_mandate_value?: Json | null;
+          document_implied_value?: Json | null;
           field_path?: string;
           household_id?: string;
           id?: string;
+          is_complete?: boolean;
+          mandate_path?: string | null;
           mandate_rule_json?: Json | null;
+          material_conflict?: boolean;
+          original_extracted_value?: Json | null;
+          prior_mandate_value?: Json | null;
           reviewed_by?: string | null;
+          source_document_id?: string | null;
+          source_page_number?: number | null;
+          source_section?: string | null;
+          specification_title?: string | null;
           updated_at?: string;
+          value_state?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "candidate_field_reviews_batch_id_fkey";
+            columns: ["batch_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_batches";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "candidate_field_reviews_candidate_id_fkey";
             columns: ["candidate_id"];
@@ -325,6 +411,84 @@ export type Database = {
             columns: ["reviewed_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_field_reviews_source_document_id_fkey";
+            columns: ["source_document_id"];
+            isOneToOne: false;
+            referencedRelation: "policy_documents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      candidate_field_review_versions: {
+        Row: {
+          action: Database["public"]["Enums"]["candidate_field_review_action"];
+          actor_profile_id: string | null;
+          candidate_id: string;
+          corrected_value: Json | null;
+          correction_reason: string | null;
+          created_at: string;
+          current_mandate_value: Json | null;
+          household_id: string;
+          id: string;
+          review_id: string;
+          snapshot_json: Json;
+        };
+        Insert: {
+          action: Database["public"]["Enums"]["candidate_field_review_action"];
+          actor_profile_id?: string | null;
+          candidate_id: string;
+          corrected_value?: Json | null;
+          correction_reason?: string | null;
+          created_at?: string;
+          current_mandate_value?: Json | null;
+          household_id: string;
+          id?: string;
+          review_id: string;
+          snapshot_json: Json;
+        };
+        Update: {
+          action?: Database["public"]["Enums"]["candidate_field_review_action"];
+          actor_profile_id?: string | null;
+          candidate_id?: string;
+          corrected_value?: Json | null;
+          correction_reason?: string | null;
+          created_at?: string;
+          current_mandate_value?: Json | null;
+          household_id?: string;
+          id?: string;
+          review_id?: string;
+          snapshot_json?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "candidate_field_review_versions_actor_profile_id_fkey";
+            columns: ["actor_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_field_review_versions_candidate_id_fkey";
+            columns: ["candidate_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_candidates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_field_review_versions_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "candidate_field_review_versions_review_id_fkey";
+            columns: ["review_id"];
+            isOneToOne: false;
+            referencedRelation: "candidate_field_reviews";
             referencedColumns: ["id"];
           },
         ];
@@ -1003,6 +1167,216 @@ export type Database = {
           },
         ];
       };
+      document_processing_batch_items: {
+        Row: {
+          batch_id: string;
+          category: Database["public"]["Enums"]["document_category"];
+          client_item_id: string;
+          content_sha256: string;
+          created_at: string;
+          deduplicated: boolean;
+          duplicate_of_policy_document_id: string | null;
+          household_id: string;
+          id: string;
+          policy_document_id: string;
+          selected_file_name: string;
+          status: string;
+        };
+        Insert: {
+          batch_id: string;
+          category: Database["public"]["Enums"]["document_category"];
+          client_item_id: string;
+          content_sha256: string;
+          created_at?: string;
+          deduplicated?: boolean;
+          duplicate_of_policy_document_id?: string | null;
+          household_id: string;
+          id?: string;
+          policy_document_id: string;
+          selected_file_name: string;
+          status: string;
+        };
+        Update: {
+          batch_id?: string;
+          category?: Database["public"]["Enums"]["document_category"];
+          client_item_id?: string;
+          content_sha256?: string;
+          created_at?: string;
+          deduplicated?: boolean;
+          duplicate_of_policy_document_id?: string | null;
+          household_id?: string;
+          id?: string;
+          policy_document_id?: string;
+          selected_file_name?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_processing_batch_items_batch_id_fkey";
+            columns: ["batch_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_batches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batch_items_duplicate_of_policy_document_id_fkey";
+            columns: ["duplicate_of_policy_document_id"];
+            isOneToOne: false;
+            referencedRelation: "policy_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batch_items_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batch_items_policy_document_id_fkey";
+            columns: ["policy_document_id"];
+            isOneToOne: false;
+            referencedRelation: "policy_documents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      document_processing_batches: {
+        Row: {
+          authorization_id: string | null;
+          client_request_id: string;
+          completed_at: string | null;
+          configured_model_id: string | null;
+          configured_provider: string | null;
+          consent_id: string | null;
+          created_at: string;
+          created_by: string;
+          deduplicated_count: number;
+          disclosure_version: string | null;
+          document_count: number;
+          error_code: string | null;
+          household_id: string;
+          id: string;
+          manual_case_id: string | null;
+          mode_snapshot: string;
+          next_retry_at: string | null;
+          processing_started_at: string | null;
+          retry_count: number;
+          retryable: boolean;
+          session_id: string;
+          settings_version: number;
+          status: string;
+          submitted_at: string | null;
+          unique_document_count: number;
+          updated_at: string;
+          worker_claimed_at: string | null;
+          worker_lease_expires_at: string | null;
+        };
+        Insert: {
+          authorization_id?: string | null;
+          client_request_id: string;
+          completed_at?: string | null;
+          configured_model_id?: string | null;
+          configured_provider?: string | null;
+          consent_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          deduplicated_count?: number;
+          disclosure_version?: string | null;
+          document_count?: number;
+          error_code?: string | null;
+          household_id: string;
+          id?: string;
+          manual_case_id?: string | null;
+          mode_snapshot: string;
+          next_retry_at?: string | null;
+          processing_started_at?: string | null;
+          retry_count?: number;
+          retryable?: boolean;
+          session_id: string;
+          settings_version: number;
+          status?: string;
+          submitted_at?: string | null;
+          unique_document_count?: number;
+          updated_at?: string;
+          worker_claimed_at?: string | null;
+          worker_lease_expires_at?: string | null;
+        };
+        Update: {
+          authorization_id?: string | null;
+          client_request_id?: string;
+          completed_at?: string | null;
+          configured_model_id?: string | null;
+          configured_provider?: string | null;
+          consent_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          deduplicated_count?: number;
+          disclosure_version?: string | null;
+          document_count?: number;
+          error_code?: string | null;
+          household_id?: string;
+          id?: string;
+          manual_case_id?: string | null;
+          mode_snapshot?: string;
+          next_retry_at?: string | null;
+          processing_started_at?: string | null;
+          retry_count?: number;
+          retryable?: boolean;
+          session_id?: string;
+          settings_version?: number;
+          status?: string;
+          submitted_at?: string | null;
+          unique_document_count?: number;
+          updated_at?: string;
+          worker_claimed_at?: string | null;
+          worker_lease_expires_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_processing_batches_authorization_id_fkey";
+            columns: ["authorization_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_authorizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batches_consent_id_fkey";
+            columns: ["consent_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_consent";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batches_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batches_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batches_manual_case_id_fkey";
+            columns: ["manual_case_id"];
+            isOneToOne: false;
+            referencedRelation: "optimization_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batches_session_id_fkey";
+            columns: ["session_id"];
+            isOneToOne: false;
+            referencedRelation: "document_extraction_sessions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_processing_consent: {
         Row: {
           authority_basis: string;
@@ -1410,6 +1784,126 @@ export type Database = {
             columns: ["updated_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      household_document_processing_setting_events: {
+        Row: {
+          actor_profile_id: string;
+          automated_processing_acknowledged: boolean;
+          configured_model_id: string | null;
+          configured_provider: string | null;
+          created_at: string;
+          disclosure_version: string | null;
+          enabled_state: boolean;
+          event_type: string;
+          foreign_processing_acknowledged: boolean;
+          household_id: string;
+          id: string;
+          raw_processing_approved: boolean;
+          reauthenticated_at: string | null;
+        };
+        Insert: {
+          actor_profile_id: string;
+          automated_processing_acknowledged?: boolean;
+          configured_model_id?: string | null;
+          configured_provider?: string | null;
+          created_at?: string;
+          disclosure_version?: string | null;
+          enabled_state: boolean;
+          event_type: string;
+          foreign_processing_acknowledged?: boolean;
+          household_id: string;
+          id?: string;
+          raw_processing_approved?: boolean;
+          reauthenticated_at?: string | null;
+        };
+        Update: {
+          actor_profile_id?: string;
+          automated_processing_acknowledged?: boolean;
+          configured_model_id?: string | null;
+          configured_provider?: string | null;
+          created_at?: string;
+          disclosure_version?: string | null;
+          enabled_state?: boolean;
+          event_type?: string;
+          foreign_processing_acknowledged?: boolean;
+          household_id?: string;
+          id?: string;
+          raw_processing_approved?: boolean;
+          reauthenticated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "household_document_processing_setting_events_actor_profile_id_fkey";
+            columns: ["actor_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "household_document_processing_setting_events_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      household_document_processing_settings: {
+        Row: {
+          configured_model_id: string | null;
+          configured_provider: string | null;
+          created_at: string;
+          dangerous_mode_enabled: boolean;
+          disabled_at: string | null;
+          disclosure_version: string | null;
+          enabled_at: string | null;
+          enabled_by: string | null;
+          household_id: string;
+          setting_version: number;
+          updated_at: string;
+        };
+        Insert: {
+          configured_model_id?: string | null;
+          configured_provider?: string | null;
+          created_at?: string;
+          dangerous_mode_enabled?: boolean;
+          disabled_at?: string | null;
+          disclosure_version?: string | null;
+          enabled_at?: string | null;
+          enabled_by?: string | null;
+          household_id: string;
+          setting_version?: number;
+          updated_at?: string;
+        };
+        Update: {
+          configured_model_id?: string | null;
+          configured_provider?: string | null;
+          created_at?: string;
+          dangerous_mode_enabled?: boolean;
+          disabled_at?: string | null;
+          disclosure_version?: string | null;
+          enabled_at?: string | null;
+          enabled_by?: string | null;
+          household_id?: string;
+          setting_version?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "household_document_processing_settings_enabled_by_fkey";
+            columns: ["enabled_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "household_document_processing_settings_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: true;
+            referencedRelation: "households";
             referencedColumns: ["id"];
           },
         ];
@@ -1890,6 +2384,7 @@ export type Database = {
       policy_documents: {
         Row: {
           category: Database["public"]["Enums"]["document_category"];
+          content_sha256: string | null;
           created_at: string;
           file_name: string;
           household_id: string;
@@ -1904,6 +2399,7 @@ export type Database = {
         };
         Insert: {
           category?: Database["public"]["Enums"]["document_category"];
+          content_sha256?: string | null;
           created_at?: string;
           file_name: string;
           household_id: string;
@@ -1918,6 +2414,7 @@ export type Database = {
         };
         Update: {
           category?: Database["public"]["Enums"]["document_category"];
+          content_sha256?: string | null;
           created_at?: string;
           file_name?: string;
           household_id?: string;
@@ -3297,6 +3794,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      claim_document_processing_batch_v1: {
+        Args: {
+          p_batch_id: string;
+          p_household_id: string;
+          p_lease_seconds?: number;
+        };
+        Returns: boolean;
+      };
       approve_customer_recommendation: {
         Args: { p_expected_rec_version: number; p_recommendation_id: string };
         Returns: Json;
@@ -3356,6 +3861,24 @@ export type Database = {
         Args: { p_expected_rec_version: number; p_recommendation_id: string };
         Returns: Json;
       };
+      disable_dangerous_mode_v1: {
+        Args: { p_household_id: string };
+        Returns: Json;
+      };
+      enable_dangerous_mode_v1: {
+        Args: {
+          p_automated_processing_acknowledged: boolean;
+          p_configured_model_id: string;
+          p_configured_provider: string;
+          p_disclosure_version: string;
+          p_explicit_confirmation: boolean;
+          p_foreign_processing_acknowledged: boolean;
+          p_household_id: string;
+          p_processor_contract_version: string;
+          p_raw_processing_approved: boolean;
+        };
+        Returns: Json;
+      };
       fail_recommendation_generation_attempt: {
         Args: {
           p_attempt_id: string;
@@ -3378,6 +3901,10 @@ export type Database = {
           household_id: string;
         };
         Returns: undefined;
+      };
+      merge_jsonb_objects_v1: {
+        Args: { p_base: Json; p_patch: Json };
+        Returns: Json;
       };
       persist_case_quote_v2: {
         Args: {
@@ -3409,6 +3936,22 @@ export type Database = {
           p_consent_id?: string;
           p_documents_json?: Json;
           p_household_id: string;
+          p_session_id: string;
+        };
+        Returns: Json;
+      };
+      persist_document_batch_analysis_v1: {
+        Args: {
+          p_analysis_json?: Json;
+          p_analysis_run_id?: string | null;
+          p_authorization_id?: string | null;
+          p_batch_id: string;
+          p_candidates_json?: Json;
+          p_client_request_id: string;
+          p_consent_id?: string | null;
+          p_documents_json?: Json;
+          p_household_id: string;
+          p_reviews_json?: Json;
           p_session_id: string;
         };
         Returns: Json;
@@ -3493,6 +4036,29 @@ export type Database = {
           p_approved: boolean;
           p_notes?: string;
           p_recommendation_id: string;
+        };
+        Returns: Json;
+      };
+      save_candidate_review_draft_v1: {
+        Args: {
+          p_candidate_id: string;
+          p_decision: string;
+          p_existing_asset_id?: string | null;
+          p_existing_asset_type?: Database["public"]["Enums"]["candidate_asset_type"] | null;
+          p_household_id: string;
+          p_identity_confirmed?: boolean;
+        };
+        Returns: Json;
+      };
+      save_mandate_review_item_v1: {
+        Args: {
+          p_action: Database["public"]["Enums"]["candidate_field_review_action"];
+          p_corrected_value?: Json;
+          p_correction_reason?: string | null;
+          p_current_mandate_value: Json;
+          p_household_id: string;
+          p_is_complete?: boolean;
+          p_review_id: string;
         };
         Returns: Json;
       };
@@ -3586,7 +4152,12 @@ export type Database = {
         | "unknown"
         | "change_mandate"
         | "reset_mandate_to_current"
-        | "not_applicable";
+        | "not_applicable"
+        | "pending"
+        | "keep_current"
+        | "use_document_value"
+        | "use_corrected_document_value"
+        | "unresolved";
       candidate_match_classification:
         | "new"
         | "exact_existing_match"
@@ -3858,6 +4429,11 @@ export const Constants = {
         "change_mandate",
         "reset_mandate_to_current",
         "not_applicable",
+        "pending",
+        "keep_current",
+        "use_document_value",
+        "use_corrected_document_value",
+        "unresolved",
       ],
       candidate_match_classification: [
         "new",

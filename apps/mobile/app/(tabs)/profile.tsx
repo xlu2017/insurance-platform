@@ -12,19 +12,36 @@ import {
   Body,
   Caption,
   Card,
+  Field,
   Loading,
+  PrimaryButton,
   Row,
   Screen,
   SecondaryButton,
   Subtitle,
   Title,
 } from "@/components/ui";
+import { loadDangerousModeSetting, updateDangerousModeSetting } from "@/lib/document-processing";
+
+const DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
+const DANGEROUS_MODE_DISCLOSURE =
+  "Immediately send uploaded policy documents to an external AI provider for extraction. Documents may contain sensitive personal, financial, property and vehicle information. AI output may be incomplete or incorrect and must be reviewed before use.";
 
 export default function Profile() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
   const [biometrics, setBiometrics] = useState(false);
   const [autopilot, setAutopilot] = useState(household?.autopilot_active ?? false);
+  const [showDangerousConfirmation, setShowDangerousConfirmation] = useState(false);
+  const [dangerousPassword, setDangerousPassword] = useState("");
+  const [dangerousBusy, setDangerousBusy] = useState(false);
+  const [dangerousError, setDangerousError] = useState<string | null>(null);
+  const [dangerousAcknowledgements, setDangerousAcknowledgements] = useState({
+    explicit: false,
+    foreign: false,
+    automated: false,
+    raw: false,
+  });
 
   useEffect(() => {
     if (household) setAutopilot(household.autopilot_active);
@@ -72,6 +89,12 @@ export default function Profile() {
     },
   });
 
+  const { data: dangerousMode, refetch: refetchDangerousMode } = useQuery({
+    queryKey: ["dangerous-mode", household?.id],
+    enabled: !!household,
+    queryFn: () => loadDangerousModeSetting(household!.id),
+  });
+
   if (isLoading) return <Loading />;
 
   const toggleBiometrics = async (value: boolean) => {
@@ -115,6 +138,74 @@ export default function Profile() {
     router.replace("/welcome");
   };
 
+  const disableDangerousMode = async () => {
+    if (!household) return;
+    setDangerousBusy(true);
+    setDangerousError(null);
+    try {
+      await updateDangerousModeSetting({
+        householdId: household.id,
+        enabled: false,
+        explicitConfirmation: false,
+        foreignProcessingAcknowledged: false,
+        automatedProcessingAcknowledged: false,
+        rawProcessingApproved: false,
+        disclosureVersion: DANGEROUS_MODE_DISCLOSURE_VERSION,
+      });
+      setShowDangerousConfirmation(false);
+      await refetchDangerousMode();
+    } catch (error) {
+      setDangerousError(
+        error instanceof Error ? error.message : "Failed to disable Dangerous mode",
+      );
+    } finally {
+      setDangerousBusy(false);
+    }
+  };
+
+  const enableDangerousMode = async () => {
+    if (!household) return;
+    setDangerousBusy(true);
+    setDangerousError(null);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const email = userData.user?.email;
+      if (!email || !dangerousPassword) {
+        throw new Error("Enter your password to reauthenticate");
+      }
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email,
+        password: dangerousPassword,
+      });
+      if (reauthError) throw new Error("Reauthentication failed");
+
+      await updateDangerousModeSetting({
+        householdId: household.id,
+        enabled: true,
+        explicitConfirmation: dangerousAcknowledgements.explicit,
+        foreignProcessingAcknowledged: dangerousAcknowledgements.foreign,
+        automatedProcessingAcknowledged: dangerousAcknowledgements.automated,
+        rawProcessingApproved: dangerousAcknowledgements.raw,
+        disclosureVersion: DANGEROUS_MODE_DISCLOSURE_VERSION,
+      });
+      setDangerousPassword("");
+      setShowDangerousConfirmation(false);
+      setDangerousAcknowledgements({
+        explicit: false,
+        foreign: false,
+        automated: false,
+        raw: false,
+      });
+      await refetchDangerousMode();
+    } catch (error) {
+      setDangerousError(error instanceof Error ? error.message : "Failed to enable Dangerous mode");
+    } finally {
+      setDangerousBusy(false);
+    }
+  };
+
+  const allDangerousAcknowledged = Object.values(dangerousAcknowledgements).every(Boolean);
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
@@ -153,6 +244,75 @@ export default function Profile() {
               <Switch value={biometrics} onValueChange={toggleBiometrics} />
             </View>
             <Caption>Approving a switch always requires reauthentication.</Caption>
+          </Card>
+          <Card>
+            <Subtitle>Experimental</Subtitle>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Body>Dangerous mode</Body>
+                <Caption>Safe mode is the default.</Caption>
+              </View>
+              <Switch
+                accessibilityLabel="Dangerous mode"
+                value={dangerousMode?.enabled ?? false}
+                disabled={dangerousBusy}
+                onValueChange={(enabled) => {
+                  if (enabled) setShowDangerousConfirmation(true);
+                  else void disableDangerousMode();
+                }}
+              />
+            </View>
+            <Caption>{DANGEROUS_MODE_DISCLOSURE}</Caption>
+            {showDangerousConfirmation && !(dangerousMode?.enabled ?? false) ? (
+              <View style={{ marginTop: 12, gap: 10 }}>
+                {[
+                  ["explicit", "I explicitly confirm that I want to enable Dangerous mode."],
+                  ["foreign", "I acknowledge that processing may occur outside Canada."],
+                  ["automated", "I acknowledge automated document processing."],
+                  ["raw", "I approve processing the original policy documents."],
+                ].map(([key, label]) => (
+                  <View key={key} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <Body style={{ flex: 1 }}>{label}</Body>
+                    <Switch
+                      accessibilityLabel={label}
+                      value={
+                        dangerousAcknowledgements[key as keyof typeof dangerousAcknowledgements]
+                      }
+                      onValueChange={(value) =>
+                        setDangerousAcknowledgements((current) => ({
+                          ...current,
+                          [key as keyof typeof current]: value,
+                        }))
+                      }
+                    />
+                  </View>
+                ))}
+                <Field
+                  label="Password for reauthentication"
+                  secureTextEntry
+                  value={dangerousPassword}
+                  onChangeText={setDangerousPassword}
+                />
+                <PrimaryButton
+                  label="Enable Dangerous mode"
+                  onPress={enableDangerousMode}
+                  loading={dangerousBusy}
+                  disabled={!allDangerousAcknowledged || !dangerousPassword}
+                />
+                <SecondaryButton
+                  label="Cancel"
+                  onPress={() => setShowDangerousConfirmation(false)}
+                  disabled={dangerousBusy}
+                />
+              </View>
+            ) : null}
+            {dangerousError ? <Body muted>{dangerousError}</Body> : null}
           </Card>
           <Card>
             <Subtitle>Membership</Subtitle>

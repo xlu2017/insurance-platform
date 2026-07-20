@@ -13,47 +13,63 @@ export interface PickedFile {
   size?: number;
 }
 
-export async function pickDocument(): Promise<PickedFile | null> {
+export async function pickDocuments(): Promise<PickedFile[]> {
   const result = await DocumentPicker.getDocumentAsync({
     type: ["application/pdf", "image/*"],
     copyToCacheDirectory: true,
+    multiple: true,
   });
-  if (result.canceled || !result.assets[0]) return null;
-  const asset = result.assets[0];
-  return {
+  if (result.canceled) return [];
+  return result.assets.map((asset) => ({
     uri: asset.uri,
     name: asset.name,
     mimeType: asset.mimeType ?? "application/octet-stream",
     size: asset.size,
-  };
+  }));
 }
 
-export async function pickImage(fromCamera: boolean): Promise<PickedFile | null> {
+export async function pickDocument(): Promise<PickedFile | null> {
+  return (await pickDocuments())[0] ?? null;
+}
+
+export async function pickImages(fromCamera: boolean): Promise<PickedFile[]> {
   const picker = fromCamera ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
   if (fromCamera) {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return null;
+    if (!permission.granted) return [];
   }
-  const result = await picker({ mediaTypes: ["images"], quality: 0.8 });
-  if (result.canceled || !result.assets[0]) return null;
-  const asset = result.assets[0];
-  return {
+  const result = await picker({
+    mediaTypes: ["images"],
+    quality: 0.8,
+    allowsMultipleSelection: !fromCamera,
+  });
+  if (result.canceled) return [];
+  return result.assets.map((asset) => ({
     uri: asset.uri,
     name: asset.fileName ?? `photo-${Date.now()}.jpg`,
     mimeType: asset.mimeType ?? "image/jpeg",
     size: "fileSize" in asset ? (asset.fileSize as number) : undefined,
-  };
+  }));
+}
+
+export async function pickImage(fromCamera: boolean): Promise<PickedFile | null> {
+  return (await pickImages(fromCamera))[0] ?? null;
 }
 
 export interface UploadResult {
   path: string;
   id: string;
+  batchId: string;
+  itemId: string;
+  deduplicated: boolean;
 }
 
 export async function uploadPolicyDocument(
   householdId: string,
   category: DocumentCategory,
   file: PickedFile,
+  batchId?: string,
+  clientItemId?: string,
 ): Promise<UploadResult> {
   const { data: session } = await supabase.auth.getSession();
   if (!session.session?.access_token) {
@@ -75,6 +91,8 @@ export async function uploadPolicyDocument(
   const form = new FormData();
   form.append("householdId", householdId);
   form.append("category", category);
+  if (batchId) form.append("batchId", batchId);
+  if (clientItemId) form.append("clientItemId", clientItemId);
   form.append("file", blob, file.name);
 
   const uploadRes = await fetch(`${SUPABASE_URL}/functions/v1/upload-document`, {
@@ -85,15 +103,32 @@ export async function uploadPolicyDocument(
     body: form,
   });
 
-  const payload = (await uploadRes.json()) as { id?: string; path?: string; message?: string };
+  const payload = (await uploadRes.json()) as {
+    id?: string;
+    path?: string;
+    batch_id?: string;
+    item_id?: string;
+    deduplicated?: boolean;
+    message?: string;
+  };
   if (!uploadRes.ok) {
     throw new Error(payload.message ?? `Upload failed (${uploadRes.status})`);
   }
-  if (!payload.id || !payload.path) {
+  if (!payload.id || !payload.path || !payload.batch_id || !payload.item_id) {
     throw new Error("Invalid server response");
   }
 
-  return { path: payload.path, id: payload.id };
+  return {
+    path: payload.path,
+    id: payload.id,
+    batchId: payload.batch_id,
+    itemId: payload.item_id,
+    deduplicated: payload.deduplicated === true,
+  };
+}
+
+export function createClientItemId(): string {
+  return `item-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 export async function deletePolicyDocument(documentId: string): Promise<void> {

@@ -40,6 +40,8 @@ export interface ProviderFileHandle {
   status: string;
   statusDetails?: string;
   providerMetadata: Record<string, unknown>;
+  /** In-memory provider-extracted content. Never persist or log this field. */
+  transientExtractedContent?: string;
 }
 
 export interface ProviderUploadResult {
@@ -68,6 +70,7 @@ export interface NativeDocumentAnalysisProvider {
   readonly baseUrl: string;
   resolveModel(): Promise<ResolvedDocumentModel>;
   resolveInputMode(input: OriginalFileInput): Promise<ResolvedInputCapability>;
+  assertBatchFits?(inputs: OriginalFileInput[]): Promise<void>;
   uploadOriginalFile(
     input: OriginalFileInput,
     callbacks?: {

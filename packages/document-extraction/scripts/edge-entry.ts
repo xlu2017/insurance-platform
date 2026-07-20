@@ -14,6 +14,9 @@ export type {
 export * from "../src/entity-identity.ts";
 export * from "../src/document-intake-planner.ts";
 export * from "../src/incremental-onboarding-session.ts";
+export * from "../src/mandate-reconciliation.ts";
+export * from "../src/dangerous-mode-policy.ts";
+export * from "../src/document-batch.ts";
 
 export * from "../src/llm-contract.ts";
 export * from "../src/llm-extraction-runner.ts";

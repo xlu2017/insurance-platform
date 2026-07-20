@@ -74,6 +74,39 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  const [{ data: activeItems }, { data: providerFiles }] = await Promise.all([
+    admin
+      .from("document_processing_batch_items")
+      .select("document_processing_batches!batch_id(status)")
+      .eq("policy_document_id", document.id),
+    admin
+      .from("document_analysis_provider_files")
+      .select("deletion_status")
+      .eq("policy_document_id", document.id),
+  ]);
+  const activeStatuses = new Set([
+    "uploading_files",
+    "checking_duplicates",
+    "queued",
+    "reading_policy_documents",
+    "comparing_policies",
+    "validating_extracted_details",
+  ]);
+  if (
+    (activeItems ?? []).some((item: Record<string, unknown>) => {
+      const joined = item.document_processing_batches as { status?: string } | null;
+      return joined?.status ? activeStatuses.has(joined.status) : false;
+    })
+  ) {
+    return jsonResponse({ message: "Document processing is still in progress" }, 409);
+  }
+  if (
+    (providerFiles ?? []).some(
+      (file: { deletion_status?: string | null }) => file.deletion_status !== "deleted",
+    )
+  ) {
+    return jsonResponse({ message: "Document cleanup is still in progress" }, 409);
+  }
   const { error: storageError } = await admin.storage
     .from("policy-documents")
     .remove([document.storage_path]);

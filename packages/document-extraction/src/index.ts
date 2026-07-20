@@ -7,6 +7,9 @@ export * from "./types.ts";
 export * from "./entity-identity.ts";
 export * from "./document-intake-planner.ts";
 export * from "./incremental-onboarding-session.ts";
+export * from "./mandate-reconciliation.ts";
+export * from "./dangerous-mode-policy.ts";
+export * from "./document-batch.ts";
 
 export * from "./llm-contract.ts";
 export * from "./llm-extraction-runner.ts";
