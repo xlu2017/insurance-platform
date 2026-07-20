@@ -4,7 +4,6 @@ import { ScrollView, Switch, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as LocalAuthentication from "expo-local-authentication";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MVP_DISCLAIMER } from "@autopilot/design-tokens";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { formatEdmontonDate } from "@/lib/format";
@@ -357,9 +356,6 @@ export default function Profile() {
                 value={`${c.granted ? "Granted" : "Withdrawn"} ${formatEdmontonDate(c.created_at)}`}
               />
             ))}
-          </Card>
-          <Card>
-            <Caption>{MVP_DISCLAIMER}</Caption>
           </Card>
           <SecondaryButton label="Sign out" onPress={signOut} testID="sign-out" />
           <View style={{ height: 24 }} />

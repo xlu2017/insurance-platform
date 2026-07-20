@@ -4,6 +4,14 @@ import {
   resolveEffectiveVehicleMandateV2,
 } from "@autopilot/database";
 import type { CandidateFieldReview } from "./extraction";
+import {
+  autoCoverageFormOptions,
+  coveragePreferenceOptions,
+  deductibleRuleOptions,
+  limitRuleOptions,
+  propertyCoverageFormOptions,
+  propertySettlementOptions,
+} from "./mandate";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -54,13 +62,43 @@ export function initialCurrentMandateValue(
   return item.document_implied_mandate_value ?? saved;
 }
 
+const allRuleOptions = [...limitRuleOptions, ...deductibleRuleOptions];
+const allValueOptions = [
+  ...autoCoverageFormOptions,
+  ...propertyCoverageFormOptions,
+  ...propertySettlementOptions,
+];
+
+function titleCaseWords(value: string): string {
+  return value
+    .replace(/[_-]/g, " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function ruleLabel(rule: string): string {
+  return allRuleOptions.find((o) => o.value === rule)?.label ?? titleCaseWords(rule);
+}
+
+function valueLabel(value: string): string {
+  return allValueOptions.find((o) => o.value === value)?.label ?? titleCaseWords(value);
+}
+
+function preferenceLabel(preference: string): string {
+  return (
+    coveragePreferenceOptions.find((o) => o.value === preference)?.label ??
+    titleCaseWords(preference)
+  );
+}
+
 export function formatMandateValue(value: unknown): string {
   if (value === null || value === undefined) return "Not covered";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (isRecord(value)) {
     if (typeof value.amountCents === "number") {
-      const rule = typeof value.rule === "string" ? `${value.rule.replaceAll("_", " ")} ` : "";
+      const rule = typeof value.rule === "string" ? `${ruleLabel(value.rule)} ` : "";
       return `${rule}$${(value.amountCents / 100).toLocaleString("en-CA", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
@@ -68,10 +106,10 @@ export function formatMandateValue(value: unknown): string {
     }
     if (typeof value.value === "string") {
       const preference =
-        typeof value.preference === "string" ? `${value.preference.replaceAll("_", " ")}: ` : "";
-      return `${preference}${value.value.replaceAll("_", " ")}`;
+        typeof value.preference === "string" ? `${preferenceLabel(value.preference)}: ` : "";
+      return `${preference}${valueLabel(value.value)}`;
     }
-    if (typeof value.rule === "string") return value.rule.replaceAll("_", " ");
+    if (typeof value.rule === "string") return ruleLabel(value.rule);
   }
   return JSON.stringify(value);
 }

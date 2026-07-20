@@ -7,11 +7,10 @@ jest.mock("expo-router", () => ({
 }));
 
 describe("Welcome screen", () => {
-  it("shows the value proposition and demo disclaimer", () => {
+  it("shows the value proposition and sign-in buttons", () => {
     const { getByText, getByTestId } = render(<Welcome />);
     expect(getByText(/Insurance handled for you/)).toBeTruthy();
     expect(getByText(/Upload your current policies once/)).toBeTruthy();
-    expect(getByText(/demonstration and workflow platform/)).toBeTruthy();
     expect(getByTestId("get-started")).toBeTruthy();
     expect(getByTestId("go-sign-in")).toBeTruthy();
   });

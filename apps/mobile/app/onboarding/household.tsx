@@ -11,7 +11,7 @@ export default function CreateHousehold() {
 
   const save = async () => {
     if (name.trim().length < 2) {
-      setError("Give your household a name");
+      setError("Enter an account name");
       return;
     }
     setLoading(true);

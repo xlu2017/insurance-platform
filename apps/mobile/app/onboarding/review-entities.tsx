@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { View, TextInput, ScrollView, StyleSheet } from "react-native";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
+import { formatEdmontonDate } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import {
   type CandidateFieldReview,
@@ -84,6 +85,11 @@ const FIELD_LABEL_OVERRIDES: Record<string, string> = {
   fullAddress: "Address",
   postalCode: "Postal code",
   vehicleUse: "Vehicle use",
+  vin: "VIN",
+  insurerName: "Insurer",
+  policyNumber: "Policy number",
+  expiryDate: "Expiry date",
+  annualPremiumCents: "Annual premium",
 };
 
 const VEHICLE_USE_LABELS: Record<string, string> = {
@@ -119,6 +125,7 @@ function displayValueForField(fieldPath: string, value: unknown): string {
   if (typeof value === "string") {
     if (key === "vehicleUse") return VEHICLE_USE_LABELS[value] ?? value;
     if (key === "occupancy") return OCCUPANCY_LABELS[value] ?? value;
+    if (key === "expiryDate") return formatEdmontonDate(value);
   }
   return formatFieldValue(value);
 }

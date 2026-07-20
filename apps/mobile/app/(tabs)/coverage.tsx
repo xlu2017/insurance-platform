@@ -204,24 +204,37 @@ function PropertyMandateRows({ property }: { property: PropertyMandateV2 }) {
 function SwitchingRows({ prefs }: { prefs: SwitchingPreferencesV2 }) {
   return (
     <>
-      <Row label="Minimum net annual savings" value={formatCad(prefs.minNetAnnualSavingsCents)} />
       <Row
-        label="Maximum deductible increase"
+        label="Only recommend a switch if I save at least"
+        value={formatCad(prefs.minNetAnnualSavingsCents)}
+      />
+      <Row
+        label="Do not increase my deductible by more than"
         value={formatCad(prefs.maxDeductibleIncreaseCents)}
       />
-      <Row label="Only switch at renewal" value={prefs.renewalOnlySwitching ? "Yes" : "No"} />
       <Row
-        label="Optimize home and auto together"
+        label="Only recommend changes at renewal"
+        value={prefs.renewalOnlySwitching ? "Yes" : "No"}
+      />
+      <Row
+        label="Compare home and auto together"
         value={prefs.householdOptimizationEnabled ? "Yes" : "No"}
       />
-      <Row label="Split insurers allowed" value={prefs.splitInsurersAllowed ? "Yes" : "No"} />
-      <Row label="Allow bundle breakup" value={prefs.allowBundleBreakup ? "Yes" : "No"} />
       <Row
-        label="Deductible increases allowed"
+        label="Allow home and auto with different insurers"
+        value={prefs.splitInsurersAllowed ? "Yes" : "No"}
+      />
+      <Row label="Allow breaking current bundle" value={prefs.allowBundleBreakup ? "Yes" : "No"} />
+      <Row
+        label="Allow higher deductibles"
         value={prefs.deductibleIncreasesAllowed ? "Yes" : "No"}
       />
       <Row
-        label="Customer approval required"
+        label="Never reduce important coverage"
+        value={prefs.materialCoverageReductionsAllowed ? "No" : "Always"}
+      />
+      <Row
+        label="Always ask me before starting a switch"
         value={prefs.customerApprovalRequired ? "Yes" : "No"}
       />
       <Row
@@ -233,7 +246,7 @@ function SwitchingRows({ prefs }: { prefs: SwitchingPreferencesV2 }) {
         value={labelForValue(billingMethodOptions, prefs.preferredBillingMethod)}
       />
       <Row
-        label="Broker/direct preference"
+        label="Broker or direct preference"
         value={labelForValue(brokerDirectOptions, prefs.brokerDirectPreference)}
       />
       <Row

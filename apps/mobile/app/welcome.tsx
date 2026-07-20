@@ -1,15 +1,6 @@
 import { router } from "expo-router";
 import { View } from "react-native";
-import { MVP_DISCLAIMER } from "@autopilot/design-tokens";
-import {
-  Body,
-  Caption,
-  Card,
-  PrimaryButton,
-  Screen,
-  SecondaryButton,
-  Title,
-} from "@/components/ui";
+import { Body, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
 
 export default function Welcome() {
   return (
@@ -31,10 +22,6 @@ export default function Welcome() {
         onPress={() => router.push("/sign-in")}
         testID="go-sign-in"
       />
-      <View style={{ height: 24 }} />
-      <Card>
-        <Caption>{MVP_DISCLAIMER}</Caption>
-      </Card>
     </Screen>
   );
 }

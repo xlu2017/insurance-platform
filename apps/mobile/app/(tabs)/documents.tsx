@@ -53,6 +53,13 @@ const categoryLabels: Record<DocumentCategory, string> = {
   other: "Other",
 };
 
+const documentStatusLabels: Record<string, string> = {
+  uploaded: "Uploaded",
+  in_review: "In review",
+  extracted: "Processed",
+  rejected: "Rejected",
+};
+
 const categoryOptions = documentCategories.map((value) => ({
   value,
   label: categoryLabels[value],
@@ -364,7 +371,7 @@ export default function Documents() {
                   </Caption>
                 </View>
                 <StatusPill
-                  label={doc.status}
+                  label={documentStatusLabels[doc.status] ?? doc.status}
                   tone={doc.status === "extracted" ? "accent" : "neutral"}
                 />
               </View>
