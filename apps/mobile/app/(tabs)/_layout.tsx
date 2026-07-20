@@ -21,9 +21,7 @@ function TabIcon({
   size?: number;
 }) {
   return (
-    <View
-      style={{ alignItems: "center", justifyContent: "center", paddingTop: 8, paddingBottom: 4 }}
-    >
+    <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 8 }}>
       <Icon color={color} size={size} weight={focused ? "fill" : "regular"} />
       {focused ? (
         <View
@@ -52,7 +50,8 @@ export default function TabsLayout() {
           backgroundColor: colors.surface,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 64,
+          height: 56,
+          paddingBottom: 0,
         },
       }}
     >
