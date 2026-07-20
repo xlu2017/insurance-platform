@@ -17,6 +17,13 @@ export interface KimiK3ProviderOptions {
   fetchImpl?: typeof fetch;
 }
 
+export class InvalidProviderJsonError extends Error {
+  constructor() {
+    super("Document analysis response was not valid JSON");
+    this.name = "InvalidProviderJsonError";
+  }
+}
+
 interface KimiFileObject {
   id: string;
   object: string;
@@ -71,8 +78,11 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     if (this.resolvedModel) return this.resolvedModel;
 
     if (this.requestedModel) {
+      if (!isIntendedK3Model(this.requestedModel)) {
+        throw new Error("Configured document model does not match the intended K3 model");
+      }
       const model = await this.fetchModel(this.requestedModel);
-      if (model) {
+      if (model && isIntendedK3Model(model.id)) {
         this.resolvedModel = this.toResolvedModel(model);
         return this.resolvedModel;
       }
@@ -94,7 +104,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       modelId: model.id,
       supportsImageInput: !!model.supports_image_in,
       supportsVideoInput: !!model.supports_video_in,
-      supportsGenericFileInput: false,
+      supportsGenericFileInput: true,
       supportedReferenceSchemes: ["ms://"],
       providerMetadata: {
         owned_by: model.owned_by,
@@ -129,19 +139,11 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     const model = await this.resolveModel();
     const mime = (input.mimeType || "").toLowerCase().trim();
 
-    if (mime.startsWith("image/") && model.supportsImageInput) {
-      return { mimeType: input.mimeType, mode: "native_image_reference", supported: true };
+    if (mime.startsWith("image/")) {
+      return { mimeType: input.mimeType, mode: "provider_extracted_text", supported: true };
     }
     if (mime.startsWith("video/") && model.supportsVideoInput) {
       return { mimeType: input.mimeType, mode: "native_video_reference", supported: true };
-    }
-    if (mime.startsWith("image/")) {
-      return {
-        mimeType: input.mimeType,
-        mode: "unsupported",
-        supported: false,
-        reason: "Image input is not supported by the resolved document model",
-      };
     }
     if (mime.startsWith("video/")) {
       return {
@@ -151,13 +153,43 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
         reason: "Video input is not supported by the resolved document model",
       };
     }
-    // Generic native file references are not implemented and tested for this provider.
+    if (mime === "application/pdf") {
+      return {
+        mimeType: input.mimeType,
+        mode: "provider_extracted_text",
+        supported: true,
+      };
+    }
     return {
       mimeType: input.mimeType,
       mode: "unsupported",
       supported: false,
       reason: "Native file reference is not supported for this file type",
     };
+  }
+
+  async assertBatchFits(inputs: OriginalFileInput[]): Promise<void> {
+    const model = await this.resolveModel();
+    const contextLength = Number(model.providerMetadata.context_length ?? 0);
+    if (!Number.isFinite(contextLength) || contextLength <= 0) {
+      throw new Error("Document model context capacity is unavailable");
+    }
+
+    // This pre-transmission bound deliberately treats roughly three PDF bytes as
+    // one token. It is intentionally stricter than a plain-text estimate because
+    // compressed PDF streams can expand during provider extraction. Images use a
+    // fixed OCR allowance. Leave room for schema/context and the structured output.
+    const estimatedInputTokens = inputs.reduce((total, input) => {
+      if (input.mimeType.toLowerCase() === "application/pdf") {
+        return total + Math.ceil(input.bytes.length / 3);
+      }
+      if (input.mimeType.toLowerCase().startsWith("image/")) return total + 4_096;
+      return total + Math.ceil(input.bytes.length / 4);
+    }, 8_000);
+    const outputReserve = Math.min(32_000, Math.floor(contextLength * 0.25));
+    if (estimatedInputTokens + outputReserve > Math.floor(contextLength * 0.9)) {
+      throw new Error("Document batch exceeds the resolved model context capacity");
+    }
   }
 
   async uploadOriginalFile(
@@ -176,11 +208,13 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     }
 
     const purpose =
-      capability.mode === "native_image_reference"
-        ? "image"
-        : capability.mode === "native_video_reference"
-          ? "video"
-          : "file";
+      capability.mode === "provider_extracted_text"
+        ? "file-extract"
+        : capability.mode === "native_image_reference"
+          ? "image"
+          : capability.mode === "native_video_reference"
+            ? "video"
+            : "file";
 
     const form = new FormData();
     form.append("purpose", purpose);
@@ -204,7 +238,7 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       }
       const file = (await response.json()) as KimiFileObject;
       const referenceScheme = (await this.resolveModel()).supportedReferenceSchemes[0] ?? "ms://";
-      const handle: ProviderFileHandle = {
+      let handle: ProviderFileHandle = {
         providerFileId: file.id,
         documentId: input.documentId,
         filename: file.filename ?? input.filename,
@@ -235,10 +269,44 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
         };
       }
 
+      if (capability.mode === "provider_extracted_text") {
+        handle = {
+          ...handle,
+          transientExtractedContent: await this.fetchExtractedContent(file.id),
+        };
+      }
+
       return { status: "ready", handle };
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private async fetchExtractedContent(fileId: string): Promise<string> {
+    const response = await this.fetch(`${this.baseUrl}/files/${fileId}/content`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    });
+    if (!response.ok) {
+      throw new Error(`Document file extraction failed: ${response.status}`);
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    let content: string;
+    if (contentType.includes("application/json")) {
+      const body = (await response.json()) as { content?: unknown; text?: unknown };
+      const value = body.content ?? body.text;
+      if (typeof value !== "string") {
+        throw new Error("Document file extraction returned no content");
+      }
+      content = value;
+    } else {
+      content = await response.text();
+    }
+    if (!content.trim()) throw new Error("Document file extraction returned empty content");
+    if (content.length > 8_000_000) {
+      throw new Error("Extracted document content exceeds the analysis limit");
+    }
+    return content;
   }
 
   private async pollFileStatus(
@@ -276,6 +344,18 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       } else if (file.mode === "native_file_reference" && file.reference) {
         // A generic native file content part is not yet exposed by the documented API.
         throw new Error("Native file reference is not supported by the resolved document model");
+      } else if (file.mode === "provider_extracted_text") {
+        if (!file.transientExtractedContent) {
+          throw new Error("Provider-extracted document content is unavailable");
+        }
+        userParts.push({
+          type: "text",
+          text: [
+            `<policy-document id="${file.documentId}">`,
+            file.transientExtractedContent,
+            "</policy-document>",
+          ].join("\n"),
+        });
       }
     }
 
@@ -288,7 +368,8 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       model: input.model,
       messages,
       response_format: input.responseFormat ?? { type: "json_object" },
-      max_tokens: 32000,
+      max_completion_tokens: 32_000,
+      reasoning_effort: "max",
     };
 
     const controller = new AbortController();
@@ -318,7 +399,11 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       if (typeof content !== "string") {
         throw new Error("Document analysis response did not contain text content");
       }
-      return JSON.parse(stripMarkdownJsonFence(content));
+      try {
+        return JSON.parse(stripMarkdownJsonFence(content));
+      } catch {
+        throw new InvalidProviderJsonError();
+      }
     } finally {
       clearTimeout(timeout);
     }
@@ -362,6 +447,12 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
     }
     return { deleted: false, attempts, failureCategory: "deletion_failed_after_retries" };
   }
+}
+
+function isIntendedK3Model(modelId: string): boolean {
+  return (
+    /(^|[-_/])kimi[-_/]?k3($|[-_/])/i.test(modelId) || modelId.toLowerCase().includes("kimi-k3")
+  );
 }
 
 function stripMarkdownJsonFence(text: string): string {

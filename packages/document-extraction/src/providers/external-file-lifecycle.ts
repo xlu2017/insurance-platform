@@ -6,6 +6,7 @@ import type {
 
 export class MemoryExternalFileLifecycleStore implements ExternalFileLifecycleStore {
   private records = new Map<string, ExternalFileRecord>();
+  private claimedPolicyDocumentIds = new Set<string>();
   private emergencyCleanup: {
     providerFileId: string;
     policyDocumentId?: string;
@@ -15,6 +16,10 @@ export class MemoryExternalFileLifecycleStore implements ExternalFileLifecycleSt
   async recordUpload(
     record: Omit<ExternalFileRecord, "id" | "uploadStartedAt" | "deletionAttempts">,
   ): Promise<ExternalFileRecord> {
+    if (this.claimedPolicyDocumentIds.has(record.policyDocumentId)) {
+      throw new Error("Document has already been transmitted externally");
+    }
+    this.claimedPolicyDocumentIds.add(record.policyDocumentId);
     const rec: ExternalFileRecord = {
       ...record,
       id: crypto.randomUUID(),

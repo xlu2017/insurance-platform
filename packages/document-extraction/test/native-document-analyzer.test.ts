@@ -51,6 +51,7 @@ class FakeNativeProvider implements NativeDocumentAnalysisProvider {
   modes: Record<string, ResolvedInputCapability> = {};
   uploadResult?: ProviderUploadResult;
   analyzeResult?: unknown;
+  analyzeSequence: unknown[] = [];
   deletionResult: ProviderFileDeletionResult = { deleted: true, attempts: 1 };
 
   resolveModelCalls = 0;
@@ -103,6 +104,11 @@ class FakeNativeProvider implements NativeDocumentAnalysisProvider {
 
   async analyze(input: NativeDocumentAnalysisRequest): Promise<unknown> {
     this.analyzeCalls += 1;
+    if (this.analyzeSequence.length > 0) {
+      const next = this.analyzeSequence.shift();
+      if (next instanceof Error) throw next;
+      return next;
+    }
     return (
       this.analyzeResult ?? {
         analysisVersion: "1",
@@ -175,6 +181,7 @@ async function authorizedAnalyzer(
     bytes?: Uint8Array;
     requireNativeInput?: boolean;
     authorization?: DocumentProcessingAuthorization;
+    preTransmissionCheck?: () => Promise<void>;
   } = {},
 ) {
   const authorization = options.authorization ?? (await createAuthorization());
@@ -184,26 +191,38 @@ async function authorizedAnalyzer(
     requireNativeInput: options.requireNativeInput,
     authorization,
     fileLifecycleStore: new MemoryExternalFileLifecycleStore(),
+    preTransmissionCheck: options.preTransmissionCheck,
   });
 }
 
 describe("NativeDocumentAnalyzer", () => {
-  it("rejects PDFs in native-only mode without uploading", async () => {
+  it("accepts PDFs through provider-file extraction", async () => {
     const provider = new FakeNativeProvider();
     provider.modes["application/pdf"] = {
       mimeType: "application/pdf",
       mode: "provider_extracted_text",
-      supported: false,
-      reason: "Native file reference is not supported",
+      supported: true,
+    };
+    provider.uploadResult = {
+      status: "ready",
+      handle: {
+        providerFileId: "file-pdf",
+        documentId: "doc-1",
+        filename: "policy.pdf",
+        mimeType: "application/pdf",
+        bytes: 3,
+        mode: "provider_extracted_text",
+        status: "ok",
+        providerMetadata: {},
+        transientExtractedContent: "Extracted policy content",
+      },
     };
 
     const analyzer = await authorizedAnalyzer(provider, { requireNativeInput: true });
 
-    await expect(analyzer.analyze(baseInput("application/pdf"))).rejects.toThrow(
-      /Unsupported file/,
-    );
-    expect(provider.uploadCalls).toBe(0);
-    expect(provider.analyzeCalls).toBe(0);
+    await analyzer.analyze(baseInput("application/pdf"));
+    expect(provider.uploadCalls).toBe(1);
+    expect(provider.analyzeCalls).toBe(1);
   });
 
   it("accepts native image references and sends them to the provider", async () => {
@@ -260,6 +279,56 @@ describe("NativeDocumentAnalyzer", () => {
     expect(provider.analyzeCalls).toBe(0);
   });
 
+  it("revalidates live consent immediately before upload", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+    let checks = 0;
+    const analyzer = await authorizedAnalyzer(provider, {
+      preTransmissionCheck: async () => {
+        checks += 1;
+        throw new Error("Document processing authorization is no longer valid");
+      },
+    });
+
+    await expect(analyzer.analyze(baseInput("image/png"))).rejects.toThrow(
+      /authorization is no longer valid/,
+    );
+    expect(checks).toBe(1);
+    expect(provider.uploadCalls).toBe(0);
+    expect(provider.analyzeCalls).toBe(0);
+  });
+
+  it("rechecks authorization for every file before external upload", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["application/pdf"] = {
+      mimeType: "application/pdf",
+      mode: "provider_extracted_text",
+      supported: true,
+    };
+    let checks = 0;
+    const analyzer = await authorizedAnalyzer(provider, {
+      preTransmissionCheck: async () => {
+        checks += 1;
+      },
+    });
+    const input = baseInput("application/pdf");
+    input.uploadedDocuments = Array.from({ length: 4 }, (_, index) => ({
+      documentId: `doc-${index + 1}`,
+      filename: `policy-${index + 1}.pdf`,
+      mimeType: "application/pdf",
+      fileReference: `doc-${index + 1}`,
+    }));
+
+    await analyzer.analyze(input);
+
+    expect(checks).toBe(5);
+    expect(provider.uploadCalls).toBe(4);
+  });
+
   it("verifies temporary file deletion is attempted and recorded", async () => {
     const provider = new FakeNativeProvider();
     provider.deletionResult = { deleted: true, attempts: 1, statusCode: 200 };
@@ -280,25 +349,63 @@ describe("NativeDocumentAnalyzer", () => {
     );
   });
 
-  it("does not call file-content extraction endpoints for PDFs", async () => {
+  it("processes every file in a four-document batch with one inference request", async () => {
     const provider = new FakeNativeProvider();
     provider.modes["application/pdf"] = {
       mimeType: "application/pdf",
       mode: "provider_extracted_text",
-      supported: false,
-      reason: "Native file reference not supported",
+      supported: true,
     };
 
     const analyzer = await authorizedAnalyzer(provider, { requireNativeInput: true });
+    const input = baseInput("application/pdf");
+    input.uploadedDocuments = Array.from({ length: 4 }, (_, index) => ({
+      documentId: `doc-${index + 1}`,
+      filename: `policy-${index + 1}.pdf`,
+      mimeType: "application/pdf",
+      fileReference: `doc-${index + 1}`,
+    }));
 
-    try {
-      await analyzer.analyze(baseInput("application/pdf"));
-    } catch {
-      // expected
-    }
+    await analyzer.analyze(input);
 
-    expect(provider.uploadCalls).toBe(0);
-    expect(provider.analyzeCalls).toBe(0);
+    expect(provider.uploadCalls).toBe(4);
+    expect(provider.analyzeCalls).toBe(1);
+    expect(provider.deleteCalls).toBe(4);
+  });
+
+  it("makes exactly one repair inference after invalid provider JSON", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+    provider.analyzeSequence = [new Error("Provider response was not valid JSON")];
+
+    const analyzer = await authorizedAnalyzer(provider);
+    await analyzer.analyze(baseInput("image/png"));
+
+    expect(provider.analyzeCalls).toBe(2);
+    expect(provider.deleteCalls).toBe(1);
+  });
+
+  it("rejects an invalid repaired result without returning partial candidates", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["image/png"] = {
+      mimeType: "image/png",
+      mode: "native_image_reference",
+      supported: true,
+    };
+    provider.analyzeSequence = [
+      new Error("Provider response was not valid JSON"),
+      { documents: [], detectedEntities: [{ temporaryId: "partial" }] },
+    ];
+
+    const analyzer = await authorizedAnalyzer(provider);
+    await expect(analyzer.analyze(baseInput("image/png"))).rejects.toThrow();
+
+    expect(provider.analyzeCalls).toBe(2);
+    expect(provider.deleteCalls).toBe(1);
   });
 
   it("returns provider-neutral public errors for unsupported files", () => {
@@ -450,6 +557,21 @@ describe("ConfigAndConsentPrivacyPreparation", () => {
 });
 
 describe("NativeDocumentAnalyzer lifecycle", () => {
+  it("allows only one external transmission claim per canonical document", async () => {
+    const lifecycle = new MemoryExternalFileLifecycleStore();
+    const upload = {
+      authorizationId: "authorization-1",
+      analysisRequestId: "analysis-1",
+      policyDocumentId: "canonical-document-1",
+      providerFileId: "pending",
+      uploadStatus: "started" as const,
+    };
+
+    await lifecycle.recordUpload(upload);
+    await expect(lifecycle.recordUpload(upload)).rejects.toThrow(/already been transmitted/);
+    expect(lifecycle.getRecords()).toHaveLength(1);
+  });
+
   it("persists an authorization snapshot before any upload", async () => {
     const provider = new FakeNativeProvider();
     provider.modes["image/png"] = {

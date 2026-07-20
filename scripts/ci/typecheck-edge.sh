@@ -24,4 +24,6 @@ deno check \
   extract-policy-entities/index.ts \
   approve-policy-candidates/index.ts \
   cleanup-provider-files/index.ts \
-  delete-document/index.ts
+  delete-document/index.ts \
+  document-processing-batch/index.ts \
+  dangerous-mode-setting/index.ts

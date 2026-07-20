@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-scripts/ci/check-supabase.sh
+bash scripts/ci/check-supabase.sh
 pnpm --filter @autopilot/insurance-engine build:edge
 
 # Export local Supabase credentials for the admin app, lifecycle scripts, and Edge Functions.

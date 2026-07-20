@@ -7,9 +7,21 @@ import { documentCategories, type DocumentCategory } from "@autopilot/schemas";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import {
+  createClientRequestId,
+  createDocumentBatch,
+  documentItemStatusLabel,
+  documentBatchStatusLabels,
+  loadDocumentBatch,
+  loadLatestDocumentBatch,
+  retryDocumentBatch,
+  submitDocumentBatch,
+  type DocumentBatchSummary,
+} from "@/lib/document-processing";
+import {
+  createClientItemId,
   deletePolicyDocument,
-  pickDocument,
-  pickImage,
+  pickDocuments,
+  pickImages,
   uploadPolicyDocument,
   type PickedFile,
 } from "@/lib/upload";
@@ -53,24 +65,53 @@ interface DocumentRow {
   created_at: string;
 }
 
+interface PendingDocument {
+  clientItemId: string;
+  file: PickedFile;
+  category: DocumentCategory;
+  status: "pending" | "uploading" | "uploaded" | "deduplicated" | "failed";
+  error?: string;
+}
+
 export default function Documents() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<DocumentCategory>("current_auto_policy");
+  const [pending, setPending] = useState<PendingDocument[]>([]);
+  const [batch, setBatch] = useState<DocumentBatchSummary | null>(null);
+  const [batchSubmitted, setBatchSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const { data: latestBatch } = useQuery({
+    queryKey: ["latest-document-processing-batch", household?.id],
+    enabled: !!household && !batch,
+    queryFn: () => loadLatestDocumentBatch(household!.id),
+  });
+  const visibleBatch = batch ?? latestBatch ?? null;
 
   const { data: documents } = useQuery({
     queryKey: ["documents", household?.id],
     enabled: !!household,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error: queryError } = await supabase
         .from("policy_documents")
         .select("id, category, status, storage_path, file_name, created_at")
         .eq("household_id", household!.id)
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (queryError) throw queryError;
       return data as DocumentRow[];
+    },
+  });
+
+  const { data: currentBatch } = useQuery({
+    queryKey: ["document-processing-batch", household?.id, visibleBatch?.id],
+    enabled: !!household && !!visibleBatch,
+    queryFn: () => loadDocumentBatch(household!.id, visibleBatch!.id),
+    initialData: visibleBatch ?? undefined,
+    refetchInterval: (query) => {
+      if (query.state.data?.is_terminal) return false;
+      return 2_000;
     },
   });
 
@@ -89,18 +130,72 @@ export default function Documents() {
     );
   }
 
-  const upload = async (source: "document" | "camera" | "library") => {
+  const appendFiles = (files: PickedFile[]) => {
+    setPending((current) => [
+      ...current,
+      ...files.map((file) => ({
+        clientItemId: createClientItemId(),
+        file,
+        category,
+        status: "pending" as const,
+      })),
+    ]);
+  };
+
+  const choose = async (source: "document" | "camera" | "library") => {
+    setError(null);
+    try {
+      appendFiles(
+        source === "document" ? await pickDocuments() : await pickImages(source === "camera"),
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not select files");
+    }
+  };
+
+  const updatePending = (clientItemId: string, patch: Partial<PendingDocument>) => {
+    setPending((current) =>
+      current.map((item) => (item.clientItemId === clientItemId ? { ...item, ...patch } : item)),
+    );
+  };
+
+  const uploadAndAnalyze = async () => {
+    if (pending.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      const file: PickedFile | null =
-        source === "document" ? await pickDocument() : await pickImage(source === "camera");
-      if (file) {
-        await uploadPolicyDocument(household.id, category, file);
-        queryClient.invalidateQueries({ queryKey: ["documents", household.id] });
+      const created =
+        batch ??
+        (await createDocumentBatch(household.id, createClientRequestId("mobile-documents")));
+      if (!batch) setBatch(created);
+      for (const item of pending.filter(
+        (candidate) => candidate.status === "pending" || candidate.status === "failed",
+      )) {
+        updatePending(item.clientItemId, { status: "uploading", error: undefined });
+        try {
+          const result = await uploadPolicyDocument(
+            household.id,
+            item.category,
+            item.file,
+            created.id,
+            item.clientItemId,
+          );
+          updatePending(item.clientItemId, {
+            status: result.deduplicated ? "deduplicated" : "uploaded",
+          });
+        } catch (caught) {
+          updatePending(item.clientItemId, {
+            status: "failed",
+            error: caught instanceof Error ? caught.message : "Upload failed",
+          });
+          throw caught;
+        }
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      setBatch(await submitDocumentBatch(household.id, created.id));
+      setBatchSubmitted(true);
+      await queryClient.invalidateQueries({ queryKey: ["documents", household.id] });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -119,8 +214,8 @@ export default function Documents() {
     try {
       await deletePolicyDocument(doc.id);
       await queryClient.invalidateQueries({ queryKey: ["documents", household.id] });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Remove failed");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Remove failed");
     } finally {
       setBusy(false);
     }
@@ -132,14 +227,9 @@ export default function Documents() {
       if (window.confirm(`Remove document?\n\n${message}`)) void removeDocument(doc);
       return;
     }
-
     Alert.alert("Remove document?", message, [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () => void removeDocument(doc),
-      },
+      { text: "Remove", style: "destructive", onPress: () => void removeDocument(doc) },
     ]);
   };
 
@@ -149,32 +239,98 @@ export default function Documents() {
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Documents</Title>
           <Card>
-            <Subtitle>Upload</Subtitle>
+            <Subtitle>Pending batch</Subtitle>
             <Select
-              label="Category"
+              label="Category for files you add next"
               options={categoryOptions}
               value={category}
-              onValueChange={(value) => setCategory(value)}
+              onValueChange={setCategory}
             />
             <View style={{ gap: 8 }}>
               <SecondaryButton
-                label="Upload a PDF"
-                onPress={() => upload("document")}
-                disabled={busy}
+                label="Add PDF or image files"
+                onPress={() => choose("document")}
+                disabled={busy || !!batch}
               />
               <SecondaryButton
                 label="Take a photo"
-                onPress={() => upload("camera")}
-                disabled={busy}
+                onPress={() => choose("camera")}
+                disabled={busy || !!batch}
               />
               <SecondaryButton
-                label="Choose from library"
-                onPress={() => upload("library")}
-                disabled={busy}
+                label="Add photos from library"
+                onPress={() => choose("library")}
+                disabled={busy || !!batch}
               />
             </View>
+            {pending.map((item) => (
+              <View key={item.clientItemId} style={{ marginTop: 12 }}>
+                <Body>{item.file.name}</Body>
+                <Caption>
+                  {categoryLabels[item.category]} ·{" "}
+                  {documentItemStatusLabel(item.status, currentBatch)}
+                </Caption>
+                {item.error ? <Caption>{item.error}</Caption> : null}
+                {item.status === "pending" ? (
+                  <SecondaryButton
+                    label="Remove"
+                    onPress={() =>
+                      setPending((current) =>
+                        current.filter((candidate) => candidate.clientItemId !== item.clientItemId),
+                      )
+                    }
+                    disabled={busy}
+                  />
+                ) : null}
+              </View>
+            ))}
+            {!batchSubmitted ? (
+              <PrimaryButton
+                label={batch ? "Retry upload and analyze" : "Upload and analyze"}
+                onPress={uploadAndAnalyze}
+                loading={busy}
+                disabled={pending.length === 0}
+              />
+            ) : null}
             {error ? <Body muted>{error}</Body> : null}
           </Card>
+
+          {currentBatch ? (
+            <Card>
+              <StatusPill
+                label={documentBatchStatusLabels[currentBatch.status]}
+                tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
+              />
+              <Caption>
+                {currentBatch.document_count} selected · {currentBatch.unique_document_count} unique
+                · {currentBatch.deduplicated_count} deduplicated
+              </Caption>
+              {!currentBatch.automatic_processing && currentBatch.is_terminal ? (
+                <Body muted>Your documents are being reviewed.</Body>
+              ) : null}
+              {currentBatch.status === "ready_for_review" ? (
+                <PrimaryButton
+                  label="Review extracted details"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/onboarding/review-entities",
+                      params: { sessionId: currentBatch.session_id },
+                    })
+                  }
+                />
+              ) : null}
+              {currentBatch.status === "processing_unavailable" && currentBatch.retryable ? (
+                <SecondaryButton
+                  label="Retry processing"
+                  onPress={async () =>
+                    setBatch(await retryDocumentBatch(household.id, currentBatch.id))
+                  }
+                  disabled={busy}
+                />
+              ) : null}
+            </Card>
+          ) : null}
+
           {(documents ?? []).map((doc) => (
             <Card key={doc.id}>
               <View

@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: a08d894456d929ed83e00d55c2af85a1530b79626a46c8fe9ea5367cf5a82a41
+// source-hash: e8d3c7d437182bb071cff3365fbadeebb139020874f36c42ba294d63635796d9
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -39163,6 +39163,325 @@ function mergeIncrementalOnboardingUpload(session, upload) {
   });
 }
 
+// src/mandate-reconciliation.ts
+var MANDATE_FIELD_DEFINITIONS = {
+  "vehicle.thirdPartyLiabilityLimitCents": {
+    assetType: "vehicle",
+    title: "Liability limit",
+    mandatePath: "liability",
+    kind: "limit"
+  },
+  "vehicle.collisionDeductibleCents": {
+    assetType: "vehicle",
+    title: "Collision deductible",
+    mandatePath: "collisionDeductible",
+    kind: "deductible"
+  },
+  "vehicle.comprehensiveDeductibleCents": {
+    assetType: "vehicle",
+    title: "Comprehensive deductible",
+    mandatePath: "comprehensiveDeductible",
+    kind: "deductible"
+  },
+  "vehicle.glassDeductibleCents": {
+    assetType: "vehicle",
+    title: "Glass deductible",
+    mandatePath: "glassDeductible",
+    kind: "deductible"
+  },
+  "vehicle.collisionIncluded": {
+    assetType: "vehicle",
+    title: "Auto coverage form",
+    mandatePath: "coverageForm",
+    kind: "coverage_form",
+    coverageFormValue: "collision"
+  },
+  "vehicle.comprehensiveIncluded": {
+    assetType: "vehicle",
+    title: "Auto coverage form",
+    mandatePath: "coverageForm",
+    kind: "coverage_form",
+    coverageFormValue: "comprehensive"
+  },
+  "vehicle.specifiedPerilsIncluded": {
+    assetType: "vehicle",
+    title: "Auto coverage form",
+    mandatePath: "coverageForm",
+    kind: "coverage_form",
+    coverageFormValue: "specified_perils"
+  },
+  "vehicle.allPerilsIncluded": {
+    assetType: "vehicle",
+    title: "Auto coverage form",
+    mandatePath: "coverageForm",
+    kind: "coverage_form",
+    coverageFormValue: "all_perils"
+  },
+  "vehicle.familyProtectionIncluded": {
+    assetType: "vehicle",
+    title: "Family protection",
+    mandatePath: "endorsements.family_protection",
+    kind: "preference"
+  },
+  "property.dwellingLimitCents": {
+    assetType: "property",
+    title: "Dwelling limit",
+    mandatePath: "dwellingLimit",
+    kind: "limit"
+  },
+  "property.contentsLimitCents": {
+    assetType: "property",
+    title: "Contents limit",
+    mandatePath: "contentsLimit",
+    kind: "limit"
+  },
+  "property.personalLiabilityLimitCents": {
+    assetType: "property",
+    title: "Personal liability limit",
+    mandatePath: "personalLiabilityLimit",
+    kind: "limit"
+  },
+  "property.fairRentalValueLimitCents": {
+    assetType: "property",
+    title: "Additional living or fair rental value limit",
+    mandatePath: "additionalLivingExpenseLimit",
+    kind: "limit"
+  },
+  "property.baseDeductibleCents": {
+    assetType: "property",
+    title: "Base deductible",
+    mandatePath: "baseDeductible",
+    kind: "deductible"
+  },
+  "property.waterDeductibleCents": {
+    assetType: "property",
+    title: "Water deductible",
+    mandatePath: "waterDeductible",
+    kind: "deductible"
+  },
+  "property.windHailDeductibleCents": {
+    assetType: "property",
+    title: "Wind and hail deductible",
+    mandatePath: "windHailDeductible",
+    kind: "deductible"
+  },
+  "property.earthquakeDeductibleCents": {
+    assetType: "property",
+    title: "Earthquake deductible",
+    mandatePath: "earthquakeDeductible",
+    kind: "deductible"
+  }
+};
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizeDocumentValueState(status) {
+  switch (status) {
+    case "known":
+      return "known";
+    case "not_included":
+    case "explicitly_absent":
+    case "absent":
+      return "absent";
+    case "not_applicable":
+      return "not_applicable";
+    case "conflicting":
+      return "conflicting";
+    default:
+      return "unknown";
+  }
+}
+function deriveMandateValue(definition, state, documentValue, suggestion) {
+  if (state === "conflicting" || state === "unknown") return null;
+  if (state === "not_applicable") {
+    if (definition.kind === "preference") return "indifferent";
+    if (definition.kind === "coverage_form") {
+      return { preference: "indifferent", value: definition.coverageFormValue ?? "unknown" };
+    }
+    return { rule: "any" };
+  }
+  if (state === "absent") {
+    if (definition.kind === "preference") return "prohibited";
+    if (definition.kind === "coverage_form") {
+      return { preference: "required", value: "liability_only" };
+    }
+    return { rule: "any" };
+  }
+  if (isRecord(suggestion) && typeof suggestion.rule === "string") {
+    return suggestion;
+  }
+  if (definition.kind === "limit" && Number.isInteger(documentValue)) {
+    return { rule: "minimum", amountCents: documentValue };
+  }
+  if (definition.kind === "deductible" && Number.isInteger(documentValue)) {
+    return { rule: "maximum", amountCents: documentValue };
+  }
+  if (definition.kind === "preference" && typeof documentValue === "boolean") {
+    return documentValue ? "required" : "prohibited";
+  }
+  if (definition.kind === "coverage_form" && typeof documentValue === "boolean") {
+    return documentValue ? { preference: "required", value: definition.coverageFormValue ?? "unknown" } : { preference: "required", value: "liability_only" };
+  }
+  if (definition.kind === "coverage_form" && typeof documentValue === "string") {
+    return { preference: "required", value: documentValue };
+  }
+  return null;
+}
+function seedPriority(seed) {
+  const statePriority = {
+    conflicting: 500,
+    known: 400,
+    absent: 300,
+    not_applicable: 200
+  }[seed.valueState];
+  const formValue = isRecord(seed.documentImpliedMandateValue) ? seed.documentImpliedMandateValue.value : void 0;
+  const formPriority = typeof formValue === "string" ? {
+    liability_only: 1,
+    specified_perils: 2,
+    collision: 3,
+    comprehensive: 4,
+    all_perils: 5
+  }[formValue] ?? 0 : 0;
+  return statePriority + formPriority;
+}
+function extractConflictValues(definition, currentValue, conflicts) {
+  const sharedExplanation = conflicts.find(isRecord)?.explanation;
+  if (Array.isArray(currentValue.alternatives)) {
+    return currentValue.alternatives.filter(isRecord).map((alternative) => {
+      const evidence = Array.isArray(alternative.evidence) ? alternative.evidence.find(isRecord) : void 0;
+      const documentValue = alternative.normalizedValue ?? alternative.value;
+      return {
+        documentValue,
+        mandateValue: deriveMandateValue(definition, "known", documentValue, void 0),
+        sourceDocumentId: evidence && typeof evidence.documentId === "string" ? evidence.documentId : void 0,
+        sourcePageNumber: evidence && Number.isInteger(evidence.pageNumber) ? evidence.pageNumber : void 0,
+        sourceSection: evidence && typeof evidence.section === "string" ? evidence.section : void 0,
+        explanation: typeof alternative.explanation === "string" ? alternative.explanation : typeof sharedExplanation === "string" ? sharedExplanation : void 0
+      };
+    });
+  }
+  return conflicts.filter(isRecord).map((conflict) => ({
+    explanation: conflict.explanation,
+    assertionIds: conflict.assertionIds
+  }));
+}
+function buildMandateReviewSeeds(candidates) {
+  const seeds = /* @__PURE__ */ new Map();
+  for (const candidate of candidates) {
+    const facts = candidate.selected_facts_json;
+    const currentCoverage = isRecord(facts.currentCoverage) ? facts.currentCoverage : {};
+    const suggestions = isRecord(facts.mandateSuggestions) ? facts.mandateSuggestions : {};
+    const conflicts = Array.isArray(candidate.conflicts_json) ? candidate.conflicts_json : [];
+    for (const fieldPath of Object.keys(currentCoverage).sort()) {
+      const definition = MANDATE_FIELD_DEFINITIONS[fieldPath];
+      if (!definition || definition.assetType !== candidate.asset_type) continue;
+      const extracted = currentCoverage[fieldPath];
+      if (!isRecord(extracted)) continue;
+      const state = normalizeDocumentValueState(extracted.status);
+      if (state === "unknown") continue;
+      const relevantConflicts = conflicts.filter(
+        (conflict) => isRecord(conflict) && conflict.fieldPath === fieldPath
+      );
+      const alternatives = extractConflictValues(definition, extracted, relevantConflicts);
+      const firstAlternative = alternatives.find(isRecord);
+      const evidence = Array.isArray(extracted.evidence) ? extracted.evidence.find(isRecord) : void 0;
+      const documentValue = extracted.value;
+      const seed = {
+        candidateId: candidate.id,
+        fieldPath: `currentCoverage.${fieldPath}`,
+        specificationTitle: definition.title,
+        mandatePath: definition.mandatePath,
+        valueState: state,
+        originalExtractedValue: extracted,
+        documentImpliedValue: documentValue,
+        documentImpliedMandateValue: deriveMandateValue(
+          definition,
+          state,
+          documentValue,
+          suggestions[fieldPath]
+        ),
+        sourceDocumentId: evidence && typeof evidence.documentId === "string" ? evidence.documentId : firstAlternative && typeof firstAlternative.sourceDocumentId === "string" ? firstAlternative.sourceDocumentId : void 0,
+        sourcePageNumber: evidence && Number.isInteger(evidence.pageNumber) ? evidence.pageNumber : firstAlternative && Number.isInteger(firstAlternative.sourcePageNumber) ? firstAlternative.sourcePageNumber : void 0,
+        sourceSection: evidence && typeof evidence.section === "string" ? evidence.section : firstAlternative && typeof firstAlternative.sourceSection === "string" ? firstAlternative.sourceSection : void 0,
+        confidence: typeof extracted.confidence === "number" ? extracted.confidence : void 0,
+        conflictValues: alternatives,
+        materialConflict: state === "conflicting" && relevantConflicts.some(
+          (conflict) => isRecord(conflict) && conflict.requiresHumanResolution === true
+        )
+      };
+      const specificationKey = `${seed.candidateId}:${seed.mandatePath}`;
+      const existing = seeds.get(specificationKey);
+      if (!existing || seedPriority(seed) > seedPriority(existing)) {
+        seeds.set(specificationKey, seed);
+      }
+    }
+  }
+  return Array.from(seeds.values()).sort(
+    (left, right) => `${left.candidateId}:${left.mandatePath}`.localeCompare(
+      `${right.candidateId}:${right.mandatePath}`
+    )
+  );
+}
+function setNestedValue(target, path, value) {
+  const parts = path.split(".");
+  let cursor = target;
+  for (let index = 0; index < parts.length - 1; index++) {
+    const part = parts[index];
+    const next = cursor[part];
+    if (!isRecord(next)) cursor[part] = {};
+    cursor = cursor[part];
+  }
+  cursor[parts[parts.length - 1]] = value;
+}
+function buildCandidateMandateValues(reviews) {
+  const result2 = /* @__PURE__ */ new Map();
+  for (const review of reviews) {
+    if (!review.isComplete) {
+      throw new Error("Every document-informed mandate specification must be completed");
+    }
+    if (review.materialConflict && review.action === "unresolved") {
+      throw new Error("Material mandate conflicts must be resolved before approval");
+    }
+    if (!review.mandatePath || review.currentMandateValue === void 0) continue;
+    const candidateValues = result2.get(review.candidateId) ?? {};
+    setNestedValue(candidateValues, review.mandatePath, review.currentMandateValue);
+    result2.set(review.candidateId, candidateValues);
+  }
+  return result2;
+}
+
+// src/dangerous-mode-policy.ts
+var DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
+function validateDangerousModeEnablePolicy(input, nowSeconds = Math.floor(Date.now() / 1e3)) {
+  if (!input.explicitConfirmation || !input.foreignProcessingAcknowledged || !input.automatedProcessingAcknowledged || !input.rawProcessingApproved) {
+    return "ACKNOWLEDGEMENTS_REQUIRED";
+  }
+  if (input.disclosureVersion !== DANGEROUS_MODE_DISCLOSURE_VERSION) {
+    return "DISCLOSURE_VERSION_MISMATCH";
+  }
+  const authenticatedAt = input.passwordAuthenticatedAtSeconds;
+  if (!authenticatedAt || nowSeconds - authenticatedAt > 5 * 60 || authenticatedAt > nowSeconds + 30) {
+    return "RECENT_REAUTHENTICATION_REQUIRED";
+  }
+  return null;
+}
+function documentProcessingRoute(mode) {
+  return mode === "dangerous" ? { dispatchExternalProcessing: true, route: "automatic_processing" } : { dispatchExternalProcessing: false, route: "manual_review" };
+}
+
+// src/document-batch.ts
+function partitionDocumentDigests(documentIds, digestByDocumentId, previouslyProcessedDigests) {
+  const duplicateDocumentIds = [];
+  const newDocumentIds = [];
+  for (const documentId of documentIds) {
+    const digest = digestByDocumentId[documentId];
+    if (!digest) throw new Error(`Missing digest for document ${documentId}`);
+    if (previouslyProcessedDigests.has(digest)) duplicateDocumentIds.push(documentId);
+    else newDocumentIds.push(documentId);
+  }
+  return { duplicateDocumentIds, newDocumentIds };
+}
+
 // src/llm-contract.ts
 var LLM_EXTRACTION_SCHEMA_VERSION = 1;
 var LLM_EXTRACTION_PROMPT_VERSION = "insurance-document-v1";
@@ -39626,7 +39945,7 @@ var LlmSemanticValidationError = class extends Error {
 function canonicalText(value) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
-function isRecord(value) {
+function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function valuesEqual(left, right) {
@@ -39634,7 +39953,7 @@ function valuesEqual(left, right) {
   if (Array.isArray(left) && Array.isArray(right)) {
     return left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]));
   }
-  if (isRecord(left) && isRecord(right)) {
+  if (isRecord2(left) && isRecord2(right)) {
     const leftKeys = Object.keys(left).sort();
     const rightKeys = Object.keys(right).sort();
     return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && valuesEqual(left[key], right[key]));
@@ -41122,11 +41441,17 @@ var EvidenceReferenceSchema = z.object({
   quotedLabel: z.string().optional(),
   evidenceSummary: z.string().min(1)
 }).strict();
+var ExtractedAlternativeValueSchema = z.object({
+  value: z.unknown(),
+  evidence: z.array(EvidenceReferenceSchema).min(1),
+  explanation: z.string().optional()
+}).strict();
 var ExtractedCurrentValueSchema = z.object({
   status: z.enum(["known", "unknown", "not_included", "not_applicable", "conflicting"]),
   value: z.unknown(),
   confidence: z.number().min(0).max(1),
   evidence: z.array(EvidenceReferenceSchema).min(1).optional(),
+  alternatives: z.array(ExtractedAlternativeValueSchema).min(2).optional(),
   explanation: z.string().optional()
 }).strict();
 var DetectedEntityIdentitySchema = z.object({
@@ -41309,7 +41634,10 @@ function buildCurrentCoverage(candidate, documentId) {
   return coverage;
 }
 function suggestMandate(fieldPath, current) {
-  if (current.status === "unknown" || current.status === "not_applicable") {
+  if (current.status === "unknown") {
+    return void 0;
+  }
+  if (current.status === "not_applicable") {
     return { rule: "any", reason: `current value is ${current.status}` };
   }
   if (current.status === "not_included") {
@@ -41947,11 +42275,12 @@ function validateEvidenceReference(ref, allowedDocumentIds, pageCountByDocumentI
   }
   if (ref.pageNumber !== void 0) {
     const pageCount = pageCountByDocumentId.get(ref.documentId);
-    if (pageCount === void 0 || pageCount === 0) {
+    if (pageCount === void 0) {
       throw new Error(
-        `evidence pageNumber ${ref.pageNumber} is not valid for document ${ref.documentId} (no page reference available)`
+        `evidence pageNumber ${ref.pageNumber} is not valid for unknown document ${ref.documentId}`
       );
     }
+    if (pageCount === 0) return;
     if (ref.pageNumber < 1 || ref.pageNumber > pageCount) {
       throw new Error(
         `evidence pageNumber ${ref.pageNumber} is out of range for document ${ref.documentId} (pages ${pageCount})`
@@ -42031,12 +42360,14 @@ Core rules:
 - If a document is a notice about future coverage, a discount notice, or promotional material, do not create an asset from it; instead add a warning.
 - When a detected asset matches an existing asset in existingAssets or pendingCandidates, set resolution.status to "matches_existing" or "matches_pending_candidate" and include the matched id.
 - Monetary values must be integer cents (e.g. $438,000 -> 43800000). Dates should be ISO strings (YYYY-MM-DD) when known.
-- For mandate defaults, apply these semantic rules:
+- For document-implied mandate suggestions, apply these semantic rules:
   * limit -> { rule: "minimum", amountCents: <current value in cents> }
   * deductible -> { rule: "maximum", amountCents: <current value in cents> }
   * coverage form/type -> { rule: "match_current_or_better", value: "<current value>" }
   * optional coverage that is included -> { rule: "required" } (omit value)
-  * optional coverage that is not included, not applicable, or unknown -> { rule: "any", reason: "..." }
+  * optional coverage that is explicitly not included or not applicable -> { rule: "any", reason: "..." }
+  * unknown or not-provided coverage -> omit the mandate suggestion entirely; never convert it to zero, false, absent, optional, empty, or "any"
+- Mandate suggestions are evidenced, non-authoritative suggestions. Never claim to create or persist an asset, policy, mandate, database ID, consent, or authorization record.
 - Every known or conflicting value must include an evidence array entry with documentId and evidenceSummary. Unknown values do not need evidence.
 
 Expected output JSON schema:
@@ -42079,6 +42410,7 @@ Expected output JSON schema:
           "value": any (number in cents for money, boolean for presence, string for form/type, null when unknown),
           "confidence": number between 0 and 1,
           "evidence": [{ "documentId": "...", "pageNumber": number, "quotedLabel": "...", "evidenceSummary": "..." }],
+          "alternatives": [{ "value": any, "evidence": [{ "documentId": "...", "pageNumber": number, "evidenceSummary": "..." }], "explanation": "string or omitted" }] (required with at least two entries when status is "conflicting"),
           "explanation": "string or omitted"
         }
       },
@@ -42249,7 +42581,44 @@ function normalizeCurrentValue(raw, fieldPath, documentIdMap, allowedDocumentIds
   if ((status === "known" || status === "conflicting") && (!evidence || evidence.length === 0)) {
     throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
   }
-  return evidence ? { status, value, confidence: typed.confidence, evidence, explanation } : { status, value, confidence: typed.confidence, explanation };
+  let alternatives;
+  if (Array.isArray(typed.alternatives)) {
+    alternatives = typed.alternatives.map((alternative, alternativeIndex) => {
+      if (!alternative || typeof alternative !== "object") {
+        throw new Error(
+          `currentCoverage.${fieldPath}.alternatives[${alternativeIndex}] is not an object`
+        );
+      }
+      const candidate = alternative;
+      const alternativeValue = candidate.value;
+      if (isMonetaryField(fieldPath) && !isValidMonetaryCents(alternativeValue)) {
+        throw new Error(
+          `currentCoverage.${fieldPath}.alternatives[${alternativeIndex}] is not a valid cent amount`
+        );
+      }
+      const alternativeEvidence = z.array(EvidenceReferenceSchema).min(1).parse(candidate.evidence).map((ref) => {
+        const mapped = documentIdMap.has(ref.documentId) ? { ...ref, documentId: documentIdMap.get(ref.documentId) } : ref;
+        validateEvidenceReference(mapped, allowedDocumentIds, pageCountByDocumentId);
+        return mapped;
+      });
+      return {
+        value: alternativeValue,
+        evidence: alternativeEvidence,
+        explanation: typeof candidate.explanation === "string" ? candidate.explanation : void 0
+      };
+    });
+  }
+  if (status === "conflicting" && (!alternatives || alternatives.length < 2)) {
+    throw new Error(`currentCoverage.${fieldPath} conflicting status requires two alternatives`);
+  }
+  return ExtractedCurrentValueSchema.parse({
+    status,
+    value,
+    confidence: typed.confidence,
+    evidence,
+    alternatives,
+    explanation
+  });
 }
 async function hashProvisionalKey(input) {
   const keys = Object.keys(input).sort();
@@ -42464,6 +42833,17 @@ async function normalizeLlmAnalysisResult(raw, input, extractedDocs, provider, a
       const rawMandates = e.mandateSuggestions ?? {};
       const mandateSuggestions = {};
       for (const [fieldPath, rawValue] of Object.entries(rawMandates)) {
+        const coverage = currentCoverage[fieldPath];
+        if (!coverage) {
+          throw new Error(
+            `mandateSuggestions.${fieldPath} has no corresponding document coverage assertion`
+          );
+        }
+        if (coverage.status === "unknown") {
+          throw new Error(
+            `mandateSuggestions.${fieldPath} must be omitted when the document value is unknown`
+          );
+        }
         mandateSuggestions[fieldPath] = normalizeMandateRule(rawValue, fieldPath);
       }
       const evidence = Array.isArray(e.evidence) ? e.evidence.map((item, idx) => {
@@ -42567,18 +42947,18 @@ async function sha256HexBytes(bytes) {
 var NativeDocumentAnalyzer = class {
   provider;
   bytesLoader;
-  requireNativeInput;
   authorization;
   fileLifecycleStore;
   analysisRequestId;
+  preTransmissionCheck;
   lifecycleRecords = /* @__PURE__ */ new Map();
   constructor(options) {
     this.provider = options.provider;
     this.bytesLoader = options.bytesLoader;
-    this.requireNativeInput = options.requireNativeInput ?? true;
     this.authorization = options.authorization;
     this.fileLifecycleStore = options.fileLifecycleStore;
     this.analysisRequestId = options.analysisRequestId;
+    this.preTransmissionCheck = options.preTransmissionCheck;
   }
   async analyze(input) {
     InsuranceDocumentAnalysisInputSchema.parse(input);
@@ -42594,6 +42974,9 @@ var NativeDocumentAnalyzer = class {
       fileDigestByDocumentId.set(original.documentId, digest);
     }
     const resolved = await this.provider.resolveModel();
+    if (this.provider.assertBatchFits) {
+      await this.provider.assertBatchFits(originalInputs);
+    }
     let normalizedResult;
     const allHandles = [];
     try {
@@ -42603,12 +42986,13 @@ var NativeDocumentAnalyzer = class {
       for (let i = 0; i < originalInputs.length; i++) {
         const original = originalInputs[i];
         const capability = capabilities[i];
-        if (!capability.supported || capability.mode === "unsupported" || this.requireNativeInput && capability.mode === "provider_extracted_text") {
+        if (!capability.supported || capability.mode === "unsupported") {
           throw new Error(
             `Unsupported file type for native document analysis: ${original.filename} (${capability.reason})`
           );
         }
       }
+      await this.preTransmissionCheck?.();
       const settled = await Promise.allSettled(
         originalInputs.map((original) => this.uploadAndRecord(original))
       );
@@ -42628,12 +43012,6 @@ var NativeDocumentAnalyzer = class {
         }
         if (uploadResult.status !== "ready" || !uploadResult.handle) {
           uploadFailures.push(uploadResult.errorCategory ?? "upload_failed");
-          continue;
-        }
-        if (this.requireNativeInput && uploadResult.handle.mode === "provider_extracted_text") {
-          uploadFailures.push(
-            `Unsupported file type for native document analysis: ${uploadResult.handle.filename} was converted to extracted text`
-          );
           continue;
         }
         readyHandles.push(uploadResult.handle);
@@ -42670,13 +43048,24 @@ var NativeDocumentAnalyzer = class {
 
 Your previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:
 ${validationFeedback}` : baseUserPrompt;
-        const rawResult = await this.provider.analyze({
-          model: resolved.modelId,
-          systemPrompt: buildInsuranceAnalysisSystemPrompt(),
-          userPrompt,
-          files: readyHandles,
-          responseFormat: { type: "json_object" }
-        });
+        let rawResult;
+        try {
+          rawResult = await this.provider.analyze({
+            model: resolved.modelId,
+            systemPrompt: buildInsuranceAnalysisSystemPrompt(),
+            userPrompt,
+            files: readyHandles,
+            responseFormat: { type: "json_object" }
+          });
+        } catch (error) {
+          lastError = error;
+          const message = error instanceof Error ? error.message : String(error);
+          if (attempt === 1 && /not valid JSON/i.test(message)) {
+            validationFeedback = "Return one syntactically valid JSON object matching the schema.";
+            continue;
+          }
+          throw error;
+        }
         try {
           normalizedResult = await normalizeLlmAnalysisResult(
             rawResult,
@@ -42716,6 +43105,7 @@ ${validationFeedback}` : baseUserPrompt;
     return normalizedResult;
   }
   async uploadAndRecord(original) {
+    await this.preTransmissionCheck?.();
     if (this.fileLifecycleStore && this.authorization) {
       const record = await this.fileLifecycleStore.recordUpload({
         authorizationId: this.authorization.id,
@@ -43000,6 +43390,12 @@ function privacyPreparationConfigFromEnv(getEnv) {
 }
 
 // src/providers/kimi-k3.ts
+var InvalidProviderJsonError = class extends Error {
+  constructor() {
+    super("Document analysis response was not valid JSON");
+    this.name = "InvalidProviderJsonError";
+  }
+};
 var KimiK3Provider = class {
   providerId = "kimi-k3";
   baseUrl;
@@ -43021,8 +43417,11 @@ var KimiK3Provider = class {
   async resolveModel() {
     if (this.resolvedModel) return this.resolvedModel;
     if (this.requestedModel) {
+      if (!isIntendedK3Model(this.requestedModel)) {
+        throw new Error("Configured document model does not match the intended K3 model");
+      }
       const model = await this.fetchModel(this.requestedModel);
-      if (model) {
+      if (model && isIntendedK3Model(model.id)) {
         this.resolvedModel = this.toResolvedModel(model);
         return this.resolvedModel;
       }
@@ -43041,7 +43440,7 @@ var KimiK3Provider = class {
       modelId: model.id,
       supportsImageInput: !!model.supports_image_in,
       supportsVideoInput: !!model.supports_video_in,
-      supportsGenericFileInput: false,
+      supportsGenericFileInput: true,
       supportedReferenceSchemes: ["ms://"],
       providerMetadata: {
         owned_by: model.owned_by,
@@ -43072,19 +43471,11 @@ var KimiK3Provider = class {
   async resolveInputMode(input) {
     const model = await this.resolveModel();
     const mime = (input.mimeType || "").toLowerCase().trim();
-    if (mime.startsWith("image/") && model.supportsImageInput) {
-      return { mimeType: input.mimeType, mode: "native_image_reference", supported: true };
+    if (mime.startsWith("image/")) {
+      return { mimeType: input.mimeType, mode: "provider_extracted_text", supported: true };
     }
     if (mime.startsWith("video/") && model.supportsVideoInput) {
       return { mimeType: input.mimeType, mode: "native_video_reference", supported: true };
-    }
-    if (mime.startsWith("image/")) {
-      return {
-        mimeType: input.mimeType,
-        mode: "unsupported",
-        supported: false,
-        reason: "Image input is not supported by the resolved document model"
-      };
     }
     if (mime.startsWith("video/")) {
       return {
@@ -43094,12 +43485,37 @@ var KimiK3Provider = class {
         reason: "Video input is not supported by the resolved document model"
       };
     }
+    if (mime === "application/pdf") {
+      return {
+        mimeType: input.mimeType,
+        mode: "provider_extracted_text",
+        supported: true
+      };
+    }
     return {
       mimeType: input.mimeType,
       mode: "unsupported",
       supported: false,
       reason: "Native file reference is not supported for this file type"
     };
+  }
+  async assertBatchFits(inputs) {
+    const model = await this.resolveModel();
+    const contextLength = Number(model.providerMetadata.context_length ?? 0);
+    if (!Number.isFinite(contextLength) || contextLength <= 0) {
+      throw new Error("Document model context capacity is unavailable");
+    }
+    const estimatedInputTokens = inputs.reduce((total, input) => {
+      if (input.mimeType.toLowerCase() === "application/pdf") {
+        return total + Math.ceil(input.bytes.length / 3);
+      }
+      if (input.mimeType.toLowerCase().startsWith("image/")) return total + 4096;
+      return total + Math.ceil(input.bytes.length / 4);
+    }, 8e3);
+    const outputReserve = Math.min(32e3, Math.floor(contextLength * 0.25));
+    if (estimatedInputTokens + outputReserve > Math.floor(contextLength * 0.9)) {
+      throw new Error("Document batch exceeds the resolved model context capacity");
+    }
   }
   async uploadOriginalFile(input, callbacks) {
     const capability = await this.resolveInputMode(input);
@@ -43109,7 +43525,7 @@ var KimiK3Provider = class {
         errorCategory: capability.reason ?? "unsupported_file_type"
       };
     }
-    const purpose = capability.mode === "native_image_reference" ? "image" : capability.mode === "native_video_reference" ? "video" : "file";
+    const purpose = capability.mode === "provider_extracted_text" ? "file-extract" : capability.mode === "native_image_reference" ? "image" : capability.mode === "native_video_reference" ? "video" : "file";
     const form = new FormData();
     form.append("purpose", purpose);
     form.append("file", new Blob([input.bytes], { type: input.mimeType }), input.filename);
@@ -43130,7 +43546,7 @@ var KimiK3Provider = class {
       }
       const file = await response.json();
       const referenceScheme = (await this.resolveModel()).supportedReferenceSchemes[0] ?? "ms://";
-      const handle = {
+      let handle = {
         providerFileId: file.id,
         documentId: input.documentId,
         filename: file.filename ?? input.filename,
@@ -43157,10 +43573,42 @@ var KimiK3Provider = class {
           errorCategory: finalStatus.errorCategory ?? "upload_processing_failed"
         };
       }
+      if (capability.mode === "provider_extracted_text") {
+        handle = {
+          ...handle,
+          transientExtractedContent: await this.fetchExtractedContent(file.id)
+        };
+      }
       return { status: "ready", handle };
     } finally {
       clearTimeout(timeout);
     }
+  }
+  async fetchExtractedContent(fileId) {
+    const response = await this.fetch(`${this.baseUrl}/files/${fileId}/content`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${this.apiKey}` }
+    });
+    if (!response.ok) {
+      throw new Error(`Document file extraction failed: ${response.status}`);
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    let content;
+    if (contentType.includes("application/json")) {
+      const body = await response.json();
+      const value = body.content ?? body.text;
+      if (typeof value !== "string") {
+        throw new Error("Document file extraction returned no content");
+      }
+      content = value;
+    } else {
+      content = await response.text();
+    }
+    if (!content.trim()) throw new Error("Document file extraction returned empty content");
+    if (content.length > 8e6) {
+      throw new Error("Extracted document content exceeds the analysis limit");
+    }
+    return content;
   }
   async pollFileStatus(fileId) {
     const deadline = Date.now() + 6e4;
@@ -43192,6 +43640,18 @@ var KimiK3Provider = class {
         userParts.push({ type: "video_url", video_url: { url: file.reference } });
       } else if (file.mode === "native_file_reference" && file.reference) {
         throw new Error("Native file reference is not supported by the resolved document model");
+      } else if (file.mode === "provider_extracted_text") {
+        if (!file.transientExtractedContent) {
+          throw new Error("Provider-extracted document content is unavailable");
+        }
+        userParts.push({
+          type: "text",
+          text: [
+            `<policy-document id="${file.documentId}">`,
+            file.transientExtractedContent,
+            "</policy-document>"
+          ].join("\n")
+        });
       }
     }
     const messages = [
@@ -43202,7 +43662,8 @@ var KimiK3Provider = class {
       model: input.model,
       messages,
       response_format: input.responseFormat ?? { type: "json_object" },
-      max_tokens: 32e3
+      max_completion_tokens: 32e3,
+      reasoning_effort: "max"
     };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -43227,7 +43688,11 @@ var KimiK3Provider = class {
       if (typeof content !== "string") {
         throw new Error("Document analysis response did not contain text content");
       }
-      return JSON.parse(stripMarkdownJsonFence2(content));
+      try {
+        return JSON.parse(stripMarkdownJsonFence2(content));
+      } catch {
+        throw new InvalidProviderJsonError();
+      }
     } finally {
       clearTimeout(timeout);
     }
@@ -43269,6 +43734,9 @@ var KimiK3Provider = class {
     return { deleted: false, attempts, failureCategory: "deletion_failed_after_retries" };
   }
 };
+function isIntendedK3Model(modelId) {
+  return /(^|[-_/])kimi[-_/]?k3($|[-_/])/i.test(modelId) || modelId.toLowerCase().includes("kimi-k3");
+}
 function stripMarkdownJsonFence2(text) {
   const trimmed = text.trim();
   if (trimmed.startsWith("```")) {
@@ -43459,6 +43927,7 @@ export {
   CandidateIdentitySchema,
   ConfigAndConsentPrivacyPreparation,
   CurrentPolicySchema,
+  DANGEROUS_MODE_DISCLOSURE_VERSION,
   DetectedConflictSchema,
   DetectedEntityIdentitySchema,
   DetectedInsuranceEntitySchema,
@@ -43466,6 +43935,7 @@ export {
   EntityResolutionStatusSchema,
   EvidenceReferenceSchema,
   ExistingHouseholdAssetSchema,
+  ExtractedAlternativeValueSchema,
   ExtractedCurrentValueSchema,
   HttpLlmProvider,
   InsuranceDocumentAnalysisInputSchema,
@@ -43496,6 +43966,7 @@ export {
   LlmSourceAuthoritySchema,
   LlmTemporalApplicabilitySchema,
   LlmVehicleCandidateSchema,
+  MANDATE_FIELD_DEFINITIONS,
   MandateRuleSchema,
   MemoryDocumentLoader,
   MemoryFileBytesLoader,
@@ -43507,8 +43978,10 @@ export {
   assertLlmExtractionSemantics,
   buildCandidateContext,
   buildCandidateIdentity,
+  buildCandidateMandateValues,
   buildInsuranceAnalysisSystemPrompt,
   buildInsuranceExtractionSystemPrompt,
+  buildMandateReviewSeeds,
   buildPropertyIdentity,
   buildVehicleIdentity,
   canAutoMergeIdentity,
@@ -43516,13 +43989,16 @@ export {
   createKimiK3Analyzer,
   createLlmFirstAnalyzer,
   createNativeDocumentAnalyzer,
+  documentProcessingRoute,
   extractPdfPages,
   extractPdfText,
   generateSupportReference,
   mergeIncrementalOnboardingUpload,
+  normalizeDocumentValueState,
   normalizeLlmAnalysisResult,
   parseDocument,
   parseLlmExtractionResult,
+  partitionDocumentDigests,
   planDocumentIntake,
   privacyPreparationConfigFromEnv,
   projectLlmRunToParsedDocument,
@@ -43532,9 +44008,10 @@ export {
   runLlmExtraction,
   sanitizeProviderError,
   stripNullValues,
+  validateDangerousModeEnablePolicy,
   validateLlmExtractionSemantics
 };
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "a08d894456d929ed83e00d55c2af85a1530b79626a46c8fe9ea5367cf5a82a41";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "e8d3c7d437182bb071cff3365fbadeebb139020874f36c42ba294d63635796d9";

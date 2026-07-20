@@ -50,6 +50,7 @@ async function createPolicyDocument(staff: any, label: string) {
       mime_type: "application/pdf",
       size_bytes: 0,
       storage_path: `manual/${label}.pdf`,
+      uploaded_by: DEMO_ADMIN_ID,
     })
     .select("id")
     .single();

@@ -110,12 +110,21 @@ export const EvidenceReferenceSchema = z
   .strict();
 export type EvidenceReference = z.infer<typeof EvidenceReferenceSchema>;
 
+export const ExtractedAlternativeValueSchema = z
+  .object({
+    value: z.unknown(),
+    evidence: z.array(EvidenceReferenceSchema).min(1),
+    explanation: z.string().optional(),
+  })
+  .strict();
+
 export const ExtractedCurrentValueSchema = z
   .object({
     status: z.enum(["known", "unknown", "not_included", "not_applicable", "conflicting"]),
     value: z.unknown(),
     confidence: z.number().min(0).max(1),
     evidence: z.array(EvidenceReferenceSchema).min(1).optional(),
+    alternatives: z.array(ExtractedAlternativeValueSchema).min(2).optional(),
     explanation: z.string().optional(),
   })
   .strict();
@@ -367,7 +376,11 @@ function suggestMandate(
   fieldPath: string,
   current: ExtractedCurrentValue,
 ): MandateRule | undefined {
-  if (current.status === "unknown" || current.status === "not_applicable") {
+  if (current.status === "unknown") {
+    return undefined;
+  }
+
+  if (current.status === "not_applicable") {
     return { rule: "any", reason: `current value is ${current.status}` };
   }
 
@@ -1203,11 +1216,15 @@ function validateEvidenceReference(
   }
   if (ref.pageNumber !== undefined) {
     const pageCount = pageCountByDocumentId.get(ref.documentId);
-    if (pageCount === undefined || pageCount === 0) {
+    if (pageCount === undefined) {
       throw new Error(
-        `evidence pageNumber ${ref.pageNumber} is not valid for document ${ref.documentId} (no page reference available)`,
+        `evidence pageNumber ${ref.pageNumber} is not valid for unknown document ${ref.documentId}`,
       );
     }
+    // Provider-file extraction may preserve page references even when the
+    // transport does not report a reliable total page count. Keep the positive
+    // reference and skip only the upper-bound check in that case.
+    if (pageCount === 0) return;
     if (ref.pageNumber < 1 || ref.pageNumber > pageCount) {
       throw new Error(
         `evidence pageNumber ${ref.pageNumber} is out of range for document ${ref.documentId} (pages ${pageCount})`,
@@ -1288,12 +1305,14 @@ Core rules:
 - If a document is a notice about future coverage, a discount notice, or promotional material, do not create an asset from it; instead add a warning.
 - When a detected asset matches an existing asset in existingAssets or pendingCandidates, set resolution.status to "matches_existing" or "matches_pending_candidate" and include the matched id.
 - Monetary values must be integer cents (e.g. $438,000 -> 43800000). Dates should be ISO strings (YYYY-MM-DD) when known.
-- For mandate defaults, apply these semantic rules:
+- For document-implied mandate suggestions, apply these semantic rules:
   * limit -> { rule: "minimum", amountCents: <current value in cents> }
   * deductible -> { rule: "maximum", amountCents: <current value in cents> }
   * coverage form/type -> { rule: "match_current_or_better", value: "<current value>" }
   * optional coverage that is included -> { rule: "required" } (omit value)
-  * optional coverage that is not included, not applicable, or unknown -> { rule: "any", reason: "..." }
+  * optional coverage that is explicitly not included or not applicable -> { rule: "any", reason: "..." }
+  * unknown or not-provided coverage -> omit the mandate suggestion entirely; never convert it to zero, false, absent, optional, empty, or "any"
+- Mandate suggestions are evidenced, non-authoritative suggestions. Never claim to create or persist an asset, policy, mandate, database ID, consent, or authorization record.
 - Every known or conflicting value must include an evidence array entry with documentId and evidenceSummary. Unknown values do not need evidence.
 
 Expected output JSON schema:
@@ -1336,6 +1355,7 @@ Expected output JSON schema:
           "value": any (number in cents for money, boolean for presence, string for form/type, null when unknown),
           "confidence": number between 0 and 1,
           "evidence": [{ "documentId": "...", "pageNumber": number, "quotedLabel": "...", "evidenceSummary": "..." }],
+          "alternatives": [{ "value": any, "evidence": [{ "documentId": "...", "pageNumber": number, "evidenceSummary": "..." }], "explanation": "string or omitted" }] (required with at least two entries when status is "conflicting"),
           "explanation": "string or omitted"
         }
       },
@@ -1539,9 +1559,51 @@ function normalizeCurrentValue(
     throw new Error(`currentCoverage.${fieldPath} status ${status} requires evidence`);
   }
 
-  return evidence
-    ? { status, value, confidence: typed.confidence, evidence, explanation }
-    : { status, value, confidence: typed.confidence, explanation };
+  let alternatives: ExtractedCurrentValue["alternatives"];
+  if (Array.isArray(typed.alternatives)) {
+    alternatives = typed.alternatives.map((alternative, alternativeIndex) => {
+      if (!alternative || typeof alternative !== "object") {
+        throw new Error(
+          `currentCoverage.${fieldPath}.alternatives[${alternativeIndex}] is not an object`,
+        );
+      }
+      const candidate = alternative as Record<string, unknown>;
+      const alternativeValue = candidate.value;
+      if (isMonetaryField(fieldPath) && !isValidMonetaryCents(alternativeValue)) {
+        throw new Error(
+          `currentCoverage.${fieldPath}.alternatives[${alternativeIndex}] is not a valid cent amount`,
+        );
+      }
+      const alternativeEvidence = z
+        .array(EvidenceReferenceSchema)
+        .min(1)
+        .parse(candidate.evidence)
+        .map((ref) => {
+          const mapped = documentIdMap.has(ref.documentId)
+            ? { ...ref, documentId: documentIdMap.get(ref.documentId)! }
+            : ref;
+          validateEvidenceReference(mapped, allowedDocumentIds, pageCountByDocumentId);
+          return mapped;
+        });
+      return {
+        value: alternativeValue,
+        evidence: alternativeEvidence,
+        explanation: typeof candidate.explanation === "string" ? candidate.explanation : undefined,
+      };
+    });
+  }
+  if (status === "conflicting" && (!alternatives || alternatives.length < 2)) {
+    throw new Error(`currentCoverage.${fieldPath} conflicting status requires two alternatives`);
+  }
+
+  return ExtractedCurrentValueSchema.parse({
+    status,
+    value,
+    confidence: typed.confidence,
+    evidence,
+    alternatives,
+    explanation,
+  });
 }
 
 async function hashProvisionalKey(input: Record<string, unknown>): Promise<string> {
@@ -1846,6 +1908,17 @@ export async function normalizeLlmAnalysisResult(
       const rawMandates = (e.mandateSuggestions as Record<string, unknown>) ?? {};
       const mandateSuggestions: Record<string, MandateRule> = {};
       for (const [fieldPath, rawValue] of Object.entries(rawMandates)) {
+        const coverage = currentCoverage[fieldPath];
+        if (!coverage) {
+          throw new Error(
+            `mandateSuggestions.${fieldPath} has no corresponding document coverage assertion`,
+          );
+        }
+        if (coverage.status === "unknown") {
+          throw new Error(
+            `mandateSuggestions.${fieldPath} must be omitted when the document value is unknown`,
+          );
+        }
         mandateSuggestions[fieldPath] = normalizeMandateRule(rawValue, fieldPath);
       }
 
@@ -1975,10 +2048,10 @@ async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
 class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
   private provider: NativeDocumentAnalysisProvider;
   private bytesLoader: FileBytesLoader;
-  private requireNativeInput: boolean;
   private authorization?: DocumentProcessingAuthorization;
   private fileLifecycleStore?: ExternalFileLifecycleStore;
   private analysisRequestId?: string;
+  private preTransmissionCheck?: () => Promise<void>;
   private lifecycleRecords = new Map<string, string>();
 
   constructor(options: {
@@ -1988,13 +2061,14 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     authorization?: DocumentProcessingAuthorization;
     fileLifecycleStore?: ExternalFileLifecycleStore;
     analysisRequestId?: string;
+    preTransmissionCheck?: () => Promise<void>;
   }) {
     this.provider = options.provider;
     this.bytesLoader = options.bytesLoader;
-    this.requireNativeInput = options.requireNativeInput ?? true;
     this.authorization = options.authorization;
     this.fileLifecycleStore = options.fileLifecycleStore;
     this.analysisRequestId = options.analysisRequestId;
+    this.preTransmissionCheck = options.preTransmissionCheck;
   }
 
   async analyze(input: InsuranceDocumentAnalysisInput): Promise<InsuranceDocumentAnalysisResult> {
@@ -2015,6 +2089,9 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
     }
 
     const resolved = await this.provider.resolveModel();
+    if (this.provider.assertBatchFits) {
+      await this.provider.assertBatchFits(originalInputs);
+    }
 
     let normalizedResult: InsuranceDocumentAnalysisResult | undefined;
     const allHandles: ProviderFileHandle[] = [];
@@ -2026,16 +2103,16 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
       for (let i = 0; i < originalInputs.length; i++) {
         const original = originalInputs[i];
         const capability = capabilities[i];
-        if (
-          !capability.supported ||
-          capability.mode === "unsupported" ||
-          (this.requireNativeInput && capability.mode === "provider_extracted_text")
-        ) {
+        if (!capability.supported || capability.mode === "unsupported") {
           throw new Error(
             `Unsupported file type for native document analysis: ${original.filename} (${capability.reason})`,
           );
         }
       }
+
+      // Recheck once after all non-content preflight checks. uploadAndRecord
+      // repeats this check per file immediately before claiming/transmitting it.
+      await this.preTransmissionCheck?.();
 
       const settled = await Promise.allSettled(
         originalInputs.map((original) => this.uploadAndRecord(original)),
@@ -2057,12 +2134,6 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
         }
         if (uploadResult.status !== "ready" || !uploadResult.handle) {
           uploadFailures.push(uploadResult.errorCategory ?? "upload_failed");
-          continue;
-        }
-        if (this.requireNativeInput && uploadResult.handle.mode === "provider_extracted_text") {
-          uploadFailures.push(
-            `Unsupported file type for native document analysis: ${uploadResult.handle.filename} was converted to extracted text`,
-          );
           continue;
         }
         readyHandles.push(uploadResult.handle);
@@ -2110,13 +2181,24 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
           ? `${baseUserPrompt}\n\nYour previous response failed validation. Correct these errors and respond only with the corrected JSON object. Errors:\n${validationFeedback}`
           : baseUserPrompt;
 
-        const rawResult = await this.provider.analyze({
-          model: resolved.modelId,
-          systemPrompt: buildInsuranceAnalysisSystemPrompt(),
-          userPrompt,
-          files: readyHandles,
-          responseFormat: { type: "json_object" },
-        });
+        let rawResult: unknown;
+        try {
+          rawResult = await this.provider.analyze({
+            model: resolved.modelId,
+            systemPrompt: buildInsuranceAnalysisSystemPrompt(),
+            userPrompt,
+            files: readyHandles,
+            responseFormat: { type: "json_object" },
+          });
+        } catch (error) {
+          lastError = error;
+          const message = error instanceof Error ? error.message : String(error);
+          if (attempt === 1 && /not valid JSON/i.test(message)) {
+            validationFeedback = "Return one syntactically valid JSON object matching the schema.";
+            continue;
+          }
+          throw error;
+        }
 
         try {
           normalizedResult = await normalizeLlmAnalysisResult(
@@ -2162,6 +2244,10 @@ class NativeDocumentAnalyzer implements InsuranceDocumentAnalyzer {
   }
 
   private async uploadAndRecord(original: OriginalFileInput): Promise<ProviderUploadResult> {
+    // A setting/consent change between batch preflight and parallel upload must
+    // fail closed before this particular document crosses the provider boundary.
+    await this.preTransmissionCheck?.();
+
     if (this.fileLifecycleStore && this.authorization) {
       const record = await this.fileLifecycleStore.recordUpload({
         authorizationId: this.authorization.id,
@@ -2364,6 +2450,8 @@ export function createNativeDocumentAnalyzer(options: {
   requireNativeInput?: boolean;
   authorization?: DocumentProcessingAuthorization;
   fileLifecycleStore?: ExternalFileLifecycleStore;
+  analysisRequestId?: string;
+  preTransmissionCheck?: () => Promise<void>;
 }): InsuranceDocumentAnalyzer {
   return new NativeDocumentAnalyzer(options);
 }
