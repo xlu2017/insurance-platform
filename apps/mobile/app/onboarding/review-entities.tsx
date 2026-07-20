@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
-import { View, TextInput, ScrollView, StyleSheet } from "react-native";
+import { View, ScrollView, StyleSheet } from "react-native";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { formatEdmontonDate } from "@/lib/format";
@@ -22,7 +22,6 @@ import {
   PrimaryButton,
   Screen,
   SecondaryButton,
-  Select,
   Subtitle,
   Title,
 } from "@/components/ui";
@@ -50,14 +49,6 @@ const REVIEW_ACTIONS: { value: ReviewAction; label: string }[] = [
 const MANDATE_ACTIONS: { value: ReviewAction; label: string }[] = [
   { value: "reset_mandate_to_current", label: "Reset" },
   { value: "change_mandate", label: "Change" },
-];
-
-const MANDATE_RULES: { value: string; label: string }[] = [
-  { value: "minimum", label: "Minimum" },
-  { value: "maximum", label: "Maximum" },
-  { value: "match_current_or_better", label: "Match current or better" },
-  { value: "required", label: "Required" },
-  { value: "any", label: "Any" },
 ];
 
 function formatFieldValue(value: unknown): string {
@@ -194,6 +185,108 @@ function isCoverageField(fieldPath: string): boolean {
   return fieldPath.startsWith("currentCoverage.");
 }
 
+function parseCorrectedValue(fieldPath: string, raw: string): unknown {
+  if (fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")) {
+    const dollars = Number(raw.replace(/[$,]/g, ""));
+    if (!Number.isNaN(dollars)) return Math.round(dollars * 100);
+  }
+  return raw;
+}
+
+function FieldReviewStep({
+  candidate,
+  fieldPath,
+  existing,
+  onComplete,
+}: {
+  candidate: ExtractionCandidate;
+  fieldPath: string;
+  existing?: CandidateFieldReview | null;
+  onComplete: (action: ReviewAction, correctedValue?: string) => void;
+}) {
+  const value = getFieldValue(candidate, fieldPath);
+  const mandate = getMandateSuggestion(candidate, fieldPath);
+  const isCoverage = isCoverageField(fieldPath);
+  const fieldLabel = formatFieldLabel(fieldPath);
+  const isCents =
+    fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium");
+  const [editing, setEditing] = useState(false);
+  const [corrected, setCorrected] = useState(() => {
+    if (existing?.corrected_value !== undefined && existing?.corrected_value !== null) {
+      return formatFieldValue(existing.corrected_value);
+    }
+    return isCents ? renderCents(value) : formatFieldValue(value);
+  });
+
+  const displayValue = isCents ? renderCents(value) : displayValueForField(fieldPath, value);
+
+  if (editing) {
+    return (
+      <View style={{ gap: 12 }}>
+        <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
+        <Field
+          label="Edit"
+          value={corrected}
+          onChangeText={setCorrected}
+          autoCorrect={false}
+          keyboardType={isCents ? "numeric" : "default"}
+        />
+        <View style={{ gap: 8 }}>
+          <PrimaryButton label="Save" onPress={() => onComplete("correct", corrected)} />
+          <SecondaryButton label="Cancel" onPress={() => setEditing(false)} />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: 16 }}>
+      <View>
+        <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
+        <Body style={styles.fieldValue}>{displayValue}</Body>
+      </View>
+      <View style={{ gap: 10 }}>
+        <Body muted>Is this {fieldLabel.toLowerCase()} correct?</Body>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {REVIEW_ACTIONS.map((a) => (
+            <SecondaryButton
+              key={a.value}
+              label={a.label}
+              onPress={() => onComplete(a.value)}
+              style={styles.fieldAction}
+            />
+          ))}
+        </View>
+        {isCoverage && mandate && (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {MANDATE_ACTIONS.map((a) => (
+              <SecondaryButton
+                key={a.value}
+                label={a.label}
+                onPress={() => onComplete(a.value)}
+                style={styles.mandateAction}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+      {actionLabel(existing?.action) ? (
+        <Body style={{ color: "#16A34A" }}>{actionLabel(existing?.action)}</Body>
+      ) : null}
+    </View>
+  );
+}
+
+function actionLabel(action: ReviewAction | null | undefined): string | null {
+  if (!action) return null;
+  if (action === "confirm") return "Looks right";
+  if (action === "unknown") return "Not sure";
+  if (action === "correct") return "Edited";
+  if (action === "reset_mandate_to_current") return "Coverage rule reset to current";
+  if (action === "change_mandate") return "Coverage rule changed";
+  return null;
+}
+
 export default function ReviewEntities() {
   const { sessionId } = useLocalSearchParams<{ sessionId?: string }>();
   const { data: household, isLoading: householdLoading } = useHousehold();
@@ -209,6 +302,9 @@ export default function ReviewEntities() {
   const [decisions, setDecisions] = useState<Record<string, CandidateDecision["decision"]>>({});
   const [identityConfirmations, setIdentityConfirmations] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, DraftReview>>({});
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const [fieldIndex, setFieldIndex] = useState(0);
+  const [phase, setPhase] = useState<"decision" | "field" | "summary">("decision");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -219,6 +315,37 @@ export default function ReviewEntities() {
     }
     return map;
   }, [fieldReviews]);
+
+  const currentCandidate = candidates?.[candidateIndex];
+  const currentFields = useMemo(() => {
+    if (!currentCandidate) return [];
+    return fieldPathsForCandidate(currentCandidate).filter(
+      (path) => !reviewsByKey.has(`${currentCandidate.id}:${path}`),
+    );
+  }, [currentCandidate, reviewsByKey]);
+
+  const totalQuestions = useMemo(() => {
+    if (!candidates) return 0;
+    return candidates.reduce((sum, c) => sum + 1 + fieldPathsForCandidate(c).length, 0);
+  }, [candidates]);
+
+  const currentQuestion = useMemo(() => {
+    if (!candidates) return 0;
+    let count = 0;
+    for (let i = 0; i < candidateIndex; i++) {
+      const c = candidates[i];
+      if (!c) continue;
+      count += 1 + fieldPathsForCandidate(c).length;
+    }
+    if (phase === "field") {
+      count += 2 + fieldIndex;
+    } else if (phase === "decision") {
+      count += 1;
+    } else if (phase === "summary") {
+      count = totalQuestions;
+    }
+    return count;
+  }, [candidates, candidateIndex, fieldIndex, phase, totalQuestions]);
 
   if (householdLoading || sessionLoading || candidatesLoading || reviewsLoading) return <Loading />;
   if (!household) {
@@ -268,13 +395,82 @@ export default function ReviewEntities() {
     return isCandidateReady(c);
   });
 
+  const advanceCandidate = () => {
+    const nextIndex = candidateIndex + 1;
+    if (nextIndex >= candidates.length) {
+      setPhase("summary");
+    } else {
+      setCandidateIndex(nextIndex);
+      setFieldIndex(0);
+      setPhase("decision");
+    }
+  };
+
+  const handleDecision = (decision: "approve_new" | "skip") => {
+    if (!currentCandidate) return;
+    setDecision(currentCandidate.id, decision);
+    if (decision === "approve_new") {
+      if (currentCandidate.match_classification === "new_identity_confirmation_required") {
+        setIdentityConfirmations((prev) => ({ ...prev, [currentCandidate.id]: true }));
+      }
+      if (currentFields.length === 0) {
+        advanceCandidate();
+      } else {
+        setFieldIndex(0);
+        setPhase("field");
+      }
+    } else {
+      advanceCandidate();
+    }
+  };
+
+  const handleFieldComplete = (action: ReviewAction, correctedValue?: string) => {
+    if (!currentCandidate) return;
+    const fieldPath = currentFields[fieldIndex];
+    if (!fieldPath) return;
+    const key = `${currentCandidate.id}:${fieldPath}`;
+    const value = getFieldValue(currentCandidate, fieldPath);
+    const mandate = getMandateSuggestion(currentCandidate, fieldPath);
+
+    setDrafts((prev) => {
+      const existing = prev[key];
+      const isCents =
+        fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium");
+      const corrected =
+        action === "correct"
+          ? String(parseCorrectedValue(fieldPath, correctedValue ?? formatFieldValue(value)))
+          : isCents
+            ? renderCents(value)
+            : formatFieldValue(value);
+      return {
+        ...prev,
+        [key]: {
+          action,
+          correctedValue: corrected,
+          mandateRule: existing?.mandateRule ?? (mandate?.rule as string) ?? "minimum",
+          mandateAmount: existing?.mandateAmount ?? "",
+        },
+      };
+    });
+
+    if (fieldIndex + 1 < currentFields.length) {
+      setFieldIndex((i) => i + 1);
+    } else {
+      advanceCandidate();
+    }
+  };
+
   const persistReview = async (
     candidate: ExtractionCandidate,
     fieldPath: string,
     draft: DraftReview,
   ): Promise<void> => {
     const value = getFieldValue(candidate, fieldPath);
-    const correctedValue = draft.action === "correct" ? draft.correctedValue || value : undefined;
+    let correctedValue: unknown =
+      draft.action === "correct" ? draft.correctedValue || value : undefined;
+    if (draft.action === "correct" && typeof correctedValue === "string") {
+      correctedValue = parseCorrectedValue(fieldPath, correctedValue);
+    }
 
     let mandateRuleJson: Record<string, unknown> | undefined;
     if (draft.action === "change_mandate") {
@@ -348,244 +544,127 @@ export default function ReviewEntities() {
     }
   };
 
-  const FieldReview = ({
-    candidate,
-    fieldPath,
-  }: {
-    candidate: ExtractionCandidate;
-    fieldPath: string;
-  }) => {
-    const key = `${candidate.id}:${fieldPath}`;
-    const existing = reviewsByKey.get(key);
-    const draft = drafts[key];
-    const action = draft?.action ?? existing?.action ?? null;
-    const value = getFieldValue(candidate, fieldPath);
-    const mandate = getMandateSuggestion(candidate, fieldPath);
-    const isCoverage = isCoverageField(fieldPath);
-    const fieldLabel = formatFieldLabel(fieldPath);
-
-    const setAction = (next: ReviewAction) => {
-      setDrafts((prev) => ({
-        ...prev,
-        [key]: {
-          action: next,
-          correctedValue: prev[key]?.correctedValue ?? formatFieldValue(value),
-          mandateRule: prev[key]?.mandateRule ?? (mandate?.rule as string) ?? "minimum",
-          mandateAmount: prev[key]?.mandateAmount ?? "",
-        },
-      }));
-    };
-
-    const updateDraft = (patch: Partial<DraftReview>) => {
-      setDrafts((prev) => {
-        const base: DraftReview = prev[key] ?? {
-          action: action ?? "confirm",
-          correctedValue: formatFieldValue(value),
-          mandateRule: (mandate?.rule as string) ?? "minimum",
-          mandateAmount: "",
-        };
-        return { ...prev, [key]: { ...base, ...patch } };
-      });
-    };
-
-    const displayValue =
-      fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")
-        ? renderCents(value)
-        : displayValueForField(fieldPath, value);
-
+  const renderDecisionStep = () => {
+    if (!currentCandidate) return null;
+    const typeLabel = currentCandidate.asset_type === "vehicle" ? "vehicle" : "property";
     return (
-      <View style={{ marginBottom: 12 }}>
-        <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
-        <Body style={styles.fieldValue}>{displayValue}</Body>
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            gap: 8,
-            marginTop: 4,
-            alignItems: "center",
-          }}
-        >
-          {REVIEW_ACTIONS.map((a) => (
-            <SecondaryButton
-              key={a.value}
-              label={a.label}
-              disabled={saveReview.isPending}
-              onPress={() => setAction(a.value)}
-              style={styles.fieldAction}
-            />
-          ))}
-        </View>
-        {isCoverage && mandate && (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-            {MANDATE_ACTIONS.map((a) => (
-              <SecondaryButton
-                key={a.value}
-                label={a.label}
-                disabled={saveReview.isPending}
-                onPress={() => setAction(a.value)}
-                style={styles.mandateAction}
-              />
-            ))}
-          </View>
-        )}
-        {action === "correct" && (
-          <View style={{ marginTop: 8 }}>
-            <Field
-              label="Edited value"
-              value={draft?.correctedValue ?? formatFieldValue(value)}
-              onChangeText={(text) => updateDraft({ correctedValue: text })}
-              autoCorrect={false}
-            />
-          </View>
-        )}
-        {action === "change_mandate" && (
-          <View style={{ marginTop: 8, gap: 8 }}>
-            <Select
-              label="Mandate rule"
-              options={MANDATE_RULES}
-              value={draft?.mandateRule ?? (mandate?.rule as string) ?? "minimum"}
-              onValueChange={(v) => updateDraft({ mandateRule: v })}
-            />
-            <TextInput
-              placeholder="Amount in dollars"
-              keyboardType="numeric"
-              value={draft?.mandateAmount ?? ""}
-              onChangeText={(text) => updateDraft({ mandateAmount: text })}
-              style={{
-                borderWidth: 1,
-                borderColor: "#E5E7EB",
-                borderRadius: 8,
-                padding: 12,
-                fontSize: 16,
-              }}
-            />
-          </View>
-        )}
-        {action ? (
-          <Body style={{ color: "#16A34A", marginTop: 4 }}>
-            {action === "reset_mandate_to_current"
-              ? "Coverage rule reset to current"
-              : action === "confirm"
-                ? "Looks right"
-                : action === "unknown"
-                  ? "Not sure"
-                  : "Edited"}
-          </Body>
+      <Card style={{ flex: 1, justifyContent: "center" }}>
+        <Subtitle style={styles.subtitle}>
+          {currentCandidate.asset_type === "vehicle" ? "Vehicle" : "Property"}
+        </Subtitle>
+        <Title style={styles.title}>{currentCandidate.display_label}</Title>
+        {currentCandidate.occupancy ? (
+          <Caption>
+            {currentCandidate.occupancy === "rental" ? "Rental / tenant" : "Principal residence"}
+          </Caption>
         ) : null}
-      </View>
+        <View style={{ gap: 8, marginTop: 8 }}>
+          {currentCandidate.match_classification === "new_identity_confirmation_required" ? (
+            <Body style={{ color: "#B45309" }}>
+              {`We could not confirm the full ${typeLabel} identity. Please verify this is the correct ${typeLabel} before adding it.`}
+            </Body>
+          ) : null}
+          {(currentCandidate.conflicts_json?.length ?? 0) > 0 ? (
+            <Body style={{ color: "#B45309" }}>
+              Your documents contain different information about this {typeLabel}. You will review
+              the details next.
+            </Body>
+          ) : null}
+        </View>
+        <View style={{ gap: 12, marginTop: 32 }}>
+          <PrimaryButton
+            label={`Add this ${typeLabel}`}
+            onPress={() => handleDecision("approve_new")}
+            disabled={busy}
+          />
+          <SecondaryButton
+            label={`Skip this ${typeLabel}`}
+            onPress={() => handleDecision("skip")}
+            disabled={busy}
+          />
+        </View>
+      </Card>
     );
   };
 
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
-      contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl * 2 }}
-    >
-      <Stack.Screen options={{ title: "Confirm what we found" }} />
-      <Title style={styles.title}>Confirm what we found</Title>
-      <Body muted>Review each vehicle and property before adding it to your account.</Body>
-      <View style={{ height: 16 }} />
+  const renderFieldStep = () => {
+    if (!currentCandidate) return null;
+    if (currentFields.length === 0) {
+      advanceCandidate();
+      return null;
+    }
+    const fieldPath = currentFields[fieldIndex];
+    if (!fieldPath) return null;
+    const existing = reviewsByKey.get(`${currentCandidate.id}:${fieldPath}`);
+    const progressLabel = `Question ${currentQuestion} of ${totalQuestions}`;
+    return (
+      <Card style={{ flex: 1, justifyContent: "center" }}>
+        <Caption>{progressLabel}</Caption>
+        <View style={{ marginVertical: 8 }}>
+          <Subtitle style={styles.subtitle}>
+            {`${currentCandidate.asset_type === "vehicle" ? "Vehicle" : "Property"}: ${currentCandidate.display_label}`}
+          </Subtitle>
+        </View>
+        <FieldReviewStep
+          candidate={currentCandidate}
+          fieldPath={fieldPath}
+          existing={existing}
+          onComplete={handleFieldComplete}
+        />
+      </Card>
+    );
+  };
 
-      {candidates.map((candidate) => {
-        const decision = decisions[candidate.id];
-        const conflicting = (candidate.conflicts_json?.length ?? 0) > 0;
-        const fields = fieldPathsForCandidate(candidate);
-        const ready = isCandidateReady(candidate);
-
-        return (
-          <Card key={candidate.id}>
-            <Subtitle style={styles.subtitle}>
-              {candidate.asset_type === "vehicle" ? "Vehicle" : "Property"}
-            </Subtitle>
-            <Body>{candidate.display_label}</Body>
-            {candidate.occupancy ? (
+  const renderSummary = () => (
+    <Card style={{ flex: 1, justifyContent: "center" }}>
+      <Title style={styles.title}>Ready to continue</Title>
+      <Body muted>Review what we found before continuing to your coverage rules.</Body>
+      <View style={{ gap: 12, marginVertical: 16 }}>
+        {candidates?.map((candidate) => {
+          const decision = decisions[candidate.id];
+          return (
+            <View key={candidate.id}>
+              <Body>{candidate.display_label}</Body>
               <Caption>
-                {candidate.occupancy === "rental" ? "Rental / tenant" : "Principal residence"}
+                {decision === "approve_new" ? "Will be added to your account" : "Will not be added"}
               </Caption>
-            ) : null}
-            {candidate.match_classification === "new_identity_confirmation_required" ? (
-              <Body style={{ color: "#B45309" }}>
-                We could not confirm the full{" "}
-                {candidate.asset_type === "vehicle" ? "vehicle" : "property"} identity. Check that
-                this is the correct {candidate.asset_type === "vehicle" ? "vehicle" : "property"}{" "}
-                before adding it.
-              </Body>
-            ) : null}
-            {conflicting ? (
-              <Body style={{ color: "#B45309" }}>
-                Two documents contain different information. Review the highlighted fields.
-              </Body>
-            ) : null}
-
-            <View style={{ marginTop: 12, gap: 8 }}>
-              {fields.map((fieldPath) => (
-                <FieldReview key={fieldPath} candidate={candidate} fieldPath={fieldPath} />
-              ))}
             </View>
-
-            {!ready && decision === "approve_new" ? (
-              <Body style={{ color: "#B45309", marginTop: 8 }}>
-                All fields must be reviewed before this can be added.
-              </Body>
-            ) : null}
-            {candidate.match_classification === "new_identity_confirmation_required" &&
-            !identityConfirmations[candidate.id] ? (
-              <Body style={{ color: "#B45309", marginTop: 8 }}>
-                Confirm the identity below before adding it.
-              </Body>
-            ) : null}
-
-            <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-              {candidate.match_classification === "new_identity_confirmation_required" ? (
-                <SecondaryButton
-                  label="Looks right"
-                  onPress={() =>
-                    setIdentityConfirmations((prev) => ({
-                      ...prev,
-                      [candidate.id]: !prev[candidate.id],
-                    }))
-                  }
-                  disabled={busy}
-                  style={styles.identityButton}
-                />
-              ) : null}
-              <SecondaryButton
-                label="Don't add"
-                onPress={() => setDecision(candidate.id, "skip")}
-                disabled={busy}
-                style={styles.skipButton}
-              />
-              <PrimaryButton
-                label={
-                  candidate.asset_type === "vehicle" ? "Add this vehicle" : "Add this property"
-                }
-                onPress={() => setDecision(candidate.id, "approve_new")}
-                disabled={busy}
-                style={styles.approveButton}
-              />
-            </View>
-            {decision ? (
-              <Body
-                style={{ marginTop: 8, color: decision === "approve_new" ? "#16A34A" : "#6B7280" }}
-              >
-                {decision === "approve_new" ? "Will be added" : "Will not be added"}
-              </Body>
-            ) : null}
-          </Card>
-        );
-      })}
-
+          );
+        })}
+      </View>
       {error ? <Body muted>{error}</Body> : null}
-
       <PrimaryButton
         label="Continue to coverage"
         onPress={submit}
         loading={busy || saveReview.isPending}
         disabled={busy || saveReview.isPending || !allApprovedReady}
-        style={styles.submitButton}
       />
-    </ScrollView>
+    </Card>
+  );
+
+  const renderStep = () => {
+    if (phase === "decision") return renderDecisionStep();
+    if (phase === "field") return renderFieldStep();
+    return renderSummary();
+  };
+
+  return (
+    <Screen style={{ flex: 1 }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: spacing.xl * 2,
+          minHeight: "100%",
+        }}
+      >
+        <Stack.Screen options={{ title: "Confirm what we found" }} />
+        <Title style={styles.title}>Confirm what we found</Title>
+        <Body muted>Review each vehicle and property before adding it to your account.</Body>
+        <View style={{ height: 16 }} />
+        {renderStep()}
+      </ScrollView>
+    </Screen>
   );
 }
 
@@ -616,39 +695,20 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   fieldValue: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 20,
+    fontWeight: "600",
     color: colors.ink,
     marginBottom: 6,
   },
   fieldAction: {
     borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    minWidth: 72,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    minWidth: 80,
   },
   mandateAction: {
     borderRadius: 999,
     paddingVertical: 10,
     paddingHorizontal: 12,
-  },
-  identityButton: {
-    borderRadius: 999,
-    paddingVertical: 12,
-  },
-  approveButton: {
-    borderRadius: 999,
-    paddingVertical: 14,
-    flex: 1,
-  },
-  skipButton: {
-    borderRadius: 999,
-    paddingVertical: 14,
-    minWidth: 80,
-  },
-  submitButton: {
-    borderRadius: 999,
-    paddingVertical: 16,
-    width: "100%",
   },
 });
