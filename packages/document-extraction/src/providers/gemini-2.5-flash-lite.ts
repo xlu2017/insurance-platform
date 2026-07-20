@@ -22,12 +22,78 @@ interface GeminiContent {
   parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
 }
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash"];
 const CONTEXT_LENGTH = 1_048_576;
+
+function getEnv(name: string): string | undefined {
+  try {
+    const deno = (globalThis as { Deno?: { env?: { get: (n: string) => string | undefined } } })
+      .Deno;
+    if (deno?.env?.get) {
+      return deno.env.get(name);
+    }
+  } catch {
+    // Deno not available in test/Node environments
+  }
+  return undefined;
+}
+
+const PRIMARY_MODEL = getEnv("DOCUMENT_MODEL_PRIMARY") ?? "gemini-2.5-flash";
+const ROUTINE_FALLBACK_MODEL = getEnv("DOCUMENT_MODEL_ROUTINE_FALLBACK") ?? "gemini-3.1-flash-lite";
+const QUALITY_ESCALATION_MODEL = getEnv("DOCUMENT_MODEL_QUALITY_ESCALATION") ?? "gemini-3.5-flash";
+const CROSS_PROVIDER_FALLBACK_MODEL = getEnv("DOCUMENT_MODEL_PROVIDER_FALLBACK") ?? "gpt-5-mini";
 
 function isGeminiModel(modelId: string): boolean {
   return modelId.toLowerCase().includes("gemini") || modelId.toLowerCase().includes("flash");
+}
+
+type ErrorCategory = "availability" | "quality" | "fatal";
+
+function classifyGeminiError(err: unknown): ErrorCategory {
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+
+  const availability = [
+    "503",
+    "429",
+    "404",
+    "not found",
+    "no longer available",
+    "high demand",
+    "temporarily unavailable",
+    "overloaded",
+    "unavailable",
+    "fetch failed",
+    "network",
+    "connection",
+    "timeout",
+    "timed out",
+    "abort",
+    "socket",
+    "econnrefused",
+    "dns",
+    "wall_clock",
+    "deadline exceeded",
+  ];
+  if (availability.some((token) => lower.includes(token))) return "availability";
+
+  const quality = [
+    "json",
+    "unexpected token",
+    "not valid",
+    "invalid",
+    "schema",
+    "missing required",
+    "requires",
+    "is not a",
+    "conflict",
+    "ambiguous",
+    "low confidence",
+    "cannot parse",
+    "failed to parse",
+  ];
+  if (quality.some((token) => lower.includes(token))) return "quality";
+
+  return "fatal";
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -292,7 +358,7 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
     const modelId =
       this.requestedModel && isGeminiModel(this.requestedModel)
         ? this.requestedModel
-        : DEFAULT_MODEL;
+        : PRIMARY_MODEL;
     this.resolvedModel = {
       modelId,
       supportsImageInput: true,
@@ -361,29 +427,55 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
 
   async analyze(input: NativeDocumentAnalysisRequest): Promise<unknown> {
     await this.resolveModel();
-    const models = [input.model, ...FALLBACK_MODELS];
+    const primaryModel = input.model || this.resolvedModel?.modelId || PRIMARY_MODEL;
+    const orderedModels: string[] = [primaryModel];
+    const tried = new Set<string>([primaryModel]);
+    const maxAttempts = Math.max(1, Number(getEnv("DOCUMENT_MODEL_MAX_ATTEMPTS") ?? 3));
     let lastError: unknown;
 
-    for (const modelId of models) {
+    for (let i = 0; i < orderedModels.length && i < maxAttempts; i++) {
+      const modelId = orderedModels[i];
       try {
         return await this.tryAnalyzeWithModel(input, modelId);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (
-          message.includes("503") ||
-          message.includes("429") ||
-          message.includes("high demand") ||
-          message.includes("temporarily unavailable") ||
-          message.includes("UNAVAILABLE") ||
-          message.includes("overloaded") ||
-          message.includes("not found") ||
-          message.includes("404") ||
-          message.includes("no longer available")
-        ) {
-          lastError = err;
-          continue;
+        lastError = err;
+        const category = classifyGeminiError(err);
+
+        if (category === "fatal") {
+          throw err;
         }
-        throw err;
+
+        if (category === "availability" && !tried.has(ROUTINE_FALLBACK_MODEL)) {
+          orderedModels.push(ROUTINE_FALLBACK_MODEL);
+          tried.add(ROUTINE_FALLBACK_MODEL);
+        }
+
+        if (
+          (category === "quality" || category === "availability") &&
+          !tried.has(QUALITY_ESCALATION_MODEL)
+        ) {
+          orderedModels.push(QUALITY_ESCALATION_MODEL);
+          tried.add(QUALITY_ESCALATION_MODEL);
+        }
+
+        if (
+          category === "availability" &&
+          !isGeminiModel(CROSS_PROVIDER_FALLBACK_MODEL) &&
+          !tried.has(CROSS_PROVIDER_FALLBACK_MODEL)
+        ) {
+          throw new Error(
+            `Cross-provider fallback to ${CROSS_PROVIDER_FALLBACK_MODEL} is not configured`,
+          );
+        }
+
+        if (
+          category === "availability" &&
+          isGeminiModel(CROSS_PROVIDER_FALLBACK_MODEL) &&
+          !tried.has(CROSS_PROVIDER_FALLBACK_MODEL)
+        ) {
+          orderedModels.push(CROSS_PROVIDER_FALLBACK_MODEL);
+          tried.add(CROSS_PROVIDER_FALLBACK_MODEL);
+        }
       }
     }
 

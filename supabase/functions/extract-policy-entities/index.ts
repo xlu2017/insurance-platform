@@ -482,6 +482,7 @@ Deno.serve(async (req) => {
   const configuredModelId = String(
     batch?.configured_model_id ??
       currentSetting?.configured_model_id ??
+      Deno.env.get("DOCUMENT_MODEL_PRIMARY") ??
       Deno.env.get("GEMINI_MODEL_ID") ??
       Deno.env.get("KIMI_MODEL_ID") ??
       "",
