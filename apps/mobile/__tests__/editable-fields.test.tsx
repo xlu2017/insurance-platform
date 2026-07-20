@@ -5,6 +5,7 @@ import {
   createDefaultSwitchingPreferencesV2,
 } from "@autopilot/schemas";
 import { AssetEditModal } from "../components/asset-edit-modal";
+import { AssetListScreen } from "../components/asset-list-screen";
 import EditMandate from "../app/edit-mandate";
 import { autoEndorsementLabels, propertyOptionalCoverageLabels } from "../lib/mandate";
 
@@ -477,5 +478,43 @@ describe("EditMandate", () => {
 
     await waitFor(() => expect(getByText("Mandate stale")).toBeTruthy());
     expect(mockRouter.back).not.toHaveBeenCalled();
+  });
+});
+
+describe("AssetListScreen", () => {
+  it("renames an asset from edit mode", async () => {
+    const onRename = jest.fn().mockResolvedValue(undefined);
+    const asset = {
+      id: "p1",
+      displayName: "Home",
+      subtitle: "123 Main St",
+      searchText: "home 123 main st",
+      data: { candidate: { id: "c1" } },
+    };
+    const { getByLabelText, getByText, getByDisplayValue } = render(
+      <AssetListScreen
+        title="Properties"
+        searchPlaceholder="Search properties"
+        emptyTitle="No properties"
+        emptyBody="Upload a document to add properties."
+        noResultsTitle="No matching properties"
+        noResultsBody="Try another search."
+        assets={[asset]}
+        isLoading={false}
+        error={null}
+        refetch={jest.fn()}
+        onOpen={jest.fn()}
+        onRemove={jest.fn()}
+        onRename={onRename}
+      />,
+    );
+
+    fireEvent.press(getByLabelText("Edit"));
+    fireEvent.press(getByLabelText("Rename Home"));
+    fireEvent.changeText(getByDisplayValue("Home"), "Primary Home");
+    fireEvent.press(getByText("Save"));
+
+    await waitFor(() => expect(onRename).toHaveBeenCalled());
+    expect(onRename).toHaveBeenCalledWith(asset, "Primary Home");
   });
 });
