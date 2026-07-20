@@ -367,11 +367,13 @@ export default function Documents() {
             {!batchSubmitted ? (
               <PrimaryButton
                 label={
-                  batch && hasFailed
-                    ? "Retry failed files"
-                    : instantReview
-                      ? `Upload ${fileCountLabel} and start AI review`
-                      : `Upload ${fileCountLabel}`
+                  pending.length === 0
+                    ? "Upload files to start review"
+                    : batch && hasFailed
+                      ? "Retry failed files"
+                      : instantReview
+                        ? `Upload ${fileCountLabel} and start AI review`
+                        : `Upload ${fileCountLabel}`
                 }
                 onPress={uploadAndAnalyze}
                 loading={busy}
