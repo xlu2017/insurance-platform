@@ -5,6 +5,15 @@ import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
+import { formatEdmontonDate } from "@/lib/format";
+import {
+  formatFieldLabel,
+  formatFieldValue,
+  isRecord,
+  OCCUPANCY_LABELS,
+  VEHICLE_USE_LABELS,
+} from "@/lib/review-entities-helpers";
+import type { ExtractionCandidate } from "@/lib/extraction";
 import { colors, spacing } from "@autopilot/design-tokens";
 import {
   Body,
@@ -77,6 +86,109 @@ function displayDeductibleRule(rule?: MonetaryRule): string {
   if (rule.rule === "match_current_or_better") return "Match current or better";
   const label = deductibleRuleOptions.find((o) => o.value === rule.rule)?.label ?? rule.rule;
   return `${label} ${formatCad(rule.amountCents)}`;
+}
+
+function formatCoverageEntry(entry: unknown): string {
+  if (!isRecord(entry)) return formatFieldValue(entry);
+  const status = entry.status;
+  if (status === "not_included") return "Not included";
+  if (status === "absent" || status === "unknown") return "—";
+  const value = entry.value;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return formatCad(value);
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") return value;
+  return formatFieldValue(value);
+}
+
+function currentPolicyValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "number") return formatCad(value);
+  if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return formatEdmontonDate(value);
+  }
+  return String(value);
+}
+
+function CurrentCoverageCard({ candidate }: { candidate: ExtractionCandidate }) {
+  const facts = isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
+  const identity = isRecord(facts.identity) ? facts.identity : {};
+  const currentPolicy = isRecord(facts.currentPolicy) ? facts.currentPolicy : {};
+  const currentCoverage = isRecord(facts.currentCoverage) ? facts.currentCoverage : {};
+  const isVehicle = candidate.asset_type === "vehicle";
+  const useLabel: string | null = isVehicle
+    ? identity.vehicleUse
+      ? (VEHICLE_USE_LABELS[String(identity.vehicleUse).toLowerCase()] ??
+        String(identity.vehicleUse))
+      : null
+    : identity.occupancy
+      ? (OCCUPANCY_LABELS[String(identity.occupancy).toLowerCase()] ?? String(identity.occupancy))
+      : null;
+
+  return (
+    <Card>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: spacing.sm,
+        }}
+      >
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: colors.accentSoft,
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: spacing.sm,
+          }}
+        >
+          <Body style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
+            {isVehicle ? "AUTO" : "HOME"}
+          </Body>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Subtitle style={{ marginBottom: 0, fontSize: 16 }}>{candidate.display_label}</Subtitle>
+          {useLabel ? <Caption numberOfLines={1}>{useLabel}</Caption> : null}
+        </View>
+      </View>
+
+      <Subtitle style={{ fontSize: 14, marginBottom: spacing.sm }}>Current policy</Subtitle>
+      {currentPolicy.insurer !== undefined && currentPolicy.insurer !== null ? (
+        <Row label="Insurer" value={String(currentPolicy.insurer)} />
+      ) : null}
+      {currentPolicy.policyNumber !== undefined && currentPolicy.policyNumber !== null ? (
+        <Row label="Policy number" value={String(currentPolicy.policyNumber)} />
+      ) : null}
+      {currentPolicy.effectiveDate !== undefined && currentPolicy.effectiveDate !== null ? (
+        <Row label="Effective date" value={currentPolicyValue(currentPolicy.effectiveDate)} />
+      ) : null}
+      {currentPolicy.expiryDate !== undefined && currentPolicy.expiryDate !== null ? (
+        <Row label="Expiry date" value={currentPolicyValue(currentPolicy.expiryDate)} />
+      ) : null}
+      {currentPolicy.annualPremiumCents !== undefined &&
+      currentPolicy.annualPremiumCents !== null ? (
+        <Row label="Annual premium" value={currentPolicyValue(currentPolicy.annualPremiumCents)} />
+      ) : null}
+
+      <Subtitle style={{ fontSize: 14, marginTop: spacing.md, marginBottom: spacing.sm }}>
+        Current coverage
+      </Subtitle>
+      {Object.keys(currentCoverage).length === 0 ? (
+        <Body muted>No coverage details extracted.</Body>
+      ) : (
+        Object.entries(currentCoverage).map(([key, entry]) => (
+          <Row
+            key={key}
+            label={formatFieldLabel(`currentCoverage.${key}`)}
+            value={formatCoverageEntry(entry)}
+          />
+        ))
+      )}
+    </Card>
+  );
 }
 
 function AutoSummary({ auto }: { auto: AutoMandateV2 }) {
@@ -282,21 +394,27 @@ export default function Coverage() {
     enabled: !!household,
     queryFn: async () => {
       if (!household) throw new Error("No household");
-      const [drivers, vehicles, properties, insurers, mandateResult] = await Promise.all([
-        supabase.from("drivers").select("id, full_name").eq("household_id", household.id),
-        supabase
-          .from("vehicles")
-          .select(
-            "id, year, make, model, financing_status, vehicle_use_class, is_classic, is_modified",
-          )
-          .eq("household_id", household.id),
-        supabase
-          .from("properties")
-          .select("id, address_line1, city, property_type")
-          .eq("household_id", household.id),
-        supabase.from("insurers").select("id, name").eq("active", true),
-        loadHouseholdMandateV2(supabase, household.id),
-      ]);
+      const [drivers, vehicles, properties, insurers, mandateResult, assetCandidates] =
+        await Promise.all([
+          supabase.from("drivers").select("id, full_name").eq("household_id", household.id),
+          supabase
+            .from("vehicles")
+            .select(
+              "id, year, make, model, financing_status, vehicle_use_class, is_classic, is_modified",
+            )
+            .eq("household_id", household.id),
+          supabase
+            .from("properties")
+            .select("id, address_line1, city, property_type")
+            .eq("household_id", household.id),
+          supabase.from("insurers").select("id, name").eq("active", true),
+          loadHouseholdMandateV2(supabase, household.id),
+          supabase
+            .from("asset_candidates")
+            .select("id, display_label, asset_type, selected_facts_json, review_status, decision")
+            .eq("household_id", household.id)
+            .in("review_status", ["approved", "confirmed"]),
+        ]);
       const insurerMap = new Map((insurers.data ?? []).map((i) => [i.id, i.name]));
       const excludedNames = mandateResult.switching.excludedInsurerIds
         .map((id) => insurerMap.get(id))
@@ -308,6 +426,7 @@ export default function Coverage() {
         mandate: mandateResult.mandate,
         switching: mandateResult.switching,
         excludedNames,
+        assetCandidates: (assetCandidates.data ?? []) as ExtractionCandidate[],
       };
     },
   });
@@ -385,6 +504,15 @@ export default function Coverage() {
               }
             />
           </Card>
+
+          {(data?.assetCandidates ?? []).length > 0 ? (
+            <>
+              <Subtitle>Current coverage from your policies</Subtitle>
+              {(data?.assetCandidates ?? []).map((candidate) => (
+                <CurrentCoverageCard key={candidate.id} candidate={candidate} />
+              ))}
+            </>
+          ) : null}
 
           <PrimaryButton
             label={showDetails ? "Hide all coverage details" : "View all coverage details"}
