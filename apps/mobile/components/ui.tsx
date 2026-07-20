@@ -34,7 +34,7 @@ export function Card({
         <View
           style={{
             flexDirection: "row",
-            alignItems: "center",
+            alignItems: "baseline",
             justifyContent: "space-between",
             marginBottom: spacing.sm,
           }}
