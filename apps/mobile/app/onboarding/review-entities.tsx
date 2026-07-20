@@ -43,12 +43,12 @@ interface DraftReview {
 const REVIEW_ACTIONS: { value: ReviewAction; label: string }[] = [
   { value: "confirm", label: "Confirm" },
   { value: "correct", label: "Edit" },
-  { value: "unknown", label: "I do not know" },
+  { value: "unknown", label: "Unknown" },
 ];
 
 const MANDATE_ACTIONS: { value: ReviewAction; label: string }[] = [
-  { value: "reset_mandate_to_current", label: "Reset mandate to current" },
-  { value: "change_mandate", label: "Change mandate" },
+  { value: "reset_mandate_to_current", label: "Reset" },
+  { value: "change_mandate", label: "Change" },
 ];
 
 const MANDATE_RULES: { value: string; label: string }[] = [
@@ -166,10 +166,7 @@ export default function ReviewEntities() {
         <Stack.Screen options={{ title: "Review extracted details" }} />
         <Title>Nothing to review</Title>
         <Body muted>Upload your policies first so we can extract your assets.</Body>
-        <PrimaryButton
-          label="Upload documents"
-          onPress={() => router.push("/onboarding/documents")}
-        />
+        <PrimaryButton label="Upload" onPress={() => router.push("/onboarding/documents")} />
       </Screen>
     );
   }
@@ -449,9 +446,7 @@ export default function ReviewEntities() {
             <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
               {candidate.match_classification === "new_identity_confirmation_required" ? (
                 <SecondaryButton
-                  label={
-                    identityConfirmations[candidate.id] ? "Identity confirmed" : "Confirm identity"
-                  }
+                  label={identityConfirmations[candidate.id] ? "Confirmed" : "Confirm"}
                   onPress={() =>
                     setIdentityConfirmations((prev) => ({
                       ...prev,
@@ -486,7 +481,7 @@ export default function ReviewEntities() {
       {error ? <Body muted>{error}</Body> : null}
 
       <PrimaryButton
-        label={allApprovedReady ? "Submit review" : "Review all fields to submit"}
+        label="Submit"
         onPress={submit}
         loading={busy || saveReview.isPending}
         disabled={busy || saveReview.isPending || !allApprovedReady}
