@@ -42,7 +42,7 @@ interface DraftReview {
 
 const REVIEW_ACTIONS: { value: ReviewAction; label: string }[] = [
   { value: "confirm", label: "Confirm" },
-  { value: "correct", label: "Correct" },
+  { value: "correct", label: "Edit" },
   { value: "unknown", label: "I do not know" },
 ];
 
@@ -243,7 +243,7 @@ export default function ReviewEntities() {
       }
 
       if (!allApprovedReady) {
-        setError("Please confirm or correct every field before approving an asset.");
+        setError("Please confirm or edit every field before approving an asset.");
         setBusy(false);
         return;
       }
@@ -352,7 +352,7 @@ export default function ReviewEntities() {
         {action === "correct" && (
           <View style={{ marginTop: 8 }}>
             <Field
-              label="Corrected value"
+              label="Edited value"
               value={draft?.correctedValue ?? formatFieldValue(value)}
               onChangeText={(text) => updateDraft({ correctedValue: text })}
               autoCorrect={false}
@@ -401,7 +401,7 @@ export default function ReviewEntities() {
       <Stack.Screen options={{ title: "Review extracted assets" }} />
       <Title>Review extracted assets</Title>
       <Body muted>
-        Confirm or correct the asset identity and current-policy facts. Document-informed mandate
+        Confirm or edit the asset identity and current-policy facts. Document-informed mandate
         specifications are reviewed one at a time next.
       </Body>
       <View style={{ height: 16 }} />
