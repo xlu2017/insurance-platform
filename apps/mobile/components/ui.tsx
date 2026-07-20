@@ -25,22 +25,31 @@ export function Card({
   style,
   onEdit,
   editLabel = "Edit",
+  title,
   ...props
-}: ViewProps & { onEdit?: () => void; editLabel?: string }) {
+}: ViewProps & { onEdit?: () => void; editLabel?: string; title?: string }) {
   return (
     <View style={[styles.card, style]} {...props}>
-      {onEdit ? (
+      {title || onEdit ? (
         <View
-          style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: spacing.sm }}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: spacing.sm,
+          }}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={editLabel}
-            onPress={onEdit}
-            style={({ pressed }) => [styles.editButton, pressed && styles.editButtonPressed]}
-          >
-            <Body style={{ color: colors.accent }}>{editLabel}</Body>
-          </Pressable>
+          {title ? <Subtitle>{title}</Subtitle> : <View />}
+          {onEdit ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={editLabel}
+              onPress={onEdit}
+              style={({ pressed }) => [styles.editButton, pressed && styles.editButtonPressed]}
+            >
+              <Body style={{ color: colors.accent }}>{editLabel}</Body>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       {children}

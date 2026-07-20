@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AssetEditModal } from "@/components/asset-edit-modal";
-import { Body, Card, Loading, Row, Screen, Subtitle, Title } from "@/components/ui";
+import { Body, Card, Loading, Row, Screen, Title } from "@/components/ui";
 import { PropertyMandateRows } from "@/components/coverage-rules";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
@@ -108,8 +108,11 @@ export default function PropertyDetail() {
             paddingBottom: spacing.xxl,
           }}
         >
-          <Card onEdit={() => setEditOpen(true)} style={{ marginBottom: spacing.md }}>
-            <Subtitle style={{ marginBottom: spacing.sm }}>{property.address_line1}</Subtitle>
+          <Card
+            title={property.address_line1}
+            onEdit={() => setEditOpen(true)}
+            style={{ marginBottom: spacing.md }}
+          >
             <Body muted style={{ marginBottom: spacing.md }}>
               {[property.city, property.province, property.postal_code].filter(Boolean).join(", ")}
             </Body>
@@ -121,10 +124,10 @@ export default function PropertyDetail() {
           </Card>
 
           <Card
+            title="Coverage rules"
             onEdit={() => router.navigate("/edit-mandate")}
             style={{ marginBottom: spacing.md }}
           >
-            <Subtitle style={{ marginBottom: spacing.sm }}>Coverage rules</Subtitle>
             <PropertyMandateRows property={effective} />
           </Card>
         </ScrollView>

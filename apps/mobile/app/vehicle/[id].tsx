@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AssetEditModal } from "@/components/asset-edit-modal";
-import { Body, Card, Loading, Row, Screen, Subtitle, Title } from "@/components/ui";
+import { Body, Card, Loading, Row, Screen, Title } from "@/components/ui";
 import { AutoMandateRows } from "@/components/coverage-rules";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
@@ -116,10 +116,11 @@ export default function VehicleDetail() {
             paddingBottom: spacing.xxl,
           }}
         >
-          <Card onEdit={() => setEditOpen(true)} style={{ marginBottom: spacing.md }}>
-            <Subtitle style={{ marginBottom: spacing.sm }}>
-              {`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-            </Subtitle>
+          <Card
+            title={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+            onEdit={() => setEditOpen(true)}
+            style={{ marginBottom: spacing.md }}
+          >
             {tags ? (
               <Body muted style={{ marginBottom: spacing.md }}>
                 {tags}
@@ -129,10 +130,10 @@ export default function VehicleDetail() {
           </Card>
 
           <Card
+            title="Coverage rules"
             onEdit={() => router.navigate("/edit-mandate")}
             style={{ marginBottom: spacing.md }}
           >
-            <Subtitle style={{ marginBottom: spacing.sm }}>Coverage rules</Subtitle>
             <AutoMandateRows auto={effective} />
           </Card>
 

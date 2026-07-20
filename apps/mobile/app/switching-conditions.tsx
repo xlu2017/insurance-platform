@@ -66,7 +66,7 @@ export default function SwitchingConditions() {
           {!data ? (
             <Body muted>No switching conditions set.</Body>
           ) : (
-            <Card onEdit={() => router.navigate("/edit-mandate")}>
+            <Card title="Switching conditions" onEdit={() => router.navigate("/edit-mandate")}>
               <SwitchingRows prefs={data.switching} excludedNames={data.excludedNames} />
             </Card>
           )}

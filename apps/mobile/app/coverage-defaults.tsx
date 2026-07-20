@@ -2,7 +2,7 @@ import { router, Stack } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Body, Card, Loading, Screen, Subtitle, Title } from "@/components/ui";
+import { Body, Card, Loading, Screen, Title } from "@/components/ui";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
 import { AutoMandateRows, PropertyMandateRows } from "@/components/coverage-rules";
@@ -60,17 +60,17 @@ export default function CoverageDefaults() {
           ) : (
             <>
               <Card
+                title="Auto defaults"
                 onEdit={() => router.navigate("/edit-mandate")}
                 style={{ marginBottom: spacing.md }}
               >
-                <Subtitle style={{ marginBottom: spacing.sm }}>Auto defaults</Subtitle>
                 <AutoMandateRows auto={data.mandate.householdAutoDefaults} />
               </Card>
               <Card
+                title="Property defaults"
                 onEdit={() => router.navigate("/edit-mandate")}
                 style={{ marginBottom: spacing.md }}
               >
-                <Subtitle style={{ marginBottom: spacing.sm }}>Property defaults</Subtitle>
                 <PropertyMandateRows property={data.mandate.householdPropertyDefaults} />
               </Card>
             </>
