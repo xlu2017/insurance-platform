@@ -319,6 +319,33 @@ export function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+export function SettingsNavigationRow({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.settingsRow,
+        pressed && !disabled ? styles.settingsRowPressed : null,
+        disabled ? styles.settingsRowDisabled : null,
+      ]}
+    >
+      <Text style={styles.settingsRowLabel}>{label}</Text>
+      <Text style={styles.settingsRowChevron}>{">"}</Text>
+    </Pressable>
+  );
+}
+
 export function Loading() {
   return (
     <View style={styles.loading}>
@@ -525,6 +552,33 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     alignSelf: "center",
     width: "100%",
+  },
+  settingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: 16,
+    minHeight: 56,
+  },
+  settingsRowPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  settingsRowDisabled: {
+    opacity: 0.5,
+  },
+  settingsRowLabel: {
+    fontSize: typography.sizes.body,
+    fontWeight: "500",
+    color: colors.ink,
+  },
+  settingsRowChevron: {
+    fontSize: typography.sizes.body,
+    fontWeight: "600",
+    color: colors.inkMuted,
   },
   tooltipBody: {
     fontSize: typography.sizes.body,
