@@ -80,8 +80,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const FIELD_LABEL_OVERRIDES: Record<string, string> = {
+  fullAddress: "Address",
+  postalCode: "Postal code",
+  vehicleUse: "Vehicle use",
+};
+
+const VEHICLE_USE_LABELS: Record<string, string> = {
+  commute: "Commute",
+  pleasure: "Pleasure",
+  business: "Business",
+  farm: "Farm",
+  unknown: "Unknown",
+};
+
+const OCCUPANCY_LABELS: Record<string, string> = {
+  principal_residence: "Principal residence",
+  rental: "Rental",
+  unknown: "Unknown",
+};
+
 function formatFieldLabel(fieldPath: string): string {
   const raw = fieldPath.split(".").pop() ?? fieldPath;
+  if (FIELD_LABEL_OVERRIDES[raw]) return FIELD_LABEL_OVERRIDES[raw];
   const spaced = raw
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[_-]/g, " ")
@@ -91,6 +112,15 @@ function formatFieldLabel(fieldPath: string): string {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function displayValueForField(fieldPath: string, value: unknown): string {
+  const key = fieldPath.split(".").pop();
+  if (typeof value === "string") {
+    if (key === "vehicleUse") return VEHICLE_USE_LABELS[value] ?? value;
+    if (key === "occupancy") return OCCUPANCY_LABELS[value] ?? value;
+  }
+  return formatFieldValue(value);
 }
 
 function getFacts(candidate: ExtractionCandidate): Record<string, unknown> {
@@ -354,7 +384,7 @@ export default function ReviewEntities() {
     const displayValue =
       fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")
         ? renderCents(value)
-        : formatFieldValue(value);
+        : displayValueForField(fieldPath, value);
 
     return (
       <View style={{ marginBottom: 12 }}>
