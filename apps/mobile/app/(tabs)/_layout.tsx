@@ -7,13 +7,13 @@ import {
   ShieldCheckIcon,
   UserIcon,
 } from "phosphor-react-native";
-import { colors } from "@autopilot/design-tokens";
+import { colors, typography } from "@autopilot/design-tokens";
 
 function TabIcon({
   icon: Icon,
   focused,
   color,
-  size = 24,
+  size = 28,
 }: {
   icon: typeof HouseIcon;
   focused: boolean;
@@ -21,7 +21,7 @@ function TabIcon({
   size?: number;
 }) {
   return (
-    <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 8 }}>
+    <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 4 }}>
       <Icon color={color} size={size} weight={focused ? "fill" : "regular"} />
       {focused ? (
         <View
@@ -30,7 +30,7 @@ function TabIcon({
             height: 4,
             borderRadius: 2,
             backgroundColor: color,
-            marginTop: 6,
+            marginTop: 3,
           }}
         />
       ) : null}
@@ -43,15 +43,15 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.inkMuted,
+        tabBarLabelStyle: { fontSize: typography.sizes.caption, fontWeight: "500" },
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 56,
-          paddingBottom: 0,
+          height: 64,
         },
       }}
     >
