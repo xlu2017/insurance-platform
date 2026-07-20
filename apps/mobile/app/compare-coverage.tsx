@@ -369,15 +369,13 @@ function SpecColumnBody({
   );
 }
 
-function AssetOverlay({
+function SpecExpandOverlay({
   specs,
   expandedIndex,
-  totalWidth,
   onCollapse,
 }: {
   specs: CoverageSpec[];
   expandedIndex: number | null;
-  totalWidth: number;
   onCollapse: () => void;
 }) {
   if (expandedIndex === null || !specs[expandedIndex]) return null;
@@ -390,10 +388,10 @@ function AssetOverlay({
         position: "absolute",
         left: 0,
         top: expandedIndex * ROW_HEIGHT,
-        width: totalWidth,
         height: ROW_HEIGHT,
         paddingHorizontal: spacing.sm,
         justifyContent: "center",
+        alignItems: "flex-start",
         backgroundColor: colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
@@ -401,7 +399,7 @@ function AssetOverlay({
         boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
       }}
     >
-      <Body style={{ fontWeight: "600", width: "100%" }}>{specs[expandedIndex].label}</Body>
+      <Body numberOfLines={1}>{specs[expandedIndex].label}</Body>
     </Pressable>
   );
 }
@@ -845,9 +843,6 @@ export default function CompareCoverage() {
   }
 
   const emptySlots = MAX_COLUMNS - selectedAssets.length;
-  const totalAssetWidth =
-    selectedAssets.reduce((sum, _, i) => sum + (colWidths[i] ?? DEFAULT_COL_WIDTH), 0) +
-    emptySlots * DEFAULT_COL_WIDTH;
 
   const pickerAllowedType: CompareAssetType | undefined = picker
     ? selectedAssets.length
@@ -974,13 +969,12 @@ export default function CompareCoverage() {
                     );
                   })
                 : null}
-              <AssetOverlay
-                specs={visibleSpecs}
-                expandedIndex={expandedSpecIndex}
-                totalWidth={totalAssetWidth}
-                onCollapse={() => setExpandedSpecIndex(null)}
-              />
             </ScrollView>
+            <SpecExpandOverlay
+              specs={visibleSpecs}
+              expandedIndex={expandedSpecIndex}
+              onCollapse={() => setExpandedSpecIndex(null)}
+            />
           </View>
         </ScrollView>
       </View>
