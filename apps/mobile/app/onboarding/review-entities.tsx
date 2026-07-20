@@ -172,8 +172,12 @@ export function AddressVerification({
           {suggestions.length > 0 ? (
             <View>
               <Caption style={{ marginBottom: 4, color: colors.inkMuted }}>Suggestions</Caption>
-              <View style={styles.suggestions}>
-                {suggestions.map((suggestion) => (
+              <ScrollView
+                style={styles.suggestions}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+              >
+                {suggestions.slice(0, 5).map((suggestion) => (
                   <Pressable
                     key={suggestion.displayName}
                     onPress={() => selectSuggestion(suggestion)}
@@ -184,7 +188,7 @@ export function AddressVerification({
                     </Caption>
                   </Pressable>
                 ))}
-              </View>
+              </ScrollView>
             </View>
           ) : null}
           <View style={{ flexDirection: "row", gap: 8 }}>
