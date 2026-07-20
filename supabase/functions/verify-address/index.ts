@@ -44,6 +44,19 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+function stripPostalCode(displayName: string): string {
+  // Remove Canadian-style postal codes (A1A 1A1 or A1A-1A1 or A1A1A1)
+  const canadian = /,\s*[A-Za-z]\d[A-Za-z][\s-]?\d[A-Za-z]\d(?=\s*,|$)/g;
+  // Remove US-style ZIP codes (12345 or 12345-6789)
+  const usZip = /,\s*\d{5}(-\d{4})?(?=\s*,|$)/g;
+  return displayName
+    .replace(canadian, "")
+    .replace(usZip, "")
+    .replace(/,\s*,/g, ",")
+    .replace(/,\s*$/, "")
+    .trim();
+}
+
 function normalizeSuggestion(
   displayName: string,
   latitude: number,
@@ -52,7 +65,7 @@ function normalizeSuggestion(
   address?: Record<string, string>,
 ): AddressSuggestion {
   return {
-    displayName: displayName.replace(/,\s*Earth$/, ""),
+    displayName: stripPostalCode(displayName.replace(/,\s*Earth$/, "")).trim(),
     latitude,
     longitude,
     source,
