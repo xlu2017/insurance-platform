@@ -20,6 +20,7 @@ import {
   submitDocumentBatch,
   type DocumentBatchSummary,
 } from "@/lib/document-processing";
+import { useExtractionCandidates } from "@/lib/extraction";
 import {
   createClientItemId,
   deletePolicyDocument,
@@ -134,6 +135,11 @@ export default function Documents() {
     enabled: !!household,
     queryFn: () => loadDangerousModeSetting(household!.id),
   });
+
+  const { data: pendingCandidates } = useExtractionCandidates(
+    household?.id,
+    currentBatch?.session_id,
+  );
 
   const instantReview = dangerousMode?.enabled ?? false;
   const fileCount = pending.length;
@@ -402,7 +408,8 @@ export default function Documents() {
               {!currentBatch.automatic_processing && currentBatch.is_terminal ? (
                 <Body muted>We are preparing the details for your review.</Body>
               ) : null}
-              {currentBatch.status === "ready_for_review" ? (
+              {currentBatch.status === "ready_for_review" &&
+              (pendingCandidates ?? []).length > 0 ? (
                 <PrimaryButton
                   label="Review what we found"
                   onPress={() =>
@@ -412,6 +419,8 @@ export default function Documents() {
                     })
                   }
                 />
+              ) : currentBatch.status === "ready_for_review" ? (
+                <Body muted>All extracted items have been reviewed.</Body>
               ) : null}
               {currentBatch.status === "processing_unavailable" && currentBatch.retryable ? (
                 <SecondaryButton

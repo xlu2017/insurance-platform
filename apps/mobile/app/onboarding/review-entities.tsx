@@ -640,13 +640,27 @@ export default function ReviewEntities() {
     return (
       <Screen>
         <Stack.Screen options={{ title: "Review" }} />
-        <Title style={styles.title}>Nothing to review</Title>
-        <Body muted>Upload your policies first so we can show you what we found.</Body>
-        <PrimaryButton
-          label="Upload"
-          onPress={() => router.push("/onboarding/documents")}
-          style={styles.uploadButton}
-        />
+        {sessionId ? (
+          <>
+            <Title style={styles.title}>All reviewed</Title>
+            <Body muted>Every extracted item has already been reviewed.</Body>
+            <PrimaryButton
+              label="View coverage"
+              onPress={() => router.replace("/(tabs)/coverage")}
+              style={styles.uploadButton}
+            />
+          </>
+        ) : (
+          <>
+            <Title style={styles.title}>Nothing to review</Title>
+            <Body muted>Upload your policies first so we can show you what we found.</Body>
+            <PrimaryButton
+              label="Upload"
+              onPress={() => router.push("/onboarding/documents")}
+              style={styles.uploadButton}
+            />
+          </>
+        )}
       </Screen>
     );
   }
