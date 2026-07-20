@@ -187,6 +187,11 @@ export function AddressVerification({
                     </Caption>
                   </Pressable>
                 ))}
+                <PrimaryButton
+                  label="Use top suggestion"
+                  onPress={() => selectSuggestion(suggestions[0]!)}
+                  style={{ margin: 12 }}
+                />
               </ScrollView>
             </View>
           ) : null}
