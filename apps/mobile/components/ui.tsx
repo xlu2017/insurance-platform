@@ -10,6 +10,7 @@ import {
   View,
   type ViewProps,
 } from "react-native";
+import { CaretRightIcon } from "phosphor-react-native";
 import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
 
 export function Screen({ children, style, ...props }: ViewProps) {
@@ -370,7 +371,7 @@ export function SettingsNavigationRow({
       ]}
     >
       <Text style={styles.settingsRowLabel}>{label}</Text>
-      <Text style={styles.settingsRowChevron}>{">"}</Text>
+      <CaretRightIcon color={colors.inkMuted} size={16} />
     </Pressable>
   );
 }

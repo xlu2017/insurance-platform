@@ -2,6 +2,7 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
+import { CaretLeftIcon } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AssetEditModal } from "@/components/asset-edit-modal";
 import { Body, Card, Loading, Row, Screen, Title } from "@/components/ui";
@@ -95,7 +96,7 @@ export default function PropertyDetail() {
             onPress={() => router.navigate("/properties")}
             style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
           >
-            <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>
+            <CaretLeftIcon color={colors.ink} size={28} />
           </Pressable>
           <Title style={{ marginBottom: 0 }}>Property coverage</Title>
         </View>

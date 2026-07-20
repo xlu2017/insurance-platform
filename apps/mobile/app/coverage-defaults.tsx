@@ -1,5 +1,6 @@
 import { router, Stack } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
+import { CaretLeftIcon } from "phosphor-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Body, Card, Loading, Screen, Title } from "@/components/ui";
@@ -42,7 +43,7 @@ export default function CoverageDefaults() {
             onPress={() => router.navigate("/coverage")}
             style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
           >
-            <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>
+            <CaretLeftIcon color={colors.ink} size={28} />
           </Pressable>
           <Title style={{ marginBottom: 0 }}>Coverage defaults</Title>
         </View>

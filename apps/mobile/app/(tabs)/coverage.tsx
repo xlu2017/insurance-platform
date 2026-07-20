@@ -1,7 +1,8 @@
 import { router, Stack } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
+import { CaretLeftIcon } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Body, Screen, SettingsNavigationRow, Subtitle, Title } from "@/components/ui";
+import { Screen, SettingsNavigationRow, Subtitle, Title } from "@/components/ui";
 import { colors, spacing } from "@autopilot/design-tokens";
 
 export default function Coverage() {
@@ -25,7 +26,7 @@ export default function Coverage() {
             onPress={() => router.navigate("/home")}
             style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
           >
-            <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>
+            <CaretLeftIcon color={colors.ink} size={28} />
           </Pressable>
           <Title style={{ marginBottom: 0 }}>Coverage</Title>
         </View>

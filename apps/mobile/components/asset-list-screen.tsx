@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, TextInput, View } from "react-native";
+import { CaretLeftIcon } from "phosphor-react-native";
 import { router, Stack } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Body, PrimaryButton, Screen, SecondaryButton, Subtitle, Title } from "@/components/ui";
@@ -148,7 +149,7 @@ export function AssetListScreen<T extends AssetListItem>({
               alignItems: "center",
             }}
           >
-            <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>
+            <CaretLeftIcon color={colors.ink} size={28} />
           </Pressable>
           <Title style={{ marginBottom: 0 }}>{headerTitle}</Title>
         </View>

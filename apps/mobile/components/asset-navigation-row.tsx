@@ -1,4 +1,5 @@
 import { Pressable, View } from "react-native";
+import { CaretRightIcon } from "phosphor-react-native";
 import { Body, Caption } from "@/components/ui";
 import { colors, radii, spacing } from "@autopilot/design-tokens";
 
@@ -70,7 +71,7 @@ export function AssetNavigationRow({
         <Body style={{ fontWeight: "600" }}>{title}</Body>
         {subtitle ? <Caption numberOfLines={1}>{subtitle}</Caption> : null}
       </View>
-      <Body style={{ color: colors.inkMuted }}>{">"}</Body>
+      <CaretRightIcon color={colors.inkMuted} size={16} />
     </Pressable>
   );
 }
