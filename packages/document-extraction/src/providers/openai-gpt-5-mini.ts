@@ -207,7 +207,10 @@ export class OpenAiGpt5MiniProvider implements NativeDocumentAnalysisProvider {
     }
   }
 
-  async deleteFile(): Promise<ProviderFileDeletionResult> {
+  async deleteFile(
+    handle: Pick<ProviderFileHandle, "providerFileId">,
+  ): Promise<ProviderFileDeletionResult> {
+    void handle;
     return { deleted: true, attempts: 1 };
   }
 }

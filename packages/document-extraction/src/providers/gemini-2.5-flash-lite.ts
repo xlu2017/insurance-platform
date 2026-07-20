@@ -8,6 +8,7 @@ import {
   type ResolvedDocumentModel,
   type ResolvedInputCapability,
 } from "./native-document-analysis.ts";
+import { OpenAiGpt5MiniProvider } from "./openai-gpt-5-mini.ts";
 
 export interface GeminiFlashLiteProviderOptions {
   apiKey: string;
@@ -104,6 +105,15 @@ function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
   }
   return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 function parseMoneyToCents(value: unknown): number | null {
@@ -428,14 +438,29 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
   async analyze(input: NativeDocumentAnalysisRequest): Promise<unknown> {
     await this.resolveModel();
     const primaryModel = input.model || this.resolvedModel?.modelId || PRIMARY_MODEL;
+    const maxAttempts = Math.max(1, Number(getEnv("DOCUMENT_MODEL_MAX_ATTEMPTS") ?? 3));
+    const maxProviderSwitches = Math.max(
+      0,
+      Number(getEnv("DOCUMENT_MODEL_MAX_PROVIDER_SWITCHES") ?? 1),
+    );
+    const humanReviewOnFailure = getEnv("DOCUMENT_MODEL_HUMAN_REVIEW_ON_FAILURE") !== "false";
+
     const orderedModels: string[] = [primaryModel];
     const tried = new Set<string>([primaryModel]);
-    const maxAttempts = Math.max(1, Number(getEnv("DOCUMENT_MODEL_MAX_ATTEMPTS") ?? 3));
     let lastError: unknown;
+    let primaryRetryDone = false;
+    let providerSwitches = 0;
 
     for (let i = 0; i < orderedModels.length && i < maxAttempts; i++) {
       const modelId = orderedModels[i];
       try {
+        if (!isGeminiModel(modelId)) {
+          if (providerSwitches >= maxProviderSwitches) {
+            throw new Error(`Provider switch limit reached for ${modelId}`);
+          }
+          providerSwitches++;
+          return await this.tryCrossProviderAnalyze(input, modelId);
+        }
         return await this.tryAnalyzeWithModel(input, modelId);
       } catch (err) {
         lastError = err;
@@ -443,6 +468,14 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
 
         if (category === "fatal") {
           throw err;
+        }
+
+        if (modelId === primaryModel && category === "availability" && !primaryRetryDone) {
+          primaryRetryDone = true;
+          const jitter = 500 + Math.random() * 1500;
+          await new Promise((resolve) => setTimeout(resolve, jitter));
+          orderedModels.splice(i + 1, 0, primaryModel);
+          continue;
         }
 
         if (category === "availability" && !tried.has(ROUTINE_FALLBACK_MODEL)) {
@@ -463,23 +496,79 @@ export class GeminiFlashLiteProvider implements NativeDocumentAnalysisProvider {
           !isGeminiModel(CROSS_PROVIDER_FALLBACK_MODEL) &&
           !tried.has(CROSS_PROVIDER_FALLBACK_MODEL)
         ) {
-          throw new Error(
-            `Cross-provider fallback to ${CROSS_PROVIDER_FALLBACK_MODEL} is not configured`,
-          );
-        }
-
-        if (
-          category === "availability" &&
-          isGeminiModel(CROSS_PROVIDER_FALLBACK_MODEL) &&
-          !tried.has(CROSS_PROVIDER_FALLBACK_MODEL)
-        ) {
-          orderedModels.push(CROSS_PROVIDER_FALLBACK_MODEL);
-          tried.add(CROSS_PROVIDER_FALLBACK_MODEL);
+          if (providerSwitches < maxProviderSwitches) {
+            orderedModels.push(CROSS_PROVIDER_FALLBACK_MODEL);
+            tried.add(CROSS_PROVIDER_FALLBACK_MODEL);
+          }
         }
       }
     }
 
-    throw lastError ?? new Error("Document analysis failed on all Gemini models");
+    if (humanReviewOnFailure) {
+      throw new Error(
+        `Document analysis requires human review after ${maxAttempts} attempts: ${
+          lastError instanceof Error ? lastError.message : String(lastError)
+        }`,
+      );
+    }
+    throw lastError ?? new Error("Document analysis failed on all models");
+  }
+
+  private async tryCrossProviderAnalyze(
+    input: NativeDocumentAnalysisRequest,
+    modelId: string,
+  ): Promise<unknown> {
+    const openAiApiKey = getEnv("OPENAI_API_KEY");
+    if (!openAiApiKey) {
+      throw new Error(
+        `Cross-provider fallback to ${modelId} is not configured: OPENAI_API_KEY missing`,
+      );
+    }
+
+    const openAi = new OpenAiGpt5MiniProvider({
+      apiKey: openAiApiKey,
+      baseUrl: getEnv("OPENAI_API_BASE_URL") ?? undefined,
+      requestedModel: modelId,
+      timeoutMs: this.timeoutMs,
+      fetchImpl: this.fetchImpl,
+    });
+
+    const originalInputs: OriginalFileInput[] = input.files.map((handle) => {
+      const base64 =
+        typeof handle.transientExtractedContent === "string"
+          ? handle.transientExtractedContent
+          : typeof handle.providerMetadata?.base64 === "string"
+            ? handle.providerMetadata.base64
+            : "";
+      return {
+        documentId: handle.documentId,
+        filename: handle.filename,
+        mimeType: handle.mimeType,
+        bytes: base64ToBytes(base64),
+      };
+    });
+
+    const openAiHandles: ProviderFileHandle[] = [];
+    try {
+      for (const original of originalInputs) {
+        const upload = await openAi.uploadOriginalFile(original);
+        if (!upload.handle) {
+          throw new Error(`OpenAI upload failed: ${upload.errorCategory ?? "unknown"}`);
+        }
+        openAiHandles.push(upload.handle);
+      }
+      return await openAi.analyze({
+        model: modelId,
+        systemPrompt: input.systemPrompt,
+        userPrompt: input.userPrompt,
+        files: openAiHandles,
+        responseFormat: { type: "json_object" },
+      });
+    } finally {
+      for (const handle of openAiHandles) {
+        await openAi.deleteFile({ providerFileId: handle.providerFileId }).catch(() => {});
+      }
+    }
   }
 
   private async tryAnalyzeWithModel(

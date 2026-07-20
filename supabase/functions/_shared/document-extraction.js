@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 5032ebe7196f867271920de38fe8d35c67aa384f9d949a5e91f7fd0484591266
+// source-hash: e4066d497c3b53957fb138b13dbabe2e1b5686477d2fa7205e2fa3c43776a2f1
 
 
 // ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
@@ -10950,8 +10950,184 @@ function stripMarkdownJsonFence2(text) {
   return trimmed;
 }
 
+// src/providers/openai-gpt-5-mini.ts
+var CONTEXT_LENGTH = 4e5;
+function isGpt5MiniModel(modelId) {
+  return /gpt[-_]?5[-_]?mini/i.test(modelId);
+}
+function bytesToBase64(bytes) {
+  const chunkSize = 65536;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}
+var OpenAiGpt5MiniProvider = class {
+  providerId = "openai";
+  baseUrl;
+  apiKey;
+  requestedModel;
+  resolvedModel = null;
+  timeoutMs;
+  fetchImpl;
+  constructor(options) {
+    this.baseUrl = (options.baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
+    this.apiKey = options.apiKey;
+    this.requestedModel = options.requestedModel;
+    this.timeoutMs = options.timeoutMs ?? 12e5;
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+  fetch(...args) {
+    return this.fetchImpl(...args);
+  }
+  async resolveModel() {
+    if (this.resolvedModel) return this.resolvedModel;
+    const modelId = this.requestedModel && isGpt5MiniModel(this.requestedModel) ? this.requestedModel : "gpt-5-mini";
+    this.resolvedModel = {
+      modelId,
+      supportsImageInput: true,
+      supportsVideoInput: false,
+      supportsGenericFileInput: true,
+      supportedReferenceSchemes: ["openai://"],
+      providerMetadata: {
+        context_length: CONTEXT_LENGTH,
+        owned_by: "openai"
+      }
+    };
+    return this.resolvedModel;
+  }
+  async resolveInputMode(input) {
+    const mime = (input.mimeType || "").toLowerCase().trim();
+    if (mime === "application/pdf" || mime.startsWith("image/")) {
+      return { mimeType: input.mimeType, mode: "provider_extracted_text", supported: true };
+    }
+    return {
+      mimeType: input.mimeType,
+      mode: "unsupported",
+      supported: false,
+      reason: "GPT-5 mini only supports PDF and image inputs in this integration"
+    };
+  }
+  async assertBatchFits(inputs) {
+    const estimatedInputTokens = inputs.reduce((total, input) => {
+      if (input.mimeType.toLowerCase() === "application/pdf") {
+        return total + Math.ceil(input.bytes.length / 4);
+      }
+      if (input.mimeType.toLowerCase().startsWith("image/")) return total + 4096;
+      return total + Math.ceil(input.bytes.length / 4);
+    }, 8e3);
+    const outputReserve = 12e3;
+    if (estimatedInputTokens + outputReserve > Math.floor(CONTEXT_LENGTH * 0.9)) {
+      throw new Error("Document batch exceeds the resolved model context capacity");
+    }
+  }
+  async uploadOriginalFile(input, callbacks) {
+    const capability = await this.resolveInputMode(input);
+    if (!capability.supported) {
+      return { status: "rejected", errorCategory: capability.reason ?? "unsupported_file_type" };
+    }
+    const providerFileId = crypto.randomUUID();
+    const base64 = bytesToBase64(input.bytes);
+    const handle = {
+      providerFileId,
+      documentId: input.documentId,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      bytes: input.bytes.length,
+      mode: capability.mode,
+      reference: `openai://${providerFileId}`,
+      status: "ready",
+      providerMetadata: {
+        base64,
+        originalMimeType: input.mimeType
+      }
+    };
+    if (callbacks?.onHandleCreated) {
+      await callbacks.onHandleCreated(handle);
+    }
+    return { status: "ready", handle };
+  }
+  async analyze(input) {
+    const model = input.model || (await this.resolveModel()).modelId;
+    const contents = [];
+    for (const file of input.files) {
+      const base64 = typeof file.transientExtractedContent === "string" ? file.transientExtractedContent : typeof file.providerMetadata?.base64 === "string" ? file.providerMetadata.base64 : void 0;
+      if (!base64) {
+        throw new Error("OpenAI provider missing base64 data for file");
+      }
+      contents.push({
+        type: "input_file",
+        filename: file.filename,
+        file_data: `data:${file.mimeType};base64,${base64}`,
+        detail: "auto"
+      });
+    }
+    const body = {
+      model,
+      input: [
+        {
+          role: "user",
+          content: [{ type: "input_text", text: input.userPrompt }, ...contents]
+        }
+      ],
+      instructions: input.systemPrompt,
+      response_format: input.responseFormat ?? { type: "json_object" },
+      max_output_tokens: 12e3
+    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetch(`${this.baseUrl}/responses`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const text2 = await response.text().catch(() => "");
+        throw new Error(
+          `Document analysis request failed: ${response.status} ${text2.slice(0, 200)}`
+        );
+      }
+      const completion = await response.json();
+      if (completion.error?.message) {
+        throw new Error(`Document analysis failed: ${completion.error.message}`);
+      }
+      const text = completion.output?.[0]?.content?.[0]?.text;
+      if (typeof text !== "string") {
+        throw new Error("Document analysis response did not contain text content");
+      }
+      return JSON.parse(stripMarkdownJsonFence3(text));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  async deleteFile(handle) {
+    void handle;
+    return { deleted: true, attempts: 1 };
+  }
+};
+function stripMarkdownJsonFence3(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("```")) {
+    const lines = trimmed.split("\n");
+    if (lines.length > 1 && lines[0].trim().toLowerCase().startsWith("```json")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+    if (lines.length > 1 && lines[0].trim().startsWith("```")) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+  }
+  return trimmed;
+}
+
 // src/providers/gemini-2.5-flash-lite.ts
-var CONTEXT_LENGTH = 1048576;
+var CONTEXT_LENGTH2 = 1048576;
 function getEnv(name) {
   try {
     const deno = globalThis.Deno;
@@ -11013,7 +11189,7 @@ function classifyGeminiError(err) {
   if (quality.some((token) => lower.includes(token))) return "quality";
   return "fatal";
 }
-function bytesToBase64(bytes) {
+function bytesToBase642(bytes) {
   const chunkSize = 65536;
   let binary = "";
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -11021,6 +11197,14 @@ function bytesToBase64(bytes) {
     binary += String.fromCharCode.apply(null, chunk);
   }
   return btoa(binary);
+}
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 function parseMoneyToCents(value) {
   if (typeof value === "number") {
@@ -11200,7 +11384,7 @@ var GeminiFlashLiteProvider = class {
       supportsGenericFileInput: true,
       supportedReferenceSchemes: ["gemini://"],
       providerMetadata: {
-        context_length: CONTEXT_LENGTH,
+        context_length: CONTEXT_LENGTH2,
         owned_by: "google"
       }
     };
@@ -11227,7 +11411,7 @@ var GeminiFlashLiteProvider = class {
       return total + Math.ceil(input.bytes.length / 4);
     }, 8e3);
     const outputReserve = 12e3;
-    if (estimatedInputTokens + outputReserve > Math.floor(CONTEXT_LENGTH * 0.9)) {
+    if (estimatedInputTokens + outputReserve > Math.floor(CONTEXT_LENGTH2 * 0.9)) {
       throw new Error("Document batch exceeds the resolved model context capacity");
     }
   }
@@ -11236,7 +11420,7 @@ var GeminiFlashLiteProvider = class {
     if (!capability.supported) {
       return { status: "rejected", errorCategory: capability.reason ?? "unsupported_file_type" };
     }
-    const base64 = bytesToBase64(input.bytes);
+    const base64 = bytesToBase642(input.bytes);
     const providerFileId = crypto.randomUUID();
     const handle = {
       providerFileId,
@@ -11258,19 +11442,40 @@ var GeminiFlashLiteProvider = class {
   async analyze(input) {
     await this.resolveModel();
     const primaryModel = input.model || this.resolvedModel?.modelId || PRIMARY_MODEL;
+    const maxAttempts = Math.max(1, Number(getEnv("DOCUMENT_MODEL_MAX_ATTEMPTS") ?? 3));
+    const maxProviderSwitches = Math.max(
+      0,
+      Number(getEnv("DOCUMENT_MODEL_MAX_PROVIDER_SWITCHES") ?? 1)
+    );
+    const humanReviewOnFailure = getEnv("DOCUMENT_MODEL_HUMAN_REVIEW_ON_FAILURE") !== "false";
     const orderedModels = [primaryModel];
     const tried = /* @__PURE__ */ new Set([primaryModel]);
-    const maxAttempts = Math.max(1, Number(getEnv("DOCUMENT_MODEL_MAX_ATTEMPTS") ?? 3));
     let lastError;
+    let primaryRetryDone = false;
+    let providerSwitches = 0;
     for (let i = 0; i < orderedModels.length && i < maxAttempts; i++) {
       const modelId = orderedModels[i];
       try {
+        if (!isGeminiModel(modelId)) {
+          if (providerSwitches >= maxProviderSwitches) {
+            throw new Error(`Provider switch limit reached for ${modelId}`);
+          }
+          providerSwitches++;
+          return await this.tryCrossProviderAnalyze(input, modelId);
+        }
         return await this.tryAnalyzeWithModel(input, modelId);
       } catch (err) {
         lastError = err;
         const category = classifyGeminiError(err);
         if (category === "fatal") {
           throw err;
+        }
+        if (modelId === primaryModel && category === "availability" && !primaryRetryDone) {
+          primaryRetryDone = true;
+          const jitter = 500 + Math.random() * 1500;
+          await new Promise((resolve) => setTimeout(resolve, jitter));
+          orderedModels.splice(i + 1, 0, primaryModel);
+          continue;
         }
         if (category === "availability" && !tried.has(ROUTINE_FALLBACK_MODEL)) {
           orderedModels.push(ROUTINE_FALLBACK_MODEL);
@@ -11281,17 +11486,65 @@ var GeminiFlashLiteProvider = class {
           tried.add(QUALITY_ESCALATION_MODEL);
         }
         if (category === "availability" && !isGeminiModel(CROSS_PROVIDER_FALLBACK_MODEL) && !tried.has(CROSS_PROVIDER_FALLBACK_MODEL)) {
-          throw new Error(
-            `Cross-provider fallback to ${CROSS_PROVIDER_FALLBACK_MODEL} is not configured`
-          );
-        }
-        if (category === "availability" && isGeminiModel(CROSS_PROVIDER_FALLBACK_MODEL) && !tried.has(CROSS_PROVIDER_FALLBACK_MODEL)) {
-          orderedModels.push(CROSS_PROVIDER_FALLBACK_MODEL);
-          tried.add(CROSS_PROVIDER_FALLBACK_MODEL);
+          if (providerSwitches < maxProviderSwitches) {
+            orderedModels.push(CROSS_PROVIDER_FALLBACK_MODEL);
+            tried.add(CROSS_PROVIDER_FALLBACK_MODEL);
+          }
         }
       }
     }
-    throw lastError ?? new Error("Document analysis failed on all Gemini models");
+    if (humanReviewOnFailure) {
+      throw new Error(
+        `Document analysis requires human review after ${maxAttempts} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+      );
+    }
+    throw lastError ?? new Error("Document analysis failed on all models");
+  }
+  async tryCrossProviderAnalyze(input, modelId) {
+    const openAiApiKey = getEnv("OPENAI_API_KEY");
+    if (!openAiApiKey) {
+      throw new Error(
+        `Cross-provider fallback to ${modelId} is not configured: OPENAI_API_KEY missing`
+      );
+    }
+    const openAi = new OpenAiGpt5MiniProvider({
+      apiKey: openAiApiKey,
+      baseUrl: getEnv("OPENAI_API_BASE_URL") ?? void 0,
+      requestedModel: modelId,
+      timeoutMs: this.timeoutMs,
+      fetchImpl: this.fetchImpl
+    });
+    const originalInputs = input.files.map((handle) => {
+      const base64 = typeof handle.transientExtractedContent === "string" ? handle.transientExtractedContent : typeof handle.providerMetadata?.base64 === "string" ? handle.providerMetadata.base64 : "";
+      return {
+        documentId: handle.documentId,
+        filename: handle.filename,
+        mimeType: handle.mimeType,
+        bytes: base64ToBytes(base64)
+      };
+    });
+    const openAiHandles = [];
+    try {
+      for (const original of originalInputs) {
+        const upload = await openAi.uploadOriginalFile(original);
+        if (!upload.handle) {
+          throw new Error(`OpenAI upload failed: ${upload.errorCategory ?? "unknown"}`);
+        }
+        openAiHandles.push(upload.handle);
+      }
+      return await openAi.analyze({
+        model: modelId,
+        systemPrompt: input.systemPrompt,
+        userPrompt: input.userPrompt,
+        files: openAiHandles,
+        responseFormat: { type: "json_object" }
+      });
+    } finally {
+      for (const handle of openAiHandles) {
+        await openAi.deleteFile({ providerFileId: handle.providerFileId }).catch(() => {
+        });
+      }
+    }
   }
   async tryAnalyzeWithModel(input, modelId) {
     const parts = [
@@ -11359,181 +11612,6 @@ var GeminiFlashLiteProvider = class {
     return { deleted: true, attempts: 1 };
   }
 };
-
-// src/providers/openai-gpt-5-mini.ts
-var CONTEXT_LENGTH2 = 4e5;
-function isGpt5MiniModel(modelId) {
-  return /gpt[-_]?5[-_]?mini/i.test(modelId);
-}
-function bytesToBase642(bytes) {
-  const chunkSize = 65536;
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode.apply(null, chunk);
-  }
-  return btoa(binary);
-}
-var OpenAiGpt5MiniProvider = class {
-  providerId = "openai";
-  baseUrl;
-  apiKey;
-  requestedModel;
-  resolvedModel = null;
-  timeoutMs;
-  fetchImpl;
-  constructor(options) {
-    this.baseUrl = (options.baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-    this.apiKey = options.apiKey;
-    this.requestedModel = options.requestedModel;
-    this.timeoutMs = options.timeoutMs ?? 12e5;
-    this.fetchImpl = options.fetchImpl ?? fetch;
-  }
-  fetch(...args) {
-    return this.fetchImpl(...args);
-  }
-  async resolveModel() {
-    if (this.resolvedModel) return this.resolvedModel;
-    const modelId = this.requestedModel && isGpt5MiniModel(this.requestedModel) ? this.requestedModel : "gpt-5-mini";
-    this.resolvedModel = {
-      modelId,
-      supportsImageInput: true,
-      supportsVideoInput: false,
-      supportsGenericFileInput: true,
-      supportedReferenceSchemes: ["openai://"],
-      providerMetadata: {
-        context_length: CONTEXT_LENGTH2,
-        owned_by: "openai"
-      }
-    };
-    return this.resolvedModel;
-  }
-  async resolveInputMode(input) {
-    const mime = (input.mimeType || "").toLowerCase().trim();
-    if (mime === "application/pdf" || mime.startsWith("image/")) {
-      return { mimeType: input.mimeType, mode: "provider_extracted_text", supported: true };
-    }
-    return {
-      mimeType: input.mimeType,
-      mode: "unsupported",
-      supported: false,
-      reason: "GPT-5 mini only supports PDF and image inputs in this integration"
-    };
-  }
-  async assertBatchFits(inputs) {
-    const estimatedInputTokens = inputs.reduce((total, input) => {
-      if (input.mimeType.toLowerCase() === "application/pdf") {
-        return total + Math.ceil(input.bytes.length / 4);
-      }
-      if (input.mimeType.toLowerCase().startsWith("image/")) return total + 4096;
-      return total + Math.ceil(input.bytes.length / 4);
-    }, 8e3);
-    const outputReserve = 12e3;
-    if (estimatedInputTokens + outputReserve > Math.floor(CONTEXT_LENGTH2 * 0.9)) {
-      throw new Error("Document batch exceeds the resolved model context capacity");
-    }
-  }
-  async uploadOriginalFile(input, callbacks) {
-    const capability = await this.resolveInputMode(input);
-    if (!capability.supported) {
-      return { status: "rejected", errorCategory: capability.reason ?? "unsupported_file_type" };
-    }
-    const providerFileId = crypto.randomUUID();
-    const base64 = bytesToBase642(input.bytes);
-    const handle = {
-      providerFileId,
-      documentId: input.documentId,
-      filename: input.filename,
-      mimeType: input.mimeType,
-      bytes: input.bytes.length,
-      mode: capability.mode,
-      reference: `openai://${providerFileId}`,
-      status: "ready",
-      providerMetadata: {
-        base64,
-        originalMimeType: input.mimeType
-      }
-    };
-    if (callbacks?.onHandleCreated) {
-      await callbacks.onHandleCreated(handle);
-    }
-    return { status: "ready", handle };
-  }
-  async analyze(input) {
-    const model = input.model || (await this.resolveModel()).modelId;
-    const contents = [];
-    for (const file of input.files) {
-      const base64 = typeof file.transientExtractedContent === "string" ? file.transientExtractedContent : typeof file.providerMetadata?.base64 === "string" ? file.providerMetadata.base64 : void 0;
-      if (!base64) {
-        throw new Error("OpenAI provider missing base64 data for file");
-      }
-      contents.push({
-        type: "input_file",
-        filename: file.filename,
-        file_data: `data:${file.mimeType};base64,${base64}`,
-        detail: "auto"
-      });
-    }
-    const body = {
-      model,
-      input: [
-        {
-          role: "user",
-          content: [{ type: "input_text", text: input.userPrompt }, ...contents]
-        }
-      ],
-      instructions: input.systemPrompt,
-      response_format: input.responseFormat ?? { type: "json_object" },
-      max_output_tokens: 12e3
-    };
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await this.fetch(`${this.baseUrl}/responses`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        const text2 = await response.text().catch(() => "");
-        throw new Error(
-          `Document analysis request failed: ${response.status} ${text2.slice(0, 200)}`
-        );
-      }
-      const completion = await response.json();
-      if (completion.error?.message) {
-        throw new Error(`Document analysis failed: ${completion.error.message}`);
-      }
-      const text = completion.output?.[0]?.content?.[0]?.text;
-      if (typeof text !== "string") {
-        throw new Error("Document analysis response did not contain text content");
-      }
-      return JSON.parse(stripMarkdownJsonFence3(text));
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  async deleteFile() {
-    return { deleted: true, attempts: 1 };
-  }
-};
-function stripMarkdownJsonFence3(text) {
-  const trimmed = text.trim();
-  if (trimmed.startsWith("```")) {
-    const lines = trimmed.split("\n");
-    if (lines.length > 1 && lines[0].trim().toLowerCase().startsWith("```json")) {
-      return lines.slice(1, -1).join("\n").trim();
-    }
-    if (lines.length > 1 && lines[0].trim().startsWith("```")) {
-      return lines.slice(1, -1).join("\n").trim();
-    }
-  }
-  return trimmed;
-}
 
 // src/providers/supabase-adapter.ts
 var SupabaseAuthorizationStore = class {
@@ -11810,4 +11888,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "5032ebe7196f867271920de38fe8d35c67aa384f9d949a5e91f7fd0484591266";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "e4066d497c3b53957fb138b13dbabe2e1b5686477d2fa7205e2fa3c43776a2f1";
