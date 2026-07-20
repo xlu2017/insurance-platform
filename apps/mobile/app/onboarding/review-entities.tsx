@@ -162,6 +162,10 @@ export function AddressVerification({
               setTouched(true);
               setQuery(text);
             }}
+            onFocus={() => {
+              setTouched(true);
+              searchSuggestions(query);
+            }}
             multiline
             numberOfLines={2}
           />
