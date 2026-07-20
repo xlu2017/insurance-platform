@@ -386,7 +386,7 @@ export default function Documents() {
             ) : null}
           </Card>
 
-          {currentBatch ? (
+          {currentBatch && currentBatch.document_count > 0 ? (
             <Card>
               <View
                 style={{

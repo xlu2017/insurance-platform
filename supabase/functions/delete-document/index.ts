@@ -17,6 +17,27 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
+async function updateBatchCounts(admin: any, batchId: string): Promise<void> {
+  const { data: items } = await admin
+    .from("document_processing_batch_items")
+    .select("policy_document_id, deduplicated")
+    .eq("batch_id", batchId);
+  const rows = items ?? [];
+  const uniqueIds = new Set(
+    rows.map((item: { policy_document_id: string }) => item.policy_document_id),
+  );
+  await admin
+    .from("document_processing_batches")
+    .update({
+      document_count: rows.length,
+      unique_document_count: uniqueIds.size,
+      deduplicated_count: rows.filter((item: { deduplicated: boolean }) => item.deduplicated)
+        .length,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", batchId);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -107,6 +128,14 @@ Deno.serve(async (req) => {
   ) {
     return jsonResponse({ message: "Document cleanup is still in progress" }, 409);
   }
+  const { data: batchItems } = await admin
+    .from("document_processing_batch_items")
+    .select("batch_id")
+    .eq("policy_document_id", document.id);
+  const batchIds = Array.from(
+    new Set((batchItems ?? []).map((item: { batch_id: string }) => item.batch_id)),
+  );
+
   const { error: storageError } = await admin.storage
     .from("policy-documents")
     .remove([document.storage_path]);
@@ -118,6 +147,10 @@ Deno.serve(async (req) => {
     .eq("id", document.id)
     .eq("household_id", document.household_id);
   if (deleteError) return jsonResponse({ message: "Failed to remove document record" }, 500);
+
+  for (const batchId of batchIds) {
+    await updateBatchCounts(admin, batchId);
+  }
 
   return jsonResponse({ id: document.id });
 });
