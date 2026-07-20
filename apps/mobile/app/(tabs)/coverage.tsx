@@ -47,6 +47,10 @@ export default function Coverage() {
                 label="Properties"
                 onPress={() => router.push("/properties")}
               />
+              <SettingsNavigationRow
+                label="Compare coverage"
+                onPress={() => router.push("/compare-coverage")}
+              />
             </View>
           </View>
 
