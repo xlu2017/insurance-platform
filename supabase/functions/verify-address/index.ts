@@ -189,12 +189,34 @@ function normalizeForDedupe(displayName: string): string {
     .trim();
 }
 
+function matchesQueryExpectations(
+  suggestion: AddressSuggestion & { parsed?: ParsedAddress },
+  expected: ParsedAddress,
+): boolean {
+  if (!suggestion.parsed) return true;
+
+  if (expected.canonicalStreetType && suggestion.parsed.canonicalStreetType) {
+    if (suggestion.parsed.canonicalStreetType !== expected.canonicalStreetType) {
+      return false;
+    }
+  }
+
+  if (expected.streetName && suggestion.parsed.streetName) {
+    const result = suggestion.parsed.streetName.toLowerCase();
+    const queryName = expected.streetName.toLowerCase();
+    if (!result.includes(queryName) && !queryName.includes(result)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function dedupeSuggestions(suggestions: AddressSuggestion[], limit: number): AddressSuggestion[] {
   const seen = new Set<string>();
   const out: AddressSuggestion[] = [];
   for (const s of suggestions) {
-    const normalized = normalizeForDedupe(s.displayName);
-    const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}|${normalized}`;
+    const key = normalizeForDedupe(s.displayName);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(s);
@@ -252,6 +274,7 @@ Deno.serve(async (req) => {
   const prefix = extractLeadingNumericPrefix(query);
   const normalizedQuery = stripLeadingNumericPrefix(query, prefix);
   const searchQuery = normalizedQuery.length >= 3 ? normalizedQuery : query;
+  const expected = parseAddress(normalizedQuery || query);
 
   const settled = await Promise.allSettled([
     nominatimSearch(searchQuery, limit),
@@ -269,10 +292,14 @@ Deno.serve(async (req) => {
     }
   }
 
-  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit).map((s) => ({
+  const parsed = all.filter(isCanadianSuggestion).map((s) => ({
     ...s,
     parsed: parseAddress(s.displayName, s.address),
   }));
+  const merged = dedupeSuggestions(
+    parsed.filter((s) => matchesQueryExpectations(s, expected)),
+    limit,
+  );
   return jsonResponse({
     found: merged.length > 0,
     query,
