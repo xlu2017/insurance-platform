@@ -778,7 +778,11 @@ export default function EditMandate() {
       <Screen style={{ flex: 1, padding: 0 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl }}
+          contentContainerStyle={{
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.md,
+            paddingBottom: spacing.xxl,
+          }}
         >
           <Title>Coverage mandate</Title>
           <Body muted>

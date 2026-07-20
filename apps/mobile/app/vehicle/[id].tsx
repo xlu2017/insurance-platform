@@ -94,6 +94,7 @@ export default function VehicleDetail() {
           contentContainerStyle={{
             flexGrow: 0,
             paddingHorizontal: spacing.lg,
+            paddingTop: spacing.md,
             paddingBottom: spacing.xxl,
           }}
         >

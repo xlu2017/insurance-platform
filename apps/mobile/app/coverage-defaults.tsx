@@ -33,6 +33,7 @@ export default function CoverageDefaults() {
           contentContainerStyle={{
             flexGrow: 0,
             paddingHorizontal: spacing.lg,
+            paddingTop: spacing.md,
             paddingBottom: spacing.xxl,
           }}
         >
