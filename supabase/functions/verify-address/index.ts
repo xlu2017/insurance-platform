@@ -74,6 +74,7 @@ async function nominatimSearch(query: string, limit: number): Promise<AddressSug
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("countrycodes", "ca");
 
   const response = await fetch(url.toString(), { headers: nominatimHeaders() });
   if (!response.ok) {
@@ -102,6 +103,8 @@ async function photonSearch(query: string, limit: number): Promise<AddressSugges
   const url = new URL(PHOTON_URL);
   url.searchParams.set("q", query);
   url.searchParams.set("limit", String(limit));
+  // Restrict results to a bounding box that roughly covers Canada
+  url.searchParams.set("bbox", "-141.0,41.0,-52.0,84.0");
 
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) {
@@ -128,6 +131,7 @@ async function openCageSearch(query: string, limit: number): Promise<AddressSugg
   url.searchParams.set("q", query);
   url.searchParams.set("key", apiKey);
   url.searchParams.set("limit", String(limit));
+  url.searchParams.set("countrycode", "ca");
 
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) {
@@ -137,6 +141,12 @@ async function openCageSearch(query: string, limit: number): Promise<AddressSugg
   return (data.results ?? []).map((r) =>
     normalizeSuggestion(r.formatted, r.geometry.lat, r.geometry.lng, "open_cage", r.components),
   );
+}
+
+function isCanadianSuggestion(s: AddressSuggestion): boolean {
+  const country = s.address?.country?.toLowerCase() ?? "";
+  const countryCode = (s.address?.country_code ?? "").toLowerCase();
+  return country === "canada" || countryCode === "ca";
 }
 
 function dedupeSuggestions(suggestions: AddressSuggestion[], limit: number): AddressSuggestion[] {
@@ -187,7 +197,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const merged = dedupeSuggestions(all, limit);
+  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit);
   return jsonResponse({
     found: merged.length > 0,
     query,
