@@ -137,7 +137,7 @@ export function AssetListScreen<T extends AssetListItem>({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
-            onPress={() => (backRoute ? router.push(backRoute) : router.back())}
+            onPress={() => (backRoute ? router.navigate(backRoute) : router.back())}
             style={{
               position: "absolute",
               left: spacing.lg,
