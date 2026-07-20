@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: ae0b9d902ffb5f9bc98250c904340bf91510e7a198244a8ae63cd589435052d3
+// source-hash: c8cd5faad65da68ce3c92b0e2bcaacd069d02c8a3db8f1e008b922b886f763d7
 
 
 // ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
@@ -10940,6 +10940,322 @@ function stripMarkdownJsonFence2(text) {
   return trimmed;
 }
 
+// src/providers/gemini-2.5-flash-lite.ts
+var DEFAULT_MODEL = "gemini-2.5-flash-lite";
+var CONTEXT_LENGTH = 1048576;
+function isGeminiModel(modelId) {
+  return modelId.toLowerCase().includes("gemini") || modelId.toLowerCase().includes("flash");
+}
+function bytesToBase64(bytes) {
+  const chunkSize = 65536;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}
+function parseMoneyToCents(value) {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return Number.isInteger(value) ? value : Math.round(value * 100);
+  }
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/[^0-9.]/g, "");
+  if (!normalized) return null;
+  const [dollars, cents = "00"] = normalized.split(".");
+  const whole = parseInt(dollars || "0", 10);
+  const fraction = parseInt((cents + "00").slice(0, 2), 10);
+  return whole * 100 + fraction;
+}
+function parseDate(value) {
+  if (typeof value === "string") {
+    const iso = value.replace(/\//g, "-").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toISOString().slice(0, 10);
+    }
+  }
+  if (typeof value === "object" && value !== null) {
+    const obj = value;
+    if (typeof obj.start_date === "string") return parseDate(obj.start_date);
+  }
+  return null;
+}
+function extractCurrentValue(raw) {
+  if (raw === null || raw === void 0) return null;
+  if (typeof raw === "object") {
+    const typed = raw;
+    if (typeof typed.status === "string") {
+      return {
+        status: typed.status,
+        value: Object.prototype.hasOwnProperty.call(typed, "value") ? typed.value : null,
+        confidence: typeof typed.confidence === "number" ? typed.confidence : 0.85
+      };
+    }
+  }
+  return { status: "known", value: raw, confidence: 0.85 };
+}
+function transformGeminiResponse(raw, documentIds) {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Gemini response is not a JSON object");
+  }
+  const typed = raw;
+  const firstDocId = documentIds[0] ?? "doc-1";
+  const allowedDocIds = new Set(documentIds);
+  const transformEntity = (entity, index) => {
+    if (!entity || typeof entity !== "object") {
+      throw new Error(`detectedEntities[${index}] is not an object`);
+    }
+    const e = entity;
+    const identity = typeof e.identity === "object" && e.identity !== null ? e.identity : {};
+    const currentPolicyRaw = typeof e.currentPolicy === "object" && e.currentPolicy !== null ? e.currentPolicy : {};
+    const annualPremiumCents = parseMoneyToCents(
+      currentPolicyRaw.annualPremiumCents ?? currentPolicyRaw.premium_cents ?? currentPolicyRaw.total_annual_amount
+    );
+    const currentPolicy = {
+      insurer: currentPolicyRaw.insurer ?? null,
+      policyNumber: currentPolicyRaw.policyNumber ?? currentPolicyRaw.policy_number ?? null,
+      effectiveDate: parseDate(
+        currentPolicyRaw.effectiveDate ?? currentPolicyRaw.effective_date ?? currentPolicyRaw.term_of_coverage
+      ),
+      expiryDate: parseDate(
+        currentPolicyRaw.expiryDate ?? currentPolicyRaw.expiry_date ?? currentPolicyRaw.renewal_term
+      ),
+      annualPremiumCents
+    };
+    const rawCoverage = typeof e.currentCoverage === "object" && e.currentCoverage !== null ? e.currentCoverage : typeof e.coverage === "object" && e.coverage !== null ? e.coverage : {};
+    const currentCoverage = {};
+    for (const [fieldPath, rawValue] of Object.entries(rawCoverage)) {
+      const parsed = extractCurrentValue(rawValue);
+      if (parsed) currentCoverage[fieldPath] = parsed;
+    }
+    const sanitizeEvidence = (item) => {
+      if (!item || typeof item !== "object") return null;
+      const ref = item;
+      const docId = typeof ref.documentId === "string" && allowedDocIds.has(ref.documentId) ? ref.documentId : firstDocId;
+      const pageNumber = typeof ref.pageNumber === "number" ? ref.pageNumber : 1;
+      const quotedLabel = typeof ref.quotedLabel === "string" && ref.quotedLabel.length > 0 ? ref.quotedLabel : "Extracted from document";
+      const evidenceSummary = typeof ref.evidenceSummary === "string" && ref.evidenceSummary.length > 0 ? ref.evidenceSummary : "Document analysis";
+      return { documentId: docId, pageNumber, quotedLabel, evidenceSummary };
+    };
+    const evidenceArray = Array.isArray(e.evidence) ? e.evidence : [];
+    let evidence = evidenceArray.map(sanitizeEvidence).filter((x) => x !== null);
+    if (evidence.length === 0) {
+      evidence = [
+        {
+          documentId: firstDocId,
+          pageNumber: 1,
+          quotedLabel: "Document analysis",
+          evidenceSummary: "Extracted from uploaded PDF"
+        }
+      ];
+    }
+    const rawResolution = typeof e.resolution === "object" && e.resolution !== null ? e.resolution : {};
+    const resolution = {
+      status: [
+        "new",
+        "matches_existing",
+        "matches_pending_candidate",
+        "possible_match_requires_confirmation"
+      ].includes(String(rawResolution.status)) ? String(rawResolution.status) : "new",
+      confidence: typeof rawResolution.confidence === "number" ? rawResolution.confidence : 0.85,
+      reasoning: typeof rawResolution.reasoning === "string" && rawResolution.reasoning.length > 0 ? rawResolution.reasoning : "Extracted from uploaded documents"
+    };
+    const displayLabel = typeof e.displayLabel === "string" && e.displayLabel.length > 0 ? e.displayLabel : identity.year && identity.make && identity.model ? `${identity.year} ${identity.make} ${identity.model}` : String(identity.fullAddress ?? identity.postalCode ?? `entity-${index}`);
+    const temporaryId = typeof e.temporaryId === "string" && e.temporaryId.length > 0 ? e.temporaryId : crypto.randomUUID();
+    return {
+      temporaryId,
+      entityType: e.entityType === "vehicle" || e.entityType === "property" ? e.entityType : "property",
+      displayLabel,
+      identity: {
+        fullAddress: identity.fullAddress ?? null,
+        city: identity.city ?? null,
+        province: identity.province ?? null,
+        postalCode: identity.postalCode ?? null,
+        occupancy: ["principal_residence", "rental", "other", "unknown"].includes(
+          String(identity.occupancy)
+        ) ? identity.occupancy : null,
+        vin: identity.vin ?? null,
+        year: typeof identity.year === "number" ? identity.year : null,
+        make: identity.make ?? null,
+        model: identity.model ?? null,
+        trim: identity.trim ?? null,
+        vehicleUse: identity.vehicleUse ?? null
+      },
+      resolution,
+      currentPolicy,
+      currentCoverage,
+      mandateSuggestions: typeof e.mandateSuggestions === "object" && e.mandateSuggestions !== null ? e.mandateSuggestions : {},
+      evidence,
+      requiredConfirmations: Array.isArray(e.requiredConfirmations) ? e.requiredConfirmations.filter((x) => typeof x === "string" && x.length > 0) : []
+    };
+  };
+  const detectedEntities = Array.isArray(typed.detectedEntities) ? typed.detectedEntities.map(transformEntity) : [];
+  const unresolvedConflicts = Array.isArray(typed.unresolvedConflicts) ? typed.unresolvedConflicts.filter((x) => typeof x === "object" && x !== null) : [];
+  const warnings = Array.isArray(typed.warnings) ? typed.warnings.filter((x) => typeof x === "object" && x !== null) : [];
+  return {
+    ...typed,
+    detectedEntities,
+    unresolvedConflicts,
+    warnings
+  };
+}
+var GeminiFlashLiteProvider = class {
+  providerId = "gemini-2.5-flash-lite";
+  baseUrl;
+  apiKey;
+  requestedModel;
+  resolvedModel = null;
+  timeoutMs;
+  fetchImpl;
+  constructor(options) {
+    this.baseUrl = (options.baseUrl ?? "https://generativelanguage.googleapis.com/v1beta").replace(
+      /\/+$/,
+      ""
+    );
+    this.apiKey = options.apiKey;
+    this.requestedModel = options.requestedModel;
+    this.timeoutMs = options.timeoutMs ?? 12e5;
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+  fetch(...args) {
+    return this.fetchImpl(...args);
+  }
+  async resolveModel() {
+    if (this.resolvedModel) return this.resolvedModel;
+    const modelId = this.requestedModel && isGeminiModel(this.requestedModel) ? this.requestedModel : DEFAULT_MODEL;
+    this.resolvedModel = {
+      modelId,
+      supportsImageInput: true,
+      supportsVideoInput: false,
+      supportsGenericFileInput: true,
+      supportedReferenceSchemes: ["gemini://"],
+      providerMetadata: {
+        context_length: CONTEXT_LENGTH,
+        owned_by: "google"
+      }
+    };
+    return this.resolvedModel;
+  }
+  async resolveInputMode(input) {
+    const mime = (input.mimeType || "").toLowerCase().trim();
+    if (mime === "application/pdf" || mime.startsWith("image/")) {
+      return { mimeType: input.mimeType, mode: "provider_extracted_text", supported: true };
+    }
+    return {
+      mimeType: input.mimeType,
+      mode: "unsupported",
+      supported: false,
+      reason: "Gemini 2.5 Flash-Lite only supports PDF and image inputs in this integration"
+    };
+  }
+  async assertBatchFits(inputs) {
+    const estimatedInputTokens = inputs.reduce((total, input) => {
+      if (input.mimeType.toLowerCase() === "application/pdf") {
+        return total + Math.ceil(input.bytes.length / 4);
+      }
+      if (input.mimeType.toLowerCase().startsWith("image/")) return total + 4096;
+      return total + Math.ceil(input.bytes.length / 4);
+    }, 8e3);
+    const outputReserve = 12e3;
+    if (estimatedInputTokens + outputReserve > Math.floor(CONTEXT_LENGTH * 0.9)) {
+      throw new Error("Document batch exceeds the resolved model context capacity");
+    }
+  }
+  async uploadOriginalFile(input) {
+    const capability = await this.resolveInputMode(input);
+    if (!capability.supported) {
+      return { status: "rejected", errorCategory: capability.reason ?? "unsupported_file_type" };
+    }
+    const base64 = bytesToBase64(input.bytes);
+    const providerFileId = crypto.randomUUID();
+    const handle = {
+      providerFileId,
+      documentId: input.documentId,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      bytes: input.bytes.length,
+      mode: capability.mode,
+      reference: `gemini://${providerFileId}`,
+      status: "ready",
+      providerMetadata: {
+        base64,
+        originalMimeType: input.mimeType
+      },
+      transientExtractedContent: base64
+    };
+    return { status: "ready", handle };
+  }
+  async analyze(input) {
+    await this.resolveModel();
+    const parts = [
+      { text: input.userPrompt }
+    ];
+    for (const file of input.files) {
+      const base64 = typeof file.transientExtractedContent === "string" ? file.transientExtractedContent : typeof file.providerMetadata?.base64 === "string" ? file.providerMetadata.base64 : void 0;
+      if (!base64) {
+        throw new Error("Gemini provider missing inline data for file");
+      }
+      parts.push({ inlineData: { mimeType: file.mimeType, data: base64 } });
+    }
+    const contents = [{ role: "user", parts }];
+    const body = {
+      model: input.model,
+      contents,
+      systemInstruction: { parts: [{ text: input.systemPrompt }] },
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 12e3
+      }
+    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetch(
+        `${this.baseUrl}/models/${input.model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal
+        }
+      );
+      if (!response.ok) {
+        const text2 = await response.text().catch(() => "");
+        throw new Error(
+          `Document analysis request failed: ${response.status} ${text2.slice(0, 200)}`
+        );
+      }
+      const completion = await response.json();
+      const text = completion.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (typeof text !== "string") {
+        throw new Error("Document analysis response did not contain text content");
+      }
+      let parsed;
+      const trimmed = text.trim();
+      if (trimmed.startsWith("```")) {
+        const lines = trimmed.split("\n");
+        if (lines.length > 1 && lines[0].trim().toLowerCase().startsWith("```")) {
+          parsed = JSON.parse(lines.slice(1, -1).join("\n").trim());
+        } else {
+          parsed = JSON.parse(trimmed);
+        }
+      } else {
+        parsed = JSON.parse(trimmed);
+      }
+      const documentIds = input.files.map((f) => f.documentId);
+      return transformGeminiResponse(parsed, documentIds);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  async deleteFile() {
+    return { deleted: true, attempts: 1 };
+  }
+};
+
 // src/providers/supabase-adapter.ts
 var SupabaseAuthorizationStore = class {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11126,6 +11442,7 @@ export {
   ExistingHouseholdAssetSchema,
   ExtractedAlternativeValueSchema,
   ExtractedCurrentValueSchema,
+  GeminiFlashLiteProvider,
   HttpLlmProvider,
   InsuranceDocumentAnalysisInputSchema,
   InsuranceDocumentAnalysisResultSchema,
@@ -11200,4 +11517,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "ae0b9d902ffb5f9bc98250c904340bf91510e7a198244a8ae63cd589435052d3";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "c8cd5faad65da68ce3c92b0e2bcaacd069d02c8a3db8f1e008b922b886f763d7";

@@ -29,6 +29,7 @@ export * from "../src/providers/native-document-analysis.ts";
 export * from "../src/providers/public-error.ts";
 export * from "../src/providers/privacy-preparation.ts";
 export { KimiK3Provider } from "../src/providers/kimi-k3.ts";
+export { GeminiFlashLiteProvider } from "../src/providers/gemini-2.5-flash-lite.ts";
 export {
   SupabaseAuthorizationStore,
   SupabaseFileLifecycleStore,

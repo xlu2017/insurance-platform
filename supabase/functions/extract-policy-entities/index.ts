@@ -13,6 +13,7 @@ import {
   buildCandidateIdentity,
   createNativeDocumentAnalyzer,
   KimiK3Provider,
+  GeminiFlashLiteProvider,
   MemoryFileBytesLoader,
   sanitizeProviderError,
   ConfigAndConsentPrivacyPreparation,
@@ -451,7 +452,9 @@ Deno.serve(async (req) => {
 
   const { data: currentSetting } = await admin
     .from("household_document_processing_settings")
-    .select("dangerous_mode_enabled, setting_version, disclosure_version, configured_model_id")
+    .select(
+      "dangerous_mode_enabled, setting_version, disclosure_version, configured_provider, configured_model_id",
+    )
     .eq("household_id", householdId)
     .maybeSingle();
   if (currentSetting?.dangerous_mode_enabled !== true) {
@@ -754,41 +757,85 @@ Deno.serve(async (req) => {
     loadPendingCandidates(admin, householdId, sessionId),
   ]);
 
-  const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
+  const configuredProvider = String(
+    batch?.configured_provider ?? currentSetting?.configured_provider ?? "",
+  ).toLowerCase();
   const configuredModelId = String(
-    batch?.configured_model_id ?? Deno.env.get("KIMI_MODEL_ID") ?? "",
+    batch?.configured_model_id ??
+      currentSetting?.configured_model_id ??
+      Deno.env.get("KIMI_MODEL_ID") ??
+      Deno.env.get("GEMINI_MODEL_ID") ??
+      "",
   );
-  if (!kimiApiKey || !configuredModelId || !configuredModelId.toLowerCase().includes("kimi-k3")) {
-    await authorizationStore.updateAuthorization(authorization.id, {
-      authorizationResult: "authorized_no_transmission",
-    });
-    if (batchIdRaw) {
-      await admin
-        .from("document_processing_batches")
-        .update({
-          status: "processing_unavailable",
-          retryable: false,
-          error_code: "DOCUMENT_MODEL_UNAVAILABLE",
-          completed_at: new Date().toISOString(),
-          worker_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", batchIdRaw);
-    }
-    return jsonError(
-      sanitizeProviderError(
-        new Error("Document analysis service is not configured"),
-      ) as PublicDocumentError,
-      503,
-    );
-  }
+  const isGemini =
+    configuredProvider.includes("gemini") || configuredModelId.toLowerCase().includes("gemini");
 
   const fileLifecycleStore = new SupabaseFileLifecycleStore(admin);
-  const provider = new KimiK3Provider({
-    apiKey: kimiApiKey,
-    baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
-    requestedModel: configuredModelId,
-  });
+  let provider: InstanceType<typeof KimiK3Provider> | InstanceType<typeof GeminiFlashLiteProvider>;
+
+  if (isGemini) {
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!geminiApiKey || !configuredModelId) {
+      await authorizationStore.updateAuthorization(authorization.id, {
+        authorizationResult: "authorized_no_transmission",
+      });
+      if (batchIdRaw) {
+        await admin
+          .from("document_processing_batches")
+          .update({
+            status: "processing_unavailable",
+            retryable: false,
+            error_code: "DOCUMENT_MODEL_UNAVAILABLE",
+            completed_at: new Date().toISOString(),
+            worker_lease_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", batchIdRaw);
+      }
+      return jsonError(
+        sanitizeProviderError(
+          new Error("Gemini document analysis service is not configured"),
+        ) as PublicDocumentError,
+        503,
+      );
+    }
+    provider = new GeminiFlashLiteProvider({
+      apiKey: geminiApiKey,
+      baseUrl: Deno.env.get("GEMINI_API_BASE_URL") ?? undefined,
+      requestedModel: configuredModelId,
+    });
+  } else {
+    const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
+    if (!kimiApiKey || !configuredModelId || !configuredModelId.toLowerCase().includes("kimi-k3")) {
+      await authorizationStore.updateAuthorization(authorization.id, {
+        authorizationResult: "authorized_no_transmission",
+      });
+      if (batchIdRaw) {
+        await admin
+          .from("document_processing_batches")
+          .update({
+            status: "processing_unavailable",
+            retryable: false,
+            error_code: "DOCUMENT_MODEL_UNAVAILABLE",
+            completed_at: new Date().toISOString(),
+            worker_lease_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", batchIdRaw);
+      }
+      return jsonError(
+        sanitizeProviderError(
+          new Error("Document analysis service is not configured"),
+        ) as PublicDocumentError,
+        503,
+      );
+    }
+    provider = new KimiK3Provider({
+      apiKey: kimiApiKey,
+      baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
+      requestedModel: configuredModelId,
+    });
+  }
   const analyzer = createNativeDocumentAnalyzer({
     provider,
     bytesLoader: new MemoryFileBytesLoader(bytesByReference),
