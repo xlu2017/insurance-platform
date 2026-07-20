@@ -21,7 +21,7 @@ function TabIcon({
   size?: number;
 }) {
   return (
-    <View style={{ alignItems: "center", justifyContent: "center" }}>
+    <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 8 }}>
       <Icon color={color} size={size} weight={focused ? "fill" : "regular"} />
     </View>
   );
@@ -35,9 +35,8 @@ export default function TabsLayout() {
         tabBarShowLabel: true,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.inkMuted,
-        tabBarLabelStyle: { fontSize: typography.sizes.caption, fontWeight: "500", marginTop: 2 },
-        tabBarIconStyle: { marginBottom: 4 },
-        tabBarItemStyle: { paddingVertical: 8 },
+        tabBarLabelStyle: { fontSize: typography.sizes.caption, fontWeight: "500" },
+        tabBarItemStyle: { padding: 0 },
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopWidth: 1,
