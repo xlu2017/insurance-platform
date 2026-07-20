@@ -57,6 +57,15 @@ function stripPostalCode(displayName: string): string {
     .trim();
 }
 
+function stripLeadingNonLetters(displayName: string): string {
+  const firstLetter = displayName.search(/[A-Za-z]/);
+  if (firstLetter <= 0) return displayName;
+  return displayName
+    .slice(firstLetter)
+    .replace(/^[\s,]+/, "")
+    .trim();
+}
+
 function normalizeSuggestion(
   displayName: string,
   latitude: number,
@@ -65,7 +74,9 @@ function normalizeSuggestion(
   address?: Record<string, string>,
 ): AddressSuggestion {
   return {
-    displayName: stripPostalCode(displayName.replace(/,\s*Earth$/, "")).trim(),
+    displayName: stripLeadingNonLetters(
+      stripPostalCode(displayName.replace(/,\s*Earth$/, "")).trim(),
+    ),
     latitude,
     longitude,
     source,
