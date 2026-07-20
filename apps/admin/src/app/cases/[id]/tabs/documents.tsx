@@ -175,14 +175,29 @@ export function DocumentsTab({ caseRow }: { caseRow: CaseDetail }) {
         <Card>
           <CardTitle>Extract values from {openDoc.file_name}</CardTitle>
           {previewUrl ? (
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mb-3 block text-sm text-accent hover:underline"
-            >
-              Open document preview (signed link, 60 seconds)
-            </a>
+            <div className="mb-3">
+              {openDoc.mime_type?.startsWith("image/") ? (
+                <img
+                  src={previewUrl}
+                  alt={openDoc.file_name}
+                  className="h-96 w-full rounded-md border border-border object-contain"
+                />
+              ) : (
+                <iframe
+                  src={previewUrl}
+                  title={openDoc.file_name}
+                  className="h-96 w-full rounded-md border border-border"
+                />
+              )}
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 block text-sm text-accent hover:underline"
+              >
+                Open in new tab (signed link, 60 seconds)
+              </a>
+            </div>
           ) : (
             <p className="mb-3 text-xs text-ink-muted">No preview available.</p>
           )}

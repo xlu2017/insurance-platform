@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import { Alert, Linking, Platform, ScrollView, View } from "react-native";
+import React, { useState } from "react";
+import { Alert, Linking, Modal, Platform, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { documentCategories, type DocumentCategory } from "@autopilot/schemas";
@@ -71,6 +71,7 @@ interface DocumentRow {
   status: string;
   storage_path: string;
   file_name: string;
+  mime_type: string;
   created_at: string;
 }
 
@@ -91,6 +92,8 @@ export default function Documents() {
   const [batchSubmitted, setBatchSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const { data: latestBatch } = useQuery({
     queryKey: ["latest-document-processing-batch", household?.id],
@@ -105,7 +108,7 @@ export default function Documents() {
     queryFn: async () => {
       const { data, error: queryError } = await supabase
         .from("policy_documents")
-        .select("id, category, status, storage_path, file_name, created_at")
+        .select("id, category, status, storage_path, file_name, mime_type, created_at")
         .eq("household_id", household!.id)
         .order("created_at", { ascending: false });
       if (queryError) throw queryError;
@@ -221,11 +224,23 @@ export default function Documents() {
     }
   };
 
-  const download = async (doc: DocumentRow) => {
-    const { data } = await supabase.storage
-      .from("policy-documents")
-      .createSignedUrl(doc.storage_path, 60);
-    if (data?.signedUrl) await Linking.openURL(data.signedUrl);
+  const viewDocument = async (doc: DocumentRow) => {
+    try {
+      const { data, error: signedError } = await supabase.storage
+        .from("policy-documents")
+        .createSignedUrl(doc.storage_path, 60);
+      if (signedError) throw signedError;
+      if (!data?.signedUrl) throw new Error("Could not generate document preview.");
+      setPreviewDoc(doc);
+      setPreviewUrl(data.signedUrl);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Could not open document";
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert("View document", message);
+      }
+    }
   };
 
   const removeDocument = async (doc: DocumentRow) => {
@@ -376,7 +391,7 @@ export default function Documents() {
                 />
               </View>
               <View style={{ height: 8 }} />
-              <SecondaryButton label="View" onPress={() => download(doc)} />
+              <SecondaryButton label="View" onPress={() => viewDocument(doc)} />
               <View style={{ height: 8 }} />
               <SecondaryButton
                 label="Remove document"
@@ -386,7 +401,90 @@ export default function Documents() {
             </Card>
           ))}
         </ScrollView>
+        {previewDoc && previewUrl ? (
+          <DocumentPreview doc={previewDoc} url={previewUrl} onClose={() => setPreviewUrl(null)} />
+        ) : null}
       </Screen>
     </SafeAreaView>
+  );
+}
+
+function DocumentPreview({
+  doc,
+  url,
+  onClose,
+}: {
+  doc: DocumentRow;
+  url: string;
+  onClose: () => void;
+}) {
+  const content = (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: "#E5E7EB",
+        }}
+      >
+        <Body style={{ flex: 1, marginRight: 12 }}>{doc.file_name}</Body>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <SecondaryButton label="Open" onPress={() => Linking.openURL(url)} />
+          <SecondaryButton label="Close" onPress={onClose} />
+        </View>
+      </View>
+      {Platform.OS === "web" ? (
+        <View style={{ flex: 1 }}>
+          {doc.mime_type.startsWith("image/")
+            ? React.createElement("img", {
+                src: url,
+                alt: doc.file_name,
+                style: { width: "100%", height: "100%", objectFit: "contain" },
+              })
+            : React.createElement("iframe", {
+                src: url,
+                title: doc.file_name,
+                style: { width: "100%", height: "100%", border: "none" },
+              })}
+        </View>
+      ) : (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}>
+          <Body muted style={{ textAlign: "center" }}>
+            Preview is available in your device browser.
+          </Body>
+          <View style={{ height: 16 }} />
+          <PrimaryButton label="Open in browser" onPress={() => Linking.openURL(url)} />
+        </View>
+      )}
+    </SafeAreaView>
+  );
+
+  if (Platform.OS === "web") {
+    return React.createElement("div", {
+      style: {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        zIndex: 9999,
+      },
+      children: content,
+    });
+  }
+
+  return (
+    <Modal
+      visible
+      animationType="fade"
+      transparent={false}
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
+      {content}
+    </Modal>
   );
 }
