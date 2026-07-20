@@ -192,7 +192,7 @@ export default function Preferences() {
       return (
         <Card>
           <Field
-            label="Recommend a switch only if I save at least (per year)"
+            label="Minimum savings per year"
             keyboardType="numeric"
             value={minSavings}
             onChangeText={setMinSavings}
@@ -210,7 +210,7 @@ export default function Preferences() {
       };
       return (
         <Card>
-          <Body>{current.description || current.question}</Body>
+          {current.description ? <Body muted>{current.description}</Body> : null}
           <View style={{ flexDirection: "row", gap: 12, marginTop: 24 }}>
             <PrimaryButton
               label="Yes"
@@ -231,8 +231,8 @@ export default function Preferences() {
 
     return (
       <Card>
-        <Row label={current.question} value={current.key === "coverage" ? "Always" : "Yes"} />
-        {current.description ? <Caption>{current.description}</Caption> : null}
+        {current.description ? <Body muted>{current.description}</Body> : null}
+        <Row label="Answer" value={current.key === "coverage" ? "Always" : "Yes"} />
       </Card>
     );
   };
