@@ -1,6 +1,7 @@
 import { router, Stack } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Switch, View } from "react-native";
+import { CaretDownIcon, CaretRightIcon } from "phosphor-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
@@ -78,10 +79,14 @@ function Collapsible({
           onPress={() => setOpen((value) => !value)}
           style={{ flexShrink: 1 }}
         >
-          <Body style={{ color: "#2563EB", fontWeight: "600" }}>
-            {open ? "▾ " : "▸ "}
-            {title}
-          </Body>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            {open ? (
+              <CaretDownIcon color="#2563EB" size={16} />
+            ) : (
+              <CaretRightIcon color="#2563EB" size={16} />
+            )}
+            <Body style={{ color: "#2563EB", fontWeight: "600", marginLeft: 4 }}>{title}</Body>
+          </View>
         </Pressable>
         {helpText ? <InfoTooltip label={title} text={helpText} /> : null}
       </View>

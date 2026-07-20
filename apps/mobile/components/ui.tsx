@@ -10,7 +10,7 @@ import {
   View,
   type ViewProps,
 } from "react-native";
-import { CaretRightIcon } from "phosphor-react-native";
+import { CaretDownIcon, CaretRightIcon } from "phosphor-react-native";
 import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
 
 export function Screen({ children, style, ...props }: ViewProps) {
@@ -284,7 +284,7 @@ export function Select<T extends string>({
         style={styles.selectTrigger}
       >
         <Text style={styles.selectTriggerText}>{selected}</Text>
-        <Text style={{ color: colors.inkMuted, fontSize: typography.sizes.body }}>▾</Text>
+        <CaretDownIcon color={colors.inkMuted} size={16} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.selectOverlay} onPress={() => setOpen(false)}>
