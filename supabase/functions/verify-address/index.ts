@@ -1,12 +1,15 @@
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const PHOTON_URL = "https://photon.komoot.io/api";
 
+import { parseAddress, type ParsedAddress } from "./address-parser.ts";
+
 interface AddressSuggestion {
   displayName: string;
   latitude: number;
   longitude: number;
   source: string;
   address?: Record<string, string>;
+  parsed?: ParsedAddress;
 }
 
 interface NominatimResult {
@@ -237,9 +240,13 @@ Deno.serve(async (req) => {
   }
 
   const prefix = extractLeadingNumericPrefix(query);
-  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit).map((s) =>
-    prependHouseNumber(s, prefix),
-  );
+  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit).map((s) => {
+    const withPrefix = prependHouseNumber(s, prefix);
+    return {
+      ...withPrefix,
+      parsed: parseAddress(withPrefix.displayName, withPrefix.address),
+    };
+  });
   return jsonResponse({
     found: merged.length > 0,
     query,
