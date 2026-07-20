@@ -1,6 +1,16 @@
+import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { supabase } from "@/lib/supabase";
@@ -53,6 +63,28 @@ function fieldPathsForCandidate(candidate: ExtractionCandidate): string[] {
     return value !== null && value !== undefined && value !== "";
   });
 }
+
+interface PolicyDocument {
+  id: string;
+  category: string;
+  status: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  created_at: string;
+}
+
+const categoryLabels: Record<string, string> = {
+  auto_detect: "Auto-detect",
+  current_auto_policy: "Current auto policy",
+  current_property_policy: "Current property policy",
+  renewal_notice: "Renewal notice",
+  competing_quote: "Competing quote",
+  proof_of_insurance: "Proof of insurance",
+  signed_authorization: "Signed authorization",
+  cancellation_confirmation: "Cancellation confirmation",
+  other: "Other",
+};
 
 export interface AddressSuggestion {
   displayName: string;
@@ -180,6 +212,157 @@ export function AddressVerification({
   );
 }
 
+function documentRelevanceScore(
+  doc: PolicyDocument,
+  candidate: ExtractionCandidate,
+  fieldPath: string,
+): number {
+  const field = fieldPath.toLowerCase();
+  const isVehicle =
+    candidate.asset_type === "vehicle" ||
+    field.includes("vin") ||
+    field.includes("vehicle") ||
+    field.includes("make") ||
+    field.includes("model");
+  const isProperty =
+    candidate.asset_type === "property" ||
+    field.includes("address") ||
+    field.includes("postal") ||
+    field.includes("occupancy") ||
+    field.includes("home");
+  const isPolicy =
+    field.includes("policy") ||
+    field.includes("insurer") ||
+    field.includes("premium") ||
+    field.includes("expiry") ||
+    field.includes("cents");
+
+  const keywords: string[] = [];
+  if (isVehicle) keywords.push("auto", "vehicle", "car", "motor", "truck", "fleet", "vin");
+  if (isProperty)
+    keywords.push("property", "home", "house", "rental", "condo", "tenant", "dwelling", "landlord");
+  if (isPolicy)
+    keywords.push("policy", "insurance", "declaration", "coverage", "quote", "premium", "insurer");
+
+  let score = 0;
+  if (isVehicle && doc.category === "current_auto_policy") score += 100;
+  else if (isProperty && doc.category === "current_property_policy") score += 100;
+  else if (doc.category === "renewal_notice") score += 60;
+  else if (doc.category === "auto_detect") score += 10;
+
+  const name = doc.file_name.toLowerCase();
+  for (const keyword of keywords) {
+    if (name.includes(keyword)) score += 25;
+  }
+
+  if (doc.status === "extracted") score += 5;
+  return score;
+}
+
+function rankDocuments(
+  docs: PolicyDocument[],
+  candidate: ExtractionCandidate,
+  fieldPath: string,
+): PolicyDocument[] {
+  return [...docs].sort((a, b) => {
+    const diff =
+      documentRelevanceScore(b, candidate, fieldPath) -
+      documentRelevanceScore(a, candidate, fieldPath);
+    if (diff !== 0) return diff;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+}
+
+function UnsureDocumentsModal({
+  candidate,
+  fieldPath,
+  visible,
+  onClose,
+  onConfirmUnknown,
+}: {
+  candidate: ExtractionCandidate;
+  fieldPath: string;
+  visible: boolean;
+  onClose: () => void;
+  onConfirmUnknown: () => void;
+}) {
+  const { data: household } = useHousehold();
+  const { data: docs } = useQuery({
+    queryKey: ["policy-documents", household?.id],
+    enabled: visible && !!household,
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("policy_documents")
+        .select("id, category, status, storage_path, file_name, mime_type, created_at")
+        .eq("household_id", household!.id)
+        .order("created_at", { ascending: false });
+      if (queryError) throw queryError;
+      return (data as PolicyDocument[] | null) ?? [];
+    },
+  });
+
+  const ranked = useMemo(
+    () => rankDocuments(docs ?? [], candidate, fieldPath),
+    [docs, candidate, fieldPath],
+  );
+
+  const openDocument = async (doc: PolicyDocument) => {
+    try {
+      const { data, error: signedError } = await supabase.storage
+        .from("policy-documents")
+        .createSignedUrl(doc.storage_path, 60);
+      if (signedError || !data?.signedUrl) throw new Error("Could not generate document preview.");
+      if (Platform.OS === "web") {
+        window.open(data.signedUrl, "_blank");
+      } else {
+        await Linking.openURL(data.signedUrl);
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Could not open document";
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert("Open document", message);
+      }
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Title style={{ marginBottom: spacing.sm }}>Need to confirm?</Title>
+          <Body muted style={{ marginBottom: spacing.md }}>
+            If you are unsure this value is correct, please manually confirm from your uploaded
+            file(s).
+          </Body>
+          <ScrollView style={{ maxHeight: 320 }}>
+            {ranked.map((doc) => (
+              <Pressable key={doc.id} onPress={() => openDocument(doc)} style={styles.fileRow}>
+                <View style={{ flex: 1, marginRight: spacing.sm }}>
+                  <Body numberOfLines={1}>{doc.file_name}</Body>
+                  <Caption>{categoryLabels[doc.category] ?? doc.category}</Caption>
+                </View>
+                <Caption style={{ color: colors.accent }}>View</Caption>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+            <PrimaryButton
+              label="Still unsure - mark unknown"
+              onPress={() => {
+                onConfirmUnknown();
+                onClose();
+              }}
+            />
+            <SecondaryButton label="Close" onPress={onClose} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function FieldEditStep({
   candidate,
   fieldPath,
@@ -196,12 +379,17 @@ function FieldEditStep({
     fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium");
   const label = formatFieldLabel(fieldPath);
   const [editing, setEditing] = useState(false);
+  const [showUnsure, setShowUnsure] = useState(false);
   const [corrected, setCorrected] = useState(() => {
     if (draft?.action === "correct" && draft.correctedValue) return draft.correctedValue;
     return isCents ? renderCents(value) : displayValueForField(fieldPath, value);
   });
 
   const displayValue = isCents ? renderCents(value) : displayValueForField(fieldPath, value);
+
+  const handleUnsureConfirm = () => {
+    onComplete("unknown");
+  };
 
   if (editing) {
     return (
@@ -232,16 +420,25 @@ function FieldEditStep({
   }
 
   return (
-    <Card style={{ flex: 1, justifyContent: "center" }}>
-      <Caption style={styles.fieldLabel}>{label}</Caption>
-      <Body style={styles.fieldValue}>{displayValue}</Body>
-      <Body muted>{`Is the ${label} correct?`}</Body>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
-        <SecondaryButton label="Confirm" onPress={() => onComplete("confirm")} />
-        <SecondaryButton label="Edit" onPress={() => setEditing(true)} />
-        <SecondaryButton label="Unsure" onPress={() => onComplete("unknown")} />
-      </View>
-    </Card>
+    <>
+      <Card style={{ flex: 1, justifyContent: "center" }}>
+        <Caption style={styles.fieldLabel}>{label}</Caption>
+        <Body style={styles.fieldValue}>{displayValue}</Body>
+        <Body muted>{`Is the ${label} correct?`}</Body>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+          <SecondaryButton label="Confirm" onPress={() => onComplete("confirm")} />
+          <SecondaryButton label="Edit" onPress={() => setEditing(true)} />
+          <SecondaryButton label="Unsure" onPress={() => setShowUnsure(true)} />
+        </View>
+      </Card>
+      <UnsureDocumentsModal
+        candidate={candidate}
+        fieldPath={fieldPath}
+        visible={showUnsure}
+        onClose={() => setShowUnsure(false)}
+        onConfirmUnknown={handleUnsureConfirm}
+      />
+    </>
   );
 }
 
@@ -731,6 +928,25 @@ const styles = StyleSheet.create({
   },
   suggestionItem: {
     paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceSubtle,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: spacing.md,
+    maxHeight: "85%",
+  },
+  fileRow: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.surfaceSubtle,
