@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   useWindowDimensions,
@@ -11,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  ArrowsHorizontalIcon,
   CaretDownIcon,
   CaretLeftIcon,
   CheckIcon,
@@ -36,7 +39,9 @@ const DEFAULT_COL_WIDTH = 180;
 const MIN_COL_WIDTH = 120;
 const MAX_COL_WIDTH_RATIO = 0.45;
 const ROW_HEIGHT = 44;
-const HEADER_HEIGHT = 56;
+const TABLE_HEADER_HEIGHT = 44;
+const APP_BAR_HEIGHT = 56;
+const HANDLE_SIZE = 32;
 
 type PickerMode = "add" | "replace";
 
@@ -44,66 +49,360 @@ function canonicalValue(asset: CompareAsset, spec: CoverageSpec): string {
   return getCellValue(asset.coverageDetails, spec, asset.type);
 }
 
+function Divider() {
+  return (
+    <View
+      style={{
+        position: "absolute",
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 1,
+        backgroundColor: colors.border,
+      }}
+    />
+  );
+}
+
 function ResizeHandle({
+  top,
   onResize,
   onAutoSize,
-  height,
+  onResizeStart,
+  onResizeEnd,
 }: {
+  top: number;
   onResize: (dx: number) => void;
   onAutoSize: () => void;
-  height?: number;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
 }) {
+  const [hovered, setHovered] = useState(false);
+  const [active, setActive] = useState(false);
+  const visible = hovered || active;
+  const defaultOpacity = Platform.OS === "web" ? 0.2 : 0;
+  const iconOpacity = useRef(new Animated.Value(defaultOpacity)).current;
   const startDx = useRef(0);
-  const lastTap = useRef(0);
+
+  useEffect(() => {
+    Animated.timing(iconOpacity, {
+      toValue: visible ? 1 : defaultOpacity,
+      duration: 175,
+      useNativeDriver: false,
+    }).start();
+  }, [visible]);
+
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
+        setActive(true);
         startDx.current = 0;
+        onResizeStart?.();
       },
       onPanResponderMove: (_, gesture) => {
         onResize(gesture.dx - startDx.current);
         startDx.current = gesture.dx;
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (_, gesture) => {
+        setActive(false);
         startDx.current = 0;
+        onResizeEnd?.();
+        if (Math.abs(gesture.dx) < 3 && Math.abs(gesture.dy) < 3) {
+          onAutoSize();
+        }
       },
+      onPanResponderTerminate: () => {
+        setActive(false);
+        startDx.current = 0;
+        onResizeEnd?.();
+      },
+      onPanResponderTerminationRequest: () => false,
     }),
   ).current;
 
   return (
-    <View
-      {...pan.panHandlers}
+    <Pressable
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      onPressIn={() => onResizeStart?.()}
       style={{
         position: "absolute",
-        right: -4,
-        top: 0,
-        width: 8,
-        height,
-        zIndex: 2,
+        right: -HANDLE_SIZE / 2,
+        top,
+        width: HANDLE_SIZE,
+        height: HANDLE_SIZE,
         justifyContent: "center",
         alignItems: "center",
+        zIndex: 10,
       }}
-      accessibilityRole="adjustable"
-      accessibilityLabel="Resize column"
+    >
+      <Animated.View
+        {...pan.panHandlers}
+        style={{
+          width: HANDLE_SIZE,
+          height: HANDLE_SIZE,
+          borderRadius: HANDLE_SIZE / 2,
+          backgroundColor: visible ? "rgba(0,0,0,0.08)" : "transparent",
+          justifyContent: "center",
+          alignItems: "center",
+          opacity: iconOpacity,
+        }}
+        accessibilityRole="adjustable"
+        accessibilityLabel="Resize column"
+      >
+        <ArrowsHorizontalIcon
+          color={visible ? colors.ink : colors.inkMuted}
+          size={16}
+          weight="bold"
+        />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function AssetColumnHeader({
+  asset,
+  index,
+  colWidth,
+  onSelect,
+  onResize,
+  onAutoSize,
+  onResizeStart,
+  onResizeEnd,
+}: {
+  asset?: CompareAsset;
+  index: number;
+  colWidth: number;
+  onSelect: () => void;
+  onResize: (dx: number) => void;
+  onAutoSize: () => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
+}) {
+  return (
+    <View
+      style={{
+        width: colWidth,
+        height: TABLE_HEADER_HEIGHT,
+        position: "relative",
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+      }}
     >
       <Pressable
-        onPress={() => {
-          const now = Date.now();
-          if (now - lastTap.current < 300) {
-            onAutoSize();
-          }
-          lastTap.current = now;
-        }}
+        accessibilityRole="button"
+        accessibilityLabel={
+          asset ? `Change asset for column ${index + 1}` : `Add asset to column ${index + 1}`
+        }
+        onPress={onSelect}
         style={{
-          width: 4,
-          height: "60%",
-          borderRadius: 2,
-          backgroundColor: colors.border,
+          width: "100%",
+          height: "100%",
+          justifyContent: "center",
+          alignItems: "center",
         }}
-      />
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            width: "100%",
+          }}
+        >
+          {asset ? (
+            <>
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Body
+                  numberOfLines={1}
+                  style={{ fontWeight: "600", textAlign: "center", width: "100%" }}
+                >
+                  {asset.displayName}
+                </Body>
+              </View>
+              <CaretDownIcon color={colors.inkMuted} size={16} />
+            </>
+          ) : (
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Body style={{ color: colors.accent, textAlign: "center", width: "100%" }}>
+                Select asset
+              </Body>
+            </View>
+          )}
+        </View>
+      </Pressable>
+      <Divider />
+      {asset ? (
+        <ResizeHandle
+          top={TABLE_HEADER_HEIGHT / 2 - HANDLE_SIZE / 2}
+          onResize={onResize}
+          onAutoSize={onAutoSize}
+          onResizeStart={onResizeStart}
+          onResizeEnd={onResizeEnd}
+        />
+      ) : null}
     </View>
+  );
+}
+
+function AssetColumnBody({
+  asset,
+  colWidth,
+  specs,
+  onResize,
+  onAutoSize,
+  onResizeStart,
+  onResizeEnd,
+}: {
+  asset?: CompareAsset;
+  colWidth: number;
+  specs: CoverageSpec[];
+  onResize: (dx: number) => void;
+  onAutoSize: () => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
+}) {
+  return (
+    <View style={{ width: colWidth, position: "relative" }}>
+      {specs.map((spec) => (
+        <View
+          key={spec.key}
+          style={{
+            height: ROW_HEIGHT,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: spacing.sm,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+          }}
+        >
+          <Body numberOfLines={1} style={{ width: "100%", textAlign: "center" }}>
+            {asset ? canonicalValue(asset, spec) : "—"}
+          </Body>
+        </View>
+      ))}
+      <Divider />
+      {asset
+        ? specs.map((spec, rowIndex) => {
+            if ((rowIndex + 1) % 6 !== 0) return null;
+            return (
+              <ResizeHandle
+                key={`handle-${spec.key}`}
+                top={rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2 - HANDLE_SIZE / 2}
+                onResize={onResize}
+                onAutoSize={onAutoSize}
+                onResizeStart={onResizeStart}
+                onResizeEnd={onResizeEnd}
+              />
+            );
+          })
+        : null}
+    </View>
+  );
+}
+
+function SpecColumnHeader({ onConfig }: { onConfig: () => void }) {
+  return (
+    <View
+      style={{
+        width: SPEC_WIDTH,
+        height: TABLE_HEADER_HEIGHT,
+        position: "relative",
+        justifyContent: "center",
+        alignItems: "center",
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Table preferences"
+        onPress={onConfig}
+        style={{
+          width: "100%",
+          height: "100%",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <SlidersHorizontalIcon color={colors.ink} size={24} />
+      </Pressable>
+      <Divider />
+    </View>
+  );
+}
+
+function SpecColumnBody({
+  specs,
+  onToggle,
+}: {
+  specs: CoverageSpec[];
+  onToggle: (index: number) => void;
+}) {
+  return (
+    <View style={{ width: SPEC_WIDTH, position: "relative" }}>
+      {specs.map((spec, index) => (
+        <Pressable
+          key={spec.key}
+          accessibilityRole="button"
+          accessibilityLabel={spec.label}
+          onPress={() => onToggle(index)}
+          style={{
+            height: ROW_HEIGHT,
+            justifyContent: "center",
+            paddingHorizontal: spacing.sm,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+          }}
+        >
+          <Body numberOfLines={1} style={{ width: "100%" }}>
+            {spec.label}
+          </Body>
+        </Pressable>
+      ))}
+      <Divider />
+    </View>
+  );
+}
+
+function AssetOverlay({
+  specs,
+  expandedIndex,
+  totalWidth,
+  onCollapse,
+}: {
+  specs: CoverageSpec[];
+  expandedIndex: number | null;
+  totalWidth: number;
+  onCollapse: () => void;
+}) {
+  if (expandedIndex === null || !specs[expandedIndex]) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Collapse expanded specification"
+      onPress={onCollapse}
+      style={{
+        position: "absolute",
+        left: 0,
+        top: expandedIndex * ROW_HEIGHT,
+        width: totalWidth,
+        height: ROW_HEIGHT,
+        paddingHorizontal: spacing.sm,
+        justifyContent: "center",
+        backgroundColor: colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+        zIndex: 30,
+        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+      }}
+    >
+      <Body style={{ fontWeight: "600", width: "100%" }}>{specs[expandedIndex].label}</Body>
+    </Pressable>
   );
 }
 
@@ -114,7 +413,6 @@ function AssetPicker({
   selected,
   allowedType,
   onSelect,
-  mode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -122,15 +420,12 @@ function AssetPicker({
   selected: CompareAsset[];
   allowedType?: CompareAssetType;
   onSelect: (asset: CompareAsset) => void;
-  mode: PickerMode;
 }) {
   const available = useMemo(() => {
     const typeFiltered = allowedType ? assets.filter((a) => a.type === allowedType) : assets;
-    const selectedIds = new Set(
-      mode === "add" ? selected.map((a) => a.id) : selected.map((a) => a.id),
-    );
+    const selectedIds = new Set(selected.map((a) => a.id));
     return typeFiltered.filter((a) => !selectedIds.has(a.id));
-  }, [assets, allowedType, selected, mode]);
+  }, [assets, allowedType, selected]);
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
@@ -406,6 +701,7 @@ export default function CompareCoverage() {
     null,
   );
   const [configOpen, setConfigOpen] = useState(false);
+  const [resizing, setResizing] = useState(false);
 
   const headerHScrollRef = useRef<ScrollView>(null);
   const bodyHScrollRef = useRef<ScrollView>(null);
@@ -413,11 +709,13 @@ export default function CompareCoverage() {
   useEffect(() => {
     setColWidths((prev) => {
       const next = [...prev];
-      while (next.length < selectedAssets.length) next.push(DEFAULT_COL_WIDTH);
+      while (next.length < selectedAssets.length) {
+        next.push(Math.min(DEFAULT_COL_WIDTH, maxColWidth));
+      }
       if (next.length > selectedAssets.length) next.length = selectedAssets.length;
       return next;
     });
-  }, [selectedAssets.length]);
+  }, [selectedAssets.length, maxColWidth]);
 
   const comparisonType: CompareAssetType | null = selectedAssets[0]?.type ?? null;
 
@@ -442,6 +740,12 @@ export default function CompareCoverage() {
     }
     return specs;
   }, [baseSpecs, hiddenSpecKeys, selectedAssets, showMode]);
+
+  useEffect(() => {
+    if (expandedSpecIndex !== null && expandedSpecIndex >= visibleSpecs.length) {
+      setExpandedSpecIndex(null);
+    }
+  }, [expandedSpecIndex, visibleSpecs]);
 
   const handleSelectAsset = useCallback((asset: CompareAsset, index: number, mode: PickerMode) => {
     setSelectedAssets((prev) => {
@@ -487,7 +791,7 @@ export default function CompareCoverage() {
           const val = getCellValue(details, s, type).length;
           return Math.max(max, val);
         }, 10);
-        next[index] = Math.min(Math.max(SPEC_WIDTH, longest * 10 + 32), maxColWidth);
+        next[index] = Math.min(Math.max(MIN_COL_WIDTH, longest * 10 + 32), maxColWidth);
         return next;
       });
     },
@@ -495,11 +799,11 @@ export default function CompareCoverage() {
   );
 
   const resetLayout = useCallback(() => {
-    setColWidths(selectedAssets.map(() => DEFAULT_COL_WIDTH));
+    setColWidths(selectedAssets.map(() => Math.min(DEFAULT_COL_WIDTH, maxColWidth)));
     setHiddenSpecKeys(new Set());
     setShowMode("all");
     setExpandedSpecIndex(null);
-  }, [selectedAssets.length]);
+  }, [maxColWidth, selectedAssets]);
 
   const syncHeaderScroll = useCallback((x: number) => {
     headerHScrollRef.current?.scrollTo({ x, animated: false });
@@ -518,7 +822,7 @@ export default function CompareCoverage() {
             justifyContent: "center",
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.md,
-            minHeight: HEADER_HEIGHT,
+            minHeight: APP_BAR_HEIGHT,
           }}
         >
           <Pressable
@@ -541,6 +845,10 @@ export default function CompareCoverage() {
   }
 
   const emptySlots = MAX_COLUMNS - selectedAssets.length;
+  const totalAssetWidth =
+    selectedAssets.reduce((sum, _, i) => sum + (colWidths[i] ?? DEFAULT_COL_WIDTH), 0) +
+    emptySlots * DEFAULT_COL_WIDTH;
+
   const pickerAllowedType: CompareAssetType | undefined = picker
     ? selectedAssets.length
       ? (comparisonType ?? undefined)
@@ -551,7 +859,7 @@ export default function CompareCoverage() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={{ flex: 1 }}>
-        {/* Top app bar */}
+        {/* App bar */}
         <View
           style={{
             flexDirection: "row",
@@ -559,7 +867,7 @@ export default function CompareCoverage() {
             justifyContent: "center",
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.md,
-            minHeight: HEADER_HEIGHT,
+            minHeight: APP_BAR_HEIGHT,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
           }}
@@ -575,97 +883,45 @@ export default function CompareCoverage() {
           <Title style={{ marginBottom: 0 }}>Compare coverage</Title>
         </View>
 
-        {/* Fixed header */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surfaceSubtle,
-            height: HEADER_HEIGHT,
-            paddingHorizontal: spacing.sm,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Table preferences"
-            onPress={() => setConfigOpen(true)}
-            style={{
-              width: SPEC_WIDTH,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <SlidersHorizontalIcon color={colors.ink} size={24} />
-          </Pressable>
+        {/* Table header */}
+        <View style={{ flexDirection: "row", height: TABLE_HEADER_HEIGHT }}>
+          <SpecColumnHeader onConfig={() => setConfigOpen(true)} />
           <ScrollView
             ref={headerHScrollRef}
             horizontal
             scrollEnabled={false}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ flexDirection: "row" }}
+            style={{ flex: 1 }}
           >
             {selectedAssets.map((asset, index) => (
-              <View
+              <AssetColumnHeader
                 key={asset.id}
-                style={{
-                  width: colWidths[index] ?? DEFAULT_COL_WIDTH,
-                  height: HEADER_HEIGHT,
-                  paddingHorizontal: spacing.sm,
-                  justifyContent: "center",
-                  borderRightWidth: 1,
-                  borderRightColor: colors.border,
-                }}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select asset for column ${index + 1}`}
-                  onPress={() => setPicker({ open: true, index, mode: "replace" })}
-                  style={{ flexDirection: "row", alignItems: "center" }}
-                >
-                  <Body
-                    numberOfLines={1}
-                    style={{
-                      flex: 1,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {asset.displayName}
-                  </Body>
-                  <CaretDownIcon color={colors.inkMuted} size={16} />
-                </Pressable>
-                <ResizeHandle
-                  height={HEADER_HEIGHT}
-                  onResize={(dx) => handleResize(index, dx)}
-                  onAutoSize={() => handleAutoSize(index)}
-                />
-              </View>
+                asset={asset}
+                index={index}
+                colWidth={colWidths[index] ?? DEFAULT_COL_WIDTH}
+                onSelect={() => setPicker({ open: true, index, mode: "replace" })}
+                onResize={(dx) => handleResize(index, dx)}
+                onAutoSize={() => handleAutoSize(index)}
+                onResizeStart={() => setResizing(true)}
+                onResizeEnd={() => setResizing(false)}
+              />
             ))}
-            {Array.from({ length: emptySlots }).map((_, index) => {
-              const globalIndex = selectedAssets.length + index;
-              return (
-                <View
-                  key={`empty-${globalIndex}`}
-                  style={{
-                    width: colWidths[globalIndex] ?? DEFAULT_COL_WIDTH,
-                    height: HEADER_HEIGHT,
-                    paddingHorizontal: spacing.sm,
-                    justifyContent: "center",
-                    borderRightWidth: 1,
-                    borderRightColor: colors.border,
-                  }}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Add asset to column ${globalIndex + 1}`}
-                    onPress={() => setPicker({ open: true, index: globalIndex, mode: "add" })}
-                  >
-                    <Body style={{ color: colors.accent }}>Select asset</Body>
-                  </Pressable>
-                </View>
-              );
-            })}
+            {emptySlots > 0
+              ? Array.from({ length: emptySlots }).map((_, i) => {
+                  const globalIndex = selectedAssets.length + i;
+                  return (
+                    <AssetColumnHeader
+                      key={`empty-${globalIndex}`}
+                      index={globalIndex}
+                      colWidth={colWidths[globalIndex] ?? DEFAULT_COL_WIDTH}
+                      onSelect={() => setPicker({ open: true, index: globalIndex, mode: "add" })}
+                      onResize={() => {}}
+                      onAutoSize={() => {}}
+                    />
+                  );
+                })
+              : null}
           </ScrollView>
         </View>
 
@@ -673,126 +929,58 @@ export default function CompareCoverage() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           onScrollBeginDrag={() => setExpandedSpecIndex(null)}
+          scrollEnabled={!resizing}
           contentContainerStyle={{ flexGrow: 1 }}
+          style={{ flex: 1 }}
         >
           <View style={{ flexDirection: "row" }}>
-            {/* Frozen spec column */}
-            <View
-              style={{ width: SPEC_WIDTH, borderRightWidth: 1, borderRightColor: colors.border }}
-            >
-              {visibleSpecs.map((spec, index) => (
-                <View
-                  key={spec.key}
-                  style={{
-                    height: ROW_HEIGHT,
-                    justifyContent: "center",
-                    paddingHorizontal: spacing.sm,
-                    borderBottomWidth: 1,
-                    borderBottomColor: colors.border,
-                  }}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={spec.label}
-                    onPress={() => setExpandedSpecIndex(expandedSpecIndex === index ? null : index)}
-                  >
-                    <Body numberOfLines={1}>{spec.label}</Body>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-
-            {/* Asset columns */}
+            <SpecColumnBody
+              specs={visibleSpecs}
+              onToggle={(i) => setExpandedSpecIndex(expandedSpecIndex === i ? null : i)}
+            />
             <ScrollView
               ref={bodyHScrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
+              scrollEnabled={!resizing}
               onScroll={(e) => syncHeaderScroll(e.nativeEvent.contentOffset.x)}
               scrollEventThrottle={16}
               contentContainerStyle={{ flexDirection: "row" }}
               style={{ flex: 1 }}
             >
-              {selectedAssets.map((asset, assetIndex) => (
-                <View
+              {selectedAssets.map((asset, index) => (
+                <AssetColumnBody
                   key={asset.id}
-                  style={{
-                    width: colWidths[assetIndex] ?? DEFAULT_COL_WIDTH,
-                    borderRightWidth: 1,
-                    borderRightColor: colors.border,
-                  }}
-                >
-                  {visibleSpecs.map((spec) => (
-                    <View
-                      key={`${asset.id}-${spec.key}`}
-                      style={{
-                        height: ROW_HEIGHT,
-                        justifyContent: "center",
-                        paddingHorizontal: spacing.sm,
-                        borderBottomWidth: 1,
-                        borderBottomColor: colors.border,
-                      }}
-                    >
-                      <Body numberOfLines={1}>{canonicalValue(asset, spec)}</Body>
-                    </View>
-                  ))}
-                </View>
+                  asset={asset}
+                  colWidth={colWidths[index] ?? DEFAULT_COL_WIDTH}
+                  specs={visibleSpecs}
+                  onResize={(dx) => handleResize(index, dx)}
+                  onAutoSize={() => handleAutoSize(index)}
+                  onResizeStart={() => setResizing(true)}
+                  onResizeEnd={() => setResizing(false)}
+                />
               ))}
-              {Array.from({ length: emptySlots }).map((_, emptyIndex) => {
-                const globalIndex = selectedAssets.length + emptyIndex;
-                return (
-                  <View
-                    key={`empty-col-${globalIndex}`}
-                    style={{
-                      width: colWidths[globalIndex] ?? DEFAULT_COL_WIDTH,
-                      borderRightWidth: 1,
-                      borderRightColor: colors.border,
-                    }}
-                  >
-                    {visibleSpecs.map((_, i) => (
-                      <View
-                        key={`empty-cell-${i}`}
-                        style={{
-                          height: ROW_HEIGHT,
-                          justifyContent: "center",
-                          paddingHorizontal: spacing.sm,
-                          borderBottomWidth: 1,
-                          borderBottomColor: colors.border,
-                        }}
-                      >
-                        <Body muted>—</Body>
-                      </View>
-                    ))}
-                  </View>
-                );
-              })}
+              {emptySlots > 0
+                ? Array.from({ length: emptySlots }).map((_, i) => {
+                    const globalIndex = selectedAssets.length + i;
+                    return (
+                      <AssetColumnBody
+                        key={`empty-${globalIndex}`}
+                        colWidth={colWidths[globalIndex] ?? DEFAULT_COL_WIDTH}
+                        specs={visibleSpecs}
+                        onResize={() => {}}
+                        onAutoSize={() => {}}
+                      />
+                    );
+                  })
+                : null}
+              <AssetOverlay
+                specs={visibleSpecs}
+                expandedIndex={expandedSpecIndex}
+                totalWidth={totalAssetWidth}
+                onCollapse={() => setExpandedSpecIndex(null)}
+              />
             </ScrollView>
-
-            {/* Expanded spec overlay */}
-            {expandedSpecIndex !== null && visibleSpecs[expandedSpecIndex] ? (
-              <Pressable
-                onPress={() => setExpandedSpecIndex(null)}
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  top: expandedSpecIndex * ROW_HEIGHT,
-                  height: ROW_HEIGHT,
-                  backgroundColor: colors.surface,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  justifyContent: "center",
-                  paddingHorizontal: spacing.md,
-                  zIndex: 10,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 4,
-                }}
-              >
-                <Body style={{ fontWeight: "600" }}>{visibleSpecs[expandedSpecIndex]!.label}</Body>
-              </Pressable>
-            ) : null}
           </View>
         </ScrollView>
       </View>
@@ -807,7 +995,6 @@ export default function CompareCoverage() {
           if (!picker) return;
           handleSelectAsset(asset, picker.index, picker.mode);
         }}
-        mode={picker?.mode ?? "add"}
       />
 
       <ConfigMenu
