@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 74dac47672fd016bec95fe7edcf5e58398593f3952a1f151021b4b9343dbd0c6
+// source-hash: e8d3c7d437182bb071cff3365fbadeebb139020874f36c42ba294d63635796d9
 
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -16,7 +16,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// ../../node_modules/.pnpm/path2d@0.3.3/node_modules/path2d/dist/index.js
+// ../../node_modules/path2d/dist/index.js
 var dist_exports = {};
 __export(dist_exports, {
   Path2D: () => Path2D2,
@@ -213,7 +213,7 @@ function applyRoundRectToPath2D(P2D) {
 }
 var ARG_LENGTH, SEGMENT_PATTERN, NUMBER, Path2D2;
 var init_dist = __esm({
-  "../../node_modules/.pnpm/path2d@0.3.3/node_modules/path2d/dist/index.js"() {
+  "../../node_modules/path2d/dist/index.js"() {
     ARG_LENGTH = {
       a: 7,
       c: 6,
@@ -843,7 +843,7 @@ var init_dist = __esm({
   }
 });
 
-// ../../node_modules/.pnpm/pdfjs-dist@6.1.200/node_modules/pdfjs-dist/legacy/build/pdf.mjs
+// ../../node_modules/pdfjs-dist/legacy/build/pdf.mjs
 var pdf_exports = {};
 __export(pdf_exports, {
   AbortException: () => AbortException,
@@ -2468,7 +2468,7 @@ function percentage(value) {
 }
 var __webpack_modules__, __webpack_module_cache__, es_array_includes, es_array_push, es_iterator_constructor, es_iterator_filter, es_map_get_or_insert, es_map_get_or_insert_computed, es_typed_array_with, es_uint8_array_set_from_base64, es_uint8_array_set_from_hex, es_uint8_array_to_base64, es_uint8_array_to_hex, web_url_parse, isNodeJS, BBOX_INIT, F32_BBOX_INIT, FONT_IDENTITY_MATRIX, LINE_FACTOR, LINE_DESCENT_FACTOR, BASELINE_FACTOR, SVG_NS, RenderingIntentFlag, AnnotationMode, AnnotationPrefix, AnnotationEditorPrefix, AnnotationEditorType, AnnotationEditorParamsType, PermissionFlag, TextRenderingMode, ImageKind, AnnotationType, AnnotationBorderStyleType, VerbosityLevel, OPS, DrawOPS, PasswordResponses, verbosity, BaseException, PasswordException, UnknownErrorException, InvalidPDFException, ResponseException, FormatError, AbortException, FeatureTest, Util, NormalizeRegex, NormalizationMap, makeArr, makeMap, makeObj, es_iterator_map, PageViewport, XfaText, XfaLayer, PixelsPerInch, RenderingCancelledException, StatTimer, PDFDateString, OutputScale, SupportedImageMimeTypes, ColorScheme, CSSConstants, contrastCache, es_iterator_take, es_promise_with_resolvers, es_set_difference_v2, es_set_intersection_v2, es_set_is_disjoint_from_v2, es_set_is_subset_of_v2, es_set_is_superset_of_v2, es_set_symmetric_difference_v2, es_set_union_v2, es_weak_map_get_or_insert, es_weak_map_get_or_insert_computed, web_dom_exception_stack, es_iterator_some, es_json_stringify, es_iterator_drop, es_iterator_every, es_iterator_find, es_json_parse, EditorToolbar, FloatingToolbar, INTERNAL_EVT, internalOpt, CurrentPointers, IdManager, ImageManager, CommandManager, KeyboardManager, ColorManager, AnnotationEditorUIManager, AltText, Comment, TouchManager, AnnotationEditor, FakeEditor, SEED, MASK_HIGH, MASK_LOW, MurmurHash3_64, SerializableEmpty, AnnotationStorage, PrintAnnotationStorage, es_iterator_for_each, FORCED_DEPENDENCY_LABEL, floor, ceil, EMPTY_BBOX, BBoxReader, ensureDebugMetadata, CanvasBBoxTracker, CanvasDependencyTracker, CanvasNestedDependencyTracker, Dependencies, CanvasImagesTracker, FontLoader, FontFaceObject, CSS_FONT_INFO, SYSTEM_FONT_INFO, FONT_INFO, PATTERN_INFO, CssFontInfo, SystemFontInfo, FontInfo, PatternInfo, FontPathInfo, isRefProxy, isNameProxy, isValidExplicitDest, LoopbackPort, es_promise_try, CallbackKind, StreamKind, MessageHandler, BaseBinaryDataFactory, DOMBinaryDataFactory, BaseCanvasFactory, DOMCanvasFactory, BaseFilterFactory, DOMFilterFactory, NodeFilterFactory, NodeCanvasFactory, NodeBinaryDataFactory, MESH_WGSL, WebGPU, _webGPU, PathType, BaseShadingPattern, RadialAxialShadingPattern, MeshShadingPattern, DummyShadingPattern, PaintType, TilingPattern, MIN_FONT_SIZE, MAX_FONT_SIZE, EXECUTION_TIME, EXECUTION_STEPS, FULL_CHUNK_HEIGHT, SCALE_MATRIX, XY, CanvasExtraState, LINE_CAP_STYLES, LINE_JOIN_STYLES, NORMAL_CLIP, EO_CLIP, CanvasGraphics, BasePDFStream, BasePDFStreamReader, BasePDFStreamRangeReader, PDFFetchStream, PDFFetchStreamReader, PDFFetchStreamRangeReader, PDFDataTransportStream, PDFDataTransportStreamReader, PDFDataTransportStreamRangeReader, OK_RESPONSE, PARTIAL_CONTENT_RESPONSE, PDFNetworkStream, PDFNetworkStreamReader, PDFNetworkStreamRangeReader, PDFNodeStream, PDFNodeStreamReader, PDFNodeStreamRangeReader, GlobalWorkerOptions, Metadata, INTERNAL, OptionalContentGroup, OptionalContentConfig, PagesMapper, INITIAL_DATA, dataObj, PDFObjects, MAX_TEXT_DIVS_TO_RENDER, DEFAULT_FONT_SIZE, TextLayer, RENDERING_CANCELLED_TIMEOUT, PDFDocumentLoadingTask, PDFDataRangeTransport, PDFDocumentProxy, PDFPageProxy, PDFWorker, WorkerTransport, RenderTask, InternalRenderTask, version, build, es_math_sum_precise, ColorPicker, BasicColorPicker, es_iterator_flat_map, ColorConverters, BaseSVGFactory, DOMSVGFactory, annotation_layer_DEFAULT_FONT_SIZE, GetElementsByNameSet, TIMEZONE_OFFSET, AnnotationElementFactory, AnnotationElement, EditorAnnotationElement, LinkAnnotationElement, TextAnnotationElement, WidgetAnnotationElement, TextWidgetAnnotationElement, SignatureWidgetAnnotationElement, CheckboxWidgetAnnotationElement, RadioButtonWidgetAnnotationElement, PushButtonWidgetAnnotationElement, ChoiceWidgetAnnotationElement, PopupAnnotationElement, PopupElement, FreeTextAnnotationElement, LineAnnotationElement, SquareAnnotationElement, CircleAnnotationElement, PolylineAnnotationElement, PolygonAnnotationElement, CaretAnnotationElement, InkAnnotationElement, HighlightAnnotationElement, UnderlineAnnotationElement, SquigglyAnnotationElement, StrikeOutAnnotationElement, StampAnnotationElement, FileAttachmentAnnotationElement, MediaAnnotationElement, AnnotationLayer, EOL_PATTERN, FreeTextEditor, Outline, FreeDrawOutliner, FreeDrawOutline, HighlightOutliner, HighlightOutline, FreeHighlightOutliner, FreeHighlightOutline, HighlightEditor, DrawingOptions, DrawingEditor, InkDrawOutliner, InkDrawOutline, InkDrawingOptions, InkEditor, ContourDrawOutline, es_uint8_array_from_base64, BASE_HEADER_LENGTH, POINTS_PROPERTIES_NUMBER, SignatureExtractor, SignatureOptions, DrawnSignatureOptions, SignatureEditor, StampEditor, AnnotationEditorLayer, DrawLayer, TextLayerImages;
 var init_pdf = __esm({
-  "../../node_modules/.pnpm/pdfjs-dist@6.1.200/node_modules/pdfjs-dist/legacy/build/pdf.mjs"() {
+  "../../node_modules/pdfjs-dist/legacy/build/pdf.mjs"() {
     __webpack_modules__ = {
       /***/
       9306(module, __unused_webpack_exports, __webpack_require__2) {
@@ -32798,7 +32798,7 @@ async function renderPageToImage(page, scale, canvasModule) {
   }
 }
 
-// ../../node_modules/.pnpm/zod@3.24.1/node_modules/zod/lib/index.mjs
+// ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
 var util;
 (function(util2) {
   util2.assertEqual = (val) => val;
@@ -44014,4 +44014,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "74dac47672fd016bec95fe7edcf5e58398593f3952a1f151021b4b9343dbd0c6";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "e8d3c7d437182bb071cff3365fbadeebb139020874f36c42ba294d63635796d9";
