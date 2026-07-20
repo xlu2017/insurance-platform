@@ -176,11 +176,25 @@ function isCanadianSuggestion(s: AddressSuggestion): boolean {
   return country === "canada" || countryCode === "ca";
 }
 
+function normalizeForDedupe(displayName: string): string {
+  // Strip the leading numeric prefix and any trailing punctuation/spaces for comparison
+  const prefix = extractLeadingNumericPrefix(displayName);
+  let remaining = displayName;
+  if (prefix) {
+    remaining = displayName.slice(prefix.length).trim();
+  }
+  return remaining
+    .toLowerCase()
+    .replace(/^[\s,]+|[\s,]+$/g, "")
+    .trim();
+}
+
 function dedupeSuggestions(suggestions: AddressSuggestion[], limit: number): AddressSuggestion[] {
   const seen = new Set<string>();
   const out: AddressSuggestion[] = [];
   for (const s of suggestions) {
-    const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}|${s.displayName}`;
+    const normalized = normalizeForDedupe(s.displayName);
+    const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}|${normalized}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(s);
@@ -190,9 +204,18 @@ function dedupeSuggestions(suggestions: AddressSuggestion[], limit: number): Add
 }
 
 function extractLeadingNumericPrefix(query: string): string {
-  // Capture the leading numeric token(s), allowing spaces and hyphens, e.g. "4015" or "4015-104"
-  const match = query.match(/[0-9](?:[0-9\s-]*[0-9])?/);
+  // Capture the leading numeric token(s), allowing spaces and hyphens, e.g. "4015" or "1503-750"
+  const match = query.trim().match(/^[0-9](?:[0-9\s-]*[0-9])?/);
   return match?.[0].trim() ?? "";
+}
+
+function stripLeadingNumericPrefix(query: string, prefix: string): string {
+  if (!prefix) return query.trim();
+  return query
+    .trim()
+    .slice(prefix.length)
+    .replace(/^[\s,-]+/, "")
+    .trim();
 }
 
 function prependHouseNumber(suggestion: AddressSuggestion, prefix: string): AddressSuggestion {
@@ -226,27 +249,30 @@ Deno.serve(async (req) => {
   }
   const limit = Math.min(Math.max(Number(body.limit) || 5, 1), 10);
 
+  const prefix = extractLeadingNumericPrefix(query);
+  const normalizedQuery = stripLeadingNumericPrefix(query, prefix);
+  const searchQuery = normalizedQuery.length >= 3 ? normalizedQuery : query;
+
   const settled = await Promise.allSettled([
-    nominatimSearch(query, limit),
-    photonSearch(query, limit),
-    openCageSearch(query, limit),
+    nominatimSearch(searchQuery, limit),
+    photonSearch(searchQuery, limit),
+    openCageSearch(searchQuery, limit),
   ]);
 
   const all: AddressSuggestion[] = [];
   for (const r of settled) {
     if (r.status === "fulfilled") {
-      all.push(...r.value);
+      for (const s of r.value) {
+        // Results from the normalized (prefix-stripped) search get the user's prefix back.
+        all.push(prependHouseNumber(s, prefix));
+      }
     }
   }
 
-  const prefix = extractLeadingNumericPrefix(query);
-  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit).map((s) => {
-    const withPrefix = prependHouseNumber(s, prefix);
-    return {
-      ...withPrefix,
-      parsed: parseAddress(withPrefix.displayName, withPrefix.address),
-    };
-  });
+  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit).map((s) => ({
+    ...s,
+    parsed: parseAddress(s.displayName, s.address),
+  }));
   return jsonResponse({
     found: merged.length > 0,
     query,
