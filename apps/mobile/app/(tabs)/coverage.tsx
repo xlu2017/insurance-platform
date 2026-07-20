@@ -301,6 +301,8 @@ export default function Coverage() {
     },
   });
 
+  const [showDetails, setShowDetails] = useState(false);
+
   if (isLoadingHousehold || isLoadingCoverage) return <Loading />;
   if (!household) {
     return (
@@ -333,8 +335,6 @@ export default function Coverage() {
   }
 
   const mandate = data?.mandate;
-
-  const [showDetails, setShowDetails] = useState(false);
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
