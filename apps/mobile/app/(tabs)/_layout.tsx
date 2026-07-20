@@ -21,19 +21,10 @@ function TabIcon({
   size?: number;
 }) {
   return (
-    <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 4 }}>
+    <View
+      style={{ alignItems: "center", justifyContent: "center", paddingTop: 8, paddingBottom: 2 }}
+    >
       <Icon color={color} size={size} weight={focused ? "fill" : "regular"} />
-      {focused ? (
-        <View
-          style={{
-            width: 4,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: color,
-            marginTop: 3,
-          }}
-        />
-      ) : null}
     </View>
   );
 }
