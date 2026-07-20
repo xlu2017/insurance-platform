@@ -188,18 +188,30 @@ export function FormLabel({ label, helpText }: { label: string; helpText?: strin
 }
 
 export function Field(
-  props: TextInputProps & { label: string; error?: string; helpText?: string },
+  props: TextInputProps & { label: string; error?: string; helpText?: string; prefix?: string },
 ) {
-  const { label, error, helpText, ...inputProps } = props;
+  const { label, error, helpText, prefix, ...inputProps } = props;
   return (
     <View style={{ marginBottom: spacing.md }}>
       <FormLabel label={label} helpText={helpText} />
-      <TextInput
-        accessibilityLabel={label}
-        placeholderTextColor={colors.inkMuted}
-        style={styles.input}
-        {...inputProps}
-      />
+      {prefix ? (
+        <View style={styles.inputWithPrefix}>
+          <Text style={styles.inputPrefix}>{prefix}</Text>
+          <TextInput
+            accessibilityLabel={label}
+            placeholderTextColor={colors.inkMuted}
+            style={[styles.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]}
+            {...inputProps}
+          />
+        </View>
+      ) : (
+        <TextInput
+          accessibilityLabel={label}
+          placeholderTextColor={colors.inkMuted}
+          style={styles.input}
+          {...inputProps}
+        />
+      )}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
@@ -412,6 +424,21 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.body,
     color: colors.ink,
     minHeight: 48,
+  },
+  inputWithPrefix: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    minHeight: 48,
+  },
+  inputPrefix: {
+    paddingLeft: 12,
+    paddingRight: 6,
+    fontSize: typography.sizes.body,
+    color: colors.inkMuted,
   },
   error: {
     color: colors.danger,

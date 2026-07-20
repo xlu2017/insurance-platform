@@ -65,7 +65,7 @@ function formatFieldValue(value: unknown): string {
 function renderCents(value: unknown): string {
   const num = typeof value === "number" ? value : Number(value);
   if (Number.isNaN(num)) return "—";
-  return `$${(num / 100).toFixed(2)}`;
+  return `C$${(num / 100).toFixed(2)}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -187,7 +187,7 @@ function isCoverageField(fieldPath: string): boolean {
 
 function parseCorrectedValue(fieldPath: string, raw: string): unknown {
   if (fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")) {
-    const dollars = Number(raw.replace(/[$,]/g, ""));
+    const dollars = Number(raw.replace(/[C$\s,]/g, ""));
     if (!Number.isNaN(dollars)) return Math.round(dollars * 100);
   }
   return raw;
@@ -225,11 +225,12 @@ function FieldReviewStep({
       <View style={{ gap: 12 }}>
         <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
         <Field
-          label="Edit"
+          label="Edit value"
           value={corrected}
           onChangeText={setCorrected}
           autoCorrect={false}
           keyboardType={isCents ? "numeric" : "default"}
+          prefix={isCents ? "C$" : undefined}
         />
         <View style={{ gap: 8 }}>
           <PrimaryButton label="Save" onPress={() => onComplete("correct", corrected)} />

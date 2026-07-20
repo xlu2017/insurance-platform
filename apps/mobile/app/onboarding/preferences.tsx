@@ -1,9 +1,69 @@
 import { router, Stack } from "expo-router";
-import { useState } from "react";
-import { ScrollView, Switch, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { ScrollView, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
-import { Body, Card, Field, Loading, PrimaryButton, Row, Screen, Title } from "@/components/ui";
+import {
+  Body,
+  Caption,
+  Card,
+  Field,
+  Loading,
+  PrimaryButton,
+  Row,
+  Screen,
+  SecondaryButton,
+  Title,
+} from "@/components/ui";
+
+interface PreferenceStep {
+  key: string;
+  question: string;
+  description?: string;
+  type: "number" | "toggle" | "info";
+}
+
+const STEPS: PreferenceStep[] = [
+  {
+    key: "minSavings",
+    question: "Recommend a switch only if I save at least (C$ per year)",
+    type: "number",
+  },
+  {
+    key: "renewalOnly",
+    question: "Only recommend changes at renewal",
+    type: "toggle",
+  },
+  {
+    key: "optimizeTogether",
+    question: "Compare home and auto together",
+    type: "toggle",
+  },
+  {
+    key: "splitAllowed",
+    question: "Allow home and auto with different insurers",
+    type: "toggle",
+  },
+  {
+    key: "deductibleIncreases",
+    question: "Allow higher deductibles",
+    description:
+      "A higher deductible can lower the premium but increases what you pay after a claim.",
+    type: "toggle",
+  },
+  {
+    key: "coverage",
+    question: "Never reduce important coverage",
+    description: "We will not recommend coverage reductions as a way to save money.",
+    type: "info",
+  },
+  {
+    key: "approval",
+    question: "Always ask me before starting a switch",
+    description: "We never start a switch without your approval.",
+    type: "info",
+  },
+];
 
 export default function Preferences() {
   const { data: household, isLoading } = useHousehold();
@@ -12,30 +72,81 @@ export default function Preferences() {
   const [optimizeTogether, setOptimizeTogether] = useState(true);
   const [splitAllowed, setSplitAllowed] = useState(true);
   const [deductibleIncreases, setDeductibleIncreases] = useState(false);
+  const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (isLoading || !household) return <Loading />;
+  useEffect(() => {
+    if (!household) return;
+    supabase
+      .from("switching_preferences")
+      .select("*")
+      .eq("household_id", household.id)
+      .eq("is_current", true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        setMinSavings(String(data.min_net_annual_savings_cents / 100));
+        setRenewalOnly(data.renewal_only_switching ?? true);
+        setOptimizeTogether(data.household_optimization_enabled ?? true);
+        setSplitAllowed(data.split_insurers_allowed ?? true);
+        setDeductibleIncreases(data.deductible_increases_allowed ?? false);
+      });
+  }, [household]);
+
+  const current = STEPS[step];
+  const isLast = step === STEPS.length - 1;
+
+  const progressLabel = useMemo(() => `Question ${step + 1} of ${STEPS.length}`, [step]);
+
+  if (isLoading || !household || !current) return <Loading />;
 
   const save = async () => {
     setBusy(true);
     setError(null);
-    const { error: prefError } = await supabase.from("switching_preferences").insert({
+    const { data: userData } = await supabase.auth.getUser();
+    const profileId = userData.user?.id;
+
+    const { data: existing } = await supabase
+      .from("switching_preferences")
+      .select("id")
+      .eq("household_id", household.id)
+      .eq("is_current", true)
+      .maybeSingle();
+
+    const payload = {
       household_id: household.id,
       is_current: true,
       min_net_annual_savings_cents: Math.round(Number(minSavings || "0") * 100),
       renewal_only_switching: renewalOnly,
       household_optimization_enabled: optimizeTogether,
       split_insurers_allowed: splitAllowed,
-      excluded_insurer_ids: [],
+      excluded_insurer_ids: [] as string[],
       deductible_increases_allowed: deductibleIncreases,
       customer_approval_required: true,
-    });
+      material_coverage_reductions_allowed: false,
+      switch_only_after_customer_approval: true,
+      updated_by: profileId,
+    };
+
+    let prefError;
+    if (existing) {
+      ({ error: prefError } = await supabase
+        .from("switching_preferences")
+        .update(payload)
+        .eq("id", existing.id));
+    } else {
+      ({ error: prefError } = await supabase
+        .from("switching_preferences")
+        .insert({ ...payload, created_by: profileId }));
+    }
+
     if (prefError) {
       setBusy(false);
       setError(prefError.message);
       return;
     }
+
     await supabase
       .from("households")
       .update({ onboarding_step: "consents" })
@@ -44,27 +155,87 @@ export default function Preferences() {
     router.push("/onboarding/consents");
   };
 
-  const Toggle = ({
-    label,
-    value,
-    onChange,
-  }: {
-    label: string;
-    value: boolean;
-    onChange: (v: boolean) => void;
-  }) => (
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingVertical: 6,
-      }}
-    >
-      <Body>{label}</Body>
-      <Switch value={value} onValueChange={onChange} />
-    </View>
-  );
+  const goNext = () => {
+    if (isLast) {
+      save();
+    } else {
+      setStep((s) => s + 1);
+    }
+  };
+
+  const goBack = () => {
+    setStep((s) => Math.max(0, s - 1));
+  };
+
+  const setValueForStep = (key: string, value: string | boolean) => {
+    switch (key) {
+      case "minSavings":
+        setMinSavings(value as string);
+        break;
+      case "renewalOnly":
+        setRenewalOnly(value as boolean);
+        break;
+      case "optimizeTogether":
+        setOptimizeTogether(value as boolean);
+        break;
+      case "splitAllowed":
+        setSplitAllowed(value as boolean);
+        break;
+      case "deductibleIncreases":
+        setDeductibleIncreases(value as boolean);
+        break;
+    }
+  };
+
+  const renderStep = () => {
+    if (current.type === "number") {
+      return (
+        <Card>
+          <Field
+            label="Recommend a switch only if I save at least (per year)"
+            keyboardType="numeric"
+            value={minSavings}
+            onChangeText={setMinSavings}
+            prefix="C$"
+            autoFocus
+          />
+        </Card>
+      );
+    }
+
+    if (current.type === "toggle") {
+      const choose = (v: boolean) => {
+        setValueForStep(current.key, v);
+        goNext();
+      };
+      return (
+        <Card>
+          <Body>{current.description || current.question}</Body>
+          <View style={{ flexDirection: "row", gap: 12, marginTop: 24 }}>
+            <PrimaryButton
+              label="Yes"
+              onPress={() => choose(true)}
+              style={{ flex: 1 }}
+              disabled={busy}
+            />
+            <SecondaryButton
+              label="No"
+              onPress={() => choose(false)}
+              style={{ flex: 1 }}
+              disabled={busy}
+            />
+          </View>
+        </Card>
+      );
+    }
+
+    return (
+      <Card>
+        <Row label={current.question} value={current.key === "coverage" ? "Always" : "Yes"} />
+        {current.description ? <Caption>{current.description}</Caption> : null}
+      </Card>
+    );
+  };
 
   return (
     <Screen>
@@ -72,44 +243,24 @@ export default function Preferences() {
         options={{ headerShown: true, headerBackTitle: "Back", title: "When to switch" }}
       />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Title>When should we recommend a switch?</Title>
-        <Body muted>We only ever propose a switch that satisfies these rules.</Body>
+        <Caption>{progressLabel}</Caption>
+        <View style={{ height: 8 }} />
+        <Title>{current.question}</Title>
         <View style={{ height: 16 }} />
-        <Card>
-          <Field
-            label="Recommend a switch only if I save at least (C$ per year)"
-            keyboardType="numeric"
-            value={minSavings}
-            onChangeText={setMinSavings}
-          />
-          <Toggle
-            label="Only recommend changes at renewal"
-            value={renewalOnly}
-            onChange={setRenewalOnly}
-          />
-          <Toggle
-            label="Compare home and auto together"
-            value={optimizeTogether}
-            onChange={setOptimizeTogether}
-          />
-          <Toggle
-            label="Allow home and auto with different insurers"
-            value={splitAllowed}
-            onChange={setSplitAllowed}
-          />
-          <Toggle
-            label="Allow higher deductibles"
-            value={deductibleIncreases}
-            onChange={setDeductibleIncreases}
-          />
-          <Body muted style={{ marginTop: 4 }}>
-            A higher deductible can lower the premium but increases what you pay after a claim.
-          </Body>
-          <Row label="Never reduce important coverage" value="Always" />
-          <Row label="Always ask me before starting a switch" value="Yes" />
-        </Card>
+        {renderStep()}
         {error ? <Body muted>{error}</Body> : null}
-        <PrimaryButton label="Continue" onPress={save} loading={busy} />
+        {current.type !== "toggle" ? (
+          <>
+            <View style={{ height: 16 }} />
+            <PrimaryButton label={isLast ? "Continue" : "Next"} onPress={goNext} loading={busy} />
+          </>
+        ) : null}
+        {step > 0 ? (
+          <>
+            <View style={{ height: 12 }} />
+            <SecondaryButton label="Back" onPress={goBack} disabled={busy} />
+          </>
+        ) : null}
       </ScrollView>
     </Screen>
   );

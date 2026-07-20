@@ -99,7 +99,7 @@ export function formatMandateValue(value: unknown): string {
   if (isRecord(value)) {
     if (typeof value.amountCents === "number") {
       const rule = typeof value.rule === "string" ? `${ruleLabel(value.rule)} ` : "";
-      return `${rule}$${(value.amountCents / 100).toLocaleString("en-CA", {
+      return `${rule}C$${(value.amountCents / 100).toLocaleString("en-CA", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;
