@@ -54,13 +54,13 @@ function fieldPathsForCandidate(candidate: ExtractionCandidate): string[] {
   });
 }
 
-interface AddressSuggestion {
+export interface AddressSuggestion {
   displayName: string;
   latitude: number;
   longitude: number;
 }
 
-function AddressVerification({
+export function AddressVerification({
   candidate,
   draft,
   onVerified,
