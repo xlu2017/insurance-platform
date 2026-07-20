@@ -304,12 +304,9 @@ Deno.serve(async (req) => {
   }
   if (
     action === "submit" &&
-    [
-      "queued",
-      "reading_policy_documents",
-      "comparing_policies",
-      "validating_extracted_details",
-    ].includes(String(batch.status))
+    ["reading_policy_documents", "comparing_policies", "validating_extracted_details"].includes(
+      String(batch.status),
+    )
   ) {
     return jsonResponse(publicBatch(batch), 202);
   }

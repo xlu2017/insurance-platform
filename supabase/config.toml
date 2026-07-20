@@ -42,4 +42,4 @@ verify_jwt = false
 
 [edge_runtime]
 enabled = true
-policy = "oneshot"
+policy = "per_worker"

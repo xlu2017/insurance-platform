@@ -843,419 +843,435 @@ Deno.serve(async (req) => {
     },
   });
 
-  let analysis: any;
-  try {
+  const work = async (): Promise<Response> => {
+    let analysis: any;
+    try {
+      if (batchIdRaw) {
+        await admin
+          .from("document_processing_batches")
+          .update({ status: "comparing_policies", updated_at: new Date().toISOString() })
+          .eq("id", batchIdRaw);
+      }
+      analysis = (await analyzer.analyze({
+        householdId,
+        uploadedDocuments,
+        existingAssets,
+        pendingCandidates,
+        priorDocumentSummaries: [],
+        jurisdiction: "AB",
+      })) as any;
+    } catch (err) {
+      const sanitized = sanitizeProviderError(err) as PublicDocumentError;
+      const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";
+      await authorizationStore.updateAuthorization(authorization.id, {
+        authorizationResult: isUnsupported ? "blocked_no_transmission" : "processing_failed",
+      });
+      if (batchIdRaw) {
+        const { count: transmissionClaims } = await admin
+          .from("document_analysis_provider_files")
+          .select("id", { count: "exact", head: true })
+          .eq("analysis_request_id", analysisRunId);
+        const retryable = Number(transmissionClaims ?? 0) === 0;
+        await admin
+          .from("document_processing_batches")
+          .update({
+            status: "processing_unavailable",
+            retryable,
+            next_retry_at: retryable ? new Date(Date.now() + 5 * 60 * 1000).toISOString() : null,
+            error_code: sanitized.code,
+            completed_at: new Date().toISOString(),
+            worker_lease_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", batchIdRaw);
+      }
+      return jsonError(sanitized, 502);
+    }
+
     if (batchIdRaw) {
       await admin
         .from("document_processing_batches")
-        .update({ status: "comparing_policies", updated_at: new Date().toISOString() })
+        .update({ status: "validating_extracted_details", updated_at: new Date().toISOString() })
         .eq("id", batchIdRaw);
     }
-    analysis = (await analyzer.analyze({
-      householdId,
-      uploadedDocuments,
-      existingAssets,
-      pendingCandidates,
-      priorDocumentSummaries: [],
-      jurisdiction: "AB",
-    })) as any;
-  } catch (err) {
-    const sanitized = sanitizeProviderError(err) as PublicDocumentError;
-    const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";
-    await authorizationStore.updateAuthorization(authorization.id, {
-      authorizationResult: isUnsupported ? "blocked_no_transmission" : "processing_failed",
-    });
-    if (batchIdRaw) {
-      const { count: transmissionClaims } = await admin
-        .from("document_analysis_provider_files")
-        .select("id", { count: "exact", head: true })
-        .eq("analysis_request_id", analysisRunId);
-      const retryable = Number(transmissionClaims ?? 0) === 0;
-      await admin
-        .from("document_processing_batches")
-        .update({
-          status: "processing_unavailable",
-          retryable,
-          next_retry_at: retryable ? new Date(Date.now() + 5 * 60 * 1000).toISOString() : null,
-          error_code: sanitized.code,
-          completed_at: new Date().toISOString(),
-          worker_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", batchIdRaw);
-    }
-    return jsonError(sanitized, 502);
-  }
 
-  if (batchIdRaw) {
-    await admin
-      .from("document_processing_batches")
-      .update({ status: "validating_extracted_details", updated_at: new Date().toISOString() })
-      .eq("id", batchIdRaw);
-  }
+    // Build the analysis-run payload. A single RPC call will persist the run,
+    // extracted documents, and candidate upserts atomically.
+    const validatedOutput = { ...analysis };
+    delete (validatedOutput as Record<string, unknown>).rawResponse;
 
-  // Build the analysis-run payload. A single RPC call will persist the run,
-  // extracted documents, and candidate upserts atomically.
-  const validatedOutput = { ...analysis };
-  delete (validatedOutput as Record<string, unknown>).rawResponse;
+    const analysisJson = {
+      modelProvider: analysis.modelProvider,
+      modelId: analysis.modelId,
+      attemptedModelProvider: analysis.attemptedModelProvider,
+      attemptedModelId: analysis.attemptedModelId,
+      fallbackReason: analysis.fallbackReason,
+      promptVersion: analysis.promptVersion ?? "1.0.0",
+      outputSchemaVersion: analysis.outputSchemaVersion ?? "1.0.0",
+      attemptCount: analysis.attemptCount ?? 1,
+      validatedOutput,
+      warnings: analysis.warnings,
+      providerMetadata: analysis.providerMetadata,
+    };
 
-  const analysisJson = {
-    modelProvider: analysis.modelProvider,
-    modelId: analysis.modelId,
-    attemptedModelProvider: analysis.attemptedModelProvider,
-    attemptedModelId: analysis.attemptedModelId,
-    fallbackReason: analysis.fallbackReason,
-    promptVersion: analysis.promptVersion ?? "1.0.0",
-    outputSchemaVersion: analysis.outputSchemaVersion ?? "1.0.0",
-    attemptCount: analysis.attemptCount ?? 1,
-    validatedOutput,
-    warnings: analysis.warnings,
-    providerMetadata: analysis.providerMetadata,
-  };
+    const documentsJson: unknown[] = [];
 
-  const documentsJson: unknown[] = [];
+    // Prepare extracted document rows with pre-generated UUIDs. The single persistence
+    // RPC will insert them atomically.
+    const extractedDocRows: { id: string; policy_document_id: string }[] = [];
+    const extractedDocIdByInputId = new Map<string, string>();
+    for (const analyzedDoc of analysis.documents) {
+      const docId = analyzedDoc.documentId;
+      const extractedId = crypto.randomUUID();
 
-  // Prepare extracted document rows with pre-generated UUIDs. The single persistence
-  // RPC will insert them atomically.
-  const extractedDocRows: { id: string; policy_document_id: string }[] = [];
-  const extractedDocIdByInputId = new Map<string, string>();
-  for (const analyzedDoc of analysis.documents) {
-    const docId = analyzedDoc.documentId;
-    const extractedId = crypto.randomUUID();
-
-    documentsJson.push({
-      id: extractedId,
-      policy_document_id: docId,
-      file_digest: analyzedDoc.fileDigest,
-      page_count: analyzedDoc.pageCount,
-      classification: analyzedDoc.classification,
-      parser_id: analyzedDoc.parserId,
-      parser_version: analyzedDoc.parserVersion,
-      pages_json: [],
-    });
-    extractedDocRows.push({ id: extractedId, policy_document_id: docId });
-    extractedDocIdByInputId.set(docId, extractedId);
-  }
-
-  // Prepare household-wide lookup tables for canonical identity resolution.
-  const allPendingRecords = await loadPendingCandidateRecords(admin, householdId);
-  const existingById = new Map<string, ExistingHouseholdAsset>();
-  for (const asset of existingAssets) {
-    existingById.set(asset.id, asset);
-  }
-  const pendingById = new Map<string, (typeof allPendingRecords)[number]>();
-  const candidateByFingerprint = new Map<string, (typeof allPendingRecords)[number]>();
-  for (const record of allPendingRecords) {
-    pendingById.set(record.id, record);
-    candidateByFingerprint.set(record.identity_fingerprint, record);
-  }
-
-  // Group detected entities by canonical identity fingerprint and merge source documents.
-  const canonicalGroups = new Map<
-    string,
-    {
-      fingerprint: string;
-      entityType: "property" | "vehicle";
-      entities: DetectedInsuranceEntity[];
-      sourceDocIds: Set<string>;
-      conflicts: {
-        fieldPath: string;
-        entityRef: string;
-        assertionIds: string[];
-        explanation: string;
-        requiresHumanResolution: boolean;
-      }[];
-      resolution: DetectedInsuranceEntity["resolution"];
-    }
-  >();
-
-  function isExactFingerprint(fingerprint: string): boolean {
-    return (
-      (fingerprint.startsWith("vehicle:vin:") && fingerprint.length > "vehicle:vin:".length) ||
-      (fingerprint.startsWith("property:") && fingerprint.includes("|"))
-    );
-  }
-
-  for (const entity of analysis.detectedEntities) {
-    // Validate the LLM resolution against supplied context; downgrade on mismatch.
-    let resolution = entity.resolution;
-    const matchedExisting = resolution.matchedExistingEntityId
-      ? existingById.get(resolution.matchedExistingEntityId)
-      : undefined;
-    const matchedPending = resolution.matchedPendingCandidateId
-      ? pendingById.get(resolution.matchedPendingCandidateId)
-      : undefined;
-
-    if (resolution.status === "matches_existing" && !matchedExisting) {
-      resolution = {
-        status: "new",
-        confidence: 0,
-        reasoning: "Matched existing asset not found in household",
-      };
-    } else if (resolution.status === "matches_pending_candidate" && !matchedPending) {
-      resolution = {
-        status: "new",
-        confidence: 0,
-        reasoning: "Matched pending candidate not found in household",
-      };
-    } else if (
-      resolution.status === "matches_existing" &&
-      matchedExisting &&
-      matchedExisting.assetType !== entity.entityType
-    ) {
-      resolution = {
-        status: "possible_match_requires_confirmation",
-        confidence: 0,
-        reasoning: "Asset type mismatch with matched existing asset",
-      };
-    } else if (
-      resolution.status === "matches_pending_candidate" &&
-      matchedPending &&
-      matchedPending.asset_type !== entity.entityType
-    ) {
-      resolution = {
-        status: "possible_match_requires_confirmation",
-        confidence: 0,
-        reasoning: "Asset type mismatch with matched pending candidate",
-      };
+      documentsJson.push({
+        id: extractedId,
+        policy_document_id: docId,
+        file_digest: analyzedDoc.fileDigest,
+        page_count: analyzedDoc.pageCount,
+        classification: analyzedDoc.classification,
+        parser_id: analyzedDoc.parserId,
+        parser_version: analyzedDoc.parserVersion,
+        pages_json: [],
+      });
+      extractedDocRows.push({ id: extractedId, policy_document_id: docId });
+      extractedDocIdByInputId.set(docId, extractedId);
     }
 
-    // The analyzer already derives canonical identity from VIN/address and applies the
-    // resolution result. For matches, merge into the matched asset/candidate fingerprint
-    // (upgrading to an exact fingerprint if this document provides one).
-    let fingerprint = computeCanonicalFingerprint(entity);
-    if (resolution.status === "matches_existing" && matchedExisting) {
-      fingerprint =
-        isExactFingerprint(fingerprint) && !isExactFingerprint(matchedExisting.identityFingerprint)
-          ? fingerprint
-          : matchedExisting.identityFingerprint;
-    } else if (resolution.status === "matches_pending_candidate" && matchedPending) {
-      fingerprint =
-        isExactFingerprint(fingerprint) && !isExactFingerprint(matchedPending.identity_fingerprint)
-          ? fingerprint
-          : matchedPending.identity_fingerprint;
+    // Prepare household-wide lookup tables for canonical identity resolution.
+    const allPendingRecords = await loadPendingCandidateRecords(admin, householdId);
+    const existingById = new Map<string, ExistingHouseholdAsset>();
+    for (const asset of existingAssets) {
+      existingById.set(asset.id, asset);
+    }
+    const pendingById = new Map<string, (typeof allPendingRecords)[number]>();
+    const candidateByFingerprint = new Map<string, (typeof allPendingRecords)[number]>();
+    for (const record of allPendingRecords) {
+      pendingById.set(record.id, record);
+      candidateByFingerprint.set(record.identity_fingerprint, record);
     }
 
-    let group = canonicalGroups.get(fingerprint);
-    if (!group) {
-      group = {
-        fingerprint,
-        entityType: entity.entityType,
-        entities: [],
-        sourceDocIds: new Set(),
-        conflicts: [],
-        resolution,
-      };
-      canonicalGroups.set(fingerprint, group);
+    // Group detected entities by canonical identity fingerprint and merge source documents.
+    const canonicalGroups = new Map<
+      string,
+      {
+        fingerprint: string;
+        entityType: "property" | "vehicle";
+        entities: DetectedInsuranceEntity[];
+        sourceDocIds: Set<string>;
+        conflicts: {
+          fieldPath: string;
+          entityRef: string;
+          assertionIds: string[];
+          explanation: string;
+          requiresHumanResolution: boolean;
+        }[];
+        resolution: DetectedInsuranceEntity["resolution"];
+      }
+    >();
+
+    function isExactFingerprint(fingerprint: string): boolean {
+      return (
+        (fingerprint.startsWith("vehicle:vin:") && fingerprint.length > "vehicle:vin:".length) ||
+        (fingerprint.startsWith("property:") && fingerprint.includes("|"))
+      );
     }
 
-    group.entities.push(entity);
-    for (const ref of entity.evidence) {
-      const extractedId = extractedDocIdByInputId.get(ref.documentId);
-      if (extractedId) group.sourceDocIds.add(extractedId);
-    }
-    for (const cv of Object.values(entity.currentCoverage) as any[]) {
-      for (const ref of cv.evidence ?? []) {
+    for (const entity of analysis.detectedEntities) {
+      // Validate the LLM resolution against supplied context; downgrade on mismatch.
+      let resolution = entity.resolution;
+      const matchedExisting = resolution.matchedExistingEntityId
+        ? existingById.get(resolution.matchedExistingEntityId)
+        : undefined;
+      const matchedPending = resolution.matchedPendingCandidateId
+        ? pendingById.get(resolution.matchedPendingCandidateId)
+        : undefined;
+
+      if (resolution.status === "matches_existing" && !matchedExisting) {
+        resolution = {
+          status: "new",
+          confidence: 0,
+          reasoning: "Matched existing asset not found in household",
+        };
+      } else if (resolution.status === "matches_pending_candidate" && !matchedPending) {
+        resolution = {
+          status: "new",
+          confidence: 0,
+          reasoning: "Matched pending candidate not found in household",
+        };
+      } else if (
+        resolution.status === "matches_existing" &&
+        matchedExisting &&
+        matchedExisting.assetType !== entity.entityType
+      ) {
+        resolution = {
+          status: "possible_match_requires_confirmation",
+          confidence: 0,
+          reasoning: "Asset type mismatch with matched existing asset",
+        };
+      } else if (
+        resolution.status === "matches_pending_candidate" &&
+        matchedPending &&
+        matchedPending.asset_type !== entity.entityType
+      ) {
+        resolution = {
+          status: "possible_match_requires_confirmation",
+          confidence: 0,
+          reasoning: "Asset type mismatch with matched pending candidate",
+        };
+      }
+
+      // The analyzer already derives canonical identity from VIN/address and applies the
+      // resolution result. For matches, merge into the matched asset/candidate fingerprint
+      // (upgrading to an exact fingerprint if this document provides one).
+      let fingerprint = computeCanonicalFingerprint(entity);
+      if (resolution.status === "matches_existing" && matchedExisting) {
+        fingerprint =
+          isExactFingerprint(fingerprint) &&
+          !isExactFingerprint(matchedExisting.identityFingerprint)
+            ? fingerprint
+            : matchedExisting.identityFingerprint;
+      } else if (resolution.status === "matches_pending_candidate" && matchedPending) {
+        fingerprint =
+          isExactFingerprint(fingerprint) &&
+          !isExactFingerprint(matchedPending.identity_fingerprint)
+            ? fingerprint
+            : matchedPending.identity_fingerprint;
+      }
+
+      let group = canonicalGroups.get(fingerprint);
+      if (!group) {
+        group = {
+          fingerprint,
+          entityType: entity.entityType,
+          entities: [],
+          sourceDocIds: new Set(),
+          conflicts: [],
+          resolution,
+        };
+        canonicalGroups.set(fingerprint, group);
+      }
+
+      group.entities.push(entity);
+      for (const ref of entity.evidence) {
         const extractedId = extractedDocIdByInputId.get(ref.documentId);
         if (extractedId) group.sourceDocIds.add(extractedId);
       }
-    }
-    for (const conflict of analysis.unresolvedConflicts) {
-      if (conflict.entityRef === entity.temporaryId) {
-        group.conflicts.push(conflict);
+      for (const cv of Object.values(entity.currentCoverage) as any[]) {
+        for (const ref of cv.evidence ?? []) {
+          const extractedId = extractedDocIdByInputId.get(ref.documentId);
+          if (extractedId) group.sourceDocIds.add(extractedId);
+        }
+      }
+      for (const conflict of analysis.unresolvedConflicts) {
+        if (conflict.entityRef === entity.temporaryId) {
+          group.conflicts.push(conflict);
+        }
+      }
+
+      // Prefer existing-asset matches, then pending-candidate matches, then the first seen resolution.
+      const isBetterMatch =
+        resolution.status === "matches_existing" ||
+        (resolution.status === "matches_pending_candidate" &&
+          group.resolution.status !== "matches_existing");
+      if (isBetterMatch) {
+        group.resolution = resolution;
       }
     }
 
-    // Prefer existing-asset matches, then pending-candidate matches, then the first seen resolution.
-    const isBetterMatch =
-      resolution.status === "matches_existing" ||
-      (resolution.status === "matches_pending_candidate" &&
-        group.resolution.status !== "matches_existing");
-    if (isBetterMatch) {
-      group.resolution = resolution;
-    }
-  }
+    // Build candidate payloads with pre-generated UUIDs. Existing candidates reuse
+    // their database id so the RPC can upsert them by primary key.
+    const candidatesJson: unknown[] = [];
+    for (const group of canonicalGroups.values()) {
+      const representative = group.entities[0];
+      const displayLabel =
+        group.entities.find((e) => e.displayLabel && e.displayLabel.trim().length > 0)
+          ?.displayLabel ?? candidateDisplayLabel(representative);
+      const occupancy =
+        group.entities.map(occupancyForEntity).find((o) => o) ?? occupancyForEntity(representative);
 
-  // Build candidate payloads with pre-generated UUIDs. Existing candidates reuse
-  // their database id so the RPC can upsert them by primary key.
-  const candidatesJson: unknown[] = [];
-  for (const group of canonicalGroups.values()) {
-    const representative = group.entities[0];
-    const displayLabel =
-      group.entities.find((e) => e.displayLabel && e.displayLabel.trim().length > 0)
-        ?.displayLabel ?? candidateDisplayLabel(representative);
-    const occupancy =
-      group.entities.map(occupancyForEntity).find((o) => o) ?? occupancyForEntity(representative);
+      const matchedPendingId =
+        group.resolution.status === "matches_pending_candidate" &&
+        group.resolution.matchedPendingCandidateId
+          ? group.resolution.matchedPendingCandidateId
+          : undefined;
+      const existingCandidate =
+        (matchedPendingId ? pendingById.get(matchedPendingId) : undefined) ??
+        candidateByFingerprint.get(group.fingerprint);
 
-    const matchedPendingId =
-      group.resolution.status === "matches_pending_candidate" &&
-      group.resolution.matchedPendingCandidateId
-        ? group.resolution.matchedPendingCandidateId
-        : undefined;
-    const existingCandidate =
-      (matchedPendingId ? pendingById.get(matchedPendingId) : undefined) ??
-      candidateByFingerprint.get(group.fingerprint);
+      const mergedSourceDocIds = new Set<string>(existingCandidate?.source_document_ids ?? []);
+      for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
 
-    const mergedSourceDocIds = new Set<string>(existingCandidate?.source_document_ids ?? []);
-    for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
-
-    const selectedFacts = {
-      canonicalFingerprint: group.fingerprint,
-      entities: group.entities.map((e) => e.temporaryId),
-      sourceDocuments: Array.from(mergedSourceDocIds),
-      resolution: group.resolution,
-      identity: representative.identity,
-      candidateIdentity: representative.candidateIdentity,
-      currentPolicy: representative.currentPolicy,
-      currentCoverage: representative.currentCoverage,
-      mandateSuggestions: representative.mandateSuggestions,
-    };
-
-    const candidateId = existingCandidate ? existingCandidate.id : crypto.randomUUID();
-    candidatesJson.push({
-      id: candidateId,
-      asset_type: group.entityType,
-      identity_fingerprint: group.fingerprint,
-      display_label: displayLabel,
-      occupancy,
-      match_classification: mapResolutionStatus({
-        ...representative,
+      const selectedFacts = {
+        canonicalFingerprint: group.fingerprint,
+        entities: group.entities.map((e) => e.temporaryId),
+        sourceDocuments: Array.from(mergedSourceDocIds),
         resolution: group.resolution,
-      } as DetectedInsuranceEntity),
-      decision: "undecided",
-      review_status: "pending",
-      source_document_ids: Array.from(mergedSourceDocIds),
-      selected_facts_json: selectedFacts,
-      conflicts_json: group.conflicts,
-    });
+        identity: representative.identity,
+        candidateIdentity: representative.candidateIdentity,
+        currentPolicy: representative.currentPolicy,
+        currentCoverage: representative.currentCoverage,
+        mandateSuggestions: representative.mandateSuggestions,
+      };
 
-    if (existingCandidate) {
-      candidateByFingerprint.set(group.fingerprint, {
-        ...existingCandidate,
+      const candidateId = existingCandidate ? existingCandidate.id : crypto.randomUUID();
+      candidatesJson.push({
+        id: candidateId,
+        asset_type: group.entityType,
+        identity_fingerprint: group.fingerprint,
+        display_label: displayLabel,
+        occupancy,
+        match_classification: mapResolutionStatus({
+          ...representative,
+          resolution: group.resolution,
+        } as DetectedInsuranceEntity),
+        decision: "undecided",
+        review_status: "pending",
         source_document_ids: Array.from(mergedSourceDocIds),
         selected_facts_json: selectedFacts,
+        conflicts_json: group.conflicts,
       });
+
+      if (existingCandidate) {
+        candidateByFingerprint.set(group.fingerprint, {
+          ...existingCandidate,
+          source_document_ids: Array.from(mergedSourceDocIds),
+          selected_facts_json: selectedFacts,
+        });
+      }
     }
-  }
 
-  const reviewSeeds = batchIdRaw
-    ? buildMandateReviewSeeds(
-        candidatesJson as {
-          id: string;
-          asset_type: "vehicle" | "property";
-          selected_facts_json: Record<string, unknown>;
-          conflicts_json?: unknown[];
-        }[],
-      )
-    : [];
-  const reviewsJson = reviewSeeds.map((seed) => ({
-    candidate_id: seed.candidateId,
-    field_path: seed.fieldPath,
-    value_state: seed.valueState,
-    specification_title: seed.specificationTitle,
-    mandate_path: seed.mandatePath,
-    original_extracted_value: seed.originalExtractedValue,
-    document_implied_value: seed.documentImpliedValue,
-    document_implied_mandate_value: seed.documentImpliedMandateValue,
-    source_document_id: seed.sourceDocumentId ?? null,
-    source_page_number: seed.sourcePageNumber ?? null,
-    source_section: seed.sourceSection ?? null,
-    confidence: seed.confidence ?? null,
-    conflict_values_json: seed.conflictValues.map((value: unknown) => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-      const sourceDocumentId = (value as Record<string, unknown>).sourceDocumentId;
-      return {
-        ...value,
-        sourceFileName:
-          typeof sourceDocumentId === "string" ? filenameByDocId[sourceDocumentId] : undefined,
-      };
-    }),
-    material_conflict: seed.materialConflict,
-  }));
+    const reviewSeeds = batchIdRaw
+      ? buildMandateReviewSeeds(
+          candidatesJson as {
+            id: string;
+            asset_type: "vehicle" | "property";
+            selected_facts_json: Record<string, unknown>;
+            conflicts_json?: unknown[];
+          }[],
+        )
+      : [];
+    const reviewsJson = reviewSeeds.map((seed) => ({
+      candidate_id: seed.candidateId,
+      field_path: seed.fieldPath,
+      value_state: seed.valueState,
+      specification_title: seed.specificationTitle,
+      mandate_path: seed.mandatePath,
+      original_extracted_value: seed.originalExtractedValue,
+      document_implied_value: seed.documentImpliedValue,
+      document_implied_mandate_value: seed.documentImpliedMandateValue,
+      source_document_id: seed.sourceDocumentId ?? null,
+      source_page_number: seed.sourcePageNumber ?? null,
+      source_section: seed.sourceSection ?? null,
+      confidence: seed.confidence ?? null,
+      conflict_values_json: seed.conflictValues.map((value: unknown) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+        const sourceDocumentId = (value as Record<string, unknown>).sourceDocumentId;
+        return {
+          ...value,
+          sourceFileName:
+            typeof sourceDocumentId === "string" ? filenameByDocId[sourceDocumentId] : undefined,
+        };
+      }),
+      material_conflict: seed.materialConflict,
+    }));
 
-  // Generate a deterministic client request id so retries return the same result.
-  const requestIdPayload = new TextEncoder().encode(
-    [householdId, sessionId, ...Object.values(digestByDocId).sort()].join("|"),
-  );
-  const clientRequestId = await sha256Hex(requestIdPayload);
+    // Generate a deterministic client request id so retries return the same result.
+    const requestIdPayload = new TextEncoder().encode(
+      [householdId, sessionId, ...Object.values(digestByDocId).sort()].join("|"),
+    );
+    const clientRequestId = await sha256Hex(requestIdPayload);
 
-  const persistenceArgs = {
-    p_household_id: householdId,
-    p_session_id: sessionId,
-    p_client_request_id: clientRequestId,
-    p_analysis_run_id: analysisRunId,
-    p_analysis_json: analysisJson,
-    p_documents_json: documentsJson,
-    p_candidates_json: candidatesJson,
-    p_authorization_id: authorization.id,
-    p_consent_id: consent?.id,
-  };
-  const { data: persistResult, error: persistErr } = batchIdRaw
-    ? await admin.rpc("persist_document_batch_analysis_v1", {
-        ...persistenceArgs,
-        p_batch_id: batchIdRaw,
-        p_reviews_json: reviewsJson,
-      })
-    : await admin.rpc("persist_document_analysis_v1", persistenceArgs);
-  if (persistErr || !persistResult) {
+    const persistenceArgs = {
+      p_household_id: householdId,
+      p_session_id: sessionId,
+      p_client_request_id: clientRequestId,
+      p_analysis_run_id: analysisRunId,
+      p_analysis_json: analysisJson,
+      p_documents_json: documentsJson,
+      p_candidates_json: candidatesJson,
+      p_authorization_id: authorization.id,
+      p_consent_id: consent?.id,
+    };
+    const { data: persistResult, error: persistErr } = batchIdRaw
+      ? await admin.rpc("persist_document_batch_analysis_v1", {
+          ...persistenceArgs,
+          p_batch_id: batchIdRaw,
+          p_reviews_json: reviewsJson,
+        })
+      : await admin.rpc("persist_document_analysis_v1", persistenceArgs);
+    if (persistErr || !persistResult) {
+      await authorizationStore.updateAuthorization(authorization.id, {
+        authorizationResult: "processing_failed",
+      });
+      if (batchIdRaw) {
+        await admin
+          .from("document_processing_batches")
+          .update({
+            status: "processing_unavailable",
+            retryable: false,
+            next_retry_at: null,
+            error_code: "DOCUMENT_PERSISTENCE_FAILED",
+            completed_at: new Date().toISOString(),
+            worker_lease_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", batchIdRaw);
+      }
+      return jsonError("Failed to persist analysis", 500);
+    }
+
     await authorizationStore.updateAuthorization(authorization.id, {
-      authorizationResult: "processing_failed",
+      authorizationResult: "analysis_persisted",
     });
+
+    const customerBatchStatus =
+      candidatesJson.length > 0 ? "ready_for_review" : "additional_information_required";
     if (batchIdRaw) {
-      await admin
-        .from("document_processing_batches")
-        .update({
-          status: "processing_unavailable",
-          retryable: false,
-          next_retry_at: null,
-          error_code: "DOCUMENT_PERSISTENCE_FAILED",
-          completed_at: new Date().toISOString(),
-          worker_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", batchIdRaw);
+      await Promise.all([
+        admin
+          .from("document_processing_batches")
+          .update({
+            status: customerBatchStatus,
+            retryable: false,
+            error_code: null,
+            completed_at: new Date().toISOString(),
+            worker_lease_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", batchIdRaw),
+        admin.from("policy_documents").update({ status: "extracted" }).in("id", policyDocumentIds),
+        admin
+          .from("document_extraction_sessions")
+          .update({ status: "submitted", updated_at: new Date().toISOString() })
+          .eq("id", sessionId),
+      ]);
     }
-    return jsonError("Failed to persist analysis", 500);
+
+    return jsonResponse({
+      batch_id: batchIdRaw ?? null,
+      status: batchIdRaw ? customerBatchStatus : undefined,
+      session_id: sessionId,
+      extracted_document_ids: (persistResult.documents ?? []).map((r: { id: string }) => r.id),
+      duplicate: !!persistResult.duplicate,
+      candidates: persistResult.candidates ?? [],
+      analysis: {
+        analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
+        warnings: analysis.warnings,
+        unresolvedConflicts: analysis.unresolvedConflicts,
+      },
+    });
+  };
+
+  const runtime = (
+    globalThis as unknown as { EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void } }
+  ).EdgeRuntime;
+  if (runtime?.waitUntil) {
+    runtime.waitUntil(work());
+    return jsonResponse(
+      { batch_id: batchIdRaw ?? null, session_id: sessionId, status: "comparing_policies" },
+      202,
+    );
   }
-
-  await authorizationStore.updateAuthorization(authorization.id, {
-    authorizationResult: "analysis_persisted",
-  });
-
-  const customerBatchStatus =
-    candidatesJson.length > 0 ? "ready_for_review" : "additional_information_required";
-  if (batchIdRaw) {
-    await Promise.all([
-      admin
-        .from("document_processing_batches")
-        .update({
-          status: customerBatchStatus,
-          retryable: false,
-          error_code: null,
-          completed_at: new Date().toISOString(),
-          worker_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", batchIdRaw),
-      admin.from("policy_documents").update({ status: "extracted" }).in("id", policyDocumentIds),
-      admin
-        .from("document_extraction_sessions")
-        .update({ status: "submitted", updated_at: new Date().toISOString() })
-        .eq("id", sessionId),
-    ]);
-  }
-
-  return jsonResponse({
-    batch_id: batchIdRaw ?? null,
-    status: batchIdRaw ? customerBatchStatus : undefined,
-    session_id: sessionId,
-    extracted_document_ids: (persistResult.documents ?? []).map((r: { id: string }) => r.id),
-    duplicate: !!persistResult.duplicate,
-    candidates: persistResult.candidates ?? [],
-    analysis: {
-      analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
-      warnings: analysis.warnings,
-      unresolvedConflicts: analysis.unresolvedConflicts,
-    },
-  });
+  return await work();
 });

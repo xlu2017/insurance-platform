@@ -126,8 +126,8 @@ describe("KimiK3Provider", () => {
     // K3 has fixed sampling parameters; the official API requires callers to
     // omit temperature and use its fixed reasoning effort.
     expect(requestBody.temperature).toBeUndefined();
-    expect(requestBody.max_completion_tokens).toBe(32_000);
-    expect(requestBody.reasoning_effort).toBe("max");
+    expect(requestBody.max_completion_tokens).toBe(12_000);
+    expect(requestBody.reasoning_effort).toBe("low");
     expect(requestBody.messages[1].content.some((part) => part.text?.includes("document-1"))).toBe(
       true,
     );

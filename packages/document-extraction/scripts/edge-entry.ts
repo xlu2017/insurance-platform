@@ -1,4 +1,3 @@
-export { extractPdfText, extractPdfPages } from "../src/extract.ts";
 export { parseDocument } from "../src/parsers/index.ts";
 export type {
   ExtractedPdf,
@@ -26,7 +25,6 @@ export * from "../src/llm-identity-resolver.ts";
 export * from "../src/llm-pipeline.ts";
 export { HttpLlmProvider } from "../src/llm-providers/http.ts";
 export * from "../src/document-analyzer.ts";
-export { MemoryDocumentLoader } from "../src/document-loaders/memory.ts";
 export * from "../src/providers/native-document-analysis.ts";
 export * from "../src/providers/public-error.ts";
 export * from "../src/providers/privacy-preparation.ts";

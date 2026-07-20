@@ -175,13 +175,13 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       throw new Error("Document model context capacity is unavailable");
     }
 
-    // This pre-transmission bound deliberately treats roughly three PDF bytes as
+    // This pre-transmission bound deliberately treats roughly four PDF bytes as
     // one token. It is intentionally stricter than a plain-text estimate because
     // compressed PDF streams can expand during provider extraction. Images use a
     // fixed OCR allowance. Leave room for schema/context and the structured output.
     const estimatedInputTokens = inputs.reduce((total, input) => {
       if (input.mimeType.toLowerCase() === "application/pdf") {
-        return total + Math.ceil(input.bytes.length / 3);
+        return total + Math.ceil(input.bytes.length / 4);
       }
       if (input.mimeType.toLowerCase().startsWith("image/")) return total + 4_096;
       return total + Math.ceil(input.bytes.length / 4);
@@ -368,8 +368,8 @@ export class KimiK3Provider implements NativeDocumentAnalysisProvider {
       model: input.model,
       messages,
       response_format: input.responseFormat ?? { type: "json_object" },
-      max_completion_tokens: 32_000,
-      reasoning_effort: "max",
+      max_completion_tokens: 12_000,
+      reasoning_effort: "low",
     };
 
     const controller = new AbortController();
