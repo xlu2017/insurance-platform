@@ -813,7 +813,7 @@ export default function CompareCoverage() {
 
   if (!allAssets || allAssets.length === 0) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
         <Stack.Screen options={{ headerShown: false }} />
         <View
           style={{
@@ -856,7 +856,7 @@ export default function CompareCoverage() {
     : undefined;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={{ flex: 1 }}>
         {/* App bar */}
