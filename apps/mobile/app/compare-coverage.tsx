@@ -31,6 +31,7 @@ import {
   type CompareAssetType,
   type CoverageSpec,
 } from "@/lib/compare-coverage";
+import { compareCoverageStorage } from "@/lib/compare-coverage-storage";
 import { useHousehold } from "@/lib/household";
 import { colors, radii, spacing } from "@autopilot/design-tokens";
 
@@ -778,9 +779,42 @@ export default function CompareCoverage() {
   );
   const [configOpen, setConfigOpen] = useState(false);
   const [resizing, setResizing] = useState(false);
+  const [isRestored, setIsRestored] = useState(false);
 
   const headerHScrollRef = useRef<ScrollView>(null);
   const bodyHScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (isRestored || !allAssets?.length) return;
+    const saved = compareCoverageStorage.load();
+    if (saved) {
+      const byId = new Map(allAssets.map((a) => [a.id, a]));
+      const restored = saved.selectedAssetIds
+        .map((id) => byId.get(id))
+        .filter((a): a is CompareAsset => !!a);
+      setSelectedAssets(restored);
+      if (saved.colWidths?.length) {
+        setColWidths(saved.colWidths.slice(0, restored.length));
+      }
+      if (saved.hiddenSpecKeys) {
+        setHiddenSpecKeys(new Set(saved.hiddenSpecKeys));
+      }
+      if (saved.showMode) {
+        setShowMode(saved.showMode);
+      }
+    }
+    setIsRestored(true);
+  }, [allAssets, isRestored]);
+
+  useEffect(() => {
+    if (!isRestored) return;
+    compareCoverageStorage.save({
+      selectedAssetIds: selectedAssets.map((a) => a.id),
+      colWidths,
+      hiddenSpecKeys: Array.from(hiddenSpecKeys),
+      showMode,
+    });
+  }, [isRestored, selectedAssets, colWidths, hiddenSpecKeys, showMode]);
 
   useEffect(() => {
     setColWidths((prev) => {
@@ -926,11 +960,14 @@ export default function CompareCoverage() {
 
   const emptySlots = MAX_COLUMNS - selectedAssets.length;
 
-  const pickerAllowedType: CompareAssetType | undefined = picker
-    ? selectedAssets.length
-      ? (comparisonType ?? undefined)
-      : undefined
-    : undefined;
+  const pickerAllowedType: CompareAssetType | undefined = (() => {
+    if (!picker) return undefined;
+    if (selectedAssets.length === 0) return undefined;
+    const replacingOnlyAsset =
+      picker.mode === "replace" && selectedAssets.length === 1 && picker.index === 0;
+    if (replacingOnlyAsset) return undefined;
+    return comparisonType ?? undefined;
+  })();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
