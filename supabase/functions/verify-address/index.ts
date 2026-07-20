@@ -186,6 +186,21 @@ function dedupeSuggestions(suggestions: AddressSuggestion[], limit: number): Add
   return out;
 }
 
+function extractLeadingNumericPrefix(query: string): string {
+  // Capture the leading numeric token(s), allowing spaces and hyphens, e.g. "4015" or "4015-104"
+  const match = query.match(/[0-9](?:[0-9\s-]*[0-9])?/);
+  return match?.[0].trim() ?? "";
+}
+
+function prependHouseNumber(suggestion: AddressSuggestion, prefix: string): AddressSuggestion {
+  if (!prefix) return suggestion;
+  if (suggestion.displayName.toLowerCase().startsWith(prefix.toLowerCase())) return suggestion;
+  return {
+    ...suggestion,
+    displayName: `${prefix} ${suggestion.displayName}`,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, 405);
@@ -221,7 +236,10 @@ Deno.serve(async (req) => {
     }
   }
 
-  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit);
+  const prefix = extractLeadingNumericPrefix(query);
+  const merged = dedupeSuggestions(all.filter(isCanadianSuggestion), limit).map((s) =>
+    prependHouseNumber(s, prefix),
+  );
   return jsonResponse({
     found: merged.length > 0,
     query,
