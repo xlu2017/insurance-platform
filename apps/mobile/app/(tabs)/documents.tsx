@@ -310,7 +310,7 @@ export default function Documents() {
                 style={{ flex: 1, paddingVertical: 10 }}
               />
               <SecondaryButton
-                label="Library"
+                label="Photos"
                 onPress={() => choose("library")}
                 disabled={busy || !!batch}
                 style={{ flex: 1, paddingVertical: 10 }}
