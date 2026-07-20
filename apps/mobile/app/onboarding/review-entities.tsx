@@ -120,12 +120,31 @@ function getMandateSuggestion(
   return isRecord(suggestion) ? suggestion : undefined;
 }
 
+const VEHICLE_IDENTITY_FIELDS = new Set(["vin", "year", "make", "model", "trim", "vehicleUse"]);
+
+const PROPERTY_IDENTITY_FIELDS = new Set([
+  "fullAddress",
+  "city",
+  "province",
+  "postalCode",
+  "occupancy",
+]);
+
+function identityFieldsFor(assetType: string | undefined, keys: string[]): Set<string> {
+  if (assetType === "vehicle") return VEHICLE_IDENTITY_FIELDS;
+  if (assetType === "property") return PROPERTY_IDENTITY_FIELDS;
+  return new Set(keys);
+}
+
 function fieldPathsForCandidate(candidate: ExtractionCandidate): string[] {
   const paths: string[] = [];
   const facts = getFacts(candidate);
   const identity = isRecord(facts.identity) ? facts.identity : undefined;
   if (identity) {
-    Object.keys(identity).forEach((k) => paths.push(`identity.${k}`));
+    const allowed = identityFieldsFor(candidate.asset_type, Object.keys(identity));
+    Object.keys(identity)
+      .filter((k) => allowed.has(k))
+      .forEach((k) => paths.push(`identity.${k}`));
   }
   const currentPolicy = isRecord(facts.currentPolicy) ? facts.currentPolicy : undefined;
   if (currentPolicy) {
