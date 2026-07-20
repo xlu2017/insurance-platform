@@ -1,12 +1,13 @@
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Linking, Modal, Platform, Pressable, ScrollView, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
 import { documentCategories, type DocumentCategory } from "@autopilot/schemas";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
+import { openDocumentUrl } from "@/lib/open-url";
 import {
   createClientRequestId,
   createDocumentBatch,
@@ -230,10 +231,13 @@ export default function Documents() {
       const { data, error: signedError } = await supabase.storage
         .from("policy-documents")
         .createSignedUrl(doc.storage_path, 60);
-      if (signedError) throw signedError;
-      if (!data?.signedUrl) throw new Error("Could not generate document preview.");
-      setPreviewDoc(doc);
-      setPreviewUrl(data.signedUrl);
+      if (signedError || !data?.signedUrl) throw new Error("Could not generate document preview.");
+      if (Platform.OS === "web") {
+        setPreviewDoc(doc);
+        setPreviewUrl(data.signedUrl);
+      } else {
+        await openDocumentUrl(data.signedUrl);
+      }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Could not open document";
       if (Platform.OS === "web") {
@@ -503,7 +507,7 @@ function DocumentPreview({
       >
         <Body style={{ flex: 1, marginRight: 12 }}>{doc.file_name}</Body>
         <View style={{ flexDirection: "row", gap: 8 }}>
-          <SecondaryButton label="Open" onPress={() => Linking.openURL(url)} />
+          <SecondaryButton label="Open" onPress={() => openDocumentUrl(url)} />
           <SecondaryButton label="Close" onPress={onClose} />
         </View>
       </View>
@@ -527,7 +531,7 @@ function DocumentPreview({
             Preview is available in your device browser.
           </Body>
           <View style={{ height: 16 }} />
-          <PrimaryButton label="Open in browser" onPress={() => Linking.openURL(url)} />
+          <PrimaryButton label="Open in browser" onPress={() => openDocumentUrl(url)} />
         </View>
       )}
     </SafeAreaView>

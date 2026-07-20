@@ -1,18 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
+import { openDocumentUrl } from "@/lib/open-url";
 import { supabase } from "@/lib/supabase";
 import {
   type CandidateFieldReview,
@@ -312,18 +304,10 @@ function UnsureDocumentsModal({
         .from("policy-documents")
         .createSignedUrl(doc.storage_path, 60);
       if (signedError || !data?.signedUrl) throw new Error("Could not generate document preview.");
-      if (Platform.OS === "web") {
-        window.open(data.signedUrl, "_blank");
-      } else {
-        await Linking.openURL(data.signedUrl);
-      }
+      await openDocumentUrl(data.signedUrl);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Could not open document";
-      if (Platform.OS === "web") {
-        window.alert(message);
-      } else {
-        Alert.alert("Open document", message);
-      }
+      Alert.alert("Open document", message);
     }
   };
 
