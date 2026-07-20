@@ -36,7 +36,7 @@ import { colors, radii, spacing } from "@autopilot/design-tokens";
 const MAX_COLUMNS = 4;
 const SPEC_WIDTH = 160;
 const DEFAULT_COL_WIDTH = 180;
-const MIN_COL_WIDTH = 120;
+const MIN_COL_WIDTH = 30;
 const MAX_COL_WIDTH_RATIO = 0.45;
 const ROW_HEIGHT = 44;
 const TABLE_HEADER_HEIGHT = 44;
@@ -219,6 +219,7 @@ function AssetColumnHeader({
               <View style={{ flex: 1, alignItems: "center" }}>
                 <Body
                   numberOfLines={1}
+                  ellipsizeMode="clip"
                   style={{ fontWeight: "600", textAlign: "center", width: "100%" }}
                 >
                   {asset.displayName}
@@ -280,7 +281,11 @@ function AssetColumnBody({
             borderBottomColor: colors.border,
           }}
         >
-          <Body numberOfLines={1} style={{ width: "100%", textAlign: "center" }}>
+          <Body
+            numberOfLines={1}
+            ellipsizeMode="clip"
+            style={{ width: "100%", textAlign: "center" }}
+          >
             {asset ? canonicalValue(asset, spec) : "—"}
           </Body>
         </View>
@@ -359,7 +364,7 @@ function SpecColumnBody({
             borderBottomColor: colors.border,
           }}
         >
-          <Body numberOfLines={1} style={{ width: "100%" }}>
+          <Body numberOfLines={1} ellipsizeMode="clip" style={{ width: "100%" }}>
             {spec.label}
           </Body>
         </Pressable>
