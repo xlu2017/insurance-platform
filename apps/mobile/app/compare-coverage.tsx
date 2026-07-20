@@ -256,7 +256,8 @@ function AssetColumnBody({
   asset,
   colWidth,
   specs,
-  onToggleCell,
+  onHoldCellStart,
+  onHoldCellEnd,
   onResize,
   onAutoSize,
   onResizeStart,
@@ -265,7 +266,8 @@ function AssetColumnBody({
   asset?: CompareAsset;
   colWidth: number;
   specs: CoverageSpec[];
-  onToggleCell?: (rowIndex: number) => void;
+  onHoldCellStart?: (rowIndex: number) => void;
+  onHoldCellEnd?: () => void;
   onResize: (dx: number) => void;
   onAutoSize: () => void;
   onResizeStart?: () => void;
@@ -301,7 +303,8 @@ function AssetColumnBody({
             key={spec.key}
             accessibilityRole="button"
             accessibilityLabel={`${spec.label}: ${value}`}
-            onPress={() => onToggleCell?.(rowIndex)}
+            onPressIn={() => onHoldCellStart?.(rowIndex)}
+            onPressOut={() => onHoldCellEnd?.()}
             style={{ height: ROW_HEIGHT }}
           >
             {cell}
@@ -363,10 +366,12 @@ function SpecColumnHeader({ onConfig }: { onConfig: () => void }) {
 
 function SpecColumnBody({
   specs,
-  onToggle,
+  onHoldStart,
+  onHoldEnd,
 }: {
   specs: CoverageSpec[];
-  onToggle: (index: number) => void;
+  onHoldStart: (index: number) => void;
+  onHoldEnd: () => void;
 }) {
   return (
     <View style={{ width: SPEC_WIDTH, position: "relative" }}>
@@ -375,7 +380,8 @@ function SpecColumnBody({
           key={spec.key}
           accessibilityRole="button"
           accessibilityLabel={spec.label}
-          onPress={() => onToggle(index)}
+          onPressIn={() => onHoldStart(index)}
+          onPressOut={onHoldEnd}
           style={{
             height: ROW_HEIGHT,
             justifyContent: "center",
@@ -397,20 +403,15 @@ function SpecColumnBody({
 function SpecExpandOverlay({
   specs,
   expandedCell,
-  onCollapse,
 }: {
   specs: CoverageSpec[];
   expandedCell: { row: number; col: "spec" | number } | null;
-  onCollapse: () => void;
 }) {
   if (expandedCell?.col !== "spec") return null;
   const spec = specs[expandedCell.row];
   if (!spec) return null;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Collapse expanded specification"
-      onPress={onCollapse}
+    <View
       style={{
         position: "absolute",
         left: 0,
@@ -425,12 +426,13 @@ function SpecExpandOverlay({
         borderBottomColor: colors.border,
         zIndex: 30,
         boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+        pointerEvents: "none",
       }}
     >
       <Body numberOfLines={1} style={clipTextStyle}>
         {spec.label}
       </Body>
-    </Pressable>
+    </View>
   );
 }
 
@@ -439,13 +441,11 @@ function AssetExpandOverlay({
   selectedAssets,
   colWidths,
   expandedCell,
-  onCollapse,
 }: {
   specs: CoverageSpec[];
   selectedAssets: CompareAsset[];
   colWidths: number[];
   expandedCell: { row: number; col: "spec" | number } | null;
-  onCollapse: () => void;
 }) {
   if (expandedCell?.col === "spec" || expandedCell === null) return null;
   const colIndex = expandedCell.col;
@@ -455,10 +455,7 @@ function AssetExpandOverlay({
   const left = colWidths.slice(0, colIndex).reduce((sum, w) => sum + w, 0);
   const minWidth = colWidths[colIndex] ?? DEFAULT_COL_WIDTH;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Collapse expanded value"
-      onPress={onCollapse}
+    <View
       style={{
         position: "absolute",
         left,
@@ -473,12 +470,13 @@ function AssetExpandOverlay({
         borderBottomColor: colors.border,
         zIndex: 30,
         boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+        pointerEvents: "none",
       }}
     >
       <Body numberOfLines={1} style={[{ textAlign: "center" }, clipTextStyle]}>
         {canonicalValue(asset, spec)}
       </Body>
-    </Pressable>
+    </View>
   );
 }
 
@@ -1015,11 +1013,8 @@ export default function CompareCoverage() {
           <View style={{ flexDirection: "row" }}>
             <SpecColumnBody
               specs={visibleSpecs}
-              onToggle={(i) =>
-                setExpandedCell((current) =>
-                  current?.row === i && current?.col === "spec" ? null : { row: i, col: "spec" },
-                )
-              }
+              onHoldStart={(i) => setExpandedCell({ row: i, col: "spec" })}
+              onHoldEnd={() => setExpandedCell(null)}
             />
             <ScrollView
               ref={bodyHScrollRef}
@@ -1037,13 +1032,8 @@ export default function CompareCoverage() {
                   asset={asset}
                   colWidth={colWidths[index] ?? DEFAULT_COL_WIDTH}
                   specs={visibleSpecs}
-                  onToggleCell={(rowIndex) =>
-                    setExpandedCell((current) =>
-                      current?.row === rowIndex && current?.col === index
-                        ? null
-                        : { row: rowIndex, col: index },
-                    )
-                  }
+                  onHoldCellStart={(rowIndex) => setExpandedCell({ row: rowIndex, col: index })}
+                  onHoldCellEnd={() => setExpandedCell(null)}
                   onResize={(dx) => handleResize(index, dx)}
                   onAutoSize={() => handleAutoSize(index)}
                   onResizeStart={() => setResizing(true)}
@@ -1069,14 +1059,9 @@ export default function CompareCoverage() {
                 selectedAssets={selectedAssets}
                 colWidths={colWidths}
                 expandedCell={expandedCell}
-                onCollapse={() => setExpandedCell(null)}
               />
             </ScrollView>
-            <SpecExpandOverlay
-              specs={visibleSpecs}
-              expandedCell={expandedCell}
-              onCollapse={() => setExpandedCell(null)}
-            />
+            <SpecExpandOverlay specs={visibleSpecs} expandedCell={expandedCell} />
           </View>
         </ScrollView>
       </View>
