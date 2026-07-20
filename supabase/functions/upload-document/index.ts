@@ -13,6 +13,7 @@ const corsHeaders = {
 };
 
 const VALID_CATEGORIES = new Set([
+  "auto_detect",
   "current_auto_policy",
   "current_property_policy",
   "renewal_notice",

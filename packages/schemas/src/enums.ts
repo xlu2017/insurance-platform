@@ -86,6 +86,7 @@ export const ProductLine = z.enum(productLines);
 export type ProductLine = z.infer<typeof ProductLine>;
 
 export const documentCategories = [
+  "auto_detect",
   "current_auto_policy",
   "current_property_policy",
   "renewal_notice",

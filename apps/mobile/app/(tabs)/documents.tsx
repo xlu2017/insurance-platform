@@ -41,6 +41,7 @@ import {
 } from "@/components/ui";
 
 const categoryLabels: Record<DocumentCategory, string> = {
+  auto_detect: "Auto-detect",
   current_auto_policy: "Current auto policy",
   current_property_policy: "Current property policy",
   renewal_notice: "Renewal notice",
@@ -76,7 +77,7 @@ interface PendingDocument {
 export default function Documents() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
-  const [category, setCategory] = useState<DocumentCategory>("current_auto_policy");
+  const [category, setCategory] = useState<DocumentCategory>("auto_detect");
   const [pending, setPending] = useState<PendingDocument[]>([]);
   const [batch, setBatch] = useState<DocumentBatchSummary | null>(null);
   const [batchSubmitted, setBatchSubmitted] = useState(false);
@@ -241,7 +242,7 @@ export default function Documents() {
           <Card>
             <Subtitle>Pending batch</Subtitle>
             <Select
-              label="Category for files you add next"
+              label="Category for the next files (or leave Auto-detect)"
               options={categoryOptions}
               value={category}
               onValueChange={setCategory}

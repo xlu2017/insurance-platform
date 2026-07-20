@@ -31,21 +31,30 @@ import {
   StatusPill,
   Title,
 } from "@/components/ui";
+import type { DocumentCategory } from "@autopilot/schemas";
 
-type PolicyCategory = "current_auto_policy" | "current_property_policy";
 type PendingStatus = "pending" | "uploading" | "uploaded" | "deduplicated" | "failed";
 
 interface PendingPolicyFile {
   clientItemId: string;
   file: PickedFile;
-  category: PolicyCategory;
+  category: DocumentCategory;
   status: PendingStatus;
   error?: string;
 }
 
-const categoryLabel: Record<PolicyCategory, string> = {
+const DEFAULT_CATEGORY: DocumentCategory = "auto_detect";
+
+const categoryLabel: Record<DocumentCategory, string> = {
+  auto_detect: "Auto-detect",
   current_auto_policy: "Auto",
   current_property_policy: "Property",
+  renewal_notice: "Renewal notice",
+  competing_quote: "Competing quote",
+  proof_of_insurance: "Proof of insurance",
+  signed_authorization: "Signed authorization",
+  cancellation_confirmation: "Cancellation confirmation",
+  other: "Other",
 };
 
 export default function OnboardingDocuments() {
@@ -77,7 +86,7 @@ export default function OnboardingDocuments() {
 
   if (isLoading || !household) return <Loading />;
 
-  const appendFiles = (files: PickedFile[], category: PolicyCategory) => {
+  const appendFiles = (files: PickedFile[], category: DocumentCategory) => {
     if (files.length === 0) return;
     setPending((current) => [
       ...current,
@@ -90,19 +99,19 @@ export default function OnboardingDocuments() {
     ]);
   };
 
-  const chooseDocuments = async (category: PolicyCategory) => {
+  const chooseDocuments = async () => {
     setError(null);
     try {
-      appendFiles(await pickDocuments(), category);
+      appendFiles(await pickDocuments(), DEFAULT_CATEGORY);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not select files");
     }
   };
 
-  const chooseImages = async (category: PolicyCategory, fromCamera: boolean) => {
+  const chooseImages = async (fromCamera: boolean) => {
     setError(null);
     try {
-      appendFiles(await pickImages(fromCamera), category);
+      appendFiles(await pickImages(fromCamera), DEFAULT_CATEGORY);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not select images");
     }
@@ -171,32 +180,31 @@ export default function OnboardingDocuments() {
       />
       <Title>Upload your current policies</Title>
       <Body muted>
-        Add several PDF or image files, review the pending batch, then upload them together.
+        Add PDF or image files. Autopilot will detect which documents cover auto, property, or both,
+        and create the right candidates.
       </Body>
       <View style={{ height: 16 }} />
 
-      {(["current_auto_policy", "current_property_policy"] as const).map((category) => (
-        <Card key={category}>
-          <Caption>{categoryLabel[category]} policy</Caption>
-          <View style={{ gap: 8, marginTop: 8 }}>
-            <SecondaryButton
-              label="Add PDF or image files"
-              onPress={() => chooseDocuments(category)}
-              disabled={busy || !!batch}
-            />
-            <SecondaryButton
-              label="Take a photo"
-              onPress={() => chooseImages(category, true)}
-              disabled={busy || !!batch}
-            />
-            <SecondaryButton
-              label="Add photos from library"
-              onPress={() => chooseImages(category, false)}
-              disabled={busy || !!batch}
-            />
-          </View>
-        </Card>
-      ))}
+      <Card>
+        <Caption>Policy documents</Caption>
+        <View style={{ gap: 8, marginTop: 8 }}>
+          <SecondaryButton
+            label="Add PDF or image files"
+            onPress={() => chooseDocuments()}
+            disabled={busy || !!batch}
+          />
+          <SecondaryButton
+            label="Take a photo"
+            onPress={() => chooseImages(true)}
+            disabled={busy || !!batch}
+          />
+          <SecondaryButton
+            label="Add photos from library"
+            onPress={() => chooseImages(false)}
+            disabled={busy || !!batch}
+          />
+        </View>
+      </Card>
 
       {pending.length > 0 ? (
         <Card>

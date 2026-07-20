@@ -758,17 +758,23 @@ Deno.serve(async (req) => {
   ]);
 
   const configuredProvider = String(
-    batch?.configured_provider ?? currentSetting?.configured_provider ?? "",
+    batch?.configured_provider ??
+      currentSetting?.configured_provider ??
+      Deno.env.get("CONFIGURED_PROVIDER") ??
+      "gemini",
   ).toLowerCase();
   const configuredModelId = String(
     batch?.configured_model_id ??
       currentSetting?.configured_model_id ??
-      Deno.env.get("KIMI_MODEL_ID") ??
       Deno.env.get("GEMINI_MODEL_ID") ??
+      Deno.env.get("KIMI_MODEL_ID") ??
       "",
   );
   const isGemini =
-    configuredProvider.includes("gemini") || configuredModelId.toLowerCase().includes("gemini");
+    configuredProvider.includes("gemini") ||
+    configuredProvider.includes("google") ||
+    configuredModelId.toLowerCase().includes("gemini") ||
+    configuredModelId.toLowerCase().includes("flash");
 
   const fileLifecycleStore = new SupabaseFileLifecycleStore(admin);
   let provider: InstanceType<typeof KimiK3Provider> | InstanceType<typeof GeminiFlashLiteProvider>;

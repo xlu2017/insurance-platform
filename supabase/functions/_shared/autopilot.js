@@ -1,5 +1,5 @@
 // This file is generated from packages/insurance-engine. Do not edit manually.
-// source-hash: c0e09f133751209cf41cd19016f5a8fae9d833ebbd989e6e0a112be0071ce2fc
+// source-hash: 8a54d49aee4951e5564e6733480922af5274bea3e4c1c11fe1e8316822e55869
 
 
 // ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
@@ -4117,6 +4117,7 @@ var SwitchState = z.enum(switchStates);
 var productLines = ["auto", "property"];
 var ProductLine = z.enum(productLines);
 var documentCategories = [
+  "auto_detect",
   "current_auto_policy",
   "current_property_policy",
   "renewal_notice",
@@ -7053,4 +7054,4 @@ export {
 // autopilot-edge-bundle end
 
 
-export const __AUTOPILOT_SOURCE_HASH__ = "c0e09f133751209cf41cd19016f5a8fae9d833ebbd989e6e0a112be0071ce2fc";
+export const __AUTOPILOT_SOURCE_HASH__ = "8a54d49aee4951e5564e6733480922af5274bea3e4c1c11fe1e8316822e55869";

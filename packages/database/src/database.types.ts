@@ -4194,7 +4194,8 @@ export type Database = {
         | "proof_of_insurance"
         | "signed_authorization"
         | "cancellation_confirmation"
-        | "other";
+        | "other"
+        | "auto_detect";
       document_status: "uploaded" | "in_review" | "extracted" | "rejected";
       financial_rating: "A_plus" | "A" | "A_minus" | "B_plus" | "B_or_lower" | "any";
       financing_status: "owned" | "financed" | "leased";
@@ -4475,6 +4476,7 @@ export const Constants = {
         "signed_authorization",
         "cancellation_confirmation",
         "other",
+        "auto_detect",
       ],
       document_status: ["uploaded", "in_review", "extracted", "rejected"],
       financial_rating: ["A_plus", "A", "A_minus", "B_plus", "B_or_lower", "any"],
