@@ -9,7 +9,9 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StackHeader } from "@/components/ui";
+import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { colors } from "@autopilot/design-tokens";
 
 export default function RootLayout() {
@@ -18,22 +20,26 @@ export default function RootLayout() {
   );
   return (
     <QueryClientProvider client={client}>
-      <StatusBar style="dark" />
-      <View style={styles.viewport}>
-        <View style={Platform.OS === "web" ? styles.webPhoneFrame : styles.nativeFrame}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              header: StackHeader,
-              headerStyle: { backgroundColor: colors.surface },
-              headerTintColor: colors.ink,
-              headerShadowVisible: true,
-            }}
-          >
-            <Stack.Screen name="(tabs)" />
-          </Stack>
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <View style={styles.viewport}>
+          <View style={Platform.OS === "web" ? styles.webPhoneFrame : styles.nativeFrame}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                header: StackHeader,
+                headerStyle: { backgroundColor: colors.surface },
+                headerTintColor: colors.ink,
+                headerShadowVisible: true,
+                contentStyle: { flex: 1 },
+              }}
+            >
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+            <BottomTabBar />
+          </View>
         </View>
-      </View>
+      </SafeAreaProvider>
     </QueryClientProvider>
   );
 }
