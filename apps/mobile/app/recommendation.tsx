@@ -84,7 +84,7 @@ export default function Recommendation() {
     return (
       <Screen style={{ justifyContent: "center" }}>
         <Title>No recommendation yet</Title>
-        <Body muted>Your recommendation appears here after licensed review.</Body>
+        <Body muted>Your best eligible option appears here after expert review.</Body>
         <View style={{ height: 16 }} />
         <SecondaryButton label="Back" onPress={() => router.back()} />
       </Screen>
@@ -181,43 +181,37 @@ export default function Recommendation() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Stack.Screen
-        options={{ headerShown: true, headerBackTitle: "Back", title: "Recommendation" }}
+        options={{ headerShown: true, headerBackTitle: "Back", title: "Your best option" }}
       />
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Title>Your recommendation</Title>
+          <Title>Save {formatCad(recommendation.net_savings_cents)} per year</Title>
           <Card testID="recommendation-summary">
             <Subtitle>
-              {recommendation.comparison.proposedInsurer ?? "Proposed configuration"}
+              Switch your home and auto insurance to{" "}
+              {recommendation.comparison.proposedInsurer ?? "recommended insurer"}.
             </Subtitle>
             <Row
-              label="Current annual cost"
-              value={formatCad(recommendation.current_total_cents)}
+              label="Annual cost"
+              value={`${formatCad(recommendation.current_total_cents)} → ${formatCad(recommendation.proposed_total_cents)}`}
             />
+            <Row label="Meets your saved coverage rules" value="Yes" />
             <Row
-              label="Proposed annual cost"
-              value={formatCad(recommendation.proposed_total_cents)}
-            />
-            <Row label="Net annual savings" value={formatCad(recommendation.net_savings_cents)} />
-            <Row
-              label="Bundle"
+              label="What changes"
               value={
-                recommendation.comparison.bundled ? "Home + auto bundled" : "Separate insurers"
+                (recommendation.comparison.materialDifferences ?? []).length === 0 &&
+                (recommendation.comparison.deductibleDifferences ?? []).length === 0
+                  ? "None"
+                  : "See details below"
               }
             />
-            <Row label="Meets all your requirements" value="Yes" />
-          </Card>
-          <Card>
-            <Subtitle>Material differences</Subtitle>
-            {(recommendation.comparison.materialDifferences ?? []).length === 0 ? (
-              <Body muted>No material coverage reductions.</Body>
-            ) : (
-              (recommendation.comparison.materialDifferences ?? []).map((d) => (
-                <Body key={d} muted>
-                  {d}
-                </Body>
-              ))
-            )}
+            {(recommendation.comparison.materialDifferences ?? []).length === 0
+              ? null
+              : (recommendation.comparison.materialDifferences ?? []).map((d) => (
+                  <Body key={d} muted>
+                    {d}
+                  </Body>
+                ))}
             {(recommendation.comparison.deductibleDifferences ?? []).map((d) => (
               <Body key={d} muted>
                 {d}
@@ -226,15 +220,15 @@ export default function Recommendation() {
           </Card>
           {showComparison ? (
             <Card>
-              <Subtitle>Full comparison</Subtitle>
+              <Subtitle>Other options reviewed</Subtitle>
               {recommendation.recommendation_options
                 .slice()
                 .sort((a, b) => a.rank - b.rank)
                 .map((o) => (
                   <Row
                     key={o.rank}
-                    label={`#${o.rank} ${o.bundled ? "Bundled" : "Split"} ${o.eligible ? "" : "(rejected)"}`}
-                    value={`${formatCad(o.total_cents)} / saves ${formatCad(o.net_savings_cents)}`}
+                    label={`#${o.rank} ${o.bundled ? "Bundled" : "Split"} ${o.eligible ? "" : "— Not eligible"}`}
+                    value={`${formatCad(o.total_cents)} per year · saves ${formatCad(o.net_savings_cents)}`}
                   />
                 ))}
             </Card>
@@ -259,7 +253,7 @@ export default function Recommendation() {
           {error ? <Body muted>{error}</Body> : null}
           <View style={{ gap: 8 }}>
             <PrimaryButton
-              label={needsPassword ? "Confirm and approve" : "Approve switch"}
+              label={needsPassword ? "Confirm and approve" : "Approve and start switch"}
               onPress={approve}
               loading={busy}
               testID="approve-switch"
@@ -271,7 +265,7 @@ export default function Recommendation() {
               disabled={busy}
             />
             <SecondaryButton
-              label={showComparison ? "Hide full comparison" : "Review full comparison"}
+              label={showComparison ? "Hide other options" : "Other options reviewed"}
               onPress={() => setShowComparison((v) => !v)}
             />
           </View>

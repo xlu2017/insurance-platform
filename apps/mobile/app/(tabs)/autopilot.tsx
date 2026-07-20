@@ -3,22 +3,45 @@ import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@autopilot/design-tokens";
 import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
-import { Body, Card, Loading, PrimaryButton, Screen, StatusPill, Title } from "@/components/ui";
+import {
+  Body,
+  Caption,
+  Card,
+  Loading,
+  PrimaryButton,
+  Screen,
+  StatusPill,
+  Title,
+} from "@/components/ui";
 
-const timeline: { state: string; label: string }[] = [
-  { state: "awaiting_documents", label: "Policies received" },
-  { state: "extracting_information", label: "Extracting your information" },
-  { state: "awaiting_customer_confirmation", label: "Waiting for your confirmation" },
-  { state: "ready_for_market_search", label: "Ready for market search" },
-  { state: "requesting_quotes", label: "Requesting quotes" },
-  { state: "awaiting_quotes", label: "Waiting for insurer responses" },
-  { state: "comparing_quotes", label: "Comparing household configurations" },
-  { state: "licensed_review", label: "Licensed review" },
-  { state: "recommendation_ready", label: "Recommendation ready" },
-  { state: "customer_decision", label: "Waiting for your decision" },
-  { state: "switching", label: "Switch in progress" },
-  { state: "completed", label: "Switch completed" },
+const customerStages: { states: string[]; label: string }[] = [
+  {
+    states: ["awaiting_documents", "extracting_information", "awaiting_customer_confirmation"],
+    label: "Preparing your information",
+  },
+  {
+    states: ["ready_for_market_search", "requesting_quotes", "awaiting_quotes"],
+    label: "Requesting insurance options",
+  },
+  { states: ["comparing_quotes", "licensed_review"], label: "Comparing coverage and price" },
+  { states: ["recommendation_ready", "customer_decision"], label: "Recommendation ready" },
+  { states: ["switching", "completed"], label: "Completing your switch" },
 ];
+
+const detailedStatus: Record<string, string> = {
+  awaiting_documents: "Policies received",
+  extracting_information: "Extracting your information",
+  awaiting_customer_confirmation: "Waiting for your confirmation",
+  ready_for_market_search: "Ready for market search",
+  requesting_quotes: "Requesting quotes",
+  awaiting_quotes: "Waiting for insurer responses",
+  comparing_quotes: "Comparing coverage and price",
+  licensed_review: "Expert review",
+  recommendation_ready: "Recommendation ready",
+  customer_decision: "Waiting for your decision",
+  switching: "Switch in progress",
+  completed: "Switch completed",
+};
 
 const outcomeText: Record<string, string> = {
   completed: "Your last case completed with a successful switch.",
@@ -33,7 +56,10 @@ export default function Autopilot() {
 
   if (isLoading || caseLoading) return <Loading />;
 
-  const currentIndex = activeCase ? timeline.findIndex((t) => t.state === activeCase.state) : -1;
+  const currentStageIndex = activeCase
+    ? customerStages.findIndex((s) => s.states.includes(activeCase.state))
+    : -1;
+  const subStatus = activeCase ? detailedStatus[activeCase.state] : undefined;
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -42,12 +68,12 @@ export default function Autopilot() {
           <Title>Autopilot</Title>
           {!activeCase && historicalCase ? (
             <Card>
-              <StatusPill label="No active case" tone="neutral" />
+              <StatusPill label="No review in progress" tone="neutral" />
               <View style={{ height: 8 }} />
               <Body muted>{outcomeText[historicalCase.state] ?? "Last case completed."}</Body>
               <View style={{ height: 8 }} />
               <Body muted>
-                A new renewal case will be created when your policy renewal date approaches.
+                A new renewal review will start when your policy renewal date approaches.
               </Body>
             </Card>
           ) : null}
@@ -55,18 +81,20 @@ export default function Autopilot() {
             <Card>
               <StatusPill label="Autopilot active" />
               <View style={{ height: 8 }} />
-              <Body muted>No optimization in progress. We are monitoring your renewals.</Body>
+              <Body muted>
+                Your insurance is being monitored. We will notify you before your next renewal.
+              </Body>
             </Card>
           ) : null}
           {activeCase ? (
             <>
               <Card testID="case-timeline">
-                {timeline.map((step, i) => {
-                  const done = currentIndex > i;
-                  const current = currentIndex === i;
+                {customerStages.map((step, i) => {
+                  const done = currentStageIndex > i;
+                  const current = currentStageIndex === i;
                   return (
                     <View
-                      key={step.state}
+                      key={step.label}
                       style={{ flexDirection: "row", alignItems: "flex-start", minHeight: 40 }}
                     >
                       <View style={{ alignItems: "center", width: 24 }}>
@@ -83,7 +111,7 @@ export default function Autopilot() {
                             marginTop: 4,
                           }}
                         />
-                        {i < timeline.length - 1 ? (
+                        {i < customerStages.length - 1 ? (
                           <View
                             style={{
                               width: 2,
@@ -106,6 +134,9 @@ export default function Autopilot() {
                         >
                           {step.label}
                         </Body>
+                        {current && subStatus ? (
+                          <Caption style={{ color: colors.ink }}>{subStatus}</Caption>
+                        ) : null}
                       </View>
                     </View>
                   );

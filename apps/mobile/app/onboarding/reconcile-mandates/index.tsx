@@ -31,12 +31,12 @@ export default function ReconcileMandatesIndex() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: "Reconcile mandate" }} />
-      <Title>Preparing mandate review</Title>
+      <Stack.Screen options={{ title: "Review coverage rules" }} />
+      <Title>Preparing coverage review</Title>
       <Body muted>
         {items.length === 0
-          ? "No document-informed specifications require review. Your current mandate will remain unchanged."
-          : "Resuming at the first incomplete specification."}
+          ? "No policy details need review. Your current coverage rules will remain unchanged."
+          : "Resuming at the first item that needs a decision."}
       </Body>
     </Screen>
   );

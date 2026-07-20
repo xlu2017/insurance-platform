@@ -55,7 +55,7 @@ export function initialCurrentMandateValue(
 }
 
 export function formatMandateValue(value: unknown): string {
-  if (value === null || value === undefined) return "Not provided";
+  if (value === null || value === undefined) return "Not covered";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (isRecord(value)) {
@@ -118,10 +118,10 @@ export function buildCandidateMandateValues(
   const result = new Map<string, Record<string, unknown>>();
   for (const item of items) {
     if (!item.is_complete) {
-      throw new Error("Every document-informed mandate specification must be completed");
+      throw new Error("Every policy detail must be completed");
     }
     if (item.material_conflict && item.action === "unresolved") {
-      throw new Error("Material mandate conflicts must be resolved before approval");
+      throw new Error("Conflicting policy information must be resolved before saving");
     }
     if (!item.mandate_path || item.current_mandate_value === undefined) continue;
     const values = result.get(item.candidate_id) ?? {};

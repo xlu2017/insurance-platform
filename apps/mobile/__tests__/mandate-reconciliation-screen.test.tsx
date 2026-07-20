@@ -74,6 +74,6 @@ describe("one specification per mandate screen", () => {
     expect(view.getByText("Liability limit")).toBeTruthy();
     expect(view.queryByText("Collision deductible")).toBeNull();
     expect(view.getByLabelText("Liability limit (current)").props.editable).toBe(true);
-    expect(view.getByLabelText("Document-implied value").props.editable).toBe(false);
+    expect(view.getByLabelText("Shown in your policy").props.editable).toBe(false);
   });
 });

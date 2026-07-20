@@ -132,7 +132,8 @@ export default function ReconcileMandateItem() {
         }
       })
       .catch((cause) => {
-        if (active) setError(cause instanceof Error ? cause.message : "Could not load mandate");
+        if (active)
+          setError(cause instanceof Error ? cause.message : "Could not load coverage rules");
       })
       .finally(() => {
         if (active) setInitializing(false);
@@ -152,8 +153,8 @@ export default function ReconcileMandateItem() {
   if (!household || !item || index < 0) {
     return (
       <Screen>
-        <Title>Specification unavailable</Title>
-        <Body muted>This mandate review item is no longer available.</Body>
+        <Title>Coverage detail unavailable</Title>
+        <Body muted>This coverage detail is no longer available.</Body>
         <PrimaryButton
           label="Return to review"
           onPress={() =>
@@ -227,11 +228,11 @@ export default function ReconcileMandateItem() {
 
   const continueReview = async () => {
     if (action === "pending") {
-      setError("Choose how to handle this specification before continuing.");
+      setError("Choose how to handle this coverage detail before continuing.");
       return;
     }
     if (correctedValue !== undefined && correctedValue !== null && !correctionReason) {
-      setError("Choose a reason for the corrected document value.");
+      setError("Choose a reason for the corrected policy value.");
       return;
     }
     setBusy(true);
@@ -256,7 +257,7 @@ export default function ReconcileMandateItem() {
         router.push({ pathname: "/onboarding/reconcile-mandates/review", params: { sessionId } });
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save this specification");
+      setError(cause instanceof Error ? cause.message : "Could not save this coverage detail");
     } finally {
       setBusy(false);
     }
@@ -272,9 +273,9 @@ export default function ReconcileMandateItem() {
         <View style={{ height: 16 }} />
 
         <Card>
-          <Subtitle>Current mandate</Subtitle>
+          <Subtitle>Your current rule</Subtitle>
           <Field
-            label={`${item.specification_title ?? "Specification"} (current)`}
+            label={`${item.specification_title ?? "Coverage detail"} (current)`}
             value={currentText}
             onChangeText={saveCurrentEdit}
             editable
@@ -287,14 +288,18 @@ export default function ReconcileMandateItem() {
                 : "default"
             }
           />
-          <SecondaryButton label="Keep current" onPress={chooseKeep} disabled={busy} />
+          <SecondaryButton
+            label={`Keep ${formatMandateValue(currentValue ?? item.prior_mandate_value)}`}
+            onPress={chooseKeep}
+            disabled={busy}
+          />
         </Card>
 
         <Card>
           <Subtitle>
             {item.value_state === "conflicting"
-              ? "Conflicting document values"
-              : "Document-implied value"}
+              ? "Conflicting policy information"
+              : "Shown in your policy"}
           </Subtitle>
           {item.value_state === "conflicting" ? (
             conflictValues.length > 0 ? (
@@ -304,7 +309,7 @@ export default function ReconcileMandateItem() {
                 return (
                   <View key={conflictIndex} style={{ marginTop: 8 }}>
                     <Field
-                      label={`Document value ${conflictIndex + 1}`}
+                      label={`Policy value ${conflictIndex + 1}`}
                       value={formatMandateValue(conflictMandateValue)}
                       editable={false}
                       style={{
@@ -327,7 +332,7 @@ export default function ReconcileMandateItem() {
                       <Body style={{ color: "#B45309" }}>{conflict.explanation}</Body>
                     ) : null}
                     <SecondaryButton
-                      label={`Use document value ${conflictIndex + 1}`}
+                      label={`Use ${formatMandateValue(conflictMandateValue)}`}
                       onPress={() => chooseDocumentValue(conflictMandateValue)}
                       disabled={busy}
                     />
@@ -339,7 +344,7 @@ export default function ReconcileMandateItem() {
             )
           ) : (
             <Field
-              label="Document-implied value"
+              label="Shown in your policy"
               value={formatMandateValue(documentValue)}
               editable={false}
               style={{ backgroundColor: "#E5E7EB", color: "#6B7280", padding: 12, borderRadius: 8 }}
@@ -354,7 +359,7 @@ export default function ReconcileMandateItem() {
           ) : null}
           {item.value_state === "conflicting" ? (
             <Body style={{ color: "#B45309" }}>
-              Conflict warning: documents imply different values.
+              Your documents show different values. Choose the one that matches your policy.
             </Body>
           ) : null}
 
@@ -362,26 +367,26 @@ export default function ReconcileMandateItem() {
             <SecondaryButton
               label={
                 item.value_state === "absent"
-                  ? "Use document-implied absence"
-                  : "Use document-implied value"
+                  ? 'Use "Not covered"'
+                  : `Use ${formatMandateValue(documentValue)}`
               }
               onPress={() => chooseDocumentValue()}
               disabled={busy || documentValue === null || documentValue === undefined}
             />
           ) : null}
           <SecondaryButton
-            label="Revise document-implied value"
+            label="The policy value is wrong"
             onPress={() => setRevising(true)}
             disabled={busy}
           />
           {item.value_state === "conflicting" ? (
-            <SecondaryButton label="Mark unresolved" onPress={markUnresolved} disabled={busy} />
+            <SecondaryButton label="Decide later" onPress={markUnresolved} disabled={busy} />
           ) : null}
 
           {revising ? (
             <View style={{ marginTop: 12 }}>
               <Field
-                label="Customer-corrected document value"
+                label="Corrected policy value"
                 value={correctedText}
                 onChangeText={saveCorrectedEdit}
                 autoCorrect={false}
@@ -405,16 +410,14 @@ export default function ReconcileMandateItem() {
                 }}
               />
               <Body muted>
-                Correcting this assertion does not change the current mandate. Choose “Use
-                document-implied value” separately to copy it.
+                Correcting this value does not change your current rule. Choose “Use [policy value]”
+                separately to apply it.
               </Body>
             </View>
           ) : null}
         </Card>
 
-        {action !== "pending" ? (
-          <Body muted>Draft saved: {action.replaceAll("_", " ")}</Body>
-        ) : null}
+        {action !== "pending" ? <Body muted>Saved</Body> : null}
         {error ? <Body style={{ color: "#B91C1C" }}>{error}</Body> : null}
         <View style={{ flexDirection: "row", gap: 12 }}>
           <SecondaryButton label="Back" onPress={() => router.back()} disabled={busy} />

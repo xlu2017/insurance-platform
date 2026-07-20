@@ -3,14 +3,31 @@ import { useState } from "react";
 import { ScrollView, Switch, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
-import { Body, Card, Loading, PrimaryButton, Screen, Title } from "@/components/ui";
+import { Body, Caption, Card, Loading, PrimaryButton, Screen, Title } from "@/components/ui";
 import type { ConsentType } from "@autopilot/schemas";
 
-const consentItems: { type: ConsentType; label: string }[] = [
-  { type: "store_documents", label: "Store my insurance documents securely" },
-  { type: "share_for_quotation", label: "Share my information with insurers for quotations" },
-  { type: "generate_recommendations", label: "Receive optimization recommendations" },
-  { type: "electronic_communications", label: "Receive electronic communications" },
+const consentItems: { type: ConsentType; label: string; description: string }[] = [
+  {
+    type: "store_documents",
+    label: "Store your policy documents",
+    description: "Required to organize and review your insurance.",
+  },
+  {
+    type: "share_for_quotation",
+    label: "Use your information to request quotes",
+    description:
+      "We share only the information required by insurers when you ask us to shop your coverage.",
+  },
+  {
+    type: "generate_recommendations",
+    label: "Prepare insurance recommendations",
+    description: "We compare eligible quotes against your saved coverage rules.",
+  },
+  {
+    type: "electronic_communications",
+    label: "Send account and renewal messages",
+    description: "Required for policy questions, recommendations and switch updates.",
+  },
 ];
 
 export default function Consents() {
@@ -61,12 +78,11 @@ export default function Consents() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Consent" }} />
+      <Stack.Screen
+        options={{ headerShown: true, headerBackTitle: "Back", title: "Permissions" }}
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Title>Your consent</Title>
-        <Body muted>
-          Each consent is recorded separately with a timestamp and disclosure version.
-        </Body>
+        <Title>Permissions</Title>
         <View style={{ height: 16 }} />
         <Card>
           {consentItems.map((c) => (
@@ -75,16 +91,18 @@ export default function Consents() {
               style={{
                 flexDirection: "row",
                 justifyContent: "space-between",
-                alignItems: "center",
+                alignItems: "flex-start",
                 paddingVertical: 8,
               }}
             >
               <View style={{ flex: 1, marginRight: 12 }}>
                 <Body>{c.label}</Body>
+                <Caption>{c.description}</Caption>
               </View>
               <Switch
                 value={granted[c.type] ?? false}
                 onValueChange={(v) => setGranted((g) => ({ ...g, [c.type]: v }))}
+                style={{ marginTop: 2 }}
               />
             </View>
           ))}

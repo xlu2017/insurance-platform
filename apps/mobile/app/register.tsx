@@ -46,10 +46,7 @@ export default function Register() {
     >
       <Screen style={{ justifyContent: "center" }}>
         <Title>Create your account</Title>
-        <Body muted>
-          You will verify your email before your recommendation is published. Local demo
-          environments auto-confirm email.
-        </Body>
+        <Body muted>Start managing your insurance in one place.</Body>
         <View style={{ height: 16 }} />
         <Field label="Full name" value={fullName} onChangeText={setFullName} />
         <Field

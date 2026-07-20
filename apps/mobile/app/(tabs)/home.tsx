@@ -75,7 +75,7 @@ export default function Home() {
     return (
       <Screen style={{ justifyContent: "center" }}>
         <Title>Finish setting up</Title>
-        <Body muted>Create your household to start Autopilot.</Body>
+        <Body muted>Set up your account to start Autopilot.</Body>
         <View style={{ height: 16 }} />
         <PrimaryButton
           label="Continue setup"
@@ -99,13 +99,35 @@ export default function Home() {
   const requiredAction = pendingQuestion
     ? {
         label: "Answer a question from your insurer",
+        buttonLabel: "Answer question",
         action: () => router.push(`/question/${pendingQuestion.id}`),
       }
     : activeCase?.state === "customer_decision"
-      ? { label: "Review your recommendation", action: () => router.push("/recommendation") }
+      ? {
+          label: "Review your recommendation",
+          buttonLabel: "Review recommendation",
+          action: () => router.push("/recommendation"),
+        }
       : activeCase?.state === "awaiting_customer_confirmation"
-        ? { label: "Confirm your policy details", action: () => router.push("/confirm-details") }
-        : null;
+        ? {
+            label: "Confirm your policy details",
+            buttonLabel: "Confirm policy details",
+            action: () => router.push("/confirm-details"),
+          }
+        : activeCase?.state === "extracting_information" ||
+            activeCase?.state === "awaiting_documents"
+          ? {
+              label: "Review document details",
+              buttonLabel: "Review document details",
+              action: () => router.push("/onboarding/review-entities"),
+            }
+          : activeCase?.state === "comparing_quotes" || activeCase?.state === "licensed_review"
+            ? {
+                label: "Review coverage rules",
+                buttonLabel: "Review coverage rules",
+                action: () => router.push("/onboarding/reconcile-mandates"),
+              }
+            : null;
 
   const historicalOutcome = historicalCase
     ? historicalCase.state === "completed"
@@ -126,7 +148,11 @@ export default function Home() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Title>Home</Title>
+          <Title>
+            {requiredAction
+              ? "One item needs your attention"
+              : "Your insurance is covered and monitored"}
+          </Title>
           <Card testID="autopilot-status-card">
             <StatusPill
               label={household.autopilot_active ? "Autopilot active" : "Autopilot paused"}
@@ -142,7 +168,7 @@ export default function Home() {
               <Body muted>{requiredAction.label}</Body>
               <View style={{ height: 12 }} />
               <PrimaryButton
-                label="Open"
+                label={requiredAction.buttonLabel}
                 onPress={requiredAction.action}
                 testID="required-action"
               />
@@ -153,8 +179,8 @@ export default function Home() {
               <Subtitle>{isOnboardingComplete ? "Get started" : "Finish setup"}</Subtitle>
               <Body muted>
                 {isOnboardingComplete
-                  ? "Upload your current policies so Autopilot can monitor renewals and compare options."
-                  : "Complete your setup so Autopilot can extract your coverage and start comparing."}
+                  ? "Upload your current policies so we can monitor renewals and compare options."
+                  : "Complete your setup so we can extract your coverage and start comparing."}
               </Body>
               <View style={{ height: 12 }} />
               <PrimaryButton
@@ -174,7 +200,7 @@ export default function Home() {
           <Card>
             <Subtitle>Savings so far</Subtitle>
             <Title>{formatCad(savings ?? 0)}</Title>
-            <Caption>Cumulative demonstrated savings from completed switches.</Caption>
+            <Caption>Total annual savings from completed switches.</Caption>
           </Card>
         </ScrollView>
       </Screen>

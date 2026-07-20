@@ -41,9 +41,9 @@ interface DraftReview {
 }
 
 const REVIEW_ACTIONS: { value: ReviewAction; label: string }[] = [
-  { value: "confirm", label: "Confirm" },
+  { value: "confirm", label: "Looks right" },
   { value: "correct", label: "Edit" },
-  { value: "unknown", label: "Unknown" },
+  { value: "unknown", label: "Not sure" },
 ];
 
 const MANDATE_ACTIONS: { value: ReviewAction; label: string }[] = [
@@ -195,9 +195,9 @@ export default function ReviewEntities() {
   if (!candidates || candidates.length === 0) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: "Review extracted details" }} />
+        <Stack.Screen options={{ title: "Confirm what we found" }} />
         <Title style={styles.title}>Nothing to review</Title>
-        <Body muted>Upload your policies first so we can extract your assets.</Body>
+        <Body muted>Upload your policies first so we can show you what we found.</Body>
         <PrimaryButton
           label="Upload"
           onPress={() => router.push("/onboarding/documents")}
@@ -276,7 +276,7 @@ export default function ReviewEntities() {
       }
 
       if (!allApprovedReady) {
-        setError("Please confirm or edit every field before approving an asset.");
+        setError("Please confirm or edit every field before adding it to your account.");
         setBusy(false);
         return;
       }
@@ -360,7 +360,15 @@ export default function ReviewEntities() {
       <View style={{ marginBottom: 12 }}>
         <Caption style={styles.fieldLabel}>{fieldLabel}</Caption>
         <Body style={styles.fieldValue}>{displayValue}</Body>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 8,
+            marginTop: 4,
+            alignItems: "center",
+          }}
+        >
           {REVIEW_ACTIONS.map((a) => (
             <SecondaryButton
               key={a.value}
@@ -420,8 +428,12 @@ export default function ReviewEntities() {
         {action ? (
           <Body style={{ color: "#16A34A", marginTop: 4 }}>
             {action === "reset_mandate_to_current"
-              ? "Mandate reset to current"
-              : `Marked: ${action}`}
+              ? "Coverage rule reset to current"
+              : action === "confirm"
+                ? "Looks right"
+                : action === "unknown"
+                  ? "Not sure"
+                  : "Edited"}
           </Body>
         ) : null}
       </View>
@@ -433,12 +445,9 @@ export default function ReviewEntities() {
       style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl * 2 }}
     >
-      <Stack.Screen options={{ title: "Review extracted assets" }} />
-      <Title style={styles.title}>Review extracted assets</Title>
-      <Body muted>
-        Confirm or edit the asset identity and current-policy facts. Document-informed mandate
-        specifications are reviewed one at a time next.
-      </Body>
+      <Stack.Screen options={{ title: "Confirm what we found" }} />
+      <Title style={styles.title}>Confirm what we found</Title>
+      <Body muted>Review each vehicle and property before adding it to your account.</Body>
       <View style={{ height: 16 }} />
 
       {candidates.map((candidate) => {
@@ -459,10 +468,17 @@ export default function ReviewEntities() {
               </Caption>
             ) : null}
             {candidate.match_classification === "new_identity_confirmation_required" ? (
-              <Body style={{ color: "#B45309" }}>Address identity needs confirmation</Body>
+              <Body style={{ color: "#B45309" }}>
+                We could not confirm the full{" "}
+                {candidate.asset_type === "vehicle" ? "vehicle" : "property"} identity. Check that
+                this is the correct {candidate.asset_type === "vehicle" ? "vehicle" : "property"}{" "}
+                before adding it.
+              </Body>
             ) : null}
             {conflicting ? (
-              <Body style={{ color: "#B45309" }}>Conflicting facts need review</Body>
+              <Body style={{ color: "#B45309" }}>
+                Two documents contain different information. Review the highlighted fields.
+              </Body>
             ) : null}
 
             <View style={{ marginTop: 12, gap: 8 }}>
@@ -473,20 +489,20 @@ export default function ReviewEntities() {
 
             {!ready && decision === "approve_new" ? (
               <Body style={{ color: "#B45309", marginTop: 8 }}>
-                All fields must be reviewed before this asset can be approved.
+                All fields must be reviewed before this can be added.
               </Body>
             ) : null}
             {candidate.match_classification === "new_identity_confirmation_required" &&
             !identityConfirmations[candidate.id] ? (
               <Body style={{ color: "#B45309", marginTop: 8 }}>
-                Confirm the identity below before approving.
+                Confirm the identity below before adding it.
               </Body>
             ) : null}
 
             <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
               {candidate.match_classification === "new_identity_confirmation_required" ? (
                 <SecondaryButton
-                  label={identityConfirmations[candidate.id] ? "Confirmed" : "Confirm"}
+                  label="Looks right"
                   onPress={() =>
                     setIdentityConfirmations((prev) => ({
                       ...prev,
@@ -498,13 +514,15 @@ export default function ReviewEntities() {
                 />
               ) : null}
               <SecondaryButton
-                label="Skip"
+                label="Don't add"
                 onPress={() => setDecision(candidate.id, "skip")}
                 disabled={busy}
                 style={styles.skipButton}
               />
               <PrimaryButton
-                label="Approve"
+                label={
+                  candidate.asset_type === "vehicle" ? "Add this vehicle" : "Add this property"
+                }
                 onPress={() => setDecision(candidate.id, "approve_new")}
                 disabled={busy}
                 style={styles.approveButton}
@@ -514,7 +532,7 @@ export default function ReviewEntities() {
               <Body
                 style={{ marginTop: 8, color: decision === "approve_new" ? "#16A34A" : "#6B7280" }}
               >
-                {decision === "approve_new" ? "Approved (pending submit)" : "Skipped"}
+                {decision === "approve_new" ? "Will be added" : "Will not be added"}
               </Body>
             ) : null}
           </Card>
@@ -524,7 +542,7 @@ export default function ReviewEntities() {
       {error ? <Body muted>{error}</Body> : null}
 
       <PrimaryButton
-        label="Submit"
+        label="Continue to coverage"
         onPress={submit}
         loading={busy || saveReview.isPending}
         disabled={busy || saveReview.isPending || !allApprovedReady}

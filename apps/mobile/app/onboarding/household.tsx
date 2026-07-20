@@ -6,7 +6,6 @@ import { Body, Field, PrimaryButton, Screen, Title } from "@/components/ui";
 
 export default function CreateHousehold() {
   const [name, setName] = useState("");
-  const [province, setProvince] = useState("AB");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -24,7 +23,7 @@ export default function CreateHousehold() {
       .insert({
         owner_profile_id: userData.user.id,
         name: name.trim(),
-        province: province.trim().toUpperCase() || "AB",
+        province: "AB",
         onboarding_step: "membership",
       })
       .select("id")
@@ -44,7 +43,7 @@ export default function CreateHousehold() {
       entity_type: "household",
       entity_id: household.id,
       household_id: household.id,
-      after_summary: { province },
+      after_summary: { province: "AB" },
     });
     setLoading(false);
     router.push("/onboarding/membership");
@@ -52,22 +51,15 @@ export default function CreateHousehold() {
 
   return (
     <Screen style={{ justifyContent: "center" }}>
-      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Household" }} />
-      <Title>Set up your household</Title>
-      <Body muted>The Alberta demo defaults to province AB. Progress saves at every step.</Body>
+      <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Account" }} />
+      <Title>Set up your insurance account</Title>
+      <Body muted>We currently serve Alberta households.</Body>
+      <Body muted style={{ marginTop: 8 }}>
+        This groups the people, vehicles and properties you insure together.
+      </Body>
       <View style={{ height: 16 }} />
-      <Field
-        label="Household name"
-        placeholder="Miller Household"
-        value={name}
-        onChangeText={setName}
-      />
-      <Field
-        label="Province"
-        value={province}
-        onChangeText={setProvince}
-        autoCapitalize="characters"
-      />
+      <Field label="Account name" placeholder="My household" value={name} onChangeText={setName} />
+      <Field label="Province" value="Alberta" editable={false} />
       {error ? <Body muted>{error}</Body> : null}
       <View style={{ height: 12 }} />
       <PrimaryButton label="Continue" onPress={save} loading={loading} />

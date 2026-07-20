@@ -14,15 +14,15 @@ export type DocumentBatchStatus =
 
 export const documentBatchStatusLabels: Record<DocumentBatchStatus, string> = {
   uploading_files: "Uploading files",
-  checking_duplicates: "Checking for duplicates",
-  queued: "Reading policy documents",
-  reading_policy_documents: "Reading policy documents",
-  comparing_policies: "Comparing policies",
-  validating_extracted_details: "Validating extracted details",
-  ready_for_review: "Ready for review",
+  checking_duplicates: "Checking your documents",
+  queued: "Preparing your review",
+  reading_policy_documents: "Reading your policies",
+  comparing_policies: "Comparing policy details",
+  validating_extracted_details: "Preparing your review",
+  ready_for_review: "Ready to confirm",
   additional_information_required: "Additional information required",
   processing_unavailable: "Processing unavailable",
-  manual_review: "Reading policy documents",
+  manual_review: "Sent for review",
 };
 
 export interface DocumentBatchSummary {
@@ -45,7 +45,7 @@ export function documentItemStatusLabel(
   if (uploadStatus === "pending") return "Pending";
   if (uploadStatus === "uploading") return "Uploading files";
   if (uploadStatus === "failed") return "Upload failed";
-  const uploadPrefix = uploadStatus === "deduplicated" ? "Deduplicated · " : "";
+  const uploadPrefix = uploadStatus === "deduplicated" ? "Already uploaded · " : "";
   if (!batch) return `${uploadPrefix}Uploaded`;
   return `${uploadPrefix}${documentBatchStatusLabels[batch.status]}`;
 }

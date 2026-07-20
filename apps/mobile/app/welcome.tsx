@@ -14,14 +14,14 @@ import {
 export default function Welcome() {
   return (
     <Screen style={{ justifyContent: "center" }}>
-      <Title>Insurance on autopilot</Title>
+      <Title>Insurance handled for you</Title>
       <Body muted>
-        Set your insurance requirements once. We monitor the renewal process, compare eligible
-        household configurations and present a clear recommendation without requiring sales calls.
+        Upload your current policies once. We monitor your renewals, look for eligible savings and
+        show you one clear recommendation. You approve every change.
       </Body>
       <View style={{ height: 24 }} />
       <PrimaryButton
-        label="Get started"
+        label="Set up my insurance"
         onPress={() => router.push("/register")}
         testID="get-started"
       />

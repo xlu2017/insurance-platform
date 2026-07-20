@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { ScrollView, View } from "react-native";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
@@ -65,6 +66,34 @@ function displayDeductibleRule(rule?: MonetaryRule): string {
   if (rule.rule === "match_current_or_better") return "Match current or better";
   const label = deductibleRuleOptions.find((o) => o.value === rule.rule)?.label ?? rule.rule;
   return `${label} ${formatCad(rule.amountCents)}`;
+}
+
+function AutoSummary({ auto }: { auto: AutoMandateV2 }) {
+  return (
+    <>
+      <Row label="Liability" value={displayMonetaryRule(auto.liability)} />
+      <Row label="Collision deductible" value={displayDeductibleRule(auto.collisionDeductible)} />
+      <Row
+        label="Comprehensive deductible"
+        value={displayDeductibleRule(auto.comprehensiveDeductible)}
+      />
+      <Row label="Telematics" value={displayPreference(auto.endorsements.telematics)} />
+    </>
+  );
+}
+
+function PropertySummary({ property }: { property: PropertyMandateV2 }) {
+  return (
+    <>
+      <Row
+        label="Replacement-cost coverage"
+        value={labelForValue(propertySettlementOptions, property.settlementBasis.value)}
+      />
+      <Row label="Base deductible" value={displayDeductibleRule(property.baseDeductible)} />
+      <Row label="Sewer backup" value={displayPreference(property.sewerBackup.preference)} />
+      <Row label="Overland water" value={displayPreference(property.overlandWater.preference)} />
+    </>
+  );
 }
 
 function AutoMandateRows({ auto }: { auto: AutoMandateV2 }) {
@@ -264,7 +293,7 @@ export default function Coverage() {
     return (
       <Screen style={{ justifyContent: "center" }}>
         <Title>Finish setting up</Title>
-        <Body muted>Create your household to view coverage and mandate details.</Body>
+        <Body muted>Set up your account to view your coverage rules.</Body>
         <View style={{ height: 16 }} />
         <PrimaryButton
           label="Continue setup"
@@ -292,20 +321,24 @@ export default function Coverage() {
 
   const mandate = data?.mandate;
 
+  const [showDetails, setShowDetails] = useState(false);
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Title>Coverage mandate</Title>
-          <Body muted>Your standing instructions. Every comparison is bound by these rules.</Body>
+          <Title>Your coverage rules</Title>
+          <Body muted>
+            These are the coverage and switching rules we will use when comparing your insurance.
+          </Body>
           <PrimaryButton
-            label="Edit mandate"
-            onPress={() => router.push("/edit-mandate")}
-            testID="edit-mandate"
+            label={showDetails ? "Hide all coverage details" : "View all coverage details"}
+            onPress={() => setShowDetails((value) => !value)}
+            testID="toggle-coverage-details"
           />
           <View style={{ height: 12 }} />
           <Card>
-            <Subtitle>Household</Subtitle>
+            <Subtitle>Your household</Subtitle>
             <Row
               label="Drivers"
               value={(data?.drivers ?? []).map((d) => d.full_name).join(", ") || "—"}
@@ -327,91 +360,107 @@ export default function Coverage() {
           </Card>
 
           <Card>
-            <Subtitle>Auto — household defaults</Subtitle>
+            <Subtitle>Rules for all vehicles</Subtitle>
             {mandate ? (
-              <AutoMandateRows auto={mandate.householdAutoDefaults} />
+              showDetails ? (
+                <AutoMandateRows auto={mandate.householdAutoDefaults} />
+              ) : (
+                <AutoSummary auto={mandate.householdAutoDefaults} />
+              )
             ) : (
               <Body muted>Loading…</Body>
             )}
           </Card>
 
-          {(data?.vehicles ?? []).map((vehicle) => {
-            const effective = mandate
-              ? resolveEffectiveVehicleMandateV2(mandate, vehicle.id)
-              : undefined;
-            const override = mandate?.vehicleOverrides.find((o) => o.vehicleId === vehicle.id);
-            return (
-              <Card key={vehicle.id}>
-                <Subtitle>
-                  Vehicle: {vehicle.year} {vehicle.make} {vehicle.model}
-                </Subtitle>
-                <Body muted>
-                  {labelForValue(
-                    financingStatusOptions,
-                    vehicle.financing_status as FinancingStatus,
-                  )}{" "}
-                  ·{" "}
-                  {labelForValue(
-                    vehicleUseClassOptions,
-                    vehicle.vehicle_use_class as VehicleUseClass,
-                  )}
-                  {vehicle.is_classic ? " · Classic" : ""}
-                  {vehicle.is_modified ? " · Modified" : ""}
-                </Body>
-                {override ? (
-                  <View style={{ marginVertical: 8 }}>
-                    <Body muted>Overrides apply to this vehicle</Body>
-                  </View>
-                ) : null}
-                {effective ? <AutoMandateRows auto={effective} /> : null}
-              </Card>
-            );
-          })}
+          {showDetails
+            ? (data?.vehicles ?? []).map((vehicle) => {
+                const effective = mandate
+                  ? resolveEffectiveVehicleMandateV2(mandate, vehicle.id)
+                  : undefined;
+                const override = mandate?.vehicleOverrides.find((o) => o.vehicleId === vehicle.id);
+                return (
+                  <Card key={vehicle.id}>
+                    <Subtitle>
+                      Vehicle: {vehicle.year} {vehicle.make} {vehicle.model}
+                    </Subtitle>
+                    <Body muted>
+                      {labelForValue(
+                        financingStatusOptions,
+                        vehicle.financing_status as FinancingStatus,
+                      )}{" "}
+                      ·{" "}
+                      {labelForValue(
+                        vehicleUseClassOptions,
+                        vehicle.vehicle_use_class as VehicleUseClass,
+                      )}
+                      {vehicle.is_classic ? " · Classic" : ""}
+                      {vehicle.is_modified ? " · Modified" : ""}
+                    </Body>
+                    {override ? (
+                      <View style={{ marginVertical: 8 }}>
+                        <Body muted>Overrides apply to this vehicle</Body>
+                      </View>
+                    ) : null}
+                    {effective ? <AutoMandateRows auto={effective} /> : null}
+                  </Card>
+                );
+              })
+            : null}
 
           <Card>
-            <Subtitle>Property — household defaults</Subtitle>
+            <Subtitle>Rules for all properties</Subtitle>
             {mandate ? (
-              <PropertyMandateRows property={mandate.householdPropertyDefaults} />
+              showDetails ? (
+                <PropertyMandateRows property={mandate.householdPropertyDefaults} />
+              ) : (
+                <PropertySummary property={mandate.householdPropertyDefaults} />
+              )
             ) : (
               <Body muted>Loading…</Body>
             )}
           </Card>
 
-          {(data?.properties ?? []).map((property) => {
-            const effective = mandate
-              ? resolveEffectivePropertyMandateV2(mandate, property.id)
-              : undefined;
-            const override = mandate?.propertyOverrides.find((o) => o.propertyId === property.id);
-            return (
-              <Card key={property.id}>
-                <Subtitle>
-                  Property: {property.address_line1}, {property.city}
-                </Subtitle>
-                <Body muted>
-                  {labelForValue(propertyTypeOptions, property.property_type as PropertyType)}
-                </Body>
-                {override ? (
-                  <View style={{ marginVertical: 8 }}>
-                    <Body muted>Overrides apply to this property</Body>
-                  </View>
-                ) : null}
-                {effective ? <PropertyMandateRows property={effective} /> : null}
-              </Card>
-            );
-          })}
+          {showDetails
+            ? (data?.properties ?? []).map((property) => {
+                const effective = mandate
+                  ? resolveEffectivePropertyMandateV2(mandate, property.id)
+                  : undefined;
+                const override = mandate?.propertyOverrides.find(
+                  (o) => o.propertyId === property.id,
+                );
+                return (
+                  <Card key={property.id}>
+                    <Subtitle>
+                      Property: {property.address_line1}, {property.city}
+                    </Subtitle>
+                    <Body muted>
+                      {labelForValue(propertyTypeOptions, property.property_type as PropertyType)}
+                    </Body>
+                    {override ? (
+                      <View style={{ marginVertical: 8 }}>
+                        <Body muted>Overrides apply to this property</Body>
+                      </View>
+                    ) : null}
+                    {effective ? <PropertyMandateRows property={effective} /> : null}
+                  </Card>
+                );
+              })
+            : null}
 
-          <Card>
-            <Subtitle>Switching rules</Subtitle>
-            {data?.switching ? (
-              <SwitchingRows prefs={data.switching} />
-            ) : (
-              <Body muted>Loading…</Body>
-            )}
-            <Row
-              label="Excluded insurers"
-              value={data?.excludedNames.length ? data.excludedNames.join(", ") : "None"}
-            />
-          </Card>
+          {showDetails ? (
+            <Card>
+              <Subtitle>Switching preferences</Subtitle>
+              {data?.switching ? (
+                <SwitchingRows prefs={data.switching} />
+              ) : (
+                <Body muted>Loading…</Body>
+              )}
+              <Row
+                label="Excluded insurers"
+                value={data?.excludedNames.length ? data.excludedNames.join(", ") : "None"}
+              />
+            </Card>
+          ) : null}
         </ScrollView>
       </Screen>
     </SafeAreaView>

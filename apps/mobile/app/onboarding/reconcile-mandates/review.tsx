@@ -91,7 +91,7 @@ export default function MandateReconciliationReview() {
       return;
     }
     if (incomplete.length > 0 || unresolved.length > 0) {
-      setError("Complete every specification and resolve material conflicts before saving.");
+      setError("Complete every coverage detail and resolve conflicting information before saving.");
       return;
     }
 
@@ -113,7 +113,7 @@ export default function MandateReconciliationReview() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("You must be signed in to save the mandate.");
+      if (!user) throw new Error("You must be signed in to save your coverage rules.");
 
       const firstCandidate = candidates[0];
       if (!firstCandidate) throw new Error("No reviewed asset candidates are available.");
@@ -142,7 +142,7 @@ export default function MandateReconciliationReview() {
         .eq("id", household.id);
       router.replace("/onboarding/preferences");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save mandate and assets");
+      setError(cause instanceof Error ? cause.message : "Could not save coverage rules");
     } finally {
       setBusy(false);
     }
@@ -150,51 +150,50 @@ export default function MandateReconciliationReview() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: "Final mandate review" }} />
+      <Stack.Screen options={{ title: "Review coverage rules" }} />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Title>Review mandate changes</Title>
+        <Title>Review your coverage rules</Title>
         <Body muted>
           {hasReviewItems
-            ? "Document values remain evidenced suggestions. Only the proposed current values below will be persisted."
-            : "No mandate changes, corrections, or conflicts were found for the reviewed assets. Nothing needs to be persisted."}
+            ? "These are the changes that will be saved. Your uploaded policy documents will remain unchanged."
+            : "No coverage rules need to change."}
         </Body>
 
-        <Subtitle>Changed current mandates</Subtitle>
-        {changed.length === 0 ? <Body muted>No current mandate values changed.</Body> : null}
+        <Subtitle>Coverage changes</Subtitle>
+        {changed.length === 0 ? <Body muted>No coverage rules changed.</Body> : null}
         {changed.map((item) => (
           <Card key={item.id}>
             <Subtitle>{item.specification_title ?? item.field_path}</Subtitle>
             <Caption>{item.asset_candidate?.display_label ?? "Affected asset"}</Caption>
-            <Body muted>Prior value</Body>
+            <Body muted>Previous rule</Body>
             <Body>{formatMandateValue(item.prior_mandate_value)}</Body>
-            <Body muted>Proposed persisted value</Body>
+            <Body muted>New rule</Body>
             <Body>{formatMandateValue(item.current_mandate_value)}</Body>
           </Card>
         ))}
 
-        <Subtitle>Corrected document assertions</Subtitle>
-        {corrections.length === 0 ? (
-          <Body muted>No document assertions were corrected.</Body>
-        ) : null}
+        <Subtitle>Policy details you corrected</Subtitle>
+        {corrections.length === 0 ? <Body muted>No policy details were corrected.</Body> : null}
         {corrections.map((item) => (
           <Card key={item.id}>
             <Body>{item.specification_title ?? item.field_path}</Body>
-            <Body muted>Original: {formatMandateValue(item.document_implied_mandate_value)}</Body>
-            <Body>Corrected: {formatMandateValue(item.corrected_value)}</Body>
-            <Caption>Reason: {(item.correction_reason ?? "other").replaceAll("_", " ")}</Caption>
+            <Body muted>Policy originally showed</Body>
+            <Body>{formatMandateValue(item.document_implied_mandate_value)}</Body>
+            <Body muted>You corrected it to</Body>
+            <Body>{formatMandateValue(item.corrected_value)}</Body>
           </Card>
         ))}
 
-        <Subtitle>Unresolved conflicts</Subtitle>
+        <Subtitle>Items still needing a decision</Subtitle>
         {unresolved.length === 0 ? (
-          <Body muted>No material conflicts remain unresolved.</Body>
+          <Body muted>No conflicting information remains unresolved.</Body>
         ) : (
           unresolved.map((item) => (
             <Card key={item.id}>
               <Body>{item.specification_title ?? item.field_path}</Body>
-              <Body style={{ color: "#B91C1C" }}>Resolve this conflict before final approval.</Body>
+              <Body style={{ color: "#B91C1C" }}>Review this before saving.</Body>
               <SecondaryButton
-                label="Resolve conflict"
+                label="Review"
                 onPress={() =>
                   router.push({
                     pathname: "/onboarding/reconcile-mandates/[reviewItemId]",
@@ -209,7 +208,7 @@ export default function MandateReconciliationReview() {
         {unchanged.length > 0 ? (
           <View style={{ marginTop: 12 }}>
             <SecondaryButton
-              label={`${showUnchanged ? "Hide" : "Show"} unchanged reviewed specifications (${unchanged.length})`}
+              label={`${showUnchanged ? "Hide" : "Show"} reviewed with no changes (${unchanged.length})`}
               onPress={() => setShowUnchanged((value) => !value)}
             />
             {showUnchanged
@@ -226,7 +225,7 @@ export default function MandateReconciliationReview() {
 
         {error ? <Body style={{ color: "#B91C1C" }}>{error}</Body> : null}
         <PrimaryButton
-          label={hasReviewItems ? "Save mandate and continue" : "Continue to preferences"}
+          label={hasReviewItems ? "Save coverage rules" : "Continue to preferences"}
           onPress={save}
           loading={busy}
           disabled={busy || incomplete.length > 0 || unresolved.length > 0}

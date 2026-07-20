@@ -95,17 +95,21 @@ export default function Membership() {
       <Title>Annual membership</Title>
       <Card>
         <Body>Insurance Autopilot Membership</Body>
-        <Body muted>C$30 per year, billed through Stripe test mode.</Body>
+        <Body muted>$30 CAD per year</Body>
         <View style={{ height: 8 }} />
         <Caption>
-          In local development the payment step is bypassed automatically so no Stripe keys are
-          required.
+          We monitor your renewals, organize your policies and present eligible savings
+          opportunities. You approve every insurance change.
         </Caption>
       </Card>
       {polling ? (
         <Body muted>Waiting for subscription to become active…</Body>
       ) : (
-        <PrimaryButton label="Start membership" onPress={checkout} loading={loading} />
+        <PrimaryButton
+          label="Continue with annual membership"
+          onPress={checkout}
+          loading={loading}
+        />
       )}
       {error ? <Body muted>{error}</Body> : null}
     </Screen>

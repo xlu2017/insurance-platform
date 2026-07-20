@@ -69,40 +69,47 @@ export default function Preferences() {
   return (
     <Screen>
       <Stack.Screen
-        options={{ headerShown: true, headerBackTitle: "Back", title: "Switching preferences" }}
+        options={{ headerShown: true, headerBackTitle: "Back", title: "When to switch" }}
       />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Title>Switching preferences</Title>
+        <Title>When should we recommend a switch?</Title>
         <Body muted>We only ever propose a switch that satisfies these rules.</Body>
         <View style={{ height: 16 }} />
         <Card>
           <Field
-            label="Minimum net annual savings before switching (C$)"
+            label="Recommend a switch only if I save at least (C$ per year)"
             keyboardType="numeric"
             value={minSavings}
             onChangeText={setMinSavings}
           />
-          <Toggle label="Only switch at renewal" value={renewalOnly} onChange={setRenewalOnly} />
           <Toggle
-            label="Optimize home and auto together"
+            label="Only recommend changes at renewal"
+            value={renewalOnly}
+            onChange={setRenewalOnly}
+          />
+          <Toggle
+            label="Compare home and auto together"
             value={optimizeTogether}
             onChange={setOptimizeTogether}
           />
           <Toggle
-            label="Allow different insurers per policy"
+            label="Allow home and auto with different insurers"
             value={splitAllowed}
             onChange={setSplitAllowed}
           />
           <Toggle
-            label="Allow deductible increases"
+            label="Allow higher deductibles"
             value={deductibleIncreases}
             onChange={setDeductibleIncreases}
           />
-          <Row label="Material coverage reductions" value="Never allowed" />
-          <Row label="Your approval before any switch" value="Always required" />
+          <Body muted style={{ marginTop: 4 }}>
+            A higher deductible can lower the premium but increases what you pay after a claim.
+          </Body>
+          <Row label="Never reduce important coverage" value="Always" />
+          <Row label="Always ask me before starting a switch" value="Yes" />
         </Card>
         {error ? <Body muted>{error}</Body> : null}
-        <PrimaryButton label="Save and continue" onPress={save} loading={busy} />
+        <PrimaryButton label="Continue" onPress={save} loading={busy} />
       </ScrollView>
     </Screen>
   );

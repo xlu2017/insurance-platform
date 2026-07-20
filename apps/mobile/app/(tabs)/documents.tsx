@@ -11,6 +11,7 @@ import {
   createDocumentBatch,
   documentItemStatusLabel,
   documentBatchStatusLabels,
+  loadDangerousModeSetting,
   loadDocumentBatch,
   loadLatestDocumentBatch,
   retryDocumentBatch,
@@ -116,12 +117,23 @@ export default function Documents() {
     },
   });
 
+  const { data: dangerousMode } = useQuery({
+    queryKey: ["dangerous-mode", household?.id],
+    enabled: !!household,
+    queryFn: () => loadDangerousModeSetting(household!.id),
+  });
+
+  const instantReview = dangerousMode?.enabled ?? false;
+  const fileCount = pending.length;
+  const fileCountLabel = fileCount === 1 ? "1 file" : `${fileCount} files`;
+  const hasFailed = pending.some((item) => item.status === "failed");
+
   if (isLoading) return <Loading />;
   if (!household) {
     return (
       <Screen style={{ justifyContent: "center" }}>
         <Title>Finish setting up</Title>
-        <Body muted>Create your household to upload and view policy documents.</Body>
+        <Body muted>Set up your account to upload and view policy documents.</Body>
         <View style={{ height: 16 }} />
         <PrimaryButton
           label="Continue setup"
@@ -240,7 +252,7 @@ export default function Documents() {
         <ScrollView showsVerticalScrollIndicator={false}>
           <Title>Documents</Title>
           <Card>
-            <Subtitle>Pending batch</Subtitle>
+            <Subtitle>Files ready to upload</Subtitle>
             <Select
               label="Category for the next files (or leave Auto-detect)"
               options={categoryOptions}
@@ -287,7 +299,13 @@ export default function Documents() {
             ))}
             {!batchSubmitted ? (
               <PrimaryButton
-                label={batch ? "Retry upload and analyze" : "Upload and analyze"}
+                label={
+                  batch && hasFailed
+                    ? "Retry failed files"
+                    : instantReview
+                      ? `Upload ${fileCountLabel} and start AI review`
+                      : `Upload ${fileCountLabel}`
+                }
                 onPress={uploadAndAnalyze}
                 loading={busy}
                 disabled={pending.length === 0}
@@ -302,16 +320,13 @@ export default function Documents() {
                 label={documentBatchStatusLabels[currentBatch.status]}
                 tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
               />
-              <Caption>
-                {currentBatch.document_count} selected · {currentBatch.unique_document_count} unique
-                · {currentBatch.deduplicated_count} deduplicated
-              </Caption>
+              <Caption>{`${currentBatch.document_count} ${currentBatch.document_count === 1 ? "file" : "files"} added`}</Caption>
               {!currentBatch.automatic_processing && currentBatch.is_terminal ? (
-                <Body muted>Your documents are being reviewed.</Body>
+                <Body muted>We are preparing the details for your review.</Body>
               ) : null}
               {currentBatch.status === "ready_for_review" ? (
                 <PrimaryButton
-                  label="Review extracted details"
+                  label="Review what we found"
                   onPress={() =>
                     router.push({
                       pathname: "/onboarding/review-entities",
@@ -354,7 +369,7 @@ export default function Documents() {
                 />
               </View>
               <View style={{ height: 8 }} />
-              <SecondaryButton label="View (secure link)" onPress={() => download(doc)} />
+              <SecondaryButton label="View" onPress={() => download(doc)} />
               <View style={{ height: 8 }} />
               <SecondaryButton
                 label="Remove document"

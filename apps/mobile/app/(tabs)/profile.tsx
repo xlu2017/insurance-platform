@@ -25,7 +25,7 @@ import { loadDangerousModeSetting, updateDangerousModeSetting } from "@/lib/docu
 
 const DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
 const DANGEROUS_MODE_DISCLOSURE =
-  "Immediately send uploaded policy documents to an external AI provider for extraction. Documents may contain sensitive personal, financial, property and vehicle information. AI output may be incomplete or incorrect and must be reviewed before use.";
+  "Your uploaded policies will be sent to an external AI service immediately. This may speed up setup, but the AI can make mistakes. You will review all information before anything is saved.";
 
 export default function Profile() {
   const { data: household, isLoading } = useHousehold();
@@ -42,6 +42,21 @@ export default function Profile() {
     automated: false,
     raw: false,
   });
+
+  const membershipStatusLabel: Record<string, string> = {
+    active: "Active",
+    past_due: "Payment required",
+    cancelled: "Cancelled",
+    trialing: "Trial",
+    unpaid: "Unpaid",
+  };
+
+  const consentTypeLabel: Record<string, string> = {
+    store_documents: "Policy document storage",
+    share_for_quotation: "Sharing information for quotes",
+    generate_recommendations: "Insurance recommendations",
+    electronic_communications: "Account communications",
+  };
 
   useEffect(() => {
     if (household) setAutopilot(household.autopilot_active);
@@ -156,7 +171,7 @@ export default function Profile() {
       await refetchDangerousMode();
     } catch (error) {
       setDangerousError(
-        error instanceof Error ? error.message : "Failed to disable Dangerous mode",
+        error instanceof Error ? error.message : "Failed to turn off instant AI review",
       );
     } finally {
       setDangerousBusy(false);
@@ -198,7 +213,9 @@ export default function Profile() {
       });
       await refetchDangerousMode();
     } catch (error) {
-      setDangerousError(error instanceof Error ? error.message : "Failed to enable Dangerous mode");
+      setDangerousError(
+        error instanceof Error ? error.message : "Failed to turn on instant AI review",
+      );
     } finally {
       setDangerousBusy(false);
     }
@@ -226,10 +243,13 @@ export default function Profile() {
                 alignItems: "center",
               }}
             >
-              <Body>Monitor renewals and switch automatically</Body>
+              <Body>Monitor renewals and prepare better options</Body>
               <Switch value={autopilot} onValueChange={toggleAutopilot} />
             </View>
-            <Caption>When paused, Autopilot will not open new renewal cases.</Caption>
+            <Caption>
+              We review your insurance before renewal and notify you when an eligible option is
+              ready. You approve every switch.
+            </Caption>
           </Card>
           <Card>
             <Subtitle>Security</Subtitle>
@@ -246,7 +266,7 @@ export default function Profile() {
             <Caption>Approving a switch always requires reauthentication.</Caption>
           </Card>
           <Card>
-            <Subtitle>Experimental</Subtitle>
+            <Subtitle>Document review</Subtitle>
             <View
               style={{
                 flexDirection: "row",
@@ -255,11 +275,11 @@ export default function Profile() {
               }}
             >
               <View style={{ flex: 1, marginRight: 12 }}>
-                <Body>Dangerous mode</Body>
-                <Caption>Safe mode is the default.</Caption>
+                <Body>{dangerousMode?.enabled ? "Instant AI review" : "Standard review"}</Body>
+                <Caption>{dangerousMode?.enabled ? "Experimental" : "Recommended"}</Caption>
               </View>
               <Switch
-                accessibilityLabel="Dangerous mode"
+                accessibilityLabel="Instant AI review"
                 value={dangerousMode?.enabled ?? false}
                 disabled={dangerousBusy}
                 onValueChange={(enabled) => {
@@ -271,11 +291,15 @@ export default function Profile() {
             <Caption>{DANGEROUS_MODE_DISCLOSURE}</Caption>
             {showDangerousConfirmation && !(dangerousMode?.enabled ?? false) ? (
               <View style={{ marginTop: 12, gap: 10 }}>
+                <Subtitle>Turn on instant AI review?</Subtitle>
                 {[
-                  ["explicit", "I explicitly confirm that I want to enable Dangerous mode."],
-                  ["foreign", "I acknowledge that processing may occur outside Canada."],
-                  ["automated", "I acknowledge automated document processing."],
-                  ["raw", "I approve processing the original policy documents."],
+                  [
+                    "explicit",
+                    "I understand my policy documents will be processed by an external AI service.",
+                  ],
+                  ["foreign", "I understand processing may occur outside Canada."],
+                  ["automated", "I understand AI-generated information may be incorrect."],
+                  ["raw", "I agree to review the results before they are saved."],
                 ].map(([key, label]) => (
                   <View key={key} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                     <Body style={{ flex: 1 }}>{label}</Body>
@@ -300,7 +324,7 @@ export default function Profile() {
                   onChangeText={setDangerousPassword}
                 />
                 <PrimaryButton
-                  label="Enable Dangerous mode"
+                  label="Turn on instant AI review"
                   onPress={enableDangerousMode}
                   loading={dangerousBusy}
                   disabled={!allDangerousAcknowledged || !dangerousPassword}
@@ -316,15 +340,20 @@ export default function Profile() {
           </Card>
           <Card>
             <Subtitle>Membership</Subtitle>
-            <Row label="Status" value={subscription?.status ?? "—"} />
+            <Row
+              label="Status"
+              value={
+                membershipStatusLabel[subscription?.status ?? ""] ?? subscription?.status ?? "—"
+              }
+            />
             <Row label="Renews" value={formatEdmontonDate(subscription?.current_period_end)} />
           </Card>
           <Card>
-            <Subtitle>Consent history</Subtitle>
+            <Subtitle>Privacy and permissions</Subtitle>
             {(consents ?? []).map((c, i) => (
               <Row
                 key={i}
-                label={`${c.consent_type} (${c.disclosure_version})`}
+                label={consentTypeLabel[c.consent_type] ?? c.consent_type}
                 value={`${c.granted ? "Granted" : "Withdrawn"} ${formatEdmontonDate(c.created_at)}`}
               />
             ))}

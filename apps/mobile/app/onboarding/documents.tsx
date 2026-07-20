@@ -8,6 +8,7 @@ import {
   createDocumentBatch,
   documentItemStatusLabel,
   documentBatchStatusLabels,
+  loadDangerousModeSetting,
   loadDocumentBatch,
   loadLatestDocumentBatch,
   submitDocumentBatch,
@@ -84,7 +85,18 @@ export default function OnboardingDocuments() {
     },
   });
 
+  const { data: dangerousMode } = useQuery({
+    queryKey: ["dangerous-mode", household?.id],
+    enabled: !!household,
+    queryFn: () => loadDangerousModeSetting(household!.id),
+  });
+
   if (isLoading || !household) return <Loading />;
+
+  const instantReview = dangerousMode?.enabled ?? false;
+  const fileCount = pending.length;
+  const fileCountLabel = fileCount === 1 ? "1 file" : `${fileCount} files`;
+  const hasFailed = pending.some((item) => item.status === "failed");
 
   const appendFiles = (files: PickedFile[], category: DocumentCategory) => {
     if (files.length === 0) return;
@@ -178,10 +190,12 @@ export default function OnboardingDocuments() {
       <Stack.Screen
         options={{ headerShown: true, headerBackTitle: "Back", title: "Upload policies" }}
       />
-      <Title>Upload your current policies</Title>
+      <Title>Add your current policies</Title>
       <Body muted>
-        Add PDF or image files. Autopilot will detect which documents cover auto, property, or both,
-        and create the right candidates.
+        Select all policy PDFs or photos you have.
+        {instantReview
+          ? " AI review begins as soon as the upload finishes."
+          : " We will organize them and prepare the details for your review."}
       </Body>
       <View style={{ height: 16 }} />
 
@@ -208,7 +222,7 @@ export default function OnboardingDocuments() {
 
       {pending.length > 0 ? (
         <Card>
-          <Caption>Pending batch</Caption>
+          <Caption>{`${fileCountLabel} ready to upload`}</Caption>
           <View style={{ gap: 12, marginTop: 8 }}>
             {pending.map((item) => (
               <View key={item.clientItemId}>
@@ -241,18 +255,15 @@ export default function OnboardingDocuments() {
             label={documentBatchStatusLabels[currentBatch.status]}
             tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
           />
-          <Caption>
-            {currentBatch.document_count} selected · {currentBatch.unique_document_count} unique ·{" "}
-            {currentBatch.deduplicated_count} deduplicated
-          </Caption>
+          <Caption>{`${currentBatch.document_count} ${currentBatch.document_count === 1 ? "file" : "files"} added`}</Caption>
           {!currentBatch.automatic_processing && currentBatch.is_terminal ? (
             <Body muted>
-              Your documents are being reviewed. You can safely leave and return later.
+              We are preparing the details for your review. You can safely leave and return later.
             </Body>
           ) : null}
           {currentBatch.status === "ready_for_review" ? (
             <PrimaryButton
-              label="Review extracted details"
+              label="Review what we found"
               onPress={() =>
                 router.push({
                   pathname: "/onboarding/review-entities",
@@ -268,12 +279,18 @@ export default function OnboardingDocuments() {
       {!batchSubmitted ? (
         <View style={{ gap: 8 }}>
           <PrimaryButton
-            label={batch ? "Retry upload and analyze" : "Upload and analyze"}
+            label={
+              batch && hasFailed
+                ? "Retry failed files"
+                : instantReview
+                  ? `Upload ${fileCountLabel} and start AI review`
+                  : `Upload ${fileCountLabel}`
+            }
             onPress={uploadAndAnalyze}
             loading={busy}
             disabled={pending.length === 0}
           />
-          <SecondaryButton label="Skip for now" onPress={skip} disabled={busy} />
+          <SecondaryButton label="Do this later" onPress={skip} disabled={busy} />
         </View>
       ) : null}
     </Screen>
