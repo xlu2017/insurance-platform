@@ -275,12 +275,14 @@ function UnsureDocumentsModal({
   fieldPath,
   visible,
   onClose,
+  onUpdateValue,
   onConfirmUnknown,
 }: {
   candidate: ExtractionCandidate;
   fieldPath: string;
   visible: boolean;
   onClose: () => void;
+  onUpdateValue: () => void;
   onConfirmUnknown: () => void;
 }) {
   const { data: household } = useHousehold();
@@ -337,7 +339,8 @@ function UnsureDocumentsModal({
             ))}
           </ScrollView>
           <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
-            <PrimaryButton
+            <PrimaryButton label="Update value" onPress={onUpdateValue} />
+            <SecondaryButton
               label="Still unsure - mark unknown"
               onPress={() => {
                 onConfirmUnknown();
@@ -378,6 +381,11 @@ function FieldEditStep({
 
   const handleUnsureConfirm = () => {
     onComplete("unknown");
+  };
+
+  const handleUpdateValue = () => {
+    setShowUnsure(false);
+    setEditing(true);
   };
 
   if (editing) {
@@ -425,6 +433,7 @@ function FieldEditStep({
         fieldPath={fieldPath}
         visible={showUnsure}
         onClose={() => setShowUnsure(false)}
+        onUpdateValue={handleUpdateValue}
         onConfirmUnknown={handleUnsureConfirm}
       />
     </>
