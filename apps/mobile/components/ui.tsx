@@ -20,9 +20,29 @@ export function Screen({ children, style, ...props }: ViewProps) {
   );
 }
 
-export function Card({ children, style, ...props }: ViewProps) {
+export function Card({
+  children,
+  style,
+  onEdit,
+  editLabel = "Edit",
+  ...props
+}: ViewProps & { onEdit?: () => void; editLabel?: string }) {
   return (
     <View style={[styles.card, style]} {...props}>
+      {onEdit ? (
+        <View
+          style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: spacing.sm }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={editLabel}
+            onPress={onEdit}
+            style={({ pressed }) => [styles.editButton, pressed && styles.editButtonPressed]}
+          >
+            <Body style={{ color: colors.accent }}>{editLabel}</Body>
+          </Pressable>
+        </View>
+      ) : null}
       {children}
     </View>
   );
@@ -595,6 +615,14 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: typography.sizes.body,
     fontWeight: "600",
+  },
+  editButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.md,
+  },
+  editButtonPressed: {
+    opacity: 0.7,
   },
   loading: {
     flex: 1,

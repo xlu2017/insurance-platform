@@ -59,11 +59,17 @@ export default function CoverageDefaults() {
             <Body muted>No coverage defaults set.</Body>
           ) : (
             <>
-              <Card style={{ marginBottom: spacing.md }}>
+              <Card
+                onEdit={() => router.navigate("/edit-mandate")}
+                style={{ marginBottom: spacing.md }}
+              >
                 <Subtitle style={{ marginBottom: spacing.sm }}>Auto defaults</Subtitle>
                 <AutoMandateRows auto={data.mandate.householdAutoDefaults} />
               </Card>
-              <Card style={{ marginBottom: spacing.md }}>
+              <Card
+                onEdit={() => router.navigate("/edit-mandate")}
+                style={{ marginBottom: spacing.md }}
+              >
                 <Subtitle style={{ marginBottom: spacing.sm }}>Property defaults</Subtitle>
                 <PropertyMandateRows property={data.mandate.householdPropertyDefaults} />
               </Card>

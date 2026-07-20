@@ -1,7 +1,9 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AssetEditModal } from "@/components/asset-edit-modal";
 import { Body, Card, Loading, Row, Screen, Subtitle, Title } from "@/components/ui";
 import { AutoMandateRows } from "@/components/coverage-rules";
 import { useHousehold } from "@/lib/household";
@@ -9,30 +11,49 @@ import { supabase } from "@/lib/supabase";
 import { loadHouseholdMandateV2, resolveEffectiveVehicleMandateV2 } from "@autopilot/database";
 import { colors, spacing } from "@autopilot/design-tokens";
 
+type VehicleCandidate = {
+  id: string;
+  display_label: string | null;
+};
+
 export default function VehicleDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: household, isLoading: isLoadingHousehold } = useHousehold();
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["vehicle", id, household?.id],
     enabled: !!household && !!id,
     queryFn: async () => {
       if (!household || !id) return null;
-      const [{ data: row, error: vehicleError }, mandateResult] = await Promise.all([
-        supabase
-          .from("vehicles")
-          .select(
-            "id, year, make, model, vin, financing_status, vehicle_use_class, is_classic, is_modified",
-          )
-          .eq("id", id)
-          .eq("household_id", household.id)
-          .single(),
-        loadHouseholdMandateV2(supabase, household.id),
-      ]);
+      const [{ data: row, error: vehicleError }, { data: candidateRows }, mandateResult] =
+        await Promise.all([
+          supabase
+            .from("vehicles")
+            .select(
+              "id, year, make, model, vin, financing_status, vehicle_use_class, is_classic, is_modified",
+            )
+            .eq("id", id)
+            .eq("household_id", household.id)
+            .single(),
+          supabase
+            .from("asset_candidates")
+            .select("id, display_label")
+            .eq("household_id", household.id)
+            .eq("approved_asset_type", "vehicle")
+            .eq("approved_asset_id", id)
+            .in("review_status", ["approved", "confirmed"])
+            .limit(1),
+          loadHouseholdMandateV2(supabase, household.id),
+        ]);
       if (vehicleError) throw new Error(vehicleError.message);
       if (!row) throw new Error("Vehicle not found");
       const effective = resolveEffectiveVehicleMandateV2(mandateResult.mandate, row.id);
-      return { vehicle: row, effective };
+      return {
+        vehicle: row,
+        candidate: (candidateRows ?? [])[0] as VehicleCandidate | undefined,
+        effective,
+      };
     },
   });
 
@@ -52,7 +73,7 @@ export default function VehicleDetail() {
     );
   }
 
-  const { vehicle, effective } = data;
+  const { vehicle, candidate, effective } = data;
   const tags = [
     vehicle.financing_status ? vehicle.financing_status.replace("_", " ") : null,
     vehicle.vehicle_use_class ? vehicle.vehicle_use_class.replace("_", " ") : null,
@@ -95,7 +116,7 @@ export default function VehicleDetail() {
             paddingBottom: spacing.xxl,
           }}
         >
-          <Card style={{ marginBottom: spacing.md }}>
+          <Card onEdit={() => setEditOpen(true)} style={{ marginBottom: spacing.md }}>
             <Subtitle style={{ marginBottom: spacing.sm }}>
               {`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
             </Subtitle>
@@ -107,7 +128,10 @@ export default function VehicleDetail() {
             {vehicle.vin ? <Row label="VIN" value={vehicle.vin} /> : null}
           </Card>
 
-          <Card style={{ marginBottom: spacing.md }}>
+          <Card
+            onEdit={() => router.navigate("/edit-mandate")}
+            style={{ marginBottom: spacing.md }}
+          >
             <Subtitle style={{ marginBottom: spacing.sm }}>Coverage rules</Subtitle>
             <AutoMandateRows auto={effective} />
           </Card>
@@ -117,6 +141,14 @@ export default function VehicleDetail() {
           </Pressable>
         </ScrollView>
       </Screen>
+
+      <AssetEditModal
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
+        payload={{ type: "vehicle", asset: vehicle }}
+        candidate={candidate ?? null}
+        onSaved={() => refetch()}
+      />
     </SafeAreaView>
   );
 }

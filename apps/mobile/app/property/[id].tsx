@@ -1,7 +1,9 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AssetEditModal } from "@/components/asset-edit-modal";
 import { Body, Card, Loading, Row, Screen, Subtitle, Title } from "@/components/ui";
 import { PropertyMandateRows } from "@/components/coverage-rules";
 import { useHousehold } from "@/lib/household";
@@ -9,30 +11,49 @@ import { supabase } from "@/lib/supabase";
 import { loadHouseholdMandateV2, resolveEffectivePropertyMandateV2 } from "@autopilot/database";
 import { colors, spacing } from "@autopilot/design-tokens";
 
+type PropertyCandidate = {
+  id: string;
+  display_label: string | null;
+};
+
 export default function PropertyDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: household, isLoading: isLoadingHousehold } = useHousehold();
+  const [editOpen, setEditOpen] = useState(false);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["property", id, household?.id],
     enabled: !!household && !!id,
     queryFn: async () => {
       if (!household || !id) return null;
-      const [{ data: row, error: propertyError }, mandateResult] = await Promise.all([
-        supabase
-          .from("properties")
-          .select(
-            "id, address_line1, city, province, postal_code, property_type, owner_occupied, year_built",
-          )
-          .eq("id", id)
-          .eq("household_id", household.id)
-          .single(),
-        loadHouseholdMandateV2(supabase, household.id),
-      ]);
+      const [{ data: row, error: propertyError }, { data: candidateRows }, mandateResult] =
+        await Promise.all([
+          supabase
+            .from("properties")
+            .select(
+              "id, address_line1, city, province, postal_code, property_type, owner_occupied, year_built",
+            )
+            .eq("id", id)
+            .eq("household_id", household.id)
+            .single(),
+          supabase
+            .from("asset_candidates")
+            .select("id, display_label")
+            .eq("household_id", household.id)
+            .eq("approved_asset_type", "property")
+            .eq("approved_asset_id", id)
+            .in("review_status", ["approved", "confirmed"])
+            .limit(1),
+          loadHouseholdMandateV2(supabase, household.id),
+        ]);
       if (propertyError) throw new Error(propertyError.message);
       if (!row) throw new Error("Property not found");
       const effective = resolveEffectivePropertyMandateV2(mandateResult.mandate, row.id);
-      return { property: row, effective };
+      return {
+        property: row,
+        candidate: (candidateRows ?? [])[0] as PropertyCandidate | undefined,
+        effective,
+      };
     },
   });
 
@@ -52,7 +73,7 @@ export default function PropertyDetail() {
     );
   }
 
-  const { property, effective } = data;
+  const { property, candidate, effective } = data;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceSubtle }} edges={["top"]}>
@@ -87,7 +108,7 @@ export default function PropertyDetail() {
             paddingBottom: spacing.xxl,
           }}
         >
-          <Card style={{ marginBottom: spacing.md }}>
+          <Card onEdit={() => setEditOpen(true)} style={{ marginBottom: spacing.md }}>
             <Subtitle style={{ marginBottom: spacing.sm }}>{property.address_line1}</Subtitle>
             <Body muted style={{ marginBottom: spacing.md }}>
               {[property.city, property.province, property.postal_code].filter(Boolean).join(", ")}
@@ -99,12 +120,23 @@ export default function PropertyDetail() {
             ) : null}
           </Card>
 
-          <Card style={{ marginBottom: spacing.md }}>
+          <Card
+            onEdit={() => router.navigate("/edit-mandate")}
+            style={{ marginBottom: spacing.md }}
+          >
             <Subtitle style={{ marginBottom: spacing.sm }}>Coverage rules</Subtitle>
             <PropertyMandateRows property={effective} />
           </Card>
         </ScrollView>
       </Screen>
+
+      <AssetEditModal
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
+        payload={{ type: "property", asset: property }}
+        candidate={candidate ?? null}
+        onSaved={() => refetch()}
+      />
     </SafeAreaView>
   );
 }
