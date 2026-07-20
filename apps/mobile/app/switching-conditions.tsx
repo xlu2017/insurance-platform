@@ -47,7 +47,7 @@ export default function SwitchingConditions() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
-            onPress={() => router.back()}
+            onPress={() => router.push("/coverage")}
             style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
           >
             <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>

@@ -16,6 +16,7 @@ export interface AssetListItem {
 
 export interface AssetListScreenProps<T extends AssetListItem> {
   title: string;
+  backRoute?: string;
   searchPlaceholder: string;
   emptyTitle: string;
   emptyBody: string;
@@ -48,6 +49,7 @@ function SkeletonRow() {
 
 export function AssetListScreen<T extends AssetListItem>({
   title,
+  backRoute,
   searchPlaceholder,
   emptyTitle,
   emptyBody,
@@ -135,7 +137,7 @@ export function AssetListScreen<T extends AssetListItem>({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
-            onPress={() => router.back()}
+            onPress={() => (backRoute ? router.push(backRoute) : router.back())}
             style={{
               position: "absolute",
               left: spacing.lg,

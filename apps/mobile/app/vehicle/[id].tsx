@@ -44,7 +44,7 @@ export default function VehicleDetail() {
         <Screen>
           <Title>Vehicle not found</Title>
           <Body muted>{error ? String(error.message) : "This vehicle does not exist."}</Body>
-          <Pressable onPress={() => router.back()}>
+          <Pressable onPress={() => router.push("/vehicles")}>
             <Body style={{ color: colors.accent }}>Go back</Body>
           </Pressable>
         </Screen>
@@ -79,7 +79,7 @@ export default function VehicleDetail() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
-            onPress={() => router.back()}
+            onPress={() => router.push("/vehicles")}
             style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
           >
             <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>

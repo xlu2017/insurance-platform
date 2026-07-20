@@ -44,7 +44,7 @@ export default function PropertyDetail() {
         <Screen>
           <Title>Property not found</Title>
           <Body muted>{error ? String(error.message) : "This property does not exist."}</Body>
-          <Pressable onPress={() => router.back()}>
+          <Pressable onPress={() => router.push("/properties")}>
             <Body style={{ color: colors.accent }}>Go back</Body>
           </Pressable>
         </Screen>
@@ -71,7 +71,7 @@ export default function PropertyDetail() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
-            onPress={() => router.back()}
+            onPress={() => router.push("/properties")}
             style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
           >
             <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>

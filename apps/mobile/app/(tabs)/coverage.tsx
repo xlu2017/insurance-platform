@@ -22,7 +22,7 @@ export default function Coverage() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
-            onPress={() => router.back()}
+            onPress={() => router.push("/home")}
             style={{ position: "absolute", left: spacing.lg, padding: spacing.sm }}
           >
             <Body style={{ fontSize: 28, lineHeight: 28, color: colors.ink }}>{"<"}</Body>

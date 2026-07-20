@@ -128,6 +128,7 @@ export default function Vehicles() {
   return (
     <AssetListScreen<VehicleListItem>
       title="Vehicles"
+      backRoute="/coverage"
       searchPlaceholder="Search vehicles"
       emptyTitle="No vehicles yet"
       emptyBody="Upload an insurance document to add your vehicles."
