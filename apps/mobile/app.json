@@ -12,7 +12,9 @@
       "bundleIdentifier": "com.insuranceautopilot.app"
     },
     "android": {
-      "package": "com.insuranceautopilot.app"
+      "package": "com.insuranceautopilot.app",
+      "versionCode": 1,
+      "permissions": ["INTERNET"]
     },
     "plugins": [
       "expo-router",
