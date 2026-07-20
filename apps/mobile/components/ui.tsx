@@ -361,6 +361,7 @@ export function Select<T extends string>({
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ selected: option.value === value }}
+                testID={`select-option-${option.label}`}
                 key={option.value}
                 onPress={() => {
                   onValueChange(option.value);
