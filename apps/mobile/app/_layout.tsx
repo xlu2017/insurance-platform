@@ -56,6 +56,21 @@ export default function RootLayout() {
     () => new QueryClient({ defaultOptions: { queries: { retry: 2, staleTime: 10_000 } } }),
   );
   const { session, ready } = useAuthGate();
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const style = document.createElement("style");
+    style.id = "hide-web-textarea-scrollbars";
+    style.textContent = `
+      textarea::-webkit-scrollbar { display: none; }
+      textarea { scrollbar-width: none; }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      style.remove();
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={client}>
       <SafeAreaProvider>

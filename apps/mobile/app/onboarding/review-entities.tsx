@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -479,6 +479,7 @@ function CandidateSummary({
   onAdd,
   onSkip,
   onAddressVerified,
+  onEditDisplayName,
   busy,
 }: {
   candidate: ExtractionCandidate;
@@ -488,6 +489,7 @@ function CandidateSummary({
   onAdd: () => void;
   onSkip: () => void;
   onAddressVerified: (displayName: string) => void;
+  onEditDisplayName: (newName: string) => Promise<void>;
   busy: boolean;
 }) {
   const allPaths = fieldPathsForCandidate(candidate);
@@ -503,10 +505,69 @@ function CandidateSummary({
     ? addressVerified[candidate.id] || addressDraft?.action === "correct"
     : true;
 
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [name, setName] = useState(candidate.display_label);
+  const [savingName, setSavingName] = useState(false);
+
+  useEffect(() => {
+    if (!isEditingName) setName(candidate.display_label);
+  }, [candidate.display_label, isEditingName]);
+
+  const handleSaveName = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === candidate.display_label) {
+      setIsEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    try {
+      await onEditDisplayName(trimmed);
+      setIsEditingName(false);
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const handleCancelName = () => {
+    setName(candidate.display_label);
+    setIsEditingName(false);
+  };
+
   return (
     <Card style={{ flex: 1, justifyContent: "center" }}>
       <Subtitle style={styles.subtitle}>{typeLabel}</Subtitle>
-      <Title style={styles.title}>{candidate.display_label}</Title>
+      {isEditingName ? (
+        <View style={{ marginBottom: 8, gap: 8 }}>
+          <Field
+            label={`${typeLabel} name`}
+            value={name}
+            onChangeText={setName}
+            autoCorrect={false}
+            editable={!savingName}
+          />
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <SecondaryButton label="Cancel" onPress={handleCancelName} disabled={savingName} />
+            <PrimaryButton
+              label="Save"
+              onPress={handleSaveName}
+              disabled={!name.trim() || savingName}
+              loading={savingName}
+            />
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => setIsEditingName(true)}
+          style={styles.nameRow}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${typeLabel.toLowerCase()} name`}
+        >
+          <Title style={[styles.title, { marginBottom: 0, flex: 1 }]}>
+            {candidate.display_label}
+          </Title>
+          <Caption style={styles.editLabel}>Edit</Caption>
+        </Pressable>
+      )}
       {candidate.occupancy ? (
         <Caption>
           {OCCUPANCY_LABELS[candidate.occupancy.toLowerCase()] ?? candidate.occupancy}
@@ -591,6 +652,7 @@ export default function ReviewEntities() {
   const candidateIds = useMemo(() => candidates?.map((c) => c.id) ?? [], [candidates]);
   const { data: fieldReviews, isLoading: reviewsLoading } = useCandidateFieldReviews(candidateIds);
   const saveReview = useSaveCandidateFieldReview();
+  const queryClient = useQueryClient();
 
   const [decisions, setDecisions] = useState<Record<string, CandidateDecision["decision"]>>({});
   const [drafts, setDrafts] = useState<Record<string, DraftReview>>({});
@@ -746,6 +808,20 @@ export default function ReviewEntities() {
       [key]: { action: "correct", correctedValue: displayName, mandateRule: "", mandateAmount: "" },
     }));
     setAddressVerified((prev) => ({ ...prev, [currentCandidate.id]: true }));
+  };
+
+  const handleDisplayNameChange = async (newName: string) => {
+    if (!currentCandidate || !household) return;
+    const trimmed = newName.trim();
+    const { error } = await supabase
+      .from("asset_candidates")
+      .update({ display_label: trimmed, updated_at: new Date().toISOString() })
+      .eq("id", currentCandidate.id)
+      .eq("household_id", household.id);
+    if (error) throw error;
+    await queryClient.invalidateQueries({
+      queryKey: ["extraction-candidates", household.id, sessionId],
+    });
   };
 
   const handleAdd = async () => {
@@ -912,6 +988,7 @@ export default function ReviewEntities() {
           onAdd={handleAdd}
           onSkip={handleSkip}
           onAddressVerified={handleAddressVerified}
+          onEditDisplayName={handleDisplayNameChange}
           busy={busy}
         />
       </ScrollView>
@@ -924,6 +1001,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
   },
   subtitle: {
