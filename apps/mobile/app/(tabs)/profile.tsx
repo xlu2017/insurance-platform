@@ -383,6 +383,7 @@ export default function Profile() {
                 label={
                   membershipStatusLabel[subscription?.status ?? ""] ?? subscription?.status ?? "—"
                 }
+                tooltip="Your current subscription status."
               />
             </View>
             <Row label="Renews" value={formatEdmontonDate(subscription?.current_period_end)} />
@@ -409,6 +410,11 @@ export default function Profile() {
                   <StatusPill
                     label={c.granted ? "Granted" : "Withdrawn"}
                     tone={c.granted ? "accent" : "neutral"}
+                    tooltip={
+                      c.granted
+                        ? `You have granted permission for ${consentTypeLabel[c.consent_type] ?? c.consent_type}.`
+                        : `Permission for ${consentTypeLabel[c.consent_type] ?? c.consent_type} is withdrawn.`
+                    }
                   />
                   <Caption>{formatEdmontonDate(c.created_at)}</Caption>
                 </View>

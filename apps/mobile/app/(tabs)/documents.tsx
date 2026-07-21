@@ -13,6 +13,7 @@ import {
   createDocumentBatch,
   documentItemStatusLabel,
   documentBatchStatusLabels,
+  documentBatchStatusTooltips,
   loadDangerousModeSetting,
   loadDocumentBatch,
   loadLatestDocumentBatch,
@@ -61,6 +62,13 @@ const documentStatusLabels: Record<string, string> = {
   in_review: "In review",
   extracted: "Processed",
   rejected: "Rejected",
+};
+
+const documentStatusTooltips: Record<string, string> = {
+  uploaded: "Document uploaded, waiting to be processed.",
+  in_review: "Document is being reviewed.",
+  extracted: "Document processed and data extracted.",
+  rejected: "Document could not be processed.",
 };
 
 const categoryOptions = documentCategories.map((value) => ({
@@ -400,6 +408,7 @@ export default function Documents() {
                 <StatusPill
                   label={documentBatchStatusLabels[currentBatch.status]}
                   tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
+                  tooltip={documentBatchStatusTooltips[currentBatch.status]}
                 />
                 <Caption>
                   {currentBatch.document_count}{" "}
@@ -468,6 +477,7 @@ export default function Documents() {
                 <StatusPill
                   label={documentStatusLabels[doc.status] ?? doc.status}
                   tone={doc.status === "extracted" ? "accent" : "neutral"}
+                  tooltip={documentStatusTooltips[doc.status]}
                 />
               </View>
               <View style={{ flexDirection: "row", gap: 8, marginTop: spacing.md }}>

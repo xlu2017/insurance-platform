@@ -8,6 +8,7 @@ import {
   createDocumentBatch,
   documentItemStatusLabel,
   documentBatchStatusLabels,
+  documentBatchStatusTooltips,
   loadDangerousModeSetting,
   loadDocumentBatch,
   loadLatestDocumentBatch,
@@ -254,6 +255,7 @@ export default function OnboardingDocuments() {
           <StatusPill
             label={documentBatchStatusLabels[currentBatch.status]}
             tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
+            tooltip={documentBatchStatusTooltips[currentBatch.status]}
           />
           <Caption>{`${currentBatch.document_count} ${currentBatch.document_count === 1 ? "file" : "files"} added`}</Caption>
           {!currentBatch.automatic_processing && currentBatch.is_terminal ? (

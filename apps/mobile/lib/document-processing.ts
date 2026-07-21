@@ -26,6 +26,19 @@ export const documentBatchStatusLabels: Record<DocumentBatchStatus, string> = {
   manual_review: "Sent for review",
 };
 
+export const documentBatchStatusTooltips: Record<DocumentBatchStatus, string> = {
+  uploading_files: "Documents are still being uploaded.",
+  checking_duplicates: "Checking for duplicate documents.",
+  queued: "Documents are queued for processing.",
+  reading_policy_documents: "Reading the uploaded policy documents.",
+  comparing_policies: "Comparing the extracted policy details.",
+  validating_extracted_details: "Validating the extracted information.",
+  ready_for_review: "Extracted information is ready for review.",
+  additional_information_required: "More information or documents are needed.",
+  processing_unavailable: "Processing could not be completed.",
+  manual_review: "Documents sent for manual review.",
+};
+
 export interface DocumentBatchSummary {
   id: string;
   session_id: string;

@@ -170,6 +170,11 @@ export default function Home() {
               <StatusPill
                 label={household.autopilot_active ? "Autopilot active" : "Autopilot paused"}
                 tone={household.autopilot_active ? "accent" : "neutral"}
+                tooltip={
+                  household.autopilot_active
+                    ? "Autopilot is monitoring your policies and renewals."
+                    : "Autopilot is paused and will not monitor your policies."
+                }
               />
               {historicalOutcome && !requiredAction ? <Caption>{historicalOutcome}</Caption> : null}
             </View>
