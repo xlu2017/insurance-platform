@@ -281,12 +281,14 @@ export function SecondaryButton({
   label,
   onPress,
   disabled,
+  loading,
   testID,
   style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  loading?: boolean;
   testID?: string;
   style?: React.ComponentProps<typeof Pressable>["style"];
 }) {
@@ -296,15 +298,19 @@ export function SecondaryButton({
       accessibilityLabel={label}
       testID={testID}
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || loading}
       style={({ pressed }) => [
         styles.secondaryButton,
         typeof style === "function" ? style({ pressed }) : style,
-        disabled && styles.buttonDisabled,
-        pressed && styles.buttonPressed,
+        (disabled || loading) && styles.buttonDisabled,
+        pressed && !disabled && !loading && styles.buttonPressed,
       ]}
     >
-      <Text style={styles.secondaryButtonText}>{label}</Text>
+      {loading ? (
+        <ActivityIndicator color={colors.ink} />
+      ) : (
+        <Text style={styles.secondaryButtonText}>{label}</Text>
+      )}
     </Pressable>
   );
 }
