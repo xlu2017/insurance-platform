@@ -57,7 +57,7 @@ export default function Register() {
           onChangeText={setEmail}
         />
         <Field label="Password" secureTextEntry value={password} onChangeText={setPassword} />
-        {error ? <Body muted>{error}</Body> : null}
+        {error ? <Body error>{error}</Body> : null}
         <View style={{ height: 12 }} />
         <PrimaryButton label="Create account" onPress={register} loading={loading} />
         <View style={{ height: 12 }} />

@@ -199,15 +199,20 @@ export function Subtitle({
 export function Body({
   children,
   muted,
+  error,
   style,
   ...rest
 }: {
   children: React.ReactNode;
   muted?: boolean;
+  error?: boolean;
   style?: React.ComponentProps<typeof Text>["style"];
 } & Omit<React.ComponentProps<typeof Text>, "style" | "children">) {
   return (
-    <Text style={[styles.body, muted && styles.muted, style]} {...rest}>
+    <Text
+      style={[styles.body, muted && styles.muted, error && { color: colors.danger }, style]}
+      {...rest}
+    >
       {children}
     </Text>
   );

@@ -46,7 +46,7 @@ export default function SignIn() {
           onChangeText={setPassword}
           testID="password-input"
         />
-        {error ? <Body muted>{error}</Body> : null}
+        {error ? <Body error>{error}</Body> : null}
         <View style={{ height: 12 }} />
         <PrimaryButton label="Sign in" onPress={signIn} loading={loading} testID="sign-in-button" />
         <View style={{ height: 12 }} />
