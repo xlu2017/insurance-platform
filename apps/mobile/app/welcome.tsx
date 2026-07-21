@@ -1,7 +1,7 @@
-import { Redirect, router } from "expo-router";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { Body, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
+import { Body, Loading, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
 import { signInWithOAuthProvider } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
@@ -24,24 +24,27 @@ export default function Welcome() {
     };
   }, []);
 
+  useEffect(() => {
+    if (signedIn) {
+      router.replace("/home");
+    }
+  }, [signedIn]);
+
+  if (signedIn === null) return <Loading />;
+
   const continueWithSSO = async () => {
     setSsoLoading(true);
     setSsoError(null);
     try {
-      const { user, error } = await signInWithOAuthProvider("google");
+      const { error } = await signInWithOAuthProvider("google");
       if (error) {
         setSsoError(error.message);
-        return;
-      }
-      if (user) {
-        router.replace("/home");
       }
     } finally {
       setSsoLoading(false);
     }
   };
 
-  if (signedIn) return <Redirect href="/home" />;
   return (
     <Screen style={{ justifyContent: "center" }}>
       <Title>Insurance handled for you</Title>
