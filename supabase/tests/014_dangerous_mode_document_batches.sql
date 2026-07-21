@@ -196,45 +196,30 @@ select throws_ok(
   'customers cannot bypass the atomic service persistence boundary'
 );
 
-select throws_ok(
-  $$select enable_dangerous_mode_v1(
-      '70000000-0000-0000-0000-00000000b001',
-      'dangerous-mode-v1', 'processor-v1', 'kimi-k3', 'kimi-k3-test',
-      true, true, true, true
-    )$$,
-  'P0001',
-  'Recent password reauthentication is required',
-  'Dangerous mode cannot be enabled without recent password reauthentication'
-);
-
-do $$
-begin
-  perform set_config(
-    'request.jwt.claims',
-    jsonb_build_object(
-      'sub', '70000000-0000-0000-0000-00000000a001',
-      'role', 'authenticated',
-      'amr', jsonb_build_array(jsonb_build_object(
-        'method', 'password',
-        'timestamp', extract(epoch from now())::bigint
-      ))
-    )::text,
-    true
-  );
-end;
-$$;
-
 select lives_ok(
   $$select enable_dangerous_mode_v1(
       '70000000-0000-0000-0000-00000000b001',
       'dangerous-mode-v1', 'processor-v1', 'kimi-k3', 'kimi-k3-test',
       true, true, true, true
     )$$,
-  'recent reauthentication and every acknowledgement enable Dangerous mode atomically'
+  'authenticated OAuth or SSO sessions can enable Dangerous mode after explicit consent'
 );
 
 set local role service_role;
 set local request.jwt.claims to '{"sub":"00000000-0000-0000-0000-000000000000","role":"service_role"}';
+
+select is(
+  (
+    select reauthenticated_at
+    from household_document_processing_setting_events
+    where household_id = '70000000-0000-0000-0000-00000000b001'
+      and event_type = 'enabled'
+    order by created_at desc
+    limit 1
+  ),
+  null::timestamptz,
+  'OAuth enable does not fabricate a separate password reauthentication timestamp'
+);
 
 select ok(
   (select dangerous_mode_enabled from household_document_processing_settings
