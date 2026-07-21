@@ -61,11 +61,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const SUPABASE_URL = supabaseUrl;
 
+const isLocaltunnel = supabaseUrl.includes(".loca.lt");
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: secureStoreAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+  },
+  global: {
+    headers: isLocaltunnel ? { "Bypass-Tunnel-Reminder": "true" } : undefined,
   },
 });

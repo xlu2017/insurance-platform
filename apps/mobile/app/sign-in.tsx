@@ -5,15 +5,21 @@ import { supabase } from "@/lib/supabase";
 import { Body, Field, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
 
 export default function SignIn() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const demoEmail = process.env.EXPO_PUBLIC_DEMO_EMAIL;
+  const demoPassword = process.env.EXPO_PUBLIC_DEMO_PASSWORD;
+
+  const [email, setEmail] = useState(demoEmail ?? "");
+  const [password, setPassword] = useState(demoPassword ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const signIn = async () => {
+  const signIn = async (creds?: { email: string; password: string }) => {
     setLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: (creds?.email ?? email).trim(),
+      password: creds?.password ?? password,
+    });
     setLoading(false);
     if (error) {
       setError(error.message);
@@ -50,7 +56,23 @@ export default function SignIn() {
         />
         {error ? <Body error>{error}</Body> : null}
         <View style={{ height: 12 }} />
-        <PrimaryButton label="Sign in" onPress={signIn} loading={loading} testID="sign-in-button" />
+        <PrimaryButton
+          label="Sign in"
+          onPress={() => signIn()}
+          loading={loading}
+          testID="sign-in-button"
+        />
+        {demoEmail && demoPassword ? (
+          <>
+            <View style={{ height: 12 }} />
+            <SecondaryButton
+              label="Sign in with test account"
+              onPress={() => signIn({ email: demoEmail, password: demoPassword })}
+              disabled={loading}
+              testID="demo-sign-in-button"
+            />
+          </>
+        ) : null}
         <View style={{ height: 12 }} />
         <SecondaryButton label="Back" onPress={() => router.back()} />
       </Screen>
