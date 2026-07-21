@@ -61,17 +61,6 @@ export default function RootLayout() {
   );
   const { session, ready } = useAuthGate();
 
-  if (!ready) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <View style={[styles.viewport, styles.loading]}>
-          <ActivityIndicator />
-        </View>
-      </SafeAreaProvider>
-    );
-  }
-
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
     const style = document.createElement("style");
@@ -85,6 +74,17 @@ export default function RootLayout() {
       style.remove();
     };
   }, []);
+
+  if (!ready) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <View style={[styles.viewport, styles.loading]}>
+          <ActivityIndicator />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={client}>
