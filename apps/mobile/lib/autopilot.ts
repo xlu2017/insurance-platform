@@ -105,13 +105,6 @@ const caseWorkflow: WorkflowStepDef[] = [
     waiting: "Completing your switch",
   },
   { state: "completed", label: "Switch completed", actor: "our team", waiting: "Completed" },
-  {
-    state: "retained_incumbent",
-    label: "Kept current insurance",
-    actor: "you",
-    waiting: "Kept current insurance",
-  },
-  { state: "cancelled", label: "Cancelled", actor: "you", waiting: "Cancelled" },
 ];
 
 const workflowByState = new Map<CaseState, WorkflowStepDef>(caseWorkflow.map((s) => [s.state, s]));
@@ -161,19 +154,28 @@ function buildSteps(
   state: CaseState,
   mode: "current" | "past",
 ): { steps: SessionStep[]; currentStepIndex: number } {
-  const terminal = terminalStates.has(state);
-  const currentIndex = caseWorkflow.findIndex((s) => s.state === state);
+  let currentIndex = caseWorkflow.findIndex((s) => s.state === state);
+  let terminalStepState: SessionStepState | null = null;
+
+  if (state === "retained_incumbent") {
+    terminalStepState = "completed";
+    currentIndex = caseWorkflow.findIndex((s) => s.state === "customer_decision");
+  } else if (state === "cancelled") {
+    terminalStepState = "failed";
+    currentIndex = caseWorkflow.findIndex((s) => s.state === "customer_decision");
+  }
+
   const effectiveIndex = currentIndex === -1 ? 0 : currentIndex;
 
   const steps: SessionStep[] = caseWorkflow.map((def, index) => {
     let stepState: SessionStepState;
     if (mode === "past") {
       if (index < effectiveIndex) stepState = "completed";
-      else if (index === effectiveIndex) stepState = state === "cancelled" ? "failed" : "completed";
+      else if (index === effectiveIndex) stepState = terminalStepState ?? "completed";
       else stepState = "upcoming";
     } else {
       if (index < effectiveIndex) stepState = "completed";
-      else if (index === effectiveIndex) stepState = terminal ? "failed" : "current";
+      else if (index === effectiveIndex) stepState = terminalStepState ?? "current";
       else stepState = "upcoming";
     }
     return { key: def.state, label: def.label, state: stepState };
