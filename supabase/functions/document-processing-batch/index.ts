@@ -181,6 +181,15 @@ Deno.serve(async (req) => {
     return jsonResponse(latest ? publicBatch(latest) : null);
   }
 
+  if (action === "list") {
+    const { data: rows } = await admin
+      .from("document_processing_batches")
+      .select("*")
+      .eq("household_id", householdId)
+      .order("created_at", { ascending: false });
+    return jsonResponse((rows ?? []).map(publicBatch));
+  }
+
   if (action === "create") {
     const clientRequestId = String(body.client_request_id ?? "");
     if (!clientRequestId || clientRequestId.length > 240) {
