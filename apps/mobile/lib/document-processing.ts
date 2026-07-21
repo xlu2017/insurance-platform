@@ -1,4 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
 import { invokeEdgeFunction } from "./edge-functions";
+import { supabase } from "./supabase";
 
 export type DocumentBatchStatus =
   | "uploading_files"
@@ -169,4 +171,42 @@ export async function updateDangerousModeSetting(input: {
 
 export function createClientRequestId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export function useReviewSessions(householdId: string | undefined) {
+  return useQuery({
+    queryKey: ["review-sessions", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<DocumentBatchSummary[]> => {
+      const { data, error } = await supabase
+        .from("document_processing_batches")
+        .select(
+          "id, session_id, status, mode_snapshot, document_count, unique_document_count, deduplicated_count, retryable, created_at",
+        )
+        .eq("household_id", householdId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const terminalStatuses: DocumentBatchStatus[] = [
+        "ready_for_review",
+        "additional_information_required",
+        "processing_unavailable",
+        "manual_review",
+      ];
+      return (data ?? []).map((row) => {
+        const status = String(row.status) as DocumentBatchStatus;
+        return {
+          id: String(row.id),
+          session_id: String(row.session_id),
+          status,
+          automatic_processing: row.mode_snapshot === "dangerous",
+          document_count: Number(row.document_count ?? 0),
+          unique_document_count: Number(row.unique_document_count ?? 0),
+          deduplicated_count: Number(row.deduplicated_count ?? 0),
+          retryable: Boolean(row.retryable),
+          is_terminal: terminalStatuses.includes(status),
+          created_at: String(row.created_at),
+        };
+      });
+    },
+  });
 }

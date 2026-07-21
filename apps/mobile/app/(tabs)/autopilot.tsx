@@ -1,8 +1,16 @@
 import { router } from "expo-router";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "@autopilot/design-tokens";
 import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
+import {
+  documentBatchStatusLabels,
+  retryDocumentBatch,
+  useReviewSessions,
+  type DocumentBatchSummary,
+} from "@/lib/document-processing";
+import { formatEdmontonDateTime } from "@/lib/format";
 import {
   Body,
   Caption,
@@ -10,6 +18,7 @@ import {
   Loading,
   PrimaryButton,
   Screen,
+  SecondaryButton,
   StatusPill,
   Subtitle,
 } from "@/components/ui";
@@ -53,13 +62,63 @@ export default function Autopilot() {
   const { data: household, isLoading } = useHousehold();
   const { data: activeCase, isLoading: caseLoading } = useActiveCase(household?.id);
   const { data: historicalCase } = useHistoricalCase(household?.id);
+  const queryClient = useQueryClient();
+  const { data: sessions, isLoading: sessionsLoading } = useReviewSessions(household?.id);
 
-  if (isLoading || caseLoading) return <Loading />;
+  if (isLoading || caseLoading || sessionsLoading) return <Loading />;
 
   const currentStageIndex = activeCase
     ? customerStages.findIndex((s) => s.states.includes(activeCase.state))
     : -1;
   const subStatus = activeCase ? detailedStatus[activeCase.state] : undefined;
+
+  const reviewableStatuses = new Set(["ready_for_review", "additional_information_required"]);
+  const continueUploadStatuses = new Set(["uploading_files", "checking_duplicates"]);
+
+  const handleRetry = async (session: DocumentBatchSummary) => {
+    if (!household) return;
+    await retryDocumentBatch(household.id, session.id);
+    queryClient.invalidateQueries({ queryKey: ["review-sessions", household.id] });
+  };
+
+  function SessionAction({ session, index }: { session: DocumentBatchSummary; index: number }) {
+    if (reviewableStatuses.has(session.status)) {
+      return (
+        <SecondaryButton
+          label={index === 0 ? "Review" : "Continue review"}
+          onPress={() =>
+            router.push({
+              pathname: "/onboarding/review-entities",
+              params: { sessionId: session.session_id },
+            })
+          }
+          style={{ paddingVertical: 10, paddingHorizontal: 14 }}
+        />
+      );
+    }
+    if (continueUploadStatuses.has(session.status)) {
+      return (
+        <SecondaryButton
+          label="Continue upload"
+          onPress={() => router.push("/(tabs)/documents")}
+          style={{ paddingVertical: 10, paddingHorizontal: 14 }}
+        />
+      );
+    }
+    if (session.status === "processing_unavailable" && session.retryable) {
+      return (
+        <SecondaryButton
+          label="Retry"
+          onPress={() => handleRetry(session)}
+          style={{ paddingVertical: 10, paddingHorizontal: 14 }}
+        />
+      );
+    }
+    if (session.status === "manual_review") {
+      return <Caption>Sent for manual review</Caption>;
+    }
+    return <Caption>{index === 0 ? "Processing latest upload..." : "Processing..."}</Caption>;
+  }
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -70,6 +129,36 @@ export default function Autopilot() {
               ? "We are working through your current review. We will notify you when a recommendation is ready."
               : "Your insurance is being monitored. A new review starts automatically before your renewal."}
           </Body>
+
+          {sessions && sessions.length > 0 ? (
+            <Card testID="review-sessions">
+              <Subtitle>Review sessions</Subtitle>
+              <View style={{ height: 8 }} />
+              {sessions.map((session, index) => (
+                <View
+                  key={session.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: index < sessions.length - 1 ? 12 : 0,
+                  }}
+                >
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Body>{documentBatchStatusLabels[session.status]}</Body>
+                    <Caption>
+                      {formatEdmontonDateTime(session.created_at)}
+                      {session.unique_document_count > 0
+                        ? ` · ${session.unique_document_count} document${session.unique_document_count === 1 ? "" : "s"}`
+                        : ""}
+                      {index === 0 ? " · latest" : ""}
+                    </Caption>
+                  </View>
+                  <SessionAction session={session} index={index} />
+                </View>
+              ))}
+            </Card>
+          ) : null}
 
           {!activeCase && historicalCase ? (
             <Card>
