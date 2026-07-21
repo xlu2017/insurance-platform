@@ -890,7 +890,7 @@ export default function ReviewEntities() {
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
         contentContainerStyle={{
-          padding: spacing.lg,
+          paddingTop: spacing.md,
           paddingBottom: spacing.xl * 2,
           minHeight: "100%",
         }}
