@@ -26,30 +26,30 @@ describe("Dangerous mode enable policy", () => {
   });
 
   it("requires every explicit processing acknowledgement", () => {
-    expect(validateDangerousModeEnablePolicy({ ...valid, rawProcessingApproved: false }, now)).toBe(
+    expect(validateDangerousModeEnablePolicy({ ...valid, rawProcessingApproved: false })).toBe(
       "ACKNOWLEDGEMENTS_REQUIRED",
     );
   });
 
   it("requires the current versioned disclosure", () => {
-    expect(validateDangerousModeEnablePolicy({ ...valid, disclosureVersion: "old" }, now)).toBe(
+    expect(validateDangerousModeEnablePolicy({ ...valid, disclosureVersion: "old" })).toBe(
       "DISCLOSURE_VERSION_MISMATCH",
     );
   });
 
-  it("requires password reauthentication within five minutes", () => {
+  it("requires a password-authenticated session", () => {
     expect(
-      validateDangerousModeEnablePolicy(
-        { ...valid, passwordAuthenticatedAtSeconds: now - 301 },
-        now,
-      ),
+      validateDangerousModeEnablePolicy({
+        ...valid,
+        passwordAuthenticatedAtSeconds: null,
+      }),
     ).toBe("RECENT_REAUTHENTICATION_REQUIRED");
     expect(
-      validateDangerousModeEnablePolicy(
-        { ...valid, passwordAuthenticatedAtSeconds: null, tokenIssuedAtSeconds: now - 1 },
-        now,
-      ),
-    ).toBe("RECENT_REAUTHENTICATION_REQUIRED");
-    expect(validateDangerousModeEnablePolicy(valid, now)).toBeNull();
+      validateDangerousModeEnablePolicy({
+        ...valid,
+        passwordAuthenticatedAtSeconds: now - 301,
+      }),
+    ).toBeNull();
+    expect(validateDangerousModeEnablePolicy(valid)).toBeNull();
   });
 });

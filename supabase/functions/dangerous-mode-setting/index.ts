@@ -141,9 +141,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    const configuredModel = Deno.env.get("KIMI_MODEL_ID") ?? "";
     const processorContractVersion = Deno.env.get("PROCESSOR_CONTRACT_VERSION") ?? "";
-    if (!configuredModel || !configuredModel.toLowerCase().includes("kimi-k3")) {
+    const configuredModel =
+      Deno.env.get("DOCUMENT_MODEL_PRIMARY") ??
+      Deno.env.get("GEMINI_MODEL_ID") ??
+      Deno.env.get("KIMI_MODEL_ID") ??
+      "";
+    const configuredProvider =
+      String(Deno.env.get("CONFIGURED_PROVIDER") ?? "").toLowerCase() ||
+      (configuredModel.toLowerCase().includes("gemini") ||
+      configuredModel.toLowerCase().includes("flash")
+        ? "gemini"
+        : configuredModel.toLowerCase().includes("kimi")
+          ? "kimi-k3"
+          : "");
+    if (!configuredModel || !configuredProvider) {
       return jsonError("Automatic document processing is not configured", 503);
     }
     if (!processorContractVersion) {
@@ -154,7 +166,7 @@ Deno.serve(async (req) => {
       p_household_id: householdId,
       p_disclosure_version: disclosureVersion,
       p_processor_contract_version: processorContractVersion,
-      p_configured_provider: "kimi-k3",
+      p_configured_provider: configuredProvider,
       p_configured_model_id: configuredModel,
       p_explicit_confirmation: true,
       p_foreign_processing_acknowledged: true,

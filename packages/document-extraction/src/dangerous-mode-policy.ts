@@ -17,7 +17,6 @@ export type DangerousModePolicyFailure =
 
 export function validateDangerousModeEnablePolicy(
   input: DangerousModeEnablePolicyInput,
-  nowSeconds = Math.floor(Date.now() / 1000),
 ): DangerousModePolicyFailure | null {
   if (
     !input.explicitConfirmation ||
@@ -31,12 +30,7 @@ export function validateDangerousModeEnablePolicy(
     return "DISCLOSURE_VERSION_MISMATCH";
   }
 
-  const authenticatedAt = input.passwordAuthenticatedAtSeconds;
-  if (
-    !authenticatedAt ||
-    nowSeconds - authenticatedAt > 5 * 60 ||
-    authenticatedAt > nowSeconds + 30
-  ) {
+  if (!input.passwordAuthenticatedAtSeconds) {
     return "RECENT_REAUTHENTICATION_REQUIRED";
   }
   return null;
