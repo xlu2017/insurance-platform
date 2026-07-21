@@ -35,6 +35,7 @@ function publicBatch(batch: Record<string, unknown>) {
   return {
     id: String(batch.id),
     session_id: String(batch.session_id),
+    case_id: batch.case_id ? String(batch.case_id) : null,
     status,
     automatic_processing: batch.mode_snapshot === "dangerous",
     document_count: Number(batch.document_count ?? 0),

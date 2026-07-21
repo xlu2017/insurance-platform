@@ -30,7 +30,7 @@ import {
   uploadPolicyDocument,
   type PickedFile,
 } from "@/lib/upload";
-import { formatEdmontonDate } from "@/lib/format";
+import { formatEdmontonDateTime } from "@/lib/format";
 import {
   Body,
   Caption,
@@ -473,7 +473,7 @@ export default function Documents() {
                   <Body numberOfLines={1}>{doc.file_name}</Body>
                   <Caption>
                     {categoryLabels[doc.category as DocumentCategory] ?? doc.category} ·{" "}
-                    {formatEdmontonDate(doc.created_at)}
+                    {formatEdmontonDateTime(doc.created_at)}
                   </Caption>
                 </View>
                 <StatusPill

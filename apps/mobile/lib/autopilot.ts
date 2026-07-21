@@ -37,6 +37,7 @@ const terminalStates = new Set<CaseState>(["completed", "retained_incumbent", "c
 interface BatchSummary {
   id: string;
   session_id: string;
+  case_id: string | null;
   status: string;
   is_terminal: boolean;
   created_at: string;
@@ -239,7 +240,7 @@ function buildSession(
     isTerminal ? "past" : "current",
   );
   const status = statusForState(c.state as CaseState);
-  const batch = batches?.find((b) => b.session_id === c.session_id);
+  const batch = batches?.find((b) => b.case_id === c.id);
   const isProcessing =
     !isTerminal && c.state === "extracting_information" && !!batch && !batch.is_terminal;
   return {
