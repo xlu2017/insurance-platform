@@ -341,6 +341,64 @@ function parseOAuthReturnUrl(returnUrl: string): {
   };
 }
 
+type ExchangeResult = { user: User; error?: undefined } | { user?: undefined; error: AuthError };
+const exchangeLocks = new Map<string, Promise<ExchangeResult>>();
+
+export async function exchangeOAuthCode(
+  code?: string,
+  accessToken?: string,
+  refreshToken?: string,
+): Promise<{ user?: User; error?: AuthError }> {
+  const key = code ?? accessToken ?? "none";
+  const existing = exchangeLocks.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = (async (): Promise<ExchangeResult> => {
+    const client = getSupabaseClient();
+    try {
+      if (code) {
+        const { data: exchanged, error: exchangeError } =
+          await client.auth.exchangeCodeForSession(code);
+        if (exchangeError || !exchanged.user) {
+          logDev(`exchangeCodeForSession failed: ${exchangeError?.message ?? "no user"}`);
+          return { error: ssoError("Could not complete SSO sign-in. Please try again.") };
+        }
+        return { user: exchanged.user };
+      }
+
+      if (accessToken && refreshToken) {
+        const { data: session, error: sessionError } = await client.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError || !session.user) {
+          logDev(`setSession failed: ${sessionError?.message ?? "no user"}`);
+          return { error: ssoError("Could not complete SSO sign-in. Please try again.") };
+        }
+        return { user: session.user };
+      }
+
+      return { error: ssoError("SSO sign-in returned no session. Please try again.") };
+    } catch (err) {
+      logDev(`SSO exchange error: ${(err as Error).message}`);
+      return {
+        error: {
+          category: "offline",
+          message: "Your device appears to be offline. Check your connection and try again.",
+          retryable: true,
+        },
+      };
+    } finally {
+      exchangeLocks.delete(key);
+    }
+  })();
+
+  exchangeLocks.set(key, promise);
+  return promise;
+}
+
 export async function signInWithOAuthProvider(
   provider: OAuthProvider = "google",
 ): Promise<{ user?: User; error?: AuthError }> {
@@ -369,30 +427,7 @@ export async function signInWithOAuthProvider(
     }
 
     const { code, accessToken, refreshToken } = parseOAuthReturnUrl(result.url);
-
-    if (code) {
-      const { data: exchanged, error: exchangeError } =
-        await client.auth.exchangeCodeForSession(code);
-      if (exchangeError || !exchanged.user) {
-        logDev(`exchangeCodeForSession failed: ${exchangeError?.message ?? "no user"}`);
-        return { error: ssoError("Could not complete SSO sign-in. Please try again.") };
-      }
-      return { user: exchanged.user };
-    }
-
-    if (accessToken && refreshToken) {
-      const { data: session, error: sessionError } = await client.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-      if (sessionError || !session.user) {
-        logDev(`setSession failed: ${sessionError?.message ?? "no user"}`);
-        return { error: ssoError("Could not complete SSO sign-in. Please try again.") };
-      }
-      return { user: session.user };
-    }
-
-    return { error: ssoError("SSO sign-in returned no session. Please try again.") };
+    return exchangeOAuthCode(code, accessToken, refreshToken);
   } catch (err) {
     logDev(`SSO network error: ${(err as Error).message}`);
     return {

@@ -851,8 +851,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: 16,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.lg,
     minHeight: 56,
   },
   settingsRowPressed: {

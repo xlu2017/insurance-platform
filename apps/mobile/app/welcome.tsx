@@ -1,36 +1,28 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { BackHandler, Platform, View } from "react-native";
 import { Body, Loading, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
 import { signInWithOAuthProvider } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 
 export default function Welcome() {
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const { status, isAuthenticated } = useAuth();
   const [ssoLoading, setSsoLoading] = useState(false);
   const [ssoError, setSsoError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) setSignedIn(!!data.session);
+    if (Platform.OS !== "android") return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      // When the user is on the welcome screen there is no authenticated route
+      // to go back to; exit the app instead of reopening any previous screen.
+      BackHandler.exitApp();
+      return true;
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setSignedIn(!!session);
-    });
-    return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
-    };
+    return () => subscription.remove();
   }, []);
 
-  useEffect(() => {
-    if (signedIn) {
-      router.replace("/home");
-    }
-  }, [signedIn]);
-
-  if (signedIn === null) return <Loading />;
+  if (status === "loading") return <Loading />;
+  if (isAuthenticated) return <Redirect href="/home" />;
 
   const continueWithSSO = async () => {
     setSsoLoading(true);
@@ -40,6 +32,7 @@ export default function Welcome() {
       if (error) {
         setSsoError(error.message);
       }
+      // On success the global auth listener will pick up the session and redirect.
     } finally {
       setSsoLoading(false);
     }

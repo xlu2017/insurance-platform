@@ -5,61 +5,27 @@ import { enableScreens } from "react-native-screens";
 enableScreens(false);
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, usePathname, useRouter } from "expo-router";
+import { Stack, usePathname } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StackHeader } from "@/components/ui";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
-import { loadRemoteConfig } from "@/lib/config";
-import { getSupabaseClient, resetSupabaseClient } from "@/lib/supabase";
+import { AuthContext } from "@/lib/auth-context";
+import { useAuthGate } from "@/lib/auth-gate";
 import { colors } from "@autopilot/design-tokens";
-import type { Session } from "@supabase/supabase-js";
 
-const PUBLIC_PATHS = new Set(["/", "/welcome", "/sign-in", "/register"]);
-
-function useAuthGate() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [ready, setReady] = useState(false);
+function AuthGate() {
+  const auth = useAuthGate();
   const pathname = usePathname();
-  const router = useRouter();
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      await loadRemoteConfig({ timeoutMs: 10_000 });
-      resetSupabaseClient();
-      const { data } = await getSupabaseClient().auth.getSession();
-      if (mounted) {
-        setSession(data.session);
-        setReady(true);
-      }
-    })();
-    const { data: subscription } = getSupabaseClient().auth.onAuthStateChange((_event, next) => {
-      if (mounted) setSession(next);
-    });
-    return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
-    };
+    // Let expo-web-browser clean up any pending auth session that may have
+    // survived a cold start or process switch.
+    WebBrowser.maybeCompleteAuthSession();
   }, []);
-
-  useEffect(() => {
-    if (!ready || !pathname) return;
-    if (!session && !PUBLIC_PATHS.has(pathname)) {
-      router.replace("/welcome");
-    }
-  }, [ready, session, pathname, router]);
-
-  return { session, ready };
-}
-
-export default function RootLayout() {
-  const [client] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: 2, staleTime: 10_000 } } }),
-  );
-  const { session, ready } = useAuthGate();
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -75,7 +41,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!ready) {
+  if (auth.status === "loading") {
     return (
       <SafeAreaProvider>
         <StatusBar style="dark" />
@@ -86,8 +52,15 @@ export default function RootLayout() {
     );
   }
 
+  const showTabBar =
+    auth.isAuthenticated &&
+    pathname !== "/welcome" &&
+    pathname !== "/sign-in" &&
+    pathname !== "/register" &&
+    pathname !== "/auth/callback";
+
   return (
-    <QueryClientProvider client={client}>
+    <AuthContext.Provider value={auth}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <View style={styles.viewport}>
@@ -101,10 +74,22 @@ export default function RootLayout() {
                 contentStyle: { flex: 1, backgroundColor: colors.surfaceSubtle },
               }}
             />
-            {ready && session && <BottomTabBar />}
+            {showTabBar && <BottomTabBar />}
           </View>
         </View>
       </SafeAreaProvider>
+    </AuthContext.Provider>
+  );
+}
+
+export default function RootLayout() {
+  const [client] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: 2, staleTime: 10_000 } } }),
+  );
+
+  return (
+    <QueryClientProvider client={client}>
+      <AuthGate />
     </QueryClientProvider>
   );
 }
