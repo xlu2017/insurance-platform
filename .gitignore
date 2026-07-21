@@ -17,3 +17,5 @@ test-results/
 .DS_Store
 deno.lock
 **/fixtures/private/
+apps/mobile/android/
+apps/mobile/ios/
