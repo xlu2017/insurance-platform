@@ -574,6 +574,20 @@ export default function ReviewEntities() {
     household?.id,
     sessionId,
   );
+  const { data: totalCandidateCount, isLoading: totalCountLoading } = useQuery({
+    queryKey: ["asset-candidate-count", household?.id, sessionId],
+    enabled: !!household,
+    queryFn: async () => {
+      let query = supabase
+        .from("asset_candidates")
+        .select("id", { count: "exact", head: true })
+        .eq("household_id", household!.id);
+      if (sessionId) query = query.eq("session_id", sessionId);
+      const { count, error } = await query;
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
   const candidateIds = useMemo(() => candidates?.map((c) => c.id) ?? [], [candidates]);
   const { data: fieldReviews, isLoading: reviewsLoading } = useCandidateFieldReviews(candidateIds);
   const saveReview = useSaveCandidateFieldReview();
@@ -627,7 +641,14 @@ export default function ReviewEntities() {
     });
   };
 
-  if (householdLoading || sessionLoading || candidatesLoading || reviewsLoading) return <Loading />;
+  if (
+    householdLoading ||
+    sessionLoading ||
+    candidatesLoading ||
+    reviewsLoading ||
+    totalCountLoading
+  )
+    return <Loading />;
   if (!household) {
     return (
       <Screen style={{ justifyContent: "center" }}>
@@ -641,35 +662,40 @@ export default function ReviewEntities() {
     );
   }
   if (!candidates || candidates.length === 0) {
+    const hasExtractedItems = (totalCandidateCount ?? 0) > 0;
+    const emptyState = sessionId
+      ? hasExtractedItems
+        ? {
+            title: "All reviewed",
+            body: "Every extracted item has already been reviewed.",
+            label: "View coverage",
+            route: "/(tabs)/coverage" as const,
+          }
+        : {
+            title: "No items found",
+            body: "We couldn't find any vehicles or properties to review in the uploaded documents.",
+            label: "Upload documents",
+            route: "/onboarding/documents" as const,
+          }
+      : {
+          title: "Nothing to review",
+          body: "Upload your policies first so we can show you what we found.",
+          label: "Upload",
+          route: "/onboarding/documents" as const,
+        };
     return (
       <Screen style={{ justifyContent: "center" }}>
         <Stack.Screen options={{ title: "Review" }} />
         <Card style={{ paddingVertical: spacing.xl }}>
-          {sessionId ? (
-            <>
-              <Title style={[styles.title, { textAlign: "center" }]}>All reviewed</Title>
-              <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
-                Every extracted item has already been reviewed.
-              </Body>
-              <PrimaryButton
-                label="View coverage"
-                onPress={() => router.replace("/(tabs)/coverage")}
-                style={styles.uploadButton}
-              />
-            </>
-          ) : (
-            <>
-              <Title style={[styles.title, { textAlign: "center" }]}>Nothing to review</Title>
-              <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
-                Upload your policies first so we can show you what we found.
-              </Body>
-              <PrimaryButton
-                label="Upload"
-                onPress={() => router.push("/onboarding/documents")}
-                style={styles.uploadButton}
-              />
-            </>
-          )}
+          <Title style={[styles.title, { textAlign: "center" }]}>{emptyState.title}</Title>
+          <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
+            {emptyState.body}
+          </Body>
+          <PrimaryButton
+            label={emptyState.label}
+            onPress={() => router.replace(emptyState.route)}
+            style={styles.uploadButton}
+          />
         </Card>
       </Screen>
     );
