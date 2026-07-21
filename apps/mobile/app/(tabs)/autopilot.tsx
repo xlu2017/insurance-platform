@@ -1,261 +1,228 @@
 import { router } from "expo-router";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "@autopilot/design-tokens";
-import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
-import {
-  documentBatchStatusLabels,
-  retryDocumentBatch,
-  useReviewSessions,
-  type DocumentBatchSummary,
-} from "@/lib/document-processing";
-import { formatEdmontonDateTime } from "@/lib/format";
+import { useHousehold } from "@/lib/household";
+import { useAutopilotSessions, type AutopilotSession, type SessionStep } from "@/lib/autopilot";
+import { useReviewSessions } from "@/lib/document-processing";
 import {
   Body,
   Caption,
   Card,
+  CollapsibleSection,
   Loading,
   PrimaryButton,
   Screen,
   SecondaryButton,
   StatusPill,
   Subtitle,
+  Title,
 } from "@/components/ui";
 
-const customerStages: { states: string[]; label: string }[] = [
-  {
-    states: ["awaiting_documents", "extracting_information", "awaiting_customer_confirmation"],
-    label: "Preparing your information",
-  },
-  {
-    states: ["ready_for_market_search", "requesting_quotes", "awaiting_quotes"],
-    label: "Requesting insurance options",
-  },
-  { states: ["comparing_quotes", "licensed_review"], label: "Comparing coverage and price" },
-  { states: ["recommendation_ready", "customer_decision"], label: "Recommendation ready" },
-  { states: ["switching", "completed"], label: "Completing your switch" },
-];
+function StepMarker({ state }: { state: SessionStep["state"] }) {
+  const color =
+    state === "completed"
+      ? colors.success
+      : state === "current"
+        ? colors.accent
+        : state === "failed"
+          ? "#B91C1C"
+          : colors.border;
+  const borderWidth = state === "upcoming" ? 1 : 0;
+  return (
+    <View
+      style={{
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: state === "upcoming" ? colors.surface : color,
+        borderWidth,
+        borderColor: color,
+        marginTop: 4,
+      }}
+    />
+  );
+}
 
-const detailedStatus: Record<string, string> = {
-  awaiting_documents: "Policies received",
-  extracting_information: "Extracting your information",
-  awaiting_customer_confirmation: "Waiting for your confirmation",
-  ready_for_market_search: "Ready for market search",
-  requesting_quotes: "Requesting quotes",
-  awaiting_quotes: "Waiting for insurer responses",
-  comparing_quotes: "Comparing coverage and price",
-  licensed_review: "Expert review",
-  recommendation_ready: "Recommendation ready",
-  customer_decision: "Waiting for your decision",
-  switching: "Switch in progress",
-  completed: "Switch completed",
-};
+function SessionStepList({
+  steps,
+  action,
+}: {
+  steps: SessionStep[];
+  action?: AutopilotSession["action"];
+}) {
+  return (
+    <View>
+      {steps.map((step, index) => {
+        const isLast = index === steps.length - 1;
+        const isCurrent = step.state === "current";
+        const color =
+          step.state === "completed"
+            ? colors.success
+            : step.state === "current"
+              ? colors.accent
+              : step.state === "failed"
+                ? "#B91C1C"
+                : colors.inkMuted;
+        const lineColor =
+          index < steps.findIndex((s) => s.state === "current" || s.state === "failed")
+            ? colors.success
+            : colors.border;
+        return (
+          <View
+            key={step.key}
+            style={{ flexDirection: "row", alignItems: "flex-start", minHeight: 40 }}
+          >
+            <View style={{ alignItems: "center", width: 24 }}>
+              <StepMarker state={step.state} />
+              {!isLast ? (
+                <View
+                  style={{
+                    width: 2,
+                    flex: 1,
+                    backgroundColor: lineColor,
+                  }}
+                />
+              ) : null}
+            </View>
+            <View style={{ flex: 1, paddingBottom: 12 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <Body
+                  style={{
+                    color,
+                    fontWeight: isCurrent ? "700" : step.state === "completed" ? "600" : "400",
+                  }}
+                >
+                  {step.label}
+                </Body>
+                {isCurrent && action ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={action.label}
+                    onPress={() =>
+                      router.push({
+                        pathname: action.route,
+                        params: action.params,
+                      })
+                    }
+                    style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Body style={{ color: colors.accent, fontWeight: "600" }}>{action.label}</Body>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
-const outcomeText: Record<string, string> = {
-  completed: "Your last case completed with a successful switch.",
-  retained_incumbent: "Your last case completed; you kept your current insurance.",
-  cancelled: "Your last case was cancelled.",
-};
-
-export default function Autopilot() {
-  const { data: household, isLoading } = useHousehold();
-  const { data: activeCase, isLoading: caseLoading } = useActiveCase(household?.id);
-  const { data: historicalCase } = useHistoricalCase(household?.id);
-  const queryClient = useQueryClient();
-  const { data: sessions, isLoading: sessionsLoading } = useReviewSessions(household?.id);
-
-  if (isLoading || caseLoading || sessionsLoading) return <Loading />;
-
-  const currentStageIndex = activeCase
-    ? customerStages.findIndex((s) => s.states.includes(activeCase.state))
-    : -1;
-  const subStatus = activeCase ? detailedStatus[activeCase.state] : undefined;
-
-  const reviewableStatuses = new Set(["ready_for_review", "additional_information_required"]);
-  const continueUploadStatuses = new Set(["uploading_files", "checking_duplicates"]);
-
-  const handleRetry = async (session: DocumentBatchSummary) => {
-    if (!household) return;
-    await retryDocumentBatch(household.id, session.id);
-    queryClient.invalidateQueries({ queryKey: ["review-sessions", household.id] });
-  };
-
-  function SessionAction({ session, index }: { session: DocumentBatchSummary; index: number }) {
-    if (reviewableStatuses.has(session.status)) {
-      return (
-        <SecondaryButton
-          label={index === 0 ? "Review" : "Continue review"}
+function SessionCard({ session, testID }: { session: AutopilotSession; testID?: string }) {
+  return (
+    <Card testID={testID}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: 12,
+          gap: 12,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Subtitle style={{ marginBottom: 4 }}>{session.name}</Subtitle>
+          <Caption>Started {session.startedAt}</Caption>
+        </View>
+        <StatusPill label={session.status} tone={session.statusTone} />
+      </View>
+      <SessionStepList steps={session.steps} action={session.action} />
+      {session.action ? (
+        <PrimaryButton
+          label={session.action.label}
           onPress={() =>
             router.push({
-              pathname: "/onboarding/review-entities",
-              params: { sessionId: session.session_id },
+              pathname: session.action!.route,
+              params: session.action!.params,
             })
           }
-          style={{ paddingVertical: 10, paddingHorizontal: 14 }}
         />
-      );
-    }
-    if (continueUploadStatuses.has(session.status)) {
-      if (index === 0) {
-        return (
-          <SecondaryButton
-            label="Continue upload"
-            onPress={() => router.push("/(tabs)/documents")}
-            style={{ paddingVertical: 10, paddingHorizontal: 14 }}
-          />
-        );
-      }
-      return <Caption>Incomplete upload</Caption>;
-    }
-    if (session.status === "processing_unavailable" && session.retryable) {
-      return (
-        <SecondaryButton
-          label="Retry"
-          onPress={() => handleRetry(session)}
-          style={{ paddingVertical: 10, paddingHorizontal: 14 }}
-        />
-      );
-    }
-    if (session.status === "manual_review") {
-      return <Caption>Sent for manual review</Caption>;
-    }
-    return <Caption>{index === 0 ? "Processing latest upload..." : "Processing..."}</Caption>;
+      ) : null}
+    </Card>
+  );
+}
+
+export default function Autopilot() {
+  const { data: household, isLoading: householdLoading } = useHousehold();
+  const { data: reviewSessions, isLoading: reviewSessionsLoading } = useReviewSessions(
+    household?.id,
+  );
+  const latestReviewSession = reviewSessions?.[0];
+  const { current, past, isLoading, error, refetch } = useAutopilotSessions(
+    household?.id,
+    latestReviewSession?.session_id,
+  );
+
+  if (householdLoading || reviewSessionsLoading || isLoading) return <Loading />;
+
+  if (error) {
+    return (
+      <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+        <Screen>
+          <Title>We couldn’t load Autopilot</Title>
+          <Body muted>Check your connection and try again.</Body>
+          <View style={{ height: 16 }} />
+          <SecondaryButton label="Try again" onPress={() => refetch()} />
+        </Screen>
+      </SafeAreaView>
+    );
   }
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Body muted style={{ marginBottom: 16 }}>
-            {activeCase
-              ? "We are working through your current review. We will notify you when a recommendation is ready."
-              : "Your insurance is being monitored. A new review starts automatically before your renewal."}
-          </Body>
+          <View style={{ marginBottom: 16 }}>
+            <Title>Autopilot</Title>
+          </View>
 
-          {sessions && sessions.length > 0 ? (
-            <Card testID="review-sessions">
-              <Subtitle>Review sessions</Subtitle>
-              <View style={{ height: 8 }} />
-              {sessions.map((session, index) => (
-                <View
-                  key={session.id}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: index < sessions.length - 1 ? 12 : 0,
-                  }}
-                >
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Body>{documentBatchStatusLabels[session.status]}</Body>
-                    <Caption>
-                      {formatEdmontonDateTime(session.created_at)}
-                      {session.unique_document_count > 0
-                        ? ` · ${session.unique_document_count} document${session.unique_document_count === 1 ? "" : "s"}`
-                        : ""}
-                      {index === 0 ? " · latest" : ""}
-                    </Caption>
-                  </View>
-                  <SessionAction session={session} index={index} />
-                </View>
-              ))}
-            </Card>
-          ) : null}
-
-          {!activeCase && historicalCase ? (
+          <Subtitle>Current Session</Subtitle>
+          {current ? (
+            <SessionCard session={current} testID="current-session" />
+          ) : (
             <Card>
-              <StatusPill label="No review in progress" tone="neutral" />
-              <View style={{ height: 12 }} />
-              <Body muted>{outcomeText[historicalCase.state] ?? "Last case completed."}</Body>
-              <View style={{ height: 8 }} />
-              <Caption>
-                A new renewal review will start when your policy renewal date approaches.
-              </Caption>
-            </Card>
-          ) : null}
-          {!activeCase && !historicalCase ? (
-            <Card>
-              <StatusPill label="Autopilot active" />
-              <View style={{ height: 12 }} />
+              <Subtitle style={{ marginBottom: 4 }}>No active Autopilot session</Subtitle>
               <Body muted>
-                Your insurance is being monitored. We will notify you before your next renewal.
+                Your next insurance review will appear here when Autopilot begins checking your
+                coverage.
               </Body>
             </Card>
-          ) : null}
-          {activeCase ? (
-            <>
-              <Card testID="case-timeline">
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 12,
-                  }}
-                >
-                  <Subtitle style={{ marginBottom: 0 }}>Current review</Subtitle>
-                  {subStatus ? <StatusPill label={subStatus} tone="accent" /> : null}
-                </View>
-                {customerStages.map((step, i) => {
-                  const done = currentStageIndex > i;
-                  const current = currentStageIndex === i;
-                  return (
-                    <View
-                      key={step.label}
-                      style={{ flexDirection: "row", alignItems: "flex-start", minHeight: 40 }}
-                    >
-                      <View style={{ alignItems: "center", width: 24 }}>
-                        <View
-                          style={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: 6,
-                            backgroundColor: current
-                              ? colors.accent
-                              : done
-                                ? colors.success
-                                : colors.border,
-                            marginTop: 4,
-                          }}
-                        />
-                        {i < customerStages.length - 1 ? (
-                          <View
-                            style={{
-                              width: 2,
-                              flex: 1,
-                              backgroundColor: done ? colors.success : colors.border,
-                            }}
-                          />
-                        ) : null}
-                      </View>
-                      <View style={{ flex: 1, paddingBottom: 12 }}>
-                        <Body
-                          muted={!done && !current}
-                          style={
-                            current
-                              ? { color: colors.accent, fontWeight: "700" }
-                              : done
-                                ? { color: colors.success }
-                                : undefined
-                          }
-                        >
-                          {step.label}
-                        </Body>
-                      </View>
-                    </View>
-                  );
-                })}
+          )}
+
+          <View style={{ height: 24 }} />
+
+          <CollapsibleSection title="Past Sessions" testID="past-sessions-section">
+            {past.length === 0 ? (
+              <Card>
+                <Body muted>No past sessions yet</Body>
+                <Caption>Completed and closed Autopilot sessions will appear here.</Caption>
               </Card>
-              {activeCase.state === "customer_decision" ? (
-                <PrimaryButton
-                  label="Review your recommendation"
-                  onPress={() => router.push("/recommendation")}
-                  testID="open-recommendation"
-                />
-              ) : null}
-            </>
-          ) : null}
+            ) : (
+              past.map((session, index) => (
+                <View key={session.id} style={{ marginBottom: index < past.length - 1 ? 16 : 0 }}>
+                  <SessionCard session={session} />
+                </View>
+              ))
+            )}
+          </CollapsibleSection>
         </ScrollView>
       </Screen>
     </SafeAreaView>

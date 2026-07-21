@@ -446,15 +446,64 @@ export function StatusPill({
   tone = "accent",
 }: {
   label: string;
-  tone?: "accent" | "warning" | "neutral";
+  tone?: "accent" | "warning" | "neutral" | "error" | "success";
 }) {
   const bg =
-    tone === "accent" ? colors.accentSoft : tone === "warning" ? "#FBF3E0" : colors.surfaceSubtle;
+    tone === "accent"
+      ? colors.accentSoft
+      : tone === "warning"
+        ? "#FBF3E0"
+        : tone === "error"
+          ? "#FDECEC"
+          : tone === "success"
+            ? "#E6F6F2"
+            : colors.surfaceSubtle;
   const fg =
-    tone === "accent" ? colors.accent : tone === "warning" ? colors.warning : colors.inkMuted;
+    tone === "accent"
+      ? colors.accent
+      : tone === "warning"
+        ? colors.warning
+        : tone === "error"
+          ? "#B91C1C"
+          : tone === "success"
+            ? colors.success
+            : colors.inkMuted;
   return (
     <View style={[styles.pill, { backgroundColor: bg }]}>
       <Text style={[styles.pillText, { color: fg }]}>{label}</Text>
+    </View>
+  );
+}
+
+export function CollapsibleSection({
+  title,
+  children,
+  defaultExpanded = true,
+  testID,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
+  testID?: string;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  return (
+    <View testID={testID}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${title}, ${expanded ? "expanded" : "collapsed"}`}
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((v) => !v)}
+        style={({ pressed }) => [styles.collapsibleHeader, pressed && styles.buttonPressed]}
+      >
+        <Text style={styles.collapsibleTitle}>{title}</Text>
+        {expanded ? (
+          <CaretDownIcon color={colors.inkMuted} size={16} />
+        ) : (
+          <CaretRightIcon color={colors.inkMuted} size={16} />
+        )}
+      </Pressable>
+      {expanded ? children : null}
     </View>
   );
 }
@@ -756,6 +805,17 @@ const styles = StyleSheet.create({
   },
   editButtonPressed: {
     opacity: 0.7,
+  },
+  collapsibleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+  },
+  collapsibleTitle: {
+    fontSize: typography.sizes.subtitle,
+    fontWeight: "600",
+    color: colors.ink,
   },
   loading: {
     flex: 1,

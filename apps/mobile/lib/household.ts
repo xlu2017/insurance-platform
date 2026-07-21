@@ -26,6 +26,31 @@ export function useHousehold() {
   });
 }
 
+export interface OptimizationCase {
+  id: string;
+  state: string;
+  renewal_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useOptimizationCases(householdId: string | undefined) {
+  return useQuery({
+    queryKey: ["optimization-cases", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<OptimizationCase[]> => {
+      const { data, error } = await supabase
+        .from("optimization_cases")
+        .select("id, state, renewal_date, notes, created_at, updated_at")
+        .eq("household_id", householdId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as OptimizationCase[];
+    },
+  });
+}
+
 export function useActiveCase(householdId: string | undefined) {
   return useQuery({
     queryKey: ["active-case", householdId],
