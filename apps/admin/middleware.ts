@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const publicRoutes = new Set(["/login", "/_next", "/favicon.ico"]);
+const publicRoutes = new Set(["/login", "/auth/callback", "/_next", "/favicon.ico"]);
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
@@ -54,5 +54,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|login).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|login|auth/callback).*)"],
 };

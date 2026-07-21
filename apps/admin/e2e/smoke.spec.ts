@@ -51,3 +51,35 @@ test("unauthenticated users are redirected to login", async ({ page }) => {
   await page.waitForURL("**/login");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });
+
+test("the SSO button is available on the login page", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Sign in with SSO" })).toBeVisible();
+});
+
+test("SSO callback without a valid code rejects and returns to login", async ({ page }) => {
+  await page.goto("/auth/callback");
+  await page.waitForURL("**/login**");
+  await expect(page.getByRole("button", { name: "Sign in with SSO" })).toBeVisible();
+});
+
+// The callback applies the same staff-only gate as the password flow: a
+// customer-role (or role-less) SSO session is signed out and redirected to
+// /login?error=staff_only, which the login page surfaces as this message.
+test("SSO staff-only rejection surfaces the operations-only error", async ({ page }) => {
+  await page.goto("/login?error=staff_only");
+  await expect(
+    page.getByText("This console is for operations, reviewer and administrator accounts."),
+  ).toBeVisible();
+});
+
+// Full provider round-trip requires a live OAuth provider, so it is gated
+// behind SSO_E2E. Without it, the assertions above cover button rendering and
+// the callback's rejection path for a non-staff session.
+test("full Google SSO staff sign-in flow", async ({ page }) => {
+  test.skip(process.env.SSO_E2E !== "1", "Set SSO_E2E=1 with a configured provider to run.");
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sign in with SSO" }).click();
+  await page.waitForURL("**/");
+  await expect(page.getByText("Cases requiring action")).toBeVisible();
+});

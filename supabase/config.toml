@@ -27,7 +27,14 @@ file_size_limit = "20MiB"
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000", "exp://localhost:8081"]
+additional_redirect_urls = [
+  "http://localhost:3000",
+  "http://localhost:3000/auth/callback",
+  "exp://localhost:8081",
+  "exp://localhost:8081/--/auth/callback",
+  "insurance-autopilot://",
+  "insurance-autopilot://auth/callback",
+]
 jwt_secret = "super-secret-jwt-token-with-at-least-32-characters-long"
 jwt_expiry = 3600
 enable_signup = true
@@ -36,6 +43,16 @@ enable_signup = true
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
+
+# External OAuth/OIDC providers. Secrets are sourced from environment variables
+# (never hardcoded); populate them via the shell running `supabase start`.
+# New SSO users still land as `customer` through handle_new_user(); staff
+# elevation remains service-role-only via assign_staff_role().
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = "http://localhost:54321/auth/v1/callback"
 
 [functions.stripe-webhook]
 verify_jwt = false

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { supabaseBrowser } from "@/lib/supabase";
@@ -11,6 +11,8 @@ const LoginForm = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
+const STAFF_ONLY_ERROR = "This console is for operations, reviewer and administrator accounts.";
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -18,6 +20,31 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get("error");
+    if (reason === "staff_only") {
+      setError(STAFF_ONLY_ERROR);
+    } else if (reason === "sso") {
+      setError("SSO sign-in could not be completed. Please try again.");
+    }
+  }, []);
+
+  const signInWithSSO = async () => {
+    setError(null);
+    setErrors({});
+    setLoading(true);
+    const supabase = supabaseBrowser();
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (oauthError) {
+      setError(oauthError.message);
+      setLoading(false);
+    }
+  };
 
   const signIn = async () => {
     setError(null);
@@ -51,7 +78,7 @@ export default function LoginPage() {
 
     if (profileError || !profile || profile.role === "customer") {
       await supabase.auth.signOut();
-      setError("This console is for operations, reviewer and administrator accounts.");
+      setError(STAFF_ONLY_ERROR);
       setLoading(false);
       return;
     }
@@ -101,6 +128,20 @@ export default function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
+        <div className="my-4 flex items-center gap-3 text-xs text-ink-muted">
+          <span className="h-px flex-1 bg-line" />
+          or
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={signInWithSSO}
+          disabled={loading}
+        >
+          Sign in with SSO
+        </Button>
       </Card>
     </main>
   );

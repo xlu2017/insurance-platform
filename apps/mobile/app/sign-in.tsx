@@ -2,7 +2,12 @@ import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { Body, Field, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
-import { signInWithPassword, type AuthError, type SignInCredentials } from "@/lib/auth";
+import {
+  signInWithOAuthProvider,
+  signInWithPassword,
+  type AuthError,
+  type SignInCredentials,
+} from "@/lib/auth";
 import { getDemoCredentials } from "@/lib/config";
 
 const MAX_RETRIES = 3;
@@ -97,6 +102,29 @@ export default function SignIn() {
     }
   };
 
+  const performSSO = async () => {
+    if (loading) return;
+    if (!isMounted.current) return;
+    setLoading(true);
+    setError(null);
+    setRetryCount(0);
+    try {
+      const { user, error: ssoError } = await signInWithOAuthProvider("google");
+      if (!isMounted.current) return;
+      if (user) {
+        router.replace("/home");
+        return;
+      }
+      if (ssoError) {
+        setError(ssoError);
+      }
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+      }
+    }
+  };
+
   const displayError = getDisplayError(error, retryCount);
   const canRetry = error?.retryable && retryCount < MAX_RETRIES;
 
@@ -144,6 +172,13 @@ export default function SignIn() {
           onPress={() => performSignIn({ email, password })}
           loading={loading}
           testID="sign-in-button"
+        />
+        <View style={{ height: 12 }} />
+        <SecondaryButton
+          label="Continue with SSO"
+          onPress={performSSO}
+          disabled={loading}
+          testID="sso-sign-in-button"
         />
         {canRetry ? (
           <>
