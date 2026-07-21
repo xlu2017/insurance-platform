@@ -128,7 +128,7 @@ function SessionStepList({
 
 function SessionCard({ session, testID }: { session: AutopilotSession; testID?: string }) {
   return (
-    <Card testID={testID}>
+    <Card testID={testID} style={{ marginBottom: 0 }}>
       <View
         style={{
           flexDirection: "row",
