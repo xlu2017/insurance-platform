@@ -46,7 +46,9 @@ function StepMarker({ state }: { state: SessionStep["state"] }) {
 }
 
 function formatElapsed(since: string): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+  // Add 334ms so the elapsed second increments right as the third dot appears
+  // during a 3-step, 1-second ellipsis cycle.
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(since).getTime() + 334) / 1000));
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
@@ -63,19 +65,18 @@ function SessionStepList({
   processing?: boolean;
   processingSince?: string;
 }) {
-  const [dots, setDots] = useState(1);
+  const [tick, setTick] = useState(0);
   const [elapsed, setElapsed] = useState(processingSince ? formatElapsed(processingSince) : "");
+  const dots = processing ? (tick % 3) + 1 : 1;
   useEffect(() => {
-    if (!processing) return;
-    const interval = setInterval(() => setDots((d) => (d % 3) + 1), 500);
-    return () => clearInterval(interval);
-  }, [processing]);
-  useEffect(() => {
-    if (!processingSince) return;
+    if (!processing || !processingSince) return;
     setElapsed(formatElapsed(processingSince));
-    const interval = setInterval(() => setElapsed(formatElapsed(processingSince)), 1000);
+    const interval = setInterval(() => {
+      setTick((t) => (t + 1) % 3);
+      setElapsed(formatElapsed(processingSince));
+    }, 1000 / 3);
     return () => clearInterval(interval);
-  }, [processingSince]);
+  }, [processing, processingSince]);
   return (
     <View>
       {steps.map((step, index) => {
