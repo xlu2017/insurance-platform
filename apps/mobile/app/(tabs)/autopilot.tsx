@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing } from "@autopilot/design-tokens";
@@ -53,6 +54,12 @@ function SessionStepList({
   action?: AutopilotSession["action"];
   processing?: boolean;
 }) {
+  const [dots, setDots] = useState(1);
+  useEffect(() => {
+    if (!processing) return;
+    const interval = setInterval(() => setDots((d) => (d % 3) + 1), 500);
+    return () => clearInterval(interval);
+  }, [processing]);
   return (
     <View>
       {steps.map((step, index) => {
@@ -107,7 +114,9 @@ function SessionStepList({
                 {isCurrent && processing ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <ActivityIndicator color={color} size="small" />
-                    <Body style={{ color, fontWeight: "700" }}>Processing...</Body>
+                    <Body
+                      style={{ color, fontWeight: "700" }}
+                    >{`Processing${".".repeat(dots)}`}</Body>
                   </View>
                 ) : isCurrent && action ? (
                   <Pressable

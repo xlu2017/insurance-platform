@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { CaseState } from "@autopilot/schemas";
-import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunction } from "./edge-functions";
 import { useOptimizationCases, type OptimizationCase } from "./household";
 import { formatEdmontonDate, formatEdmontonDateTimeLong } from "./format";
 
@@ -33,14 +33,12 @@ export interface AutopilotSession {
 
 const terminalStates = new Set<CaseState>(["completed", "retained_incumbent", "cancelled"]);
 
-const batchTerminalStatuses = new Set([
-  "ready_for_review",
-  "additional_information_required",
-  "processing_unavailable",
-  "manual_review",
-]);
-
-type BatchRow = { session_id: string | null; status: string | null };
+interface BatchSummary {
+  id: string;
+  session_id: string;
+  status: string;
+  is_terminal: boolean;
+}
 
 interface WorkflowStepDef {
   state: CaseState;
@@ -230,7 +228,7 @@ function buildSteps(
 function buildSession(
   c: OptimizationCase,
   isCurrent: boolean,
-  batches?: BatchRow[],
+  batches?: BatchSummary[],
 ): AutopilotSession {
   const isTerminal = terminalStates.has(c.state as CaseState);
   const { steps, currentStepIndex } = buildSteps(
@@ -240,10 +238,7 @@ function buildSession(
   const status = statusForState(c.state as CaseState);
   const batch = batches?.find((b) => b.session_id === c.session_id);
   const isProcessing =
-    !isTerminal &&
-    c.state === "extracting_information" &&
-    !!batch &&
-    !batchTerminalStatuses.has(batch.status ?? "");
+    !isTerminal && c.state === "extracting_information" && !!batch && !batch.is_terminal;
   return {
     id: c.id,
     name: sessionName(c),
@@ -264,20 +259,20 @@ function buildSession(
 
 export function useAutopilotSessions(householdId: string | undefined) {
   const { data: cases, isLoading, error, refetch } = useOptimizationCases(householdId);
-  const { data: batches, isLoading: batchesLoading } = useQuery<BatchRow[]>({
+  const { data: batches, isLoading: batchesLoading } = useQuery<BatchSummary[]>({
     queryKey: ["document-processing-batches", householdId],
     enabled: !!householdId,
     queryFn: async () => {
-      const { data, error: queryError } = await supabase
-        .from("document_processing_batches")
-        .select("session_id, status")
-        .eq("household_id", householdId!);
-      if (queryError) throw queryError;
-      return (data ?? []) as BatchRow[];
+      const { data, error: queryError } = await invokeEdgeFunction<BatchSummary[]>(
+        "document-processing-batch",
+        { action: "list", household_id: householdId },
+      );
+      if (queryError) throw new Error(queryError.message);
+      return data ?? [];
     },
     refetchInterval: (query) => {
       const rows = query.state.data ?? [];
-      return rows.some((b) => b.status && !batchTerminalStatuses.has(b.status)) ? 2000 : false;
+      return rows.some((b) => !b.is_terminal) ? 2000 : false;
     },
   });
 
