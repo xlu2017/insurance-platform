@@ -1,4 +1,4 @@
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,8 +49,9 @@ interface RecommendationRow {
 }
 
 export default function Recommendation() {
+  const { caseId } = useLocalSearchParams<{ caseId?: string }>();
   const { data: household } = useHousehold();
-  const { data: activeCase } = useActiveCase(household?.id);
+  const { data: activeCase } = useActiveCase(household?.id, caseId);
   const queryClient = useQueryClient();
   const [showComparison, setShowComparison] = useState(false);
   const [asking, setAsking] = useState(false);

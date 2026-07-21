@@ -4,7 +4,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { useAutopilotSessions, type AutopilotSession, type SessionStep } from "@/lib/autopilot";
-import { useReviewSessions } from "@/lib/document-processing";
 import {
   Body,
   Caption,
@@ -163,16 +162,9 @@ function SessionCard({ session, testID }: { session: AutopilotSession; testID?: 
 
 export default function Autopilot() {
   const { data: household, isLoading: householdLoading } = useHousehold();
-  const { data: reviewSessions, isLoading: reviewSessionsLoading } = useReviewSessions(
-    household?.id,
-  );
-  const latestReviewSession = reviewSessions?.[0];
-  const { current, past, isLoading, error, refetch } = useAutopilotSessions(
-    household?.id,
-    latestReviewSession?.session_id,
-  );
+  const { current, past, isLoading, error, refetch } = useAutopilotSessions(household?.id);
 
-  if (householdLoading || reviewSessionsLoading || isLoading) return <Loading />;
+  if (householdLoading || isLoading) return <Loading />;
 
   if (error) {
     return (
@@ -206,11 +198,11 @@ export default function Autopilot() {
 
           <View style={{ height: 24 }} />
 
-          <CollapsibleSection title="Past Sessions" testID="past-sessions-section">
+          <CollapsibleSection title="Other sessions" testID="past-sessions-section">
             {past.length === 0 ? (
               <Card>
-                <Body muted>No past sessions yet</Body>
-                <Caption>Completed and closed Autopilot sessions will appear here.</Caption>
+                <Body muted>No other sessions yet</Body>
+                <Caption>Other active or completed Autopilot sessions will appear here.</Caption>
               </Card>
             ) : (
               past.map((session, index) => (

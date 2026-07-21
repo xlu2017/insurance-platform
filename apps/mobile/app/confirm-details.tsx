@@ -1,4 +1,4 @@
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,8 +9,9 @@ import { formatCad, formatEdmontonDate } from "@/lib/format";
 import { Body, Card, Loading, PrimaryButton, Row, Screen, Subtitle, Title } from "@/components/ui";
 
 export default function ConfirmDetails() {
+  const { caseId } = useLocalSearchParams<{ caseId?: string }>();
   const { data: household } = useHousehold();
-  const { data: activeCase } = useActiveCase(household?.id);
+  const { data: activeCase } = useActiveCase(household?.id, caseId);
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

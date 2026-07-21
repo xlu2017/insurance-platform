@@ -11,10 +11,6 @@ jest.mock("@/lib/household", () => ({
   useOptimizationCases: jest.fn(),
 }));
 
-jest.mock("@/lib/document-processing", () => ({
-  useReviewSessions: jest.fn().mockReturnValue({ data: [], isLoading: false }),
-}));
-
 jest.mock("@/lib/autopilot", () => ({
   useAutopilotSessions: jest.fn().mockReturnValue({
     current: {
@@ -67,7 +63,7 @@ describe("Autopilot screen", () => {
     expect(await findByText(/2027 Renewal Review/)).toBeTruthy();
     expect(await findByText(/Waiting for your decision/)).toBeTruthy();
     expect(getAllByText(/View details/).length).toBeGreaterThan(0);
-    expect(await findByText(/Past Sessions/)).toBeTruthy();
+    expect(await findByText(/Other sessions/)).toBeTruthy();
     expect(await findByText(/2026 Renewal Review/)).toBeTruthy();
     expect(getByTestId("current-session")).toBeTruthy();
     expect(getByTestId("past-sessions-section")).toBeTruthy();

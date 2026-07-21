@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "./supabase";
+import { invokeEdgeFunction } from "./edge-functions";
 
 export interface HouseholdSummary {
   id: string;
@@ -33,6 +34,7 @@ export interface OptimizationCase {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  session_id?: string | null;
 }
 
 export function useOptimizationCases(householdId: string | undefined) {
@@ -40,22 +42,31 @@ export function useOptimizationCases(householdId: string | undefined) {
     queryKey: ["optimization-cases", householdId],
     enabled: !!householdId,
     queryFn: async (): Promise<OptimizationCase[]> => {
-      const { data, error } = await supabase
-        .from("optimization_cases")
-        .select("id, state, renewal_date, notes, created_at, updated_at")
-        .eq("household_id", householdId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as OptimizationCase[];
+      const { data, error } = await invokeEdgeFunction<OptimizationCase[]>(
+        "document-processing-batch",
+        { action: "list-cases", household_id: householdId },
+      );
+      if (error) throw new Error(error.message);
+      return data ?? [];
     },
   });
 }
 
-export function useActiveCase(householdId: string | undefined) {
+export function useActiveCase(householdId: string | undefined, caseId?: string) {
   return useQuery({
-    queryKey: ["active-case", householdId],
+    queryKey: ["active-case", householdId, caseId],
     enabled: !!householdId,
     queryFn: async () => {
+      if (caseId) {
+        const { data, error } = await supabase
+          .from("optimization_cases")
+          .select("id, state, renewal_date")
+          .eq("id", caseId)
+          .eq("household_id", householdId!)
+          .maybeSingle();
+        if (error) throw error;
+        return data;
+      }
       const { data, error } = await supabase
         .from("optimization_cases")
         .select("id, state, renewal_date")

@@ -50,30 +50,55 @@ function publicBatch(batch: Record<string, unknown>) {
   };
 }
 
-async function ensureManualReviewCase(admin: any, householdId: string): Promise<string> {
-  const { data: existing } = await admin
-    .from("optimization_cases")
-    .select("id, state")
-    .eq("household_id", householdId)
-    .in("state", ["awaiting_documents", "extracting_information"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (existing) {
-    if (existing.state === "awaiting_documents") {
+function publicCase(
+  caseRow: Record<string, unknown>,
+  sessionId?: string | null,
+): Record<string, unknown> {
+  return {
+    id: String(caseRow.id),
+    state: String(caseRow.state),
+    renewal_date: caseRow.renewal_date ? String(caseRow.renewal_date) : null,
+    notes: caseRow.notes ? String(caseRow.notes) : null,
+    created_at: String(caseRow.created_at),
+    updated_at: String(caseRow.updated_at),
+    session_id: sessionId ?? null,
+  };
+}
+
+async function ensureBatchCase(admin: any, batch: Record<string, unknown>): Promise<string> {
+  if (batch.case_id) {
+    const { data: existing } = await admin
+      .from("optimization_cases")
+      .select("id, state")
+      .eq("id", batch.case_id)
+      .maybeSingle();
+    if (existing && (existing.state === "awaiting_documents" || existing.state === "draft")) {
       await admin
         .from("optimization_cases")
         .update({ state: "extracting_information" })
         .eq("id", existing.id);
     }
-    return String(existing.id);
+    return String(batch.case_id);
   }
+
   const { data: created, error } = await admin
     .from("optimization_cases")
-    .insert({ household_id: householdId, state: "extracting_information" })
+    .insert({
+      household_id: batch.household_id,
+      created_by: batch.created_by,
+      state: "extracting_information",
+    })
     .select("id")
     .single();
-  if (error || !created) throw new Error("Failed to create manual review case");
+  if (error || !created) throw new Error("Failed to create optimization case");
+
+  await Promise.all([
+    admin.from("document_processing_batches").update({ case_id: created.id }).eq("id", batch.id),
+    admin
+      .from("document_extraction_sessions")
+      .update({ case_id: created.id })
+      .eq("id", batch.session_id),
+  ]);
   return String(created.id);
 }
 
@@ -190,6 +215,20 @@ Deno.serve(async (req) => {
     return jsonResponse((rows ?? []).map(publicBatch));
   }
 
+  if (action === "list-cases") {
+    const { data: rows } = await admin
+      .from("optimization_cases")
+      .select("*, document_extraction_sessions!case_id(id)")
+      .eq("household_id", householdId)
+      .order("created_at", { ascending: false });
+    return jsonResponse(
+      (rows ?? []).map((c: Record<string, unknown>) => {
+        const sessions = c.document_extraction_sessions as { id?: string }[] | undefined;
+        return publicCase(c, sessions?.[0]?.id);
+      }),
+    );
+  }
+
   if (action === "create") {
     const clientRequestId = String(body.client_request_id ?? "");
     if (!clientRequestId || clientRequestId.length > 240) {
@@ -221,9 +260,21 @@ Deno.serve(async (req) => {
           .maybeSingle()
       : { data: null };
 
+    const { data: newCase, error: caseError } = await admin
+      .from("optimization_cases")
+      .insert({ household_id: householdId, created_by: user.id, state: "awaiting_documents" })
+      .select("id")
+      .single();
+    if (caseError || !newCase) return jsonError("Failed to create optimization case", 500);
+
     const { data: session, error: sessionError } = await admin
       .from("document_extraction_sessions")
-      .insert({ household_id: householdId, created_by: user.id, status: "open" })
+      .insert({
+        household_id: householdId,
+        created_by: user.id,
+        case_id: newCase.id,
+        status: "open",
+      })
       .select("id")
       .single();
     if (sessionError || !session) return jsonError("Failed to create extraction session", 500);
@@ -235,6 +286,7 @@ Deno.serve(async (req) => {
         created_by: user.id,
         client_request_id: clientRequestId,
         session_id: session.id,
+        case_id: newCase.id,
         mode_snapshot: dangerous ? "dangerous" : "safe",
         settings_version: Number(setting?.setting_version ?? 1),
         disclosure_version: setting?.disclosure_version ?? null,
@@ -332,14 +384,16 @@ Deno.serve(async (req) => {
   const processingRoute = documentProcessingRoute(
     batch.mode_snapshot === "dangerous" ? "dangerous" : "safe",
   );
+  const batchCaseId = await ensureBatchCase(admin, batch);
+
   if (!processingRoute.dispatchExternalProcessing) {
-    const manualCaseId = await ensureManualReviewCase(admin, householdId);
     await Promise.all([
       admin
         .from("document_processing_batches")
         .update({
           status: "manual_review",
-          manual_case_id: manualCaseId,
+          case_id: batchCaseId,
+          manual_case_id: batchCaseId,
           retryable: false,
           submitted_at: batch.submitted_at ?? new Date().toISOString(),
           completed_at: new Date().toISOString(),
@@ -369,6 +423,8 @@ Deno.serve(async (req) => {
     .from("document_processing_batches")
     .update({
       status: "queued",
+      case_id: batchCaseId,
+      manual_case_id: batchCaseId,
       retryable: true,
       retry_count: action === "retry" ? Number(batch.retry_count ?? 0) + 1 : batch.retry_count,
       submitted_at: batch.submitted_at ?? now,

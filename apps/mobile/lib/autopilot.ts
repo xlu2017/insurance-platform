@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CaseState } from "@autopilot/schemas";
 import { useOptimizationCases, type OptimizationCase } from "./household";
-import { formatEdmontonDateTimeLong } from "./format";
+import { formatEdmontonDate, formatEdmontonDateTimeLong } from "./format";
 
 export type SessionStepState = "completed" | "current" | "upcoming" | "failed";
 
@@ -114,6 +114,9 @@ function sessionName(c: OptimizationCase): string {
     const year = new Date(c.renewal_date).getFullYear();
     return `${year} Renewal Review`;
   }
+  if (c.created_at) {
+    return `${formatEdmontonDate(c.created_at)} Review`;
+  }
   return "Autopilot session";
 }
 
@@ -130,22 +133,26 @@ function statusForState(state: CaseState): { label: string; tone: AutopilotSessi
   return { label: step?.waiting ?? "In progress", tone: "accent" };
 }
 
-function actionForState(state: CaseState, reviewSessionId?: string): AutopilotSession["action"] {
+function actionForState(
+  state: CaseState,
+  caseId?: string,
+  sessionId?: string | null,
+): AutopilotSession["action"] {
   if (state === "awaiting_documents") {
     return { label: "Upload document", route: "/(tabs)/documents" };
   }
-  if (state === "extracting_information" && reviewSessionId) {
+  if (state === "extracting_information" && sessionId) {
     return {
       label: "Review",
       route: "/onboarding/review-entities",
-      params: { sessionId: reviewSessionId },
+      params: { sessionId },
     };
   }
-  if (state === "awaiting_customer_confirmation") {
-    return { label: "Confirm", route: "/confirm-details" };
+  if (state === "awaiting_customer_confirmation" && caseId) {
+    return { label: "Confirm", route: "/confirm-details", params: { caseId } };
   }
-  if (state === "recommendation_ready" || state === "customer_decision") {
-    return { label: "View details", route: "/recommendation" };
+  if ((state === "recommendation_ready" || state === "customer_decision") && caseId) {
+    return { label: "View details", route: "/recommendation", params: { caseId } };
   }
   return undefined;
 }
@@ -184,14 +191,11 @@ function buildSteps(
   return { steps, currentStepIndex: effectiveIndex };
 }
 
-function buildSession(
-  c: OptimizationCase,
-  options: { isCurrent: boolean; reviewSessionId?: string },
-): AutopilotSession {
-  const isCurrent = options.isCurrent && !terminalStates.has(c.state as CaseState);
+function buildSession(c: OptimizationCase, isCurrent: boolean): AutopilotSession {
+  const isTerminal = terminalStates.has(c.state as CaseState);
   const { steps, currentStepIndex } = buildSteps(
     c.state as CaseState,
-    isCurrent ? "current" : "past",
+    isTerminal ? "past" : "current",
   );
   const status = statusForState(c.state as CaseState);
   return {
@@ -200,25 +204,28 @@ function buildSession(
     startedAt: formatEdmontonDateTimeLong(c.created_at),
     status: status.label,
     statusTone: status.tone,
-    isCurrent,
+    isCurrent: isCurrent && !isTerminal,
     steps,
     currentStepIndex,
-    action: isCurrent ? actionForState(c.state as CaseState, options.reviewSessionId) : undefined,
+    action: isTerminal ? undefined : actionForState(c.state as CaseState, c.id, c.session_id),
   };
 }
 
-export function useAutopilotSessions(householdId: string | undefined, reviewSessionId?: string) {
+export function useAutopilotSessions(householdId: string | undefined) {
   const { data: cases, isLoading, error, refetch } = useOptimizationCases(householdId);
 
   const sessions = useMemo(() => {
     if (!cases) return { current: null, past: [] };
-    const current = cases.find((c) => !terminalStates.has(c.state as CaseState));
-    const past = cases.filter((c) => terminalStates.has(c.state as CaseState));
+    const active = cases.filter((c) => !terminalStates.has(c.state as CaseState));
+    const current = active[0] ?? null;
+    const others = active
+      .slice(1)
+      .concat(cases.filter((c) => terminalStates.has(c.state as CaseState)));
     return {
-      current: current ? buildSession(current, { isCurrent: true, reviewSessionId }) : null,
-      past: past.map((c) => buildSession(c, { isCurrent: false })),
+      current: current ? buildSession(current, true) : null,
+      past: others.map((c) => buildSession(c, false)),
     };
-  }, [cases, reviewSessionId]);
+  }, [cases]);
 
   return { ...sessions, isLoading, error, refetch };
 }
