@@ -1,4 +1,4 @@
-import { SUPABASE_URL, supabase } from "./supabase";
+import { BYPASS_TUNNEL_HEADERS, SUPABASE_URL, supabase } from "./supabase";
 
 export interface EdgeFunctionError {
   code: string;
@@ -24,6 +24,7 @@ export async function invokeEdgeFunction<T = unknown>(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
       apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
+      ...BYPASS_TUNNEL_HEADERS,
     },
     body: JSON.stringify(body),
   });

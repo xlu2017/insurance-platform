@@ -1,7 +1,8 @@
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import type { DocumentCategory } from "@autopilot/schemas";
-import { supabase, SUPABASE_URL } from "./supabase";
+import { BYPASS_TUNNEL_HEADERS, supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "./supabase";
 
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -85,33 +86,44 @@ export async function uploadPolicyDocument(
     console.warn("File size not provided; server will enforce the limit");
   }
 
-  const response = await fetch(file.uri);
-  const blob = await response.blob();
-
-  const form = new FormData();
-  form.append("householdId", householdId);
-  form.append("category", category);
-  if (batchId) form.append("batchId", batchId);
-  if (clientItemId) form.append("clientItemId", clientItemId);
-  form.append("file", blob, file.name);
-
-  const uploadRes = await fetch(`${SUPABASE_URL}/functions/v1/upload-document`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${session.session.access_token}`,
-    },
-    body: form,
-  });
-
-  const payload = (await uploadRes.json()) as {
-    id?: string;
-    path?: string;
-    batch_id?: string;
-    item_id?: string;
-    deduplicated?: boolean;
-    message?: string;
+  const parameters: Record<string, string> = {
+    householdId,
+    category,
   };
-  if (!uploadRes.ok) {
+  if (batchId) parameters.batchId = batchId;
+  if (clientItemId) parameters.clientItemId = clientItemId;
+
+  const uploadRes = await FileSystem.uploadAsync(
+    `${SUPABASE_URL}/functions/v1/upload-document`,
+    file.uri,
+    {
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: "file",
+      mimeType: file.mimeType,
+      parameters,
+      headers: {
+        Authorization: `Bearer ${session.session.access_token}`,
+        apikey: SUPABASE_ANON_KEY,
+        ...BYPASS_TUNNEL_HEADERS,
+      },
+    },
+  );
+
+  const payload = (() => {
+    try {
+      return JSON.parse(uploadRes.body) as {
+        id?: string;
+        path?: string;
+        batch_id?: string;
+        item_id?: string;
+        deduplicated?: boolean;
+        message?: string;
+      };
+    } catch {
+      return {};
+    }
+  })();
+  if (uploadRes.status < 200 || uploadRes.status >= 300) {
     throw new Error(payload.message ?? `Upload failed (${uploadRes.status})`);
   }
   if (!payload.id || !payload.path || !payload.batch_id || !payload.item_id) {
@@ -142,6 +154,8 @@ export async function deletePolicyDocument(documentId: string): Promise<void> {
     headers: {
       Authorization: `Bearer ${session.session.access_token}`,
       "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      ...BYPASS_TUNNEL_HEADERS,
     },
     body: JSON.stringify({ documentId }),
   });

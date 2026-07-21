@@ -1,7 +1,7 @@
 import { router, Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Linking, View } from "react-native";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { BYPASS_TUNNEL_HEADERS, SUPABASE_ANON_KEY, supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { Body, Caption, Card, PrimaryButton, Screen, Title } from "@/components/ui";
 
@@ -64,6 +64,8 @@ export default function Membership() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.session?.access_token ?? ""}`,
+          apikey: SUPABASE_ANON_KEY,
+          ...BYPASS_TUNNEL_HEADERS,
         },
       });
       const payload = (await res.json()) as {

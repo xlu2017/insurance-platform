@@ -60,8 +60,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_ANON_KEY = supabaseAnonKey;
 
 const isLocaltunnel = supabaseUrl.includes(".loca.lt");
+export const BYPASS_TUNNEL_HEADERS = isLocaltunnel ? { "Bypass-Tunnel-Reminder": "true" } : undefined;
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
