@@ -630,37 +630,47 @@ export default function ReviewEntities() {
   if (householdLoading || sessionLoading || candidatesLoading || reviewsLoading) return <Loading />;
   if (!household) {
     return (
-      <Screen>
-        <Title style={styles.title}>No household</Title>
-        <Body muted>Please sign in and create a household first.</Body>
+      <Screen style={{ justifyContent: "center" }}>
+        <Card style={{ paddingVertical: spacing.xl }}>
+          <Title style={[styles.title, { textAlign: "center" }]}>No household</Title>
+          <Body muted style={{ textAlign: "center" }}>
+            Please sign in and create a household first.
+          </Body>
+        </Card>
       </Screen>
     );
   }
   if (!candidates || candidates.length === 0) {
     return (
-      <Screen>
+      <Screen style={{ justifyContent: "center" }}>
         <Stack.Screen options={{ title: "Review" }} />
-        {sessionId ? (
-          <>
-            <Title style={styles.title}>All reviewed</Title>
-            <Body muted>Every extracted item has already been reviewed.</Body>
-            <PrimaryButton
-              label="View coverage"
-              onPress={() => router.replace("/(tabs)/coverage")}
-              style={styles.uploadButton}
-            />
-          </>
-        ) : (
-          <>
-            <Title style={styles.title}>Nothing to review</Title>
-            <Body muted>Upload your policies first so we can show you what we found.</Body>
-            <PrimaryButton
-              label="Upload"
-              onPress={() => router.push("/onboarding/documents")}
-              style={styles.uploadButton}
-            />
-          </>
-        )}
+        <Card style={{ paddingVertical: spacing.xl }}>
+          {sessionId ? (
+            <>
+              <Title style={[styles.title, { textAlign: "center" }]}>All reviewed</Title>
+              <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
+                Every extracted item has already been reviewed.
+              </Body>
+              <PrimaryButton
+                label="View coverage"
+                onPress={() => router.replace("/(tabs)/coverage")}
+                style={styles.uploadButton}
+              />
+            </>
+          ) : (
+            <>
+              <Title style={[styles.title, { textAlign: "center" }]}>Nothing to review</Title>
+              <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
+                Upload your policies first so we can show you what we found.
+              </Body>
+              <PrimaryButton
+                label="Upload"
+                onPress={() => router.push("/onboarding/documents")}
+                style={styles.uploadButton}
+              />
+            </>
+          )}
+        </Card>
       </Screen>
     );
   }
