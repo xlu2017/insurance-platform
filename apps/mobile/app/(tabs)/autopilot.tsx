@@ -97,13 +97,16 @@ export default function Autopilot() {
       );
     }
     if (continueUploadStatuses.has(session.status)) {
-      return (
-        <SecondaryButton
-          label="Continue upload"
-          onPress={() => router.push("/(tabs)/documents")}
-          style={{ paddingVertical: 10, paddingHorizontal: 14 }}
-        />
-      );
+      if (index === 0) {
+        return (
+          <SecondaryButton
+            label="Continue upload"
+            onPress={() => router.push("/(tabs)/documents")}
+            style={{ paddingVertical: 10, paddingHorizontal: 14 }}
+          />
+        );
+      }
+      return <Caption>Incomplete upload</Caption>;
     }
     if (session.status === "processing_unavailable" && session.retryable) {
       return (
