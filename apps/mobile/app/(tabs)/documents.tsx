@@ -105,6 +105,7 @@ export default function Documents() {
   const [busy, setBusy] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [removeConfirmDoc, setRemoveConfirmDoc] = useState<DocumentRow | null>(null);
 
   const { data: latestBatch } = useQuery({
     queryKey: ["latest-document-processing-batch", household?.id],
@@ -275,17 +276,15 @@ export default function Documents() {
     }
   };
 
-  const remove = (doc: DocumentRow) => {
-    const message = `${doc.file_name} will be removed from your household documents.`;
-    if (Platform.OS === "web") {
-      if (window.confirm(`Remove document?\n\n${message}`)) void removeDocument(doc);
-      return;
-    }
-    Alert.alert("Remove document?", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: () => void removeDocument(doc) },
-    ]);
+  const remove = (doc: DocumentRow) => setRemoveConfirmDoc(doc);
+
+  const confirmRemove = async () => {
+    if (!removeConfirmDoc) return;
+    await removeDocument(removeConfirmDoc);
+    setRemoveConfirmDoc(null);
   };
+
+  const cancelRemove = () => setRemoveConfirmDoc(null);
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -499,6 +498,47 @@ export default function Documents() {
             </Card>
           ))}
         </ScrollView>
+
+        <Modal
+          visible={!!removeConfirmDoc}
+          transparent
+          animationType="fade"
+          onRequestClose={cancelRemove}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              justifyContent: "center",
+              padding: spacing.lg,
+            }}
+          >
+            <Card>
+              <Subtitle>Remove document?</Subtitle>
+              <Body muted style={{ marginBottom: spacing.md }}>
+                {removeConfirmDoc
+                  ? `${removeConfirmDoc.file_name} will be removed from your household documents.`
+                  : ""}
+              </Body>
+              <View style={{ flexDirection: "row", gap: spacing.md }}>
+                <SecondaryButton
+                  label="Cancel"
+                  onPress={cancelRemove}
+                  style={{ flex: 1 }}
+                  disabled={busy}
+                />
+                <PrimaryButton
+                  label="Remove"
+                  onPress={confirmRemove}
+                  loading={busy}
+                  disabled={busy}
+                  style={{ flex: 1, backgroundColor: colors.danger }}
+                />
+              </View>
+            </Card>
+          </View>
+        </Modal>
+
         {previewDoc && previewUrl ? (
           <DocumentPreview doc={previewDoc} url={previewUrl} onClose={() => setPreviewUrl(null)} />
         ) : null}
