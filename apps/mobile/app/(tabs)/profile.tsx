@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Switch, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -140,9 +139,25 @@ export default function Profile() {
     queryClient.invalidateQueries({ queryKey: ["household"] });
   };
 
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
   const signOut = async () => {
-    await supabase.auth.signOut();
-    router.replace("/welcome");
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setSignOutError(error.message || "Sign out failed. Please try again.");
+        return;
+      }
+      // The root auth gate listens for SIGNED_OUT and redirects to /welcome.
+      // Clearing the local query cache here guarantees no stale data persists
+      // across the transition.
+      queryClient.clear();
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const latestConsents = (consents ?? []).reduce(
@@ -425,7 +440,15 @@ export default function Profile() {
             ))}
           </Card>
 
-          <SecondaryButton label="Sign out" onPress={signOut} testID="sign-out" />
+          <SecondaryButton
+            label="Sign out"
+            onPress={signOut}
+            loading={signingOut}
+            testID="sign-out"
+          />
+          {signOutError ? (
+            <Body style={{ color: colors.danger, marginTop: spacing.sm }}>{signOutError}</Body>
+          ) : null}
         </ScrollView>
       </Screen>
     </SafeAreaView>

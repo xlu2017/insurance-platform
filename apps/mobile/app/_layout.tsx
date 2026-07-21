@@ -5,61 +5,68 @@ import { enableScreens } from "react-native-screens";
 enableScreens(false);
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, usePathname, useRouter } from "expo-router";
+import { Redirect, Stack, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StackHeader } from "@/components/ui";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
-import { loadRemoteConfig } from "@/lib/config";
-import { getSupabaseClient, resetSupabaseClient } from "@/lib/supabase";
+import { AuthContext } from "@/lib/auth-context";
+import { PUBLIC_PATHS, useAuthGate } from "@/lib/auth-gate";
 import { colors } from "@autopilot/design-tokens";
-import type { Session } from "@supabase/supabase-js";
 
-const PUBLIC_PATHS = new Set(["/", "/welcome", "/sign-in", "/register"]);
-
-function useAuthGate() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [ready, setReady] = useState(false);
+function AuthGate() {
+  const auth = useAuthGate();
   const pathname = usePathname();
-  const router = useRouter();
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      await loadRemoteConfig({ timeoutMs: 10_000 });
-      resetSupabaseClient();
-      const { data } = await getSupabaseClient().auth.getSession();
-      if (mounted) {
-        setSession(data.session);
-        setReady(true);
-      }
-    })();
-    const { data: subscription } = getSupabaseClient().auth.onAuthStateChange((_event, next) => {
-      if (mounted) setSession(next);
-    });
-    return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
-    };
-  }, []);
+  if (auth.status === "loading") {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <View style={[styles.viewport, styles.loading]}>
+          <ActivityIndicator />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
-  useEffect(() => {
-    if (!ready || !pathname) return;
-    if (!session && !PUBLIC_PATHS.has(pathname)) {
-      router.replace("/welcome");
-    }
-  }, [ready, session, pathname, router]);
+  if (auth.isUnauthenticated && pathname && !PUBLIC_PATHS.has(pathname)) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <Redirect href="/welcome" />
+      </SafeAreaProvider>
+    );
+  }
 
-  return { session, ready };
+  return (
+    <AuthContext.Provider value={auth}>
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <View style={styles.viewport}>
+          <View style={Platform.OS === "web" ? styles.webPhoneFrame : styles.nativeFrame}>
+            <Stack
+              screenOptions={{
+                header: StackHeader,
+                headerStyle: { backgroundColor: colors.surface },
+                headerTintColor: colors.ink,
+                headerShadowVisible: true,
+                contentStyle: { flex: 1, backgroundColor: colors.surfaceSubtle },
+              }}
+            />
+            {auth.isAuthenticated && <BottomTabBar />}
+          </View>
+        </View>
+      </SafeAreaProvider>
+    </AuthContext.Provider>
+  );
 }
 
 export default function RootLayout() {
   const [client] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: 2, staleTime: 10_000 } } }),
   );
-  const { session, ready } = useAuthGate();
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -75,36 +82,9 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!ready) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <View style={[styles.viewport, styles.loading]}>
-          <ActivityIndicator />
-        </View>
-      </SafeAreaProvider>
-    );
-  }
-
   return (
     <QueryClientProvider client={client}>
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <View style={styles.viewport}>
-          <View style={Platform.OS === "web" ? styles.webPhoneFrame : styles.nativeFrame}>
-            <Stack
-              screenOptions={{
-                header: StackHeader,
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.ink,
-                headerShadowVisible: true,
-                contentStyle: { flex: 1, backgroundColor: colors.surfaceSubtle },
-              }}
-            />
-            {ready && session && <BottomTabBar />}
-          </View>
-        </View>
-      </SafeAreaProvider>
+      <AuthGate />
     </QueryClientProvider>
   );
 }

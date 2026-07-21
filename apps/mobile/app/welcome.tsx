@@ -1,26 +1,26 @@
 import { Redirect, router } from "expo-router";
-import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { Body, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
-import { supabase } from "@/lib/supabase";
+import { useEffect } from "react";
+import { BackHandler, Platform, View } from "react-native";
+import { Body, Loading, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
+import { useAuth } from "@/lib/auth-context";
 
 export default function Welcome() {
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const { status, isAuthenticated } = useAuth();
+
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) setSignedIn(!!data.session);
+    if (Platform.OS !== "android") return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      // When the user is on the welcome screen there is no authenticated route
+      // to go back to; exit the app instead of reopening any previous screen.
+      BackHandler.exitApp();
+      return true;
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setSignedIn(!!session);
-    });
-    return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
-    };
+    return () => subscription.remove();
   }, []);
 
-  if (signedIn) return <Redirect href="/home" />;
+  if (status === "loading") return <Loading />;
+  if (isAuthenticated) return <Redirect href="/home" />;
+
   return (
     <Screen style={{ justifyContent: "center" }}>
       <Title>Insurance handled for you</Title>
