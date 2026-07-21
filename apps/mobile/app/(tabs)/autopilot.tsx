@@ -129,28 +129,24 @@ function SessionStepList({
 function SessionCard({ session, testID }: { session: AutopilotSession; testID?: string }) {
   return (
     <Card testID={testID} style={{ marginBottom: 0 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "flex-start",
-          marginBottom: 12,
-          gap: 12,
-        }}
-      >
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Subtitle style={{ marginBottom: 4 }}>{session.name}</Subtitle>
-          <Caption>Started {session.startedAt}</Caption>
-        </View>
+      <View style={{ marginBottom: 12, gap: 4 }}>
         <View
           style={{
-            flex: 1,
-            minWidth: 0,
-            justifyContent: "flex-end",
-            alignItems: "flex-end",
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 12,
           }}
         >
-          <StatusPill label={session.status} tone={session.statusTone} tooltip={session.tooltip} />
+          <Subtitle style={{ flex: 1, marginBottom: 0 }}>{session.name}</Subtitle>
+          <StatusPill
+            label={session.status}
+            tone={session.statusTone}
+            tooltip={session.tooltip}
+            variant="text"
+          />
         </View>
+        <Caption>Started {session.startedAt}</Caption>
       </View>
       <SessionStepList steps={session.steps} action={session.action} />
       {session.action ? (

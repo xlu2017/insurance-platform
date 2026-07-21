@@ -450,10 +450,12 @@ export function StatusPill({
   label,
   tone = "accent",
   tooltip,
+  variant = "pill",
 }: {
   label: string;
   tone?: "accent" | "warning" | "neutral" | "error" | "success";
   tooltip?: string;
+  variant?: "pill" | "text";
 }) {
   const [open, setOpen] = useState(false);
   const bg =
@@ -476,11 +478,13 @@ export function StatusPill({
           : tone === "success"
             ? colors.success
             : colors.inkMuted;
-  const pill = (
-    <View style={[styles.pill, { backgroundColor: bg }]}>
-      <Text style={[styles.pillText, { color: fg }]}>{label}</Text>
-    </View>
-  );
+  const labelNode = <Text style={[styles.pillText, { color: fg }]}>{label}</Text>;
+  const pill =
+    variant === "text" ? (
+      labelNode
+    ) : (
+      <View style={[styles.pill, { backgroundColor: bg }]}>{labelNode}</View>
+    );
   if (!tooltip) return pill;
   return (
     <>
@@ -733,7 +737,6 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: typography.sizes.caption,
     fontWeight: "600",
-    textAlign: "right",
   },
   row: {
     flexDirection: "row",
