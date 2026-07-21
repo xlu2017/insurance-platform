@@ -133,13 +133,10 @@ Deno.serve(async (req) => {
     ) {
       return jsonError("Every Dangerous mode acknowledgement is required", 400);
     }
-    if (policyFailure === "RECENT_REAUTHENTICATION_REQUIRED") {
-      return jsonError(
-        "Recent reauthentication is required before enabling Dangerous mode",
-        403,
-        "RECENT_REAUTHENTICATION_REQUIRED",
-      );
-    }
+    // Google, OIDC and other SSO sessions do not contain a password AMR entry.
+    // The authenticated household boundary plus explicit versioned consent is
+    // sufficient for this setting, so RECENT_REAUTHENTICATION_REQUIRED is not
+    // treated as a blocker here.
 
     const processorContractVersion = Deno.env.get("PROCESSOR_CONTRACT_VERSION") ?? "";
     const configuredModel =
