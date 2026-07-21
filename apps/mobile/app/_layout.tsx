@@ -32,9 +32,7 @@ export default function RootLayout() {
                 headerShadowVisible: true,
                 contentStyle: { flex: 1 },
               }}
-            >
-              <Stack.Screen name="(tabs)" />
-            </Stack>
+            />
             <BottomTabBar />
           </View>
         </View>
