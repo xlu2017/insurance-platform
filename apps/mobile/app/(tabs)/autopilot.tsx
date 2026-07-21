@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
@@ -47,9 +47,11 @@ function StepMarker({ state }: { state: SessionStep["state"] }) {
 function SessionStepList({
   steps,
   action,
+  processing,
 }: {
   steps: SessionStep[];
   action?: AutopilotSession["action"];
+  processing?: boolean;
 }) {
   return (
     <View>
@@ -102,7 +104,12 @@ function SessionStepList({
                 >
                   {step.label}
                 </Body>
-                {isCurrent && action ? (
+                {isCurrent && processing ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <ActivityIndicator color={color} size="small" />
+                    <Body style={{ color, fontWeight: "700" }}>Processing...</Body>
+                  </View>
+                ) : isCurrent && action ? (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={action.label}
@@ -148,8 +155,12 @@ function SessionCard({ session, testID }: { session: AutopilotSession; testID?: 
         </View>
         <Caption>Started {session.startedAt}</Caption>
       </View>
-      <SessionStepList steps={session.steps} action={session.action} />
-      {session.action ? (
+      <SessionStepList
+        steps={session.steps}
+        action={session.action}
+        processing={session.isProcessing}
+      />
+      {session.action && !session.isProcessing ? (
         <PrimaryButton
           label={session.action.label}
           onPress={() =>
