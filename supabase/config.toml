@@ -26,8 +26,11 @@ file_size_limit = "20MiB"
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
+site_url = "http://localhost:8081"
 additional_redirect_urls = [
+  "http://localhost:8081",
+  "http://127.0.0.1:8081",
+  "http://localhost:8081/auth/callback",
   "http://localhost:3000",
   "http://localhost:3000/auth/callback",
   "exp://localhost:8081",
@@ -52,6 +55,9 @@ enable_confirmations = false
 enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Default for a direct-localhost stack. If Supabase is reached over a public
+# tunnel (e.g. *.loca.lt), override this locally with the tunnel callback and
+# register the SAME URL on the Google client (see .env.local.example).
 redirect_uri = "http://localhost:54321/auth/v1/callback"
 
 [functions.stripe-webhook]
