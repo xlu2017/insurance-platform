@@ -327,7 +327,7 @@ function UnsureDocumentsModal({
             If you are unsure this value is correct, please manually confirm from your uploaded
             file(s).
           </Body>
-          <ScrollView style={{ maxHeight: 320 }}>
+          <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
             {ranked.map((doc) => (
               <Pressable key={doc.id} onPress={() => openDocument(doc)} style={styles.fileRow}>
                 <View style={{ flex: 1, marginRight: spacing.sm }}>
@@ -830,6 +830,7 @@ export default function ReviewEntities() {
             paddingTop: spacing.md,
             paddingBottom: spacing.md,
           }}
+          showsVerticalScrollIndicator={false}
         >
           <Stack.Screen options={{ title: "Review complete" }} />
           <Title style={styles.title}>Ready to continue</Title>
@@ -870,6 +871,7 @@ export default function ReviewEntities() {
             paddingTop: spacing.md,
             paddingBottom: spacing.md,
           }}
+          showsVerticalScrollIndicator={false}
         >
           <Stack.Screen options={{ title: `Edit ${formatFieldLabel(editingPath)}` }} />
           <FieldEditStep
@@ -892,6 +894,7 @@ export default function ReviewEntities() {
           paddingBottom: spacing.xl * 2,
           minHeight: "100%",
         }}
+        showsVerticalScrollIndicator={false}
       >
         <Stack.Screen options={{ title: "Review" }} />
         <Caption>{`Asset ${candidateIndex + 1} of ${candidates.length}`}</Caption>
