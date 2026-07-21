@@ -17,6 +17,7 @@ export interface AutopilotSession {
   startedAt: string;
   status: string;
   statusTone: "accent" | "warning" | "error" | "success" | "neutral";
+  tooltip: string;
   isCurrent: boolean;
   steps: SessionStep[];
   currentStepIndex: number;
@@ -120,17 +121,40 @@ function sessionName(c: OptimizationCase): string {
   return "Autopilot session";
 }
 
-function statusForState(state: CaseState): { label: string; tone: AutopilotSession["statusTone"] } {
+function statusForState(state: CaseState): {
+  label: string;
+  tone: AutopilotSession["statusTone"];
+  tooltip: string;
+} {
   const step = workflowByState.get(state);
-  if (state === "completed") return { label: step?.waiting ?? "Completed", tone: "success" };
+  const tooltipByState: Record<CaseState, string> = {
+    draft: "The review has not started yet.",
+    awaiting_documents: "Upload your policy documents so we can start the review.",
+    extracting_information: "We are reading your documents and extracting policy details.",
+    awaiting_customer_confirmation: "Please confirm the extracted details before we continue.",
+    ready_for_market_search: "We have your details and are preparing to search the market.",
+    requesting_quotes: "We are requesting quotes from insurance providers.",
+    awaiting_quotes: "Waiting for insurers to respond with quotes.",
+    comparing_quotes: "We are comparing the quotes and coverage options.",
+    licensed_review: "A licensed advisor is reviewing your case.",
+    recommendation_ready: "A recommendation is ready for you to review.",
+    customer_decision: "Please choose whether to switch or keep your current policy.",
+    switching: "We are completing the policy switch with your chosen insurer.",
+    completed: "This review is complete. Your new policy is in place.",
+    retained_incumbent: "You decided to keep your current insurance.",
+    cancelled: "This review was cancelled.",
+  };
+  const tooltip = tooltipByState[state] ?? step?.waiting ?? "In progress";
+  if (state === "completed")
+    return { label: step?.waiting ?? "Completed", tone: "success", tooltip };
   if (state === "retained_incumbent")
-    return { label: step?.waiting ?? "Kept current insurance", tone: "neutral" };
-  if (state === "cancelled") return { label: step?.waiting ?? "Cancelled", tone: "error" };
+    return { label: step?.waiting ?? "Kept current insurance", tone: "neutral", tooltip };
+  if (state === "cancelled") return { label: step?.waiting ?? "Cancelled", tone: "error", tooltip };
   if (state === "recommendation_ready")
-    return { label: step?.waiting ?? "Recommendation ready", tone: "success" };
+    return { label: step?.waiting ?? "Recommendation ready", tone: "success", tooltip };
   if (state === "awaiting_quotes")
-    return { label: step?.waiting ?? "Waiting for insurer responses", tone: "warning" };
-  return { label: step?.waiting ?? "In progress", tone: "accent" };
+    return { label: step?.waiting ?? "Waiting for insurer responses", tone: "warning", tooltip };
+  return { label: step?.waiting ?? "In progress", tone: "accent", tooltip };
 }
 
 function actionForState(
@@ -204,6 +228,7 @@ function buildSession(c: OptimizationCase, isCurrent: boolean): AutopilotSession
     startedAt: formatEdmontonDateTimeLong(c.created_at),
     status: status.label,
     statusTone: status.tone,
+    tooltip: status.tooltip,
     isCurrent: isCurrent && !isTerminal,
     steps,
     currentStepIndex,

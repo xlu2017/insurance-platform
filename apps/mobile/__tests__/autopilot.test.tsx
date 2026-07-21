@@ -20,6 +20,7 @@ jest.mock("@/lib/autopilot", () => ({
       status: "Waiting for your decision",
       statusTone: "accent",
       isCurrent: true,
+      tooltip: "We are reading your documents and extracting policy details.",
       steps: [
         { key: "awaiting_documents", label: "Upload your documents", state: "completed" },
         { key: "extracting_information", label: "Extract policy information", state: "completed" },
@@ -42,6 +43,7 @@ jest.mock("@/lib/autopilot", () => ({
         status: "Completed",
         statusTone: "success",
         isCurrent: false,
+        tooltip: "This review is complete. Your new policy is in place.",
         steps: [
           { key: "awaiting_documents", label: "Upload your documents", state: "completed" },
           { key: "completed", label: "Switch completed", state: "completed" },

@@ -449,10 +449,13 @@ export function Select<T extends string>({
 export function StatusPill({
   label,
   tone = "accent",
+  tooltip,
 }: {
   label: string;
   tone?: "accent" | "warning" | "neutral" | "error" | "success";
+  tooltip?: string;
 }) {
+  const [open, setOpen] = useState(false);
   const bg =
     tone === "accent"
       ? colors.accentSoft
@@ -473,10 +476,42 @@ export function StatusPill({
           : tone === "success"
             ? colors.success
             : colors.inkMuted;
-  return (
+  const pill = (
     <View style={[styles.pill, { backgroundColor: bg }]}>
       <Text style={[styles.pillText, { color: fg }]}>{label}</Text>
     </View>
+  );
+  if (!tooltip) return pill;
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${tooltip}`}
+        onPress={() => setOpen(true)}
+      >
+        {pill}
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.selectOverlay} onPress={() => setOpen(false)}>
+          <Pressable
+            accessibilityViewIsModal
+            style={styles.tooltipSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={styles.subtitle}>{label}</Text>
+            <Text style={styles.tooltipBody}>{tooltip}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Close ${label} explanation`}
+              onPress={() => setOpen(false)}
+              style={({ pressed }) => [styles.tooltipClose, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.tooltipCloseText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 

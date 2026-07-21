@@ -149,7 +149,7 @@ function SessionCard({ session, testID }: { session: AutopilotSession; testID?: 
             alignItems: "flex-start",
           }}
         >
-          <StatusPill label={session.status} tone={session.statusTone} />
+          <StatusPill label={session.status} tone={session.statusTone} tooltip={session.tooltip} />
         </View>
       </View>
       <SessionStepList steps={session.steps} action={session.action} />
