@@ -34,6 +34,7 @@ export default function SignIn() {
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
+          textContentType="emailAddress"
           value={email}
           onChangeText={setEmail}
           testID="email-input"
@@ -41,7 +42,8 @@ export default function SignIn() {
         <Field
           label="Password"
           secureTextEntry
-          autoComplete="password"
+          autoComplete="current-password"
+          textContentType="password"
           value={password}
           onChangeText={setPassword}
           testID="password-input"

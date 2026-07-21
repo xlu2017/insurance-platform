@@ -48,15 +48,30 @@ export default function Register() {
         <Title>Create your account</Title>
         <Body muted>Start managing your insurance in one place.</Body>
         <View style={{ height: 16 }} />
-        <Field label="Full name" value={fullName} onChangeText={setFullName} />
+        <Field
+          label="Full name"
+          autoComplete="name"
+          textContentType="name"
+          value={fullName}
+          onChangeText={setFullName}
+        />
         <Field
           label="Email"
           autoCapitalize="none"
           keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
           value={email}
           onChangeText={setEmail}
         />
-        <Field label="Password" secureTextEntry value={password} onChangeText={setPassword} />
+        <Field
+          label="Password"
+          secureTextEntry
+          autoComplete="new-password"
+          textContentType="newPassword"
+          value={password}
+          onChangeText={setPassword}
+        />
         {error ? <Body error>{error}</Body> : null}
         <View style={{ height: 12 }} />
         <PrimaryButton label="Create account" onPress={register} loading={loading} />
