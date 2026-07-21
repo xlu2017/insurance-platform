@@ -733,6 +733,7 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: typography.sizes.caption,
     fontWeight: "600",
+    textAlign: "right",
   },
   row: {
     flexDirection: "row",

@@ -146,7 +146,7 @@ function SessionCard({ session, testID }: { session: AutopilotSession; testID?: 
             flex: 1,
             minWidth: 0,
             justifyContent: "flex-end",
-            alignItems: "flex-start",
+            alignItems: "flex-end",
           }}
         >
           <StatusPill label={session.status} tone={session.statusTone} tooltip={session.tooltip} />
