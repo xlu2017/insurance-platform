@@ -1,10 +1,10 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ScrollView, Switch, View } from "react-native";
+import { Modal, Pressable, ScrollView, Switch, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as LocalAuthentication from "expo-local-authentication";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors, spacing } from "@autopilot/design-tokens";
+import { colors, radii, spacing } from "@autopilot/design-tokens";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { formatEdmontonDate } from "@/lib/format";
@@ -12,7 +12,6 @@ import {
   Body,
   Caption,
   Card,
-  Field,
   Loading,
   PrimaryButton,
   Row,
@@ -33,15 +32,8 @@ export default function Profile() {
   const [biometrics, setBiometrics] = useState(false);
   const [autopilot, setAutopilot] = useState(household?.autopilot_active ?? false);
   const [showDangerousConfirmation, setShowDangerousConfirmation] = useState(false);
-  const [dangerousPassword, setDangerousPassword] = useState("");
   const [dangerousBusy, setDangerousBusy] = useState(false);
   const [dangerousError, setDangerousError] = useState<string | null>(null);
-  const [dangerousAcknowledgements, setDangerousAcknowledgements] = useState({
-    explicit: false,
-    foreign: false,
-    automated: false,
-    raw: false,
-  });
 
   const membershipStatusLabel: Record<string, string> = {
     active: "Active",
@@ -194,34 +186,16 @@ export default function Profile() {
     setDangerousBusy(true);
     setDangerousError(null);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const email = userData.user?.email;
-      if (!email || !dangerousPassword) {
-        throw new Error("Enter your password to reauthenticate");
-      }
-      const { error: reauthError } = await supabase.auth.signInWithPassword({
-        email,
-        password: dangerousPassword,
-      });
-      if (reauthError) throw new Error("Reauthentication failed");
-
       await updateDangerousModeSetting({
         householdId: household.id,
         enabled: true,
-        explicitConfirmation: dangerousAcknowledgements.explicit,
-        foreignProcessingAcknowledged: dangerousAcknowledgements.foreign,
-        automatedProcessingAcknowledged: dangerousAcknowledgements.automated,
-        rawProcessingApproved: dangerousAcknowledgements.raw,
+        explicitConfirmation: true,
+        foreignProcessingAcknowledged: true,
+        automatedProcessingAcknowledged: true,
+        rawProcessingApproved: true,
         disclosureVersion: DANGEROUS_MODE_DISCLOSURE_VERSION,
       });
-      setDangerousPassword("");
       setShowDangerousConfirmation(false);
-      setDangerousAcknowledgements({
-        explicit: false,
-        foreign: false,
-        automated: false,
-        raw: false,
-      });
       await refetchDangerousMode();
     } catch (error) {
       setDangerousError(
@@ -231,8 +205,6 @@ export default function Profile() {
       setDangerousBusy(false);
     }
   };
-
-  const allDangerousAcknowledged = Object.values(dangerousAcknowledgements).every(Boolean);
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -311,61 +283,85 @@ export default function Profile() {
               />
             </View>
             <Caption>{DANGEROUS_MODE_DISCLOSURE}</Caption>
-            {showDangerousConfirmation && !(dangerousMode?.enabled ?? false) ? (
-              <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
-                <Body>Turn on instant AI review?</Body>
-                {[
-                  [
-                    "explicit",
+            <Modal
+              animationType="fade"
+              transparent
+              visible={showDangerousConfirmation && !(dangerousMode?.enabled ?? false)}
+              onRequestClose={() => {
+                setShowDangerousConfirmation(false);
+                setDangerousError(null);
+              }}
+            >
+              <Pressable
+                style={{
+                  flex: 1,
+                  backgroundColor: "rgba(0,0,0,0.4)",
+                  justifyContent: "center",
+                  padding: spacing.lg,
+                }}
+                onPress={() => {
+                  setShowDangerousConfirmation(false);
+                  setDangerousError(null);
+                }}
+              >
+                <View
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderRadius: radii.lg,
+                    padding: spacing.lg,
+                    gap: spacing.sm,
+                  }}
+                >
+                  <Subtitle style={{ marginBottom: spacing.xs }}>
+                    Turn on instant AI review?
+                  </Subtitle>
+                  <Body muted style={{ marginBottom: spacing.sm }}>
+                    {DANGEROUS_MODE_DISCLOSURE}
+                  </Body>
+                  {[
                     "I understand my policy documents will be processed by an external AI service.",
-                  ],
-                  ["foreign", "I understand processing may occur outside Canada."],
-                  ["automated", "I understand AI-generated information may be incorrect."],
-                  ["raw", "I agree to review the results before they are saved."],
-                ].map(([key, label]) => (
+                    "I understand processing may occur outside Canada.",
+                    "I understand AI-generated information may be incorrect.",
+                    "I agree to review the results before they are saved.",
+                  ].map((point) => (
+                    <View key={point} style={{ flexDirection: "row", paddingVertical: spacing.xs }}>
+                      <Body style={{ marginRight: spacing.sm }}>•</Body>
+                      <Body style={{ flex: 1 }}>{point}</Body>
+                    </View>
+                  ))}
+                  {dangerousError ? (
+                    <Body style={{ color: colors.danger, marginTop: spacing.sm }}>
+                      {dangerousError}
+                    </Body>
+                  ) : null}
                   <View
-                    key={key}
                     style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      paddingVertical: spacing.xs,
+                      flexDirection: "column",
+                      gap: spacing.sm,
+                      marginTop: spacing.md,
+                      width: "100%",
                     }}
                   >
-                    <Body style={{ flex: 1, marginRight: spacing.sm }}>{label}</Body>
-                    <Switch
-                      accessibilityLabel={label}
-                      value={
-                        dangerousAcknowledgements[key as keyof typeof dangerousAcknowledgements]
-                      }
-                      onValueChange={(value) =>
-                        setDangerousAcknowledgements((current) => ({
-                          ...current,
-                          [key as keyof typeof current]: value,
-                        }))
-                      }
+                    <PrimaryButton
+                      label="Turn on instant AI review"
+                      onPress={enableDangerousMode}
+                      loading={dangerousBusy}
+                      style={{ width: "100%" }}
+                    />
+                    <SecondaryButton
+                      label="Cancel"
+                      onPress={() => {
+                        setShowDangerousConfirmation(false);
+                        setDangerousError(null);
+                      }}
+                      disabled={dangerousBusy}
+                      style={{ width: "100%" }}
                     />
                   </View>
-                ))}
-                <Field
-                  label="Password for reauthentication"
-                  secureTextEntry
-                  value={dangerousPassword}
-                  onChangeText={setDangerousPassword}
-                />
-                <PrimaryButton
-                  label="Turn on instant AI review"
-                  onPress={enableDangerousMode}
-                  loading={dangerousBusy}
-                  disabled={!allDangerousAcknowledged || !dangerousPassword}
-                />
-                <SecondaryButton
-                  label="Cancel"
-                  onPress={() => setShowDangerousConfirmation(false)}
-                  disabled={dangerousBusy}
-                />
-              </View>
-            ) : null}
-            {dangerousError ? (
+                </View>
+              </Pressable>
+            </Modal>
+            {dangerousError && !showDangerousConfirmation ? (
               <Body muted style={{ marginTop: spacing.sm }}>
                 {dangerousError}
               </Body>
