@@ -12,7 +12,13 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import type { NativeStackHeaderProps } from "@react-navigation/native-stack";
-import { CaretDownIcon, CaretLeftIcon, CaretRightIcon } from "phosphor-react-native";
+import {
+  CaretDownIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  EyeIcon,
+  EyeSlashIcon,
+} from "phosphor-react-native";
 import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
 
 export function Screen({ children, style, ...props }: ViewProps) {
@@ -353,7 +359,23 @@ export function FormLabel({ label, helpText }: { label: string; helpText?: strin
 export function Field(
   props: TextInputProps & { label?: string; error?: string; helpText?: string; prefix?: string },
 ) {
-  const { label, error, helpText, prefix, ...inputProps } = props;
+  const { label, error, helpText, prefix, secureTextEntry, ...inputProps } = props;
+  const [visible, setVisible] = useState(false);
+  const isPassword = secureTextEntry === true;
+  const suffix = isPassword ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={visible ? "Hide password" : "Show password"}
+      onPress={() => setVisible((v) => !v)}
+      style={styles.inputSuffix}
+    >
+      {visible ? (
+        <EyeSlashIcon color={colors.inkMuted} size={20} />
+      ) : (
+        <EyeIcon color={colors.inkMuted} size={20} />
+      )}
+    </Pressable>
+  ) : null;
   return (
     <View style={{ marginBottom: spacing.md }}>
       {label ? <FormLabel label={label} helpText={helpText} /> : null}
@@ -364,14 +386,27 @@ export function Field(
             accessibilityLabel={label}
             placeholderTextColor={colors.inkMuted}
             style={[styles.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]}
+            secureTextEntry={isPassword ? !visible : secureTextEntry}
             {...inputProps}
           />
+        </View>
+      ) : isPassword ? (
+        <View style={styles.inputWithPrefix}>
+          <TextInput
+            accessibilityLabel={label}
+            placeholderTextColor={colors.inkMuted}
+            style={[styles.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]}
+            secureTextEntry={!visible}
+            {...inputProps}
+          />
+          {suffix}
         </View>
       ) : (
         <TextInput
           accessibilityLabel={label}
           placeholderTextColor={colors.inkMuted}
           style={styles.input}
+          secureTextEntry={secureTextEntry}
           {...inputProps}
         />
       )}
@@ -722,6 +757,10 @@ const styles = StyleSheet.create({
     paddingRight: 6,
     fontSize: typography.sizes.body,
     color: colors.inkMuted,
+  },
+  inputSuffix: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   error: {
     color: colors.danger,
