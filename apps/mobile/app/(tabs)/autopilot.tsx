@@ -137,11 +137,11 @@ function SessionCard({ session, testID }: { session: AutopilotSession; testID?: 
           gap: 12,
         }}
       >
-        <View style={{ flex: 1, width: "50%" }}>
+        <View style={{ flex: 1 }}>
           <Subtitle style={{ marginBottom: 4 }}>{session.name}</Subtitle>
           <Caption>Started {session.startedAt}</Caption>
         </View>
-        <View style={{ flex: 1, width: "50%", alignItems: "flex-end" }}>
+        <View style={{ flex: 1, justifyContent: "flex-end", alignItems: "flex-start" }}>
           <StatusPill label={session.status} tone={session.statusTone} />
         </View>
       </View>
