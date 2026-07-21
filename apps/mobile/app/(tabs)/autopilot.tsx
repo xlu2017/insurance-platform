@@ -23,18 +23,20 @@ function StepMarker({ state }: { state: SessionStep["state"] }) {
     state === "completed"
       ? colors.success
       : state === "current"
-        ? colors.accent
+        ? "#F59E0B"
         : state === "failed"
           ? "#B91C1C"
           : colors.border;
-  const borderWidth = state === "upcoming" ? 1 : 0;
+  const backgroundColor =
+    state === "upcoming" ? colors.surface : state === "current" ? "#FEF3C7" : color;
+  const borderWidth = state === "upcoming" || state === "current" ? 1 : 0;
   return (
     <View
       style={{
         width: 12,
         height: 12,
         borderRadius: 6,
-        backgroundColor: state === "upcoming" ? colors.surface : color,
+        backgroundColor,
         borderWidth,
         borderColor: color,
         marginTop: 4,
@@ -59,7 +61,7 @@ function SessionStepList({
           step.state === "completed"
             ? colors.success
             : step.state === "current"
-              ? colors.accent
+              ? "#F59E0B"
               : step.state === "failed"
                 ? "#B91C1C"
                 : colors.inkMuted;
@@ -113,7 +115,7 @@ function SessionStepList({
                     }
                     style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
                   >
-                    <Body style={{ color: colors.accent, fontWeight: "600" }}>{action.label}</Body>
+                    <Body style={{ color: "#F59E0B", fontWeight: "600" }}>{action.label}</Body>
                   </Pressable>
                 ) : null}
               </View>
