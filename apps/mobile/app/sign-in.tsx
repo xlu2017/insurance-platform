@@ -19,7 +19,7 @@ export default function SignIn() {
       setError(error.message);
       return;
     }
-    router.replace("/(tabs)/home");
+    router.replace("/home");
   };
 
   return (
