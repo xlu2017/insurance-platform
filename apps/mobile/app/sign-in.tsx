@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { Body, Field, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
@@ -8,9 +8,11 @@ import {
   type AuthError,
   type SignInCredentials,
 } from "@/lib/auth";
+import { useAuth } from "@/lib/auth-context";
 import { getDemoCredentials } from "@/lib/config";
 
 const MAX_RETRIES = 3;
+const SSO_TIMEOUT_MS = 30_000;
 
 function getDisplayError(error: AuthError | null, retryCount: number): AuthError | null {
   if (!error) return null;
@@ -25,6 +27,7 @@ function getDisplayError(error: AuthError | null, retryCount: number): AuthError
 }
 
 export default function SignIn() {
+  const { status, isAuthenticated } = useAuth();
   const { email: demoEmail, password: demoPassword } = getDemoCredentials();
 
   const [email, setEmail] = useState(demoEmail ?? "");
@@ -32,6 +35,7 @@ export default function SignIn() {
   const [error, setError] = useState<AuthError | null>(null);
   const [loading, setLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const ssoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isMounted = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -40,8 +44,24 @@ export default function SignIn() {
     return () => {
       isMounted.current = false;
       abortRef.current?.abort();
+      if (ssoTimeoutRef.current) {
+        clearTimeout(ssoTimeoutRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (ssoTimeoutRef.current) {
+        clearTimeout(ssoTimeoutRef.current);
+        ssoTimeoutRef.current = null;
+      }
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  if (status === "loading") return null;
+  if (isAuthenticated) return <Redirect href="/home" />;
 
   const resetForInput = () => {
     if (retryCount > 0) {
@@ -49,6 +69,13 @@ export default function SignIn() {
     }
     if (error) {
       setError(null);
+    }
+  };
+
+  const clearSsoTimeout = () => {
+    if (ssoTimeoutRef.current) {
+      clearTimeout(ssoTimeoutRef.current);
+      ssoTimeoutRef.current = null;
     }
   };
 
@@ -108,20 +135,37 @@ export default function SignIn() {
     setLoading(true);
     setError(null);
     setRetryCount(0);
-    try {
-      const { user, error: ssoError } = await signInWithOAuthProvider("google");
+    clearSsoTimeout();
+
+    ssoTimeoutRef.current = setTimeout(() => {
       if (!isMounted.current) return;
-      if (user) {
-        router.replace("/home");
-        return;
-      }
+      setLoading(false);
+      setError({
+        category: "timeout",
+        message: "Sign-in took too long. Please try again.",
+        retryable: true,
+      });
+    }, SSO_TIMEOUT_MS);
+
+    try {
+      const { error: ssoError } = await signInWithOAuthProvider("google");
+      if (!isMounted.current) return;
       if (ssoError) {
+        clearSsoTimeout();
         setError(ssoError);
-      }
-    } finally {
-      if (isMounted.current) {
         setLoading(false);
       }
+      // If no error, the deep-link callback will complete the sign-in and the
+      // auth listener above will redirect once the session is set.
+    } catch (err) {
+      if (!isMounted.current) return;
+      clearSsoTimeout();
+      setError({
+        category: "unknown",
+        message: err instanceof Error ? err.message : "Sign-in failed. Please try again.",
+        retryable: false,
+      });
+      setLoading(false);
     }
   };
 
@@ -178,6 +222,7 @@ export default function SignIn() {
           label="Continue with SSO"
           onPress={performSSO}
           disabled={loading}
+          loading={loading}
           testID="sso-sign-in-button"
         />
         {canRetry ? (

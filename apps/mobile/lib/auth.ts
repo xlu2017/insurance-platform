@@ -422,12 +422,18 @@ export async function signInWithOAuthProvider(
     }
 
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type !== "success" || !result.url) {
-      return { error: ssoError("SSO sign-in was cancelled.", "invalid_credentials") };
+
+    if (result.type === "success" && result.url) {
+      // The browser was able to return the OAuth redirect URL directly (common on iOS).
+      const { code, accessToken, refreshToken } = parseOAuthReturnUrl(result.url);
+      return exchangeOAuthCode(code, accessToken, refreshToken);
     }
 
-    const { code, accessToken, refreshToken } = parseOAuthReturnUrl(result.url);
-    return exchangeOAuthCode(code, accessToken, refreshToken);
+    // On Android, Chrome Custom Tabs can be dismissed by the OS when the app
+    // scheme redirect is intercepted. The deep link is delivered to the app via
+    // Linking and handled by app/auth/callback.tsx, which finishes the exchange.
+    // The caller should keep waiting for the global auth state to become authenticated.
+    return {};
   } catch (err) {
     logDev(`SSO network error: ${(err as Error).message}`);
     return {

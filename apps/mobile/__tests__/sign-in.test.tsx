@@ -2,18 +2,32 @@ import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import { router } from "expo-router";
 import SignIn from "../app/sign-in";
-import { signInWithPassword } from "../lib/auth";
+import { signInWithOAuthProvider, signInWithPassword } from "../lib/auth";
+import { useAuth } from "../lib/auth-context";
 
 jest.mock("expo-router", () => ({
   router: { replace: jest.fn(), back: jest.fn() },
   Redirect: () => null,
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock("../lib/auth", () => ({
   signInWithPassword: jest.fn(),
+  signInWithOAuthProvider: jest.fn(),
+}));
+
+jest.mock("../lib/auth-context", () => ({
+  useAuth: jest.fn(),
+}));
+
+jest.mock("../lib/config", () => ({
+  getDemoCredentials: () => ({ email: "demo@example.com", password: "demo-password" }),
+  loadRemoteConfig: jest.fn(),
 }));
 
 const mockSignIn = signInWithPassword as jest.MockedFunction<typeof signInWithPassword>;
+const mockSSO = signInWithOAuthProvider as jest.MockedFunction<typeof signInWithOAuthProvider>;
+const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 
 async function fillCredentials(
   getByTestId: ReturnType<typeof render>["getByTestId"],
@@ -27,6 +41,12 @@ async function fillCredentials(
 describe("SignIn screen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseAuth.mockReturnValue({
+      session: null,
+      status: "unauthenticated",
+      isAuthenticated: false,
+      isUnauthenticated: true,
+    } as any);
   });
 
   it("signs in and navigates home on success", async () => {
