@@ -16,7 +16,6 @@ import {
   SecondaryButton,
   StatusPill,
   Subtitle,
-  Title,
 } from "@/components/ui";
 
 function StepMarker({ state }: { state: SessionStep["state"] }) {
@@ -177,7 +176,7 @@ export default function Autopilot() {
     return (
       <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
         <Screen>
-          <Title>We couldn’t load Autopilot</Title>
+          <Subtitle>We couldn’t load Autopilot</Subtitle>
           <Body muted>Check your connection and try again.</Body>
           <View style={{ height: 16 }} />
           <SecondaryButton label="Try again" onPress={() => refetch()} />
@@ -190,10 +189,6 @@ export default function Autopilot() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={{ marginBottom: 16 }}>
-            <Title>Autopilot</Title>
-          </View>
-
           <Subtitle>Current Session</Subtitle>
           {current ? (
             <SessionCard session={current} testID="current-session" />
