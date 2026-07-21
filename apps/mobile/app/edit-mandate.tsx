@@ -778,7 +778,7 @@ export default function EditMandate() {
           contentContainerStyle={{
             paddingHorizontal: spacing.lg,
             paddingTop: spacing.md,
-            paddingBottom: spacing.xxl,
+            paddingBottom: spacing.md,
           }}
         >
           <Title>Coverage mandate</Title>
@@ -1053,7 +1053,6 @@ export default function EditMandate() {
 
           {error ? <Body style={{ color: "red" }}>{error}</Body> : null}
           <PrimaryButton label="Save changes" onPress={save} loading={busy} />
-          <View style={{ height: 24 }} />
         </ScrollView>
       </Screen>
     </SafeAreaView>

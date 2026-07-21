@@ -13,35 +13,36 @@ export default function Coverage() {
           contentContainerStyle={{
             flexGrow: 0,
             paddingHorizontal: spacing.lg,
-            paddingBottom: spacing.xxl,
           }}
         >
-          <View style={{ marginTop: spacing.xxl, marginBottom: spacing.xl }}>
-            <Subtitle style={{ marginBottom: spacing.md }}>Assets</Subtitle>
-            <View style={{ gap: 12 }}>
-              <SettingsNavigationRow label="Vehicles" onPress={() => router.push("/vehicles")} />
-              <SettingsNavigationRow
-                label="Properties"
-                onPress={() => router.push("/properties")}
-              />
-              <SettingsNavigationRow
-                label="Compare coverage"
-                onPress={() => router.push("/compare-coverage")}
-              />
+          <View style={{ gap: spacing.xl }}>
+            <View>
+              <Subtitle style={{ marginBottom: spacing.md }}>Assets</Subtitle>
+              <View style={{ gap: 12 }}>
+                <SettingsNavigationRow label="Vehicles" onPress={() => router.push("/vehicles")} />
+                <SettingsNavigationRow
+                  label="Properties"
+                  onPress={() => router.push("/properties")}
+                />
+                <SettingsNavigationRow
+                  label="Compare coverage"
+                  onPress={() => router.push("/compare-coverage")}
+                />
+              </View>
             </View>
-          </View>
 
-          <View style={{ marginBottom: spacing.xl }}>
-            <Subtitle style={{ marginBottom: spacing.md }}>Rules</Subtitle>
-            <View style={{ gap: 12 }}>
-              <SettingsNavigationRow
-                label="Coverage defaults"
-                onPress={() => router.push("/coverage-defaults")}
-              />
-              <SettingsNavigationRow
-                label="Switching conditions"
-                onPress={() => router.push("/switching-conditions")}
-              />
+            <View>
+              <Subtitle style={{ marginBottom: spacing.md }}>Rules</Subtitle>
+              <View style={{ gap: 12 }}>
+                <SettingsNavigationRow
+                  label="Coverage defaults"
+                  onPress={() => router.push("/coverage-defaults")}
+                />
+                <SettingsNavigationRow
+                  label="Switching conditions"
+                  onPress={() => router.push("/switching-conditions")}
+                />
+              </View>
             </View>
           </View>
         </ScrollView>

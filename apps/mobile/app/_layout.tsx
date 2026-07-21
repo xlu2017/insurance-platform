@@ -68,7 +68,7 @@ export default function RootLayout() {
                 headerStyle: { backgroundColor: colors.surface },
                 headerTintColor: colors.ink,
                 headerShadowVisible: true,
-                contentStyle: { flex: 1 },
+                contentStyle: { flex: 1, backgroundColor: colors.surfaceSubtle },
               }}
             />
             {ready && session && <BottomTabBar />}

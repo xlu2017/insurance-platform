@@ -31,7 +31,7 @@ export default function CoverageDefaults() {
             flexGrow: 0,
             paddingHorizontal: spacing.lg,
             paddingTop: spacing.md,
-            paddingBottom: spacing.xxl,
+            paddingBottom: 0,
           }}
         >
           {!data ? (

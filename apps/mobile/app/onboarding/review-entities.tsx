@@ -791,9 +791,8 @@ export default function ReviewEntities() {
         <ScrollView
           style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
           contentContainerStyle={{
-            padding: spacing.lg,
-            paddingBottom: spacing.xl * 2,
-            minHeight: "100%",
+            paddingTop: spacing.md,
+            paddingBottom: spacing.md,
           }}
         >
           <Stack.Screen options={{ title: "Review complete" }} />
@@ -832,9 +831,8 @@ export default function ReviewEntities() {
         <ScrollView
           style={{ flex: 1, backgroundColor: colors.surfaceSubtle }}
           contentContainerStyle={{
-            padding: spacing.lg,
-            paddingBottom: spacing.xl * 2,
-            minHeight: "100%",
+            paddingTop: spacing.md,
+            paddingBottom: spacing.md,
           }}
         >
           <Stack.Screen options={{ title: `Edit ${formatFieldLabel(editingPath)}` }} />

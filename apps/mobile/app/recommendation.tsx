@@ -275,7 +275,6 @@ export default function Recommendation() {
             Approving requires reauthentication. Your current policy is never cancelled before
             replacement coverage is confirmed.
           </Caption>
-          <View style={{ height: 24 }} />
         </ScrollView>
       </Screen>
     </SafeAreaView>

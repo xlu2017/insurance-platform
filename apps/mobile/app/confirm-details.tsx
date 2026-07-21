@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
@@ -113,7 +113,6 @@ export default function ConfirmDetails() {
           </Card>
           {error ? <Body muted>{error}</Body> : null}
           <PrimaryButton label="Everything is correct" onPress={confirm} loading={busy} />
-          <View style={{ height: 24 }} />
         </ScrollView>
       </Screen>
     </SafeAreaView>

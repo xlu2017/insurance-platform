@@ -84,7 +84,7 @@ export default function PropertyDetail() {
             flexGrow: 0,
             paddingHorizontal: spacing.lg,
             paddingTop: spacing.md,
-            paddingBottom: spacing.xxl,
+            paddingBottom: 0,
           }}
         >
           <Card

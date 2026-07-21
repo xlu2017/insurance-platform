@@ -209,7 +209,10 @@ export default function Profile() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+        >
           <Body muted style={{ marginBottom: spacing.md }}>
             Manage your account, preferences, and permissions.
           </Body>
@@ -423,7 +426,6 @@ export default function Profile() {
           </Card>
 
           <SecondaryButton label="Sign out" onPress={signOut} testID="sign-out" />
-          <View style={{ height: 24 }} />
         </ScrollView>
       </Screen>
     </SafeAreaView>

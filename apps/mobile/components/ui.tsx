@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.surfaceSubtle,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   card: {
     backgroundColor: colors.surface,
