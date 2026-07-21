@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
-import { colors } from "@autopilot/design-tokens";
+import { colors, spacing } from "@autopilot/design-tokens";
 import { formatCad, formatEdmontonDate } from "@/lib/format";
 import {
   Body,
@@ -148,7 +148,10 @@ export default function Home() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+        >
           <Title>
             {requiredAction ? "One item needs your attention" : "Your insurance is covered"}
           </Title>

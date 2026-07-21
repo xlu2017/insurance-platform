@@ -290,7 +290,10 @@ export default function Documents() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+        >
           <Body muted style={{ marginBottom: spacing.md }}>
             Upload or photograph your current insurance documents so we can review your coverage.
           </Body>

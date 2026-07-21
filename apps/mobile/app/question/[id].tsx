@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { spacing } from "@autopilot/design-tokens";
 import { supabase } from "@/lib/supabase";
 import {
   Body,
@@ -87,7 +88,10 @@ export default function AnswerQuestion() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Stack.Screen options={{ headerShown: true, headerBackTitle: "Back", title: "Question" }} />
       <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+        >
           <Title>Question from your insurer</Title>
           <Card>
             <Body>{question.prompt}</Body>

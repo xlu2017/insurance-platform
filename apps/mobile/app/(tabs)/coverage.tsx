@@ -13,6 +13,8 @@ export default function Coverage() {
           contentContainerStyle={{
             flexGrow: 0,
             paddingHorizontal: spacing.lg,
+            paddingTop: spacing.md,
+            paddingBottom: spacing.md,
           }}
         >
           <View style={{ gap: spacing.xl }}>

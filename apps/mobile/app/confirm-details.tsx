@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useActiveCase, useHousehold } from "@/lib/household";
+import { spacing } from "@autopilot/design-tokens";
 import { formatCad, formatEdmontonDate } from "@/lib/format";
 import { Body, Card, Loading, PrimaryButton, Row, Screen, Subtitle, Title } from "@/components/ui";
 
@@ -74,7 +75,10 @@ export default function ConfirmDetails() {
         options={{ headerShown: true, headerBackTitle: "Back", title: "Confirm details" }}
       />
       <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+        >
           <Title>Confirm your details</Title>
           <Body muted>
             Check what we extracted from your documents before we search the market.

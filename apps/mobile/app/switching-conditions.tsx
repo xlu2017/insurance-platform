@@ -39,7 +39,7 @@ export default function SwitchingConditions() {
             flexGrow: 0,
             paddingHorizontal: spacing.lg,
             paddingTop: spacing.md,
-            paddingBottom: 0,
+            paddingBottom: spacing.md,
           }}
         >
           {!data ? (

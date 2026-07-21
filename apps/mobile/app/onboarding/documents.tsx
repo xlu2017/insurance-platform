@@ -3,6 +3,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHousehold } from "@/lib/household";
+import { spacing } from "@autopilot/design-tokens";
 import {
   createClientRequestId,
   createDocumentBatch,
@@ -187,7 +188,7 @@ export default function OnboardingDocuments() {
   };
 
   return (
-    <Screen>
+    <Screen style={{ paddingVertical: spacing.md }}>
       <Stack.Screen
         options={{ headerShown: true, headerBackTitle: "Back", title: "Upload policies" }}
       />

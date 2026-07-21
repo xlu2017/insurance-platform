@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useActiveCase, useHousehold } from "@/lib/household";
 import { formatCad } from "@/lib/format";
+import { spacing } from "@autopilot/design-tokens";
 import {
   Body,
   Caption,
@@ -185,7 +186,10 @@ export default function Recommendation() {
         options={{ headerShown: true, headerBackTitle: "Back", title: "Your best option" }}
       />
       <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+        >
           <Title>Save {formatCad(recommendation.net_savings_cents)} per year</Title>
           <Card testID="recommendation-summary">
             <Subtitle>

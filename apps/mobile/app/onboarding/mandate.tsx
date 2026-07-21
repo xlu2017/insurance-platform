@@ -4,6 +4,7 @@ import { ScrollView, Switch, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { useHousehold } from "@/lib/household";
+import { spacing } from "@autopilot/design-tokens";
 import {
   Body,
   Card,
@@ -151,7 +152,10 @@ export default function Mandate() {
       <Stack.Screen
         options={{ headerShown: true, headerBackTitle: "Back", title: "Coverage mandate" }}
       />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+      >
         <Title>Your coverage mandate</Title>
         <Body muted>These requirements are enforced on every future comparison.</Body>
         <View style={{ height: 16 }} />
@@ -237,7 +241,6 @@ export default function Mandate() {
         </Card>
         {error ? <Body muted>{error}</Body> : null}
         <PrimaryButton label="Save and continue" onPress={save} loading={busy} />
-        <View style={{ height: 24 }} />
       </ScrollView>
     </Screen>
   );

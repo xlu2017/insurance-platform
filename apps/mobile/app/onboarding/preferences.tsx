@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
+import { spacing } from "@autopilot/design-tokens";
 import {
   Body,
   Caption,
@@ -252,7 +253,10 @@ export default function Preferences() {
       <Stack.Screen
         options={{ headerShown: true, headerBackTitle: "Back", title: "When to switch" }}
       />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+      >
         <Caption>{progressLabel}</Caption>
         <View style={{ height: 8 }} />
         <Title>{current.question}</Title>

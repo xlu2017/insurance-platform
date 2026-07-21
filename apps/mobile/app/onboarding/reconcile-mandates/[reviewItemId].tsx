@@ -22,6 +22,7 @@ import {
   useMandateReviewItems,
 } from "@/lib/extraction";
 import { useHousehold } from "@/lib/household";
+import { spacing } from "@autopilot/design-tokens";
 import {
   editableMandateValue,
   formatMandateValue,
@@ -266,7 +267,10 @@ export default function ReconcileMandateItem() {
   return (
     <Screen>
       <Stack.Screen options={{ title: `${index + 1} of ${items.length}` }} />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+      >
         <Caption>{`${index + 1} of ${items.length}`}</Caption>
         <Title>{item.specification_title ?? item.field_path}</Title>
         <Body muted>{item.asset_candidate?.display_label ?? "Affected asset"}</Body>

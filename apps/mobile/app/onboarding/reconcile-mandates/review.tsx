@@ -20,6 +20,7 @@ import {
   useMandateReviewItems,
 } from "@/lib/extraction";
 import { useHousehold } from "@/lib/household";
+import { spacing } from "@autopilot/design-tokens";
 import {
   buildCandidateMandateValues,
   formatMandateValue,
@@ -151,7 +152,10 @@ export default function MandateReconciliationReview() {
   return (
     <Screen>
       <Stack.Screen options={{ title: "Review coverage rules" }} />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+      >
         <Title>Review your coverage rules</Title>
         <Body muted>
           {hasReviewItems

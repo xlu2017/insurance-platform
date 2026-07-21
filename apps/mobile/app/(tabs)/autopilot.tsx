@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "@autopilot/design-tokens";
+import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { useAutopilotSessions, type AutopilotSession, type SessionStep } from "@/lib/autopilot";
 import {
@@ -190,7 +190,10 @@ export default function Autopilot() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <Screen>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
+        >
           <Subtitle>Current Session</Subtitle>
           {current ? (
             <SessionCard session={current} testID="current-session" />
