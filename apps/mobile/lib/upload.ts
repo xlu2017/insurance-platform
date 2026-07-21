@@ -2,7 +2,12 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import type { DocumentCategory } from "@autopilot/schemas";
-import { BYPASS_TUNNEL_HEADERS, supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "./supabase";
+import {
+  getBypassTunnelHeaders,
+  getSupabaseAnonKeyString,
+  getSupabaseUrlString,
+  supabase,
+} from "./supabase";
 
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -94,7 +99,7 @@ export async function uploadPolicyDocument(
   if (clientItemId) parameters.clientItemId = clientItemId;
 
   const uploadRes = await FileSystem.uploadAsync(
-    `${SUPABASE_URL}/functions/v1/upload-document`,
+    `${getSupabaseUrlString()}/functions/v1/upload-document`,
     file.uri,
     {
       uploadType: FileSystem.FileSystemUploadType.MULTIPART,
@@ -103,8 +108,8 @@ export async function uploadPolicyDocument(
       parameters,
       headers: {
         Authorization: `Bearer ${session.session.access_token}`,
-        apikey: SUPABASE_ANON_KEY,
-        ...BYPASS_TUNNEL_HEADERS,
+        apikey: getSupabaseAnonKeyString(),
+        ...getBypassTunnelHeaders(),
       },
     },
   );
@@ -149,13 +154,13 @@ export async function deletePolicyDocument(documentId: string): Promise<void> {
     throw new Error("You must be signed in to remove documents");
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-document`, {
+  const response = await fetch(`${getSupabaseUrlString()}/functions/v1/delete-document`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${session.session.access_token}`,
       "Content-Type": "application/json",
-      apikey: SUPABASE_ANON_KEY,
-      ...BYPASS_TUNNEL_HEADERS,
+      apikey: getSupabaseAnonKeyString(),
+      ...getBypassTunnelHeaders(),
     },
     body: JSON.stringify({ documentId }),
   });

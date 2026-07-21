@@ -1,8 +1,9 @@
 import "react-native-url-polyfill/auto";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@autopilot/database";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { getBypassHeaders, getSupabaseAnonKey, getSupabaseUrl } from "./config";
 
 const memoryStore = new Map<string, string>();
 
@@ -49,32 +50,64 @@ const secureStoreAdapter = {
       : withFallback(() => SecureStore.deleteItemAsync(key), (memoryStore.delete(key), undefined)),
 };
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+let activeClient: SupabaseClient<Database> | null = null;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. " +
-      "Set these environment variables before building or running the app.",
-  );
+function createSupabaseClient(): SupabaseClient<Database> {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  const bypassHeaders = getBypassHeaders();
+
+  if (!url || !key) {
+    throw new Error(
+      "Missing Supabase URL or anon key. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY, " +
+        "or provide a remote config endpoint with EXPO_PUBLIC_CONFIG_ENDPOINT.",
+    );
+  }
+
+  return createClient<Database>(url, key, {
+    auth: {
+      storage: secureStoreAdapter,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: bypassHeaders,
+    },
+  });
 }
 
-export const SUPABASE_URL = supabaseUrl;
-export const SUPABASE_ANON_KEY = supabaseAnonKey;
+export function getSupabaseClient(): SupabaseClient<Database> {
+  if (!activeClient) {
+    activeClient = createSupabaseClient();
+  }
+  return activeClient;
+}
 
-const isLocaltunnel = supabaseUrl.includes(".loca.lt");
-export const BYPASS_TUNNEL_HEADERS = isLocaltunnel
-  ? { "Bypass-Tunnel-Reminder": "true" }
-  : undefined;
+export function resetSupabaseClient(): void {
+  activeClient = null;
+}
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: secureStoreAdapter,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
+export const supabase = new Proxy<SupabaseClient<Database>>({} as SupabaseClient<Database>, {
+  get: (_target, prop) => {
+    const client = getSupabaseClient();
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
+    if (typeof value === "function") {
+      return value.bind(client);
+    }
+    return value;
   },
-  global: {
-    headers: isLocaltunnel ? { "Bypass-Tunnel-Reminder": "true" } : undefined,
-  },
-});
+}) as SupabaseClient<Database>;
+
+// Backwards-compatible helpers that read the currently loaded config.
+export function getSupabaseUrlString(): string {
+  return getSupabaseUrl();
+}
+
+export function getSupabaseAnonKeyString(): string {
+  return getSupabaseAnonKey();
+}
+
+export function getBypassTunnelHeaders(): Record<string, string> | undefined {
+  return getBypassHeaders();
+}

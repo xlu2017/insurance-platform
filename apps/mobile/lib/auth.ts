@@ -1,5 +1,6 @@
 import type { User } from "@supabase/supabase-js";
-import { BYPASS_TUNNEL_HEADERS, supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "./supabase";
+import { getBypassHeaders, getSupabaseAnonKey, getSupabaseUrl } from "./config";
+import { getSupabaseClient, resetSupabaseClient } from "./supabase";
 
 declare const __DEV__: boolean;
 
@@ -39,8 +40,8 @@ function logDev(message: string) {
 }
 
 export function getSupabaseConfigError(url?: string, anonKey?: string): AuthError | null {
-  const resolvedUrl = url ?? SUPABASE_URL;
-  const resolvedAnonKey = anonKey ?? SUPABASE_ANON_KEY;
+  const resolvedUrl = url ?? getSupabaseUrl();
+  const resolvedAnonKey = anonKey ?? getSupabaseAnonKey();
   if (!resolvedUrl || !resolvedAnonKey) {
     return {
       category: "invalid_config",
@@ -107,7 +108,7 @@ export function getSupabaseConfigError(url?: string, anonKey?: string): AuthErro
 
 function getSanitizedHostname(): string | null {
   try {
-    return new URL(SUPABASE_URL).hostname;
+    return new URL(getSupabaseUrl()).hostname;
   } catch {
     return null;
   }
@@ -202,6 +203,10 @@ export async function signInWithPassword(
   const hostname = getSanitizedHostname();
   logDev(`sign-in request: hostname=${hostname ?? "unknown"}`);
 
+  const SUPABASE_URL = getSupabaseUrl();
+  const SUPABASE_ANON_KEY = getSupabaseAnonKey();
+  const BYPASS_TUNNEL_HEADERS = getBypassHeaders();
+
   try {
     const url = new URL(`${SUPABASE_URL}/auth/v1/token`);
     url.searchParams.set("grant_type", "password");
@@ -249,7 +254,8 @@ export async function signInWithPassword(
         };
       }
 
-      const { error: sessionError } = await supabase.auth.setSession({
+      resetSupabaseClient();
+      const { error: sessionError } = await getSupabaseClient().auth.setSession({
         access_token: token.access_token,
         refresh_token: token.refresh_token,
       });

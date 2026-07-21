@@ -1,7 +1,12 @@
 import { router, Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Linking, View } from "react-native";
-import { BYPASS_TUNNEL_HEADERS, SUPABASE_ANON_KEY, supabase, SUPABASE_URL } from "@/lib/supabase";
+import {
+  getBypassTunnelHeaders,
+  getSupabaseAnonKeyString,
+  getSupabaseUrlString,
+  supabase,
+} from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { Body, Caption, Card, PrimaryButton, Screen, Title } from "@/components/ui";
 
@@ -59,13 +64,13 @@ export default function Membership() {
     setError(null);
     const { data: session } = await supabase.auth.getSession();
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout-session`, {
+      const res = await fetch(`${getSupabaseUrlString()}/functions/v1/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.session?.access_token ?? ""}`,
-          apikey: SUPABASE_ANON_KEY,
-          ...BYPASS_TUNNEL_HEADERS,
+          apikey: getSupabaseAnonKeyString(),
+          ...getBypassTunnelHeaders(),
         },
       });
       const payload = (await res.json()) as {

@@ -8,11 +8,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StackHeader } from "@/components/ui";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
-import { supabase } from "@/lib/supabase";
+import { loadRemoteConfig } from "@/lib/config";
+import { getSupabaseClient, resetSupabaseClient } from "@/lib/supabase";
 import { colors } from "@autopilot/design-tokens";
 import type { Session } from "@supabase/supabase-js";
 
@@ -26,13 +27,16 @@ function useAuthGate() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    (async () => {
+      await loadRemoteConfig({ timeoutMs: 10_000 });
+      resetSupabaseClient();
+      const { data } = await getSupabaseClient().auth.getSession();
       if (mounted) {
         setSession(data.session);
         setReady(true);
       }
-    });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, next) => {
+    })();
+    const { data: subscription } = getSupabaseClient().auth.onAuthStateChange((_event, next) => {
       if (mounted) setSession(next);
     });
     return () => {
@@ -56,6 +60,17 @@ export default function RootLayout() {
     () => new QueryClient({ defaultOptions: { queries: { retry: 2, staleTime: 10_000 } } }),
   );
   const { session, ready } = useAuthGate();
+
+  if (!ready) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <View style={[styles.viewport, styles.loading]}>
+          <ActivityIndicator />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -95,6 +110,12 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+  },
   viewport: {
     flex: 1,
     backgroundColor: colors.surfaceSubtle,

@@ -1,4 +1,9 @@
-import { BYPASS_TUNNEL_HEADERS, SUPABASE_URL, supabase } from "./supabase";
+import {
+  getBypassTunnelHeaders,
+  getSupabaseAnonKeyString,
+  getSupabaseUrlString,
+  supabase,
+} from "./supabase";
 
 export interface EdgeFunctionError {
   code: string;
@@ -18,13 +23,13 @@ export async function invokeEdgeFunction<T = unknown>(
     return { error: { code: "UNAUTHORIZED", message: "No active session" } };
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+  const response = await fetch(`${getSupabaseUrlString()}/functions/v1/${name}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
-      apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
-      ...BYPASS_TUNNEL_HEADERS,
+      apikey: getSupabaseAnonKeyString(),
+      ...getBypassTunnelHeaders(),
     },
     body: JSON.stringify(body),
   });

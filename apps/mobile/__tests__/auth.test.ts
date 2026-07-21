@@ -1,16 +1,26 @@
 import { getSupabaseConfigError, signInWithPassword } from "../lib/auth";
 
 const mockSetSession = jest.fn().mockResolvedValue({ error: null });
+const mockUrl = "https://test-project.example.com";
+const mockKey = "test-anon-key-with-enough-length";
+
+jest.mock("../lib/config", () => ({
+  getSupabaseUrl: () => mockUrl,
+  getSupabaseAnonKey: () => mockKey,
+  getBypassHeaders: () => undefined,
+  getDemoCredentials: () => ({}),
+  getConfig: () => null,
+  setConfig: jest.fn(),
+  loadRemoteConfig: jest.fn().mockResolvedValue(null),
+}));
 
 jest.mock("../lib/supabase", () => ({
-  SUPABASE_URL: "https://test-project.example.com",
-  SUPABASE_ANON_KEY: "test-anon-key-with-enough-length",
-  BYPASS_TUNNEL_HEADERS: undefined,
-  supabase: {
+  getSupabaseClient: () => ({
     auth: {
       setSession: (...args: unknown[]) => mockSetSession(...args),
     },
-  },
+  }),
+  resetSupabaseClient: jest.fn(),
 }));
 
 describe("getSupabaseConfigError", () => {
@@ -82,6 +92,7 @@ describe("signInWithPassword", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
+      headers: headers(null),
       json: jest.fn().mockResolvedValueOnce({
         access_token: "access",
         refresh_token: "refresh",

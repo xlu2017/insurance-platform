@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { Body, Field, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
 import { signInWithPassword, type AuthError, type SignInCredentials } from "@/lib/auth";
+import { getDemoCredentials } from "@/lib/config";
 
 const MAX_RETRIES = 3;
 
@@ -19,8 +20,7 @@ function getDisplayError(error: AuthError | null, retryCount: number): AuthError
 }
 
 export default function SignIn() {
-  const demoEmail = process.env.EXPO_PUBLIC_DEMO_EMAIL;
-  const demoPassword = process.env.EXPO_PUBLIC_DEMO_PASSWORD;
+  const { email: demoEmail, password: demoPassword } = getDemoCredentials();
 
   const [email, setEmail] = useState(demoEmail ?? "");
   const [password, setPassword] = useState(demoPassword ?? "");
