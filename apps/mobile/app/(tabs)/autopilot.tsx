@@ -194,7 +194,7 @@ export default function Autopilot() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
         >
-          <Subtitle>Current Session</Subtitle>
+          <Subtitle style={{ marginBottom: spacing.md }}>Current Session</Subtitle>
           {current ? (
             <SessionCard session={current} testID="current-session" />
           ) : (
