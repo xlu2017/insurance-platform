@@ -47,6 +47,7 @@ function publicBatch(batch: Record<string, unknown>) {
       internalStatus === "processing_unavailable" ||
       internalStatus === "manual_review",
     created_at: String(batch.created_at),
+    processing_started_at: batch.processing_started_at ? String(batch.processing_started_at) : null,
   };
 }
 

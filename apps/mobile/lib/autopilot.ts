@@ -29,6 +29,7 @@ export interface AutopilotSession {
     params?: Record<string, string>;
   };
   isProcessing?: boolean;
+  processingSince?: string;
 }
 
 const terminalStates = new Set<CaseState>(["completed", "retained_incumbent", "cancelled"]);
@@ -38,6 +39,8 @@ interface BatchSummary {
   session_id: string;
   status: string;
   is_terminal: boolean;
+  created_at: string;
+  processing_started_at: string | null;
 }
 
 interface WorkflowStepDef {
@@ -254,6 +257,7 @@ function buildSession(
         ? undefined
         : actionForState(c.state as CaseState, c.id, c.session_id),
     isProcessing,
+    processingSince: isProcessing ? (batch.processing_started_at ?? batch.created_at) : undefined,
   };
 }
 

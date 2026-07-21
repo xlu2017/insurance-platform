@@ -45,21 +45,37 @@ function StepMarker({ state }: { state: SessionStep["state"] }) {
   );
 }
 
+function formatElapsed(since: string): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 function SessionStepList({
   steps,
   action,
   processing,
+  processingSince,
 }: {
   steps: SessionStep[];
   action?: AutopilotSession["action"];
   processing?: boolean;
+  processingSince?: string;
 }) {
   const [dots, setDots] = useState(1);
+  const [elapsed, setElapsed] = useState(processingSince ? formatElapsed(processingSince) : "");
   useEffect(() => {
     if (!processing) return;
     const interval = setInterval(() => setDots((d) => (d % 3) + 1), 500);
     return () => clearInterval(interval);
   }, [processing]);
+  useEffect(() => {
+    if (!processingSince) return;
+    setElapsed(formatElapsed(processingSince));
+    const interval = setInterval(() => setElapsed(formatElapsed(processingSince)), 1000);
+    return () => clearInterval(interval);
+  }, [processingSince]);
   return (
     <View>
       {steps.map((step, index) => {
@@ -116,7 +132,7 @@ function SessionStepList({
                     <ActivityIndicator color={color} size="small" />
                     <Body
                       style={{ color, fontWeight: "700" }}
-                    >{`Processing${".".repeat(dots)}`}</Body>
+                    >{`Processing${".".repeat(dots)} ${elapsed}`}</Body>
                   </View>
                 ) : isCurrent && action ? (
                   <Pressable
@@ -168,6 +184,7 @@ function SessionCard({ session, testID }: { session: AutopilotSession; testID?: 
         steps={session.steps}
         action={session.action}
         processing={session.isProcessing}
+        processingSince={session.processingSince}
       />
       {session.action && !session.isProcessing ? (
         <PrimaryButton
