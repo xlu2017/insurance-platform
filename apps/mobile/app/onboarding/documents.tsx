@@ -1,4 +1,4 @@
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -61,6 +61,7 @@ const categoryLabel: Record<DocumentCategory, string> = {
 };
 
 export default function OnboardingDocuments() {
+  const { mode } = useLocalSearchParams<{ mode?: "safe" | "dangerous" }>();
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<PendingPolicyFile[]>([]);
@@ -95,7 +96,8 @@ export default function OnboardingDocuments() {
 
   if (isLoading || !household) return <Loading />;
 
-  const instantReview = dangerousMode?.enabled ?? false;
+  const batchMode = mode ?? (dangerousMode?.enabled ? "dangerous" : "safe");
+  const instantReview = batchMode === "dangerous";
   const fileCount = pending.length;
   const fileCountLabel = fileCount === 1 ? "1 file" : `${fileCount} files`;
   const hasFailed = pending.some((item) => item.status === "failed");
@@ -144,7 +146,11 @@ export default function OnboardingDocuments() {
     try {
       const created =
         batch ??
-        (await createDocumentBatch(household.id, createClientRequestId("mobile-onboarding")));
+        (await createDocumentBatch(
+          household.id,
+          createClientRequestId("mobile-onboarding"),
+          batchMode,
+        ));
       if (!batch) setBatch(created);
 
       for (const item of pending.filter(

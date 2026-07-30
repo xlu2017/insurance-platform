@@ -143,7 +143,7 @@ export default function Home() {
   const showSetupAction = !requiredAction && (!isOnboardingComplete || !hasPolicies);
   const setupAction = isOnboardingComplete
     ? { label: "Upload documents", route: "/(tabs)/documents" }
-    : { label: "Continue setup", route: "/onboarding/documents" };
+    : { label: "Continue setup", route: "/onboarding/document-processing-consent" };
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>

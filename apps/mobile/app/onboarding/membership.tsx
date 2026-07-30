@@ -38,11 +38,11 @@ export default function Membership() {
       if (household) {
         await supabase
           .from("households")
-          .update({ onboarding_step: "documents" })
+          .update({ onboarding_step: "document_processing_consent" })
           .eq("id", household.id);
       }
       cleanup();
-      router.push("/onboarding/documents");
+      router.push("/onboarding/document-processing-consent");
       return true;
     }
     return false;

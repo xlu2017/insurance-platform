@@ -244,12 +244,17 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (existing) return jsonResponse(publicBatch(existing));
 
+    const requestedMode = String(body.mode ?? "");
+    const modeIsValid = requestedMode === "safe" || requestedMode === "dangerous";
+
     const { data: setting } = await admin
       .from("household_document_processing_settings")
       .select("*")
       .eq("household_id", householdId)
       .maybeSingle();
-    const dangerous = setting?.dangerous_mode_enabled === true;
+    const dangerous = modeIsValid
+      ? requestedMode === "dangerous"
+      : setting?.dangerous_mode_enabled === true;
     const { data: consent } = dangerous
       ? await admin
           .from("document_processing_consent")

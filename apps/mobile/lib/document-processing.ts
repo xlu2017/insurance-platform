@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "./supabase";
 import { invokeEdgeFunction } from "./edge-functions";
 
 export type DocumentBatchStatus =
@@ -78,6 +79,7 @@ export async function loadLatestDocumentBatch(
 export async function createDocumentBatch(
   householdId: string,
   clientRequestId: string,
+  mode?: "safe" | "dangerous",
 ): Promise<DocumentBatchSummary> {
   const { data, error } = await invokeEdgeFunction<DocumentBatchSummary>(
     "document-processing-batch",
@@ -85,6 +87,7 @@ export async function createDocumentBatch(
       action: "create",
       household_id: householdId,
       client_request_id: clientRequestId,
+      mode,
     },
   );
   if (error) throw new Error(error.message);
@@ -179,6 +182,33 @@ export async function updateDangerousModeSetting(input: {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Failed to update Dangerous mode");
   return data;
+}
+
+export async function recordDocumentProcessingConsent(input: {
+  householdId: string;
+  profileId: string;
+  purpose?: string;
+  privacyNoticeVersion?: string;
+  processorContractVersion?: string;
+  foreignProcessingAcknowledged?: boolean;
+  automatedProcessingAcknowledged?: boolean;
+  rawProcessingApproved?: boolean;
+  authorityBasis?: string;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("record_document_processing_consent", {
+    p_household_id: input.householdId,
+    p_profile_id: input.profileId,
+    p_purpose: input.purpose ?? "insurance_policy_extraction",
+    p_privacy_notice_version: input.privacyNoticeVersion ?? "1.0.0",
+    p_processor_contract_version: input.processorContractVersion ?? "1.0.0",
+    p_foreign_processing_acknowledged: input.foreignProcessingAcknowledged ?? true,
+    p_automated_processing_acknowledged: input.automatedProcessingAcknowledged ?? true,
+    p_raw_processing_approved: input.rawProcessingApproved ?? true,
+    p_authority_basis: input.authorityBasis ?? "household_owner",
+  });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Failed to record document processing consent");
+  return data as string;
 }
 
 export function createClientRequestId(prefix: string): string {
