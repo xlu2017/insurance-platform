@@ -27,6 +27,8 @@ jest.mock("expo-router", () => ({
 
 jest.mock("@/lib/config", () => ({
   loadRemoteConfig: jest.fn().mockResolvedValue(null),
+  getSupabaseUrl: () => "https://test-project.supabase.co",
+  getSupabaseAnonKey: () => "test-anon-key",
 }));
 
 jest.mock("@/lib/supabase", () => ({

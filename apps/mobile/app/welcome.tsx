@@ -92,11 +92,11 @@ export default function Welcome() {
       />
       <View style={{ height: 12 }} />
       <SecondaryButton
-        label="Continue with SSO"
+        label="Continue with Google"
         onPress={continueWithSSO}
         disabled={ssoLoading}
         loading={ssoLoading}
-        testID="welcome-sso-button"
+        testID="welcome-google-button"
       />
       {ssoError ? (
         <Body style={{ color: "#d00", marginTop: 12, textAlign: "center" }}>{ssoError}</Body>

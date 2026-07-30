@@ -9,9 +9,9 @@ import { Stack, usePathname } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { StackHeader } from "@/components/ui";
+import { PrimaryButton, StackHeader } from "@/components/ui";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { AuthContext } from "@/lib/auth-context";
 import { useAuthGate } from "@/lib/auth-gate";
@@ -40,6 +40,21 @@ function AuthGate() {
       style.remove();
     };
   }, []);
+
+  if (auth.status === "configuration_error" || auth.status === "network_error") {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <View style={[styles.viewport, styles.loading]}>
+          <Text style={{ color: "#d00", textAlign: "center" }}>
+            {auth.error?.message ?? "Sign-in is unavailable."}
+          </Text>
+          <View style={{ height: 16 }} />
+          <PrimaryButton label="Retry" onPress={auth.retry} />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   if (auth.status === "loading") {
     return (

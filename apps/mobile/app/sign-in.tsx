@@ -219,11 +219,11 @@ export default function SignIn() {
         />
         <View style={{ height: 12 }} />
         <SecondaryButton
-          label="Continue with SSO"
+          label="Continue with Google"
           onPress={performSSO}
           disabled={loading}
           loading={loading}
-          testID="sso-sign-in-button"
+          testID="google-sign-in-button"
         />
         {canRetry ? (
           <>

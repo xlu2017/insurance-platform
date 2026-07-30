@@ -6,14 +6,9 @@ export interface DangerousModeEnablePolicyInput {
   automatedProcessingAcknowledged: boolean;
   rawProcessingApproved: boolean;
   disclosureVersion: string;
-  tokenIssuedAtSeconds: number | null;
-  passwordAuthenticatedAtSeconds?: number | null;
 }
 
-export type DangerousModePolicyFailure =
-  | "ACKNOWLEDGEMENTS_REQUIRED"
-  | "DISCLOSURE_VERSION_MISMATCH"
-  | "RECENT_REAUTHENTICATION_REQUIRED";
+export type DangerousModePolicyFailure = "ACKNOWLEDGEMENTS_REQUIRED" | "DISCLOSURE_VERSION_MISMATCH";
 
 export function validateDangerousModeEnablePolicy(
   input: DangerousModeEnablePolicyInput,
@@ -30,9 +25,6 @@ export function validateDangerousModeEnablePolicy(
     return "DISCLOSURE_VERSION_MISMATCH";
   }
 
-  if (!input.passwordAuthenticatedAtSeconds) {
-    return "RECENT_REAUTHENTICATION_REQUIRED";
-  }
   return null;
 }
 

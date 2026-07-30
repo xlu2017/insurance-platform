@@ -1,21 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { loadRemoteConfig } from "./config";
-import { getSupabaseClient, resetSupabaseClient } from "./supabase";
-import type { AuthStatus } from "./auth-context";
 import type { Session } from "@supabase/supabase-js";
+import { getSupabaseAnonKey, getSupabaseUrl, loadRemoteConfig } from "./config";
+import { getSupabaseClient, resetSupabaseClient } from "./supabase";
+import type { AuthContextValue, AuthStatus } from "./auth-context";
+import type { AuthError } from "./auth";
 
 export const PUBLIC_PATHS = new Set(["/", "/welcome", "/sign-in", "/register", "/auth/callback"]);
+export const AUTHENTICATION_PATHS = new Set(["/sign-in", "/register"]);
 
-export interface AuthGateResult {
-  session: Session | null;
-  status: AuthStatus;
-  isAuthenticated: boolean;
-  isUnauthenticated: boolean;
-}
-
-function safeReplaceToWelcome(router: ReturnType<typeof useRouter>, onDone?: () => void) {
+function safeReplace(router: ReturnType<typeof useRouter>, href: string, onDone?: () => void) {
   let attempts = 0;
   const maxAttempts = 10;
   const delay = 50;
@@ -23,8 +18,6 @@ function safeReplaceToWelcome(router: ReturnType<typeof useRouter>, onDone?: () 
   const tryReplace = () => {
     attempts++;
     try {
-      // Reset the navigation stack so the Android back button cannot reopen an
-      // authenticated screen after sign-out. dismissAll is best-effort on web.
       if (typeof router.dismissAll === "function") {
         try {
           router.dismissAll();
@@ -32,7 +25,7 @@ function safeReplaceToWelcome(router: ReturnType<typeof useRouter>, onDone?: () 
           // ignore
         }
       }
-      router.replace("/welcome");
+      router.replace(href as never);
       onDone?.();
       return;
     } catch {
@@ -47,40 +40,102 @@ function safeReplaceToWelcome(router: ReturnType<typeof useRouter>, onDone?: () 
   tryReplace();
 }
 
-export function useAuthGate(): AuthGateResult {
+function buildError(category: "invalid_config" | "service_unavailable", message: string): AuthError {
+  return { category, message, retryable: true };
+}
+
+export function useAuthGate(): AuthContextValue {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
-  const [redirected, setRedirected] = useState(false);
+  const [error, setError] = useState<AuthError | null>(null);
+  const [redirectedForAuth, setRedirectedForAuth] = useState(false);
+  const [redirectedForPublic, setRedirectedForPublic] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const mountedRef = useRef(true);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setStatus("loading");
+    setAttempt((count) => count + 1);
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
     let subUnsubscribe = () => {};
 
     const init = async () => {
-      await loadRemoteConfig({ timeoutMs: 10_000 });
+      try {
+        await loadRemoteConfig({ timeoutMs: 10_000 });
+      } catch {
+        // loadRemoteConfig swallows its own errors; missing configuration is detected below.
+      }
+
+      const url = getSupabaseUrl();
+      const key = getSupabaseAnonKey();
+      if (!url || !key) {
+        // Remote configuration is the only path that should be able to override a missing
+        // local environment. If neither is available, the app cannot initialize auth.
+        if (!mountedRef.current) return;
+        setStatus("configuration_error");
+        setError(
+          buildError(
+            "invalid_config",
+            "Sign-in is not configured. Check your environment or remote config endpoint.",
+          ),
+        );
+        return;
+      }
+
+      // Create exactly one client from the loaded configuration and use it for both
+      // the initial session read and the auth-state listener. Do not reset it again.
       resetSupabaseClient();
-      const { data } = await getSupabaseClient().auth.getSession();
+      let client;
+      try {
+        client = getSupabaseClient();
+      } catch (configError) {
+        if (!mountedRef.current) return;
+        setStatus("configuration_error");
+        setError(
+          buildError(
+            "invalid_config",
+            configError instanceof Error ? configError.message : "Sign-in is not configured.",
+          ),
+        );
+        return;
+      }
+
+      let data;
+      try {
+        ({ data } = await client.auth.getSession());
+      } catch (sessionError) {
+        if (!mountedRef.current) return;
+        setStatus("network_error");
+        setError(
+          buildError(
+            "service_unavailable",
+            sessionError instanceof Error
+              ? sessionError.message
+              : "Could not reach the sign-in service. Please try again.",
+          ),
+        );
+        return;
+      }
+
       if (!mountedRef.current) return;
       setSession(data.session ?? null);
       setStatus(data.session ? "authenticated" : "unauthenticated");
-    };
+      setError(null);
 
-    void init();
-
-    const { data: subscription } = getSupabaseClient().auth.onAuthStateChange(
-      (event, nextSession) => {
+      const { data: subscription } = client.auth.onAuthStateChange((event, nextSession) => {
         if (!mountedRef.current) return;
 
         if (event === "SIGNED_OUT" || nextSession === null) {
           setSession(null);
           setStatus("unauthenticated");
           queryClient.clear();
-          // Ensure the Supabase client discards any cached session-dependent state.
-          resetSupabaseClient();
           return;
         }
 
@@ -88,28 +143,41 @@ export function useAuthGate(): AuthGateResult {
           setSession(nextSession);
           setStatus("authenticated");
         }
-      },
-    );
-    subUnsubscribe = subscription.subscription.unsubscribe;
+      });
+      subUnsubscribe = subscription.subscription.unsubscribe;
+    };
+
+    void init();
 
     return () => {
       mountedRef.current = false;
       subUnsubscribe();
     };
-  }, [queryClient]);
+  }, [attempt, queryClient]);
 
   useEffect(() => {
-    if (status !== "unauthenticated" || !pathname || redirected) return;
+    if (status !== "unauthenticated" || !pathname || redirectedForPublic) return;
     if (!PUBLIC_PATHS.has(pathname)) {
-      setRedirected(true);
-      safeReplaceToWelcome(router, () => {
+      setRedirectedForPublic(true);
+      safeReplace(router, "/welcome", () => {
         if (mountedRef.current) {
-          // Allow future redirects if the pathname changes again.
-          setRedirected(false);
+          setRedirectedForPublic(false);
         }
       });
     }
-  }, [status, pathname, router, redirected]);
+  }, [status, pathname, router, redirectedForPublic]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !pathname || redirectedForAuth) return;
+    if (AUTHENTICATION_PATHS.has(pathname)) {
+      setRedirectedForAuth(true);
+      safeReplace(router, "/home", () => {
+        if (mountedRef.current) {
+          setRedirectedForAuth(false);
+        }
+      });
+    }
+  }, [status, pathname, router, redirectedForAuth]);
 
   return useMemo(
     () => ({
@@ -117,7 +185,9 @@ export function useAuthGate(): AuthGateResult {
       status,
       isAuthenticated: status === "authenticated",
       isUnauthenticated: status === "unauthenticated",
+      error,
+      retry,
     }),
-    [session, status],
+    [session, status, error, retry],
   );
 }

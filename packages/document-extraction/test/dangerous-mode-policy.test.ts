@@ -5,15 +5,12 @@ import {
   validateDangerousModeEnablePolicy,
 } from "../src/dangerous-mode-policy.ts";
 
-const now = 1_800_000_000;
 const valid = {
   explicitConfirmation: true,
   foreignProcessingAcknowledged: true,
   automatedProcessingAcknowledged: true,
   rawProcessingApproved: true,
   disclosureVersion: DANGEROUS_MODE_DISCLOSURE_VERSION,
-  tokenIssuedAtSeconds: now - 30,
-  passwordAuthenticatedAtSeconds: now - 30,
 };
 
 describe("Dangerous mode enable policy", () => {
@@ -37,19 +34,7 @@ describe("Dangerous mode enable policy", () => {
     );
   });
 
-  it("requires a password-authenticated session", () => {
-    expect(
-      validateDangerousModeEnablePolicy({
-        ...valid,
-        passwordAuthenticatedAtSeconds: null,
-      }),
-    ).toBe("RECENT_REAUTHENTICATION_REQUIRED");
-    expect(
-      validateDangerousModeEnablePolicy({
-        ...valid,
-        passwordAuthenticatedAtSeconds: now - 301,
-      }),
-    ).toBeNull();
+  it("passes with explicit consent and matching disclosure", () => {
     expect(validateDangerousModeEnablePolicy(valid)).toBeNull();
   });
 });

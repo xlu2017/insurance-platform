@@ -1,8 +1,8 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 370a7779179b604749ad3ad1e737778fae408f1f5db3c199d216277987f8072d
+// source-hash: ddc3cfdf57cd4215297ab5c4577db1ddcd782faa3b6ccc07b56d272a7dbc300f
 
 
-// ../../node_modules/.deno/zod@3.24.1/node_modules/zod/lib/index.mjs
+// ../../node_modules/zod/lib/index.mjs
 var util;
 (function(util2) {
   util2.assertEqual = (val) => val;
@@ -6663,9 +6663,6 @@ function validateDangerousModeEnablePolicy(input) {
   if (input.disclosureVersion !== DANGEROUS_MODE_DISCLOSURE_VERSION) {
     return "DISCLOSURE_VERSION_MISMATCH";
   }
-  if (!input.passwordAuthenticatedAtSeconds) {
-    return "RECENT_REAUTHENTICATION_REQUIRED";
-  }
   return null;
 }
 function documentProcessingRoute(mode) {
@@ -11887,4 +11884,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "370a7779179b604749ad3ad1e737778fae408f1f5db3c199d216277987f8072d";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "ddc3cfdf57cd4215297ab5c4577db1ddcd782faa3b6ccc07b56d272a7dbc300f";

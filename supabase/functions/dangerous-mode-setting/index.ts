@@ -8,6 +8,10 @@ import {
 
 const DISCLOSURE_VERSION = DANGEROUS_MODE_DISCLOSURE_VERSION;
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -25,39 +29,6 @@ function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-}
-
-function accessTokenAuthentication(authHeader: string): {
-  issuedAt: number | null;
-  passwordAuthenticatedAt: number | null;
-} {
-  const token = authHeader.replace(/^Bearer\s+/i, "");
-  const payload = token.split(".")[1];
-  if (!payload) return { issuedAt: null, passwordAuthenticatedAt: null };
-  try {
-    const unpadded = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const normalized = unpadded.padEnd(Math.ceil(unpadded.length / 4) * 4, "=");
-    const parsed = JSON.parse(atob(normalized)) as {
-      iat?: unknown;
-      amr?: { method?: unknown; timestamp?: unknown }[];
-    };
-    const password = Array.isArray(parsed.amr)
-      ? (parsed.amr
-          .filter((entry) => entry.method === "password" && typeof entry.timestamp === "number")
-          .map((entry) => entry.timestamp as number)
-          .sort((left, right) => right - left)[0] ?? null)
-      : null;
-    return {
-      issuedAt: typeof parsed.iat === "number" ? parsed.iat : null,
-      passwordAuthenticatedAt: password,
-    };
-  } catch {
-    return { issuedAt: null, passwordAuthenticatedAt: null };
-  }
 }
 
 function publicSetting(setting?: Record<string, unknown> | null) {
@@ -117,15 +88,12 @@ Deno.serve(async (req) => {
     const foreignAcknowledged = body.foreign_processing_acknowledged === true;
     const automatedAcknowledged = body.automated_processing_acknowledged === true;
     const rawApproved = body.raw_processing_approved === true;
-    const authentication = accessTokenAuthentication(authHeader);
     const policyFailure = validateDangerousModeEnablePolicy({
       explicitConfirmation,
       foreignProcessingAcknowledged: foreignAcknowledged,
       automatedProcessingAcknowledged: automatedAcknowledged,
       rawProcessingApproved: rawApproved,
       disclosureVersion,
-      tokenIssuedAtSeconds: authentication.issuedAt,
-      passwordAuthenticatedAtSeconds: authentication.passwordAuthenticatedAt,
     });
     if (
       policyFailure === "ACKNOWLEDGEMENTS_REQUIRED" ||
@@ -133,10 +101,8 @@ Deno.serve(async (req) => {
     ) {
       return jsonError("Every Dangerous mode acknowledgement is required", 400);
     }
-    // Google, OIDC and other SSO sessions do not contain a password AMR entry.
-    // The authenticated household boundary plus explicit versioned consent is
-    // sufficient for this setting, so RECENT_REAUTHENTICATION_REQUIRED is not
-    // treated as a blocker here.
+    // Active authentication plus explicit versioned consent is sufficient for
+    // the closed pilot. A separate step-up credential is not required.
 
     const processorContractVersion = Deno.env.get("PROCESSOR_CONTRACT_VERSION") ?? "";
     const configuredModel =
