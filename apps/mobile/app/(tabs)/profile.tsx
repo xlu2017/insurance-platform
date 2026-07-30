@@ -33,6 +33,8 @@ export default function Profile() {
   const [showDangerousConfirmation, setShowDangerousConfirmation] = useState(false);
   const [dangerousBusy, setDangerousBusy] = useState(false);
   const [dangerousError, setDangerousError] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const membershipStatusLabel: Record<string, string> = {
     active: "Active",
@@ -138,9 +140,6 @@ export default function Profile() {
     }
     queryClient.invalidateQueries({ queryKey: ["household"] });
   };
-
-  const [signingOut, setSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const signOut = async () => {
     setSigningOut(true);

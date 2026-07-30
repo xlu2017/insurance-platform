@@ -1,6 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
+import { Platform } from "react-native";
 import type { DocumentCategory } from "@autopilot/schemas";
 import {
   getBypassTunnelHeaders,
@@ -98,21 +99,31 @@ export async function uploadPolicyDocument(
   if (batchId) parameters.batchId = batchId;
   if (clientItemId) parameters.clientItemId = clientItemId;
 
-  const uploadRes = await FileSystem.uploadAsync(
-    `${getSupabaseUrlString()}/functions/v1/upload-document`,
-    file.uri,
-    {
+  const url = `${getSupabaseUrlString()}/functions/v1/upload-document`;
+  const headers = {
+    Authorization: `Bearer ${session.session.access_token}`,
+    apikey: getSupabaseAnonKeyString(),
+    ...getBypassTunnelHeaders(),
+  };
+
+  let uploadRes: { status: number; body: string };
+  if (Platform.OS === "web") {
+    const fileResponse = await fetch(file.uri);
+    const blob = await fileResponse.blob();
+    const formData = new FormData();
+    formData.append("file", blob, file.name);
+    Object.entries(parameters).forEach(([key, value]) => formData.append(key, value));
+    const response = await fetch(url, { method: "POST", headers, body: formData });
+    uploadRes = { status: response.status, body: await response.text() };
+  } else {
+    uploadRes = await FileSystem.uploadAsync(url, file.uri, {
       uploadType: FileSystem.FileSystemUploadType.MULTIPART,
       fieldName: "file",
       mimeType: file.mimeType,
       parameters,
-      headers: {
-        Authorization: `Bearer ${session.session.access_token}`,
-        apikey: getSupabaseAnonKeyString(),
-        ...getBypassTunnelHeaders(),
-      },
-    },
-  );
+      headers,
+    });
+  }
 
   const payload = (() => {
     try {
