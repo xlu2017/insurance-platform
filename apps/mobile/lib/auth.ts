@@ -34,7 +34,6 @@ function isLoopback(url: URL): boolean {
 
 function logDev(message: string) {
   if (typeof __DEV__ !== "undefined" && __DEV__) {
-    // eslint-disable-next-line no-console
     console.warn(`[auth] ${message}`);
   }
 }
