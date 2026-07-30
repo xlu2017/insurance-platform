@@ -5,7 +5,7 @@ import { enableScreens } from "react-native-screens";
 enableScreens(false);
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack, usePathname } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
@@ -19,6 +19,19 @@ import { colors } from "@autopilot/design-tokens";
 function AuthGate() {
   const auth = useAuthGate();
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (auth.status !== "unauthenticated" || !pathname) return;
+    if (!PUBLIC_PATHS.has(pathname)) {
+      // Reset the navigation stack so the Android back button cannot reopen an
+      // authenticated screen after sign-out, then redirect to the welcome screen.
+      if (typeof router.dismissAll === "function") {
+        router.dismissAll();
+      }
+      router.replace("/welcome");
+    }
+  }, [auth.status, pathname, router]);
 
   if (auth.status === "loading") {
     return (
@@ -31,14 +44,7 @@ function AuthGate() {
     );
   }
 
-  if (auth.isUnauthenticated && pathname && !PUBLIC_PATHS.has(pathname)) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <Redirect href="/welcome" />
-      </SafeAreaProvider>
-    );
-  }
+  const needsAuth = auth.isUnauthenticated && pathname && !PUBLIC_PATHS.has(pathname);
 
   return (
     <AuthContext.Provider value={auth}>
@@ -56,6 +62,12 @@ function AuthGate() {
               }}
             />
             {auth.isAuthenticated && <BottomTabBar />}
+            {needsAuth && (
+              <View
+                style={[StyleSheet.absoluteFillObject, styles.authBlocker]}
+                pointerEvents="auto"
+              />
+            )}
           </View>
         </View>
       </SafeAreaProvider>
@@ -110,6 +122,9 @@ const styles = StyleSheet.create({
     maxHeight: 932,
     alignSelf: "center",
     flex: 1,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  authBlocker: {
     backgroundColor: colors.surfaceSubtle,
   },
 });
