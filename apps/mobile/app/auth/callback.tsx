@@ -64,8 +64,11 @@ function parseCallbackParams(
 }
 
 function dismissBrowserSafely() {
-  if (typeof WebBrowser.dismissBrowser === "function") {
-    WebBrowser.dismissBrowser().catch(() => {});
+  if (typeof WebBrowser.dismissBrowser !== "function") return;
+  try {
+    Promise.resolve(WebBrowser.dismissBrowser()).catch(() => {});
+  } catch {
+    // Browser may already be closed or the API may be unavailable on this platform.
   }
 }
 
