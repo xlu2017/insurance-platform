@@ -1,9 +1,10 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
 import { Body, Loading, Screen } from "@/components/ui";
 import { exchangeOAuthCode } from "@/lib/auth";
+import { safeReplace } from "@/lib/auth-gate";
 import { useAuth } from "@/lib/auth-context";
 
 function parseCallbackParams(
@@ -62,21 +63,28 @@ function parseCallbackParams(
   return out;
 }
 
+function dismissBrowserSafely() {
+  if (typeof WebBrowser.dismissBrowser === "function") {
+    WebBrowser.dismissBrowser().catch(() => {});
+  }
+}
+
 export default function AuthCallback() {
   const { status, isAuthenticated } = useAuth();
   const params = useLocalSearchParams();
   const url = Linking.useURL();
+  const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const handledRef = useRef(false);
 
   useEffect(() => {
     if (isAuthenticated) {
       // Close any Chrome Custom Tab / SFSafariViewController that is still open.
-      WebBrowser.dismissBrowser().catch(() => {});
-      router.replace("/home");
+      dismissBrowserSafely();
+      safeReplace(router, "/home");
       return;
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, router]);
 
   useEffect(() => {
     if (status === "loading" || handledRef.current) return;
@@ -92,7 +100,7 @@ export default function AuthCallback() {
     if (!parsed.code && !parsed.access_token) {
       // No OAuth payload in the deep link. Return to welcome so the user can retry.
       handledRef.current = true;
-      router.replace("/welcome");
+      safeReplace(router, "/welcome");
       return;
     }
 
@@ -105,7 +113,7 @@ export default function AuthCallback() {
         setErrorMessage(error.message);
         return;
       }
-      WebBrowser.dismissBrowser().catch(() => {});
+      dismissBrowserSafely();
       // The auth listener will redirect to /home once the session is set.
     });
 

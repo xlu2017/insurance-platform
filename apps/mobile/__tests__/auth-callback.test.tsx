@@ -10,13 +10,27 @@ import { useAuth } from "../lib/auth-context";
 let mockParams: Record<string, string | string[]> = {};
 let mockUrl: string | null = null;
 
-jest.mock("expo-router", () => ({
-  router: { replace: jest.fn() },
-  useLocalSearchParams: () => mockParams,
-}));
+jest.mock("expo-router", () => {
+  const routerMock = {
+    replace: jest.fn(),
+    dismissAll: jest.fn(),
+    back: jest.fn(),
+    push: jest.fn(),
+  };
+  return {
+    router: routerMock,
+    useLocalSearchParams: () => mockParams,
+    useRouter: () => routerMock,
+  };
+});
 
 jest.mock("expo-linking", () => ({
   useURL: () => mockUrl,
+}));
+
+jest.mock("expo-web-browser", () => ({
+  dismissBrowser: jest.fn().mockResolvedValue(undefined),
+  maybeCompleteAuthSession: jest.fn(),
 }));
 
 jest.mock("../lib/auth");

@@ -1,6 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
+import { Platform } from "react-native";
 import type { DocumentCategory } from "@autopilot/schemas";
 import {
   getBypassTunnelHeaders,
@@ -98,25 +99,49 @@ export async function uploadPolicyDocument(
   if (batchId) parameters.batchId = batchId;
   if (clientItemId) parameters.clientItemId = clientItemId;
 
-  const uploadRes = await FileSystem.uploadAsync(
-    `${getSupabaseUrlString()}/functions/v1/upload-document`,
-    file.uri,
-    {
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      fieldName: "file",
-      mimeType: file.mimeType,
-      parameters,
+  let responseStatus: number;
+  let responseBody: string;
+  if (Platform.OS === "web") {
+    const blob = await fetch(file.uri).then((res) => res.blob());
+    const form = new FormData();
+    form.append("file", blob, file.name);
+    for (const [key, value] of Object.entries(parameters)) {
+      form.append(key, value);
+    }
+    const fetchResponse = await fetch(`${getSupabaseUrlString()}/functions/v1/upload-document`, {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${session.session.access_token}`,
         apikey: getSupabaseAnonKeyString(),
         ...getBypassTunnelHeaders(),
       },
-    },
-  );
+      body: form,
+    });
+    responseStatus = fetchResponse.status;
+    responseBody = await fetchResponse.text();
+  } else {
+    const uploadRes = await FileSystem.uploadAsync(
+      `${getSupabaseUrlString()}/functions/v1/upload-document`,
+      file.uri,
+      {
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: file.mimeType,
+        parameters,
+        headers: {
+          Authorization: `Bearer ${session.session.access_token}`,
+          apikey: getSupabaseAnonKeyString(),
+          ...getBypassTunnelHeaders(),
+        },
+      },
+    );
+    responseStatus = uploadRes.status;
+    responseBody = uploadRes.body;
+  }
 
   const payload = (() => {
     try {
-      return JSON.parse(uploadRes.body) as {
+      return JSON.parse(responseBody) as {
         id?: string;
         path?: string;
         batch_id?: string;
@@ -128,8 +153,8 @@ export async function uploadPolicyDocument(
       return {};
     }
   })();
-  if (uploadRes.status < 200 || uploadRes.status >= 300) {
-    throw new Error(payload.message ?? `Upload failed (${uploadRes.status})`);
+  if (responseStatus < 200 || responseStatus >= 300) {
+    throw new Error(payload.message ?? `Upload failed (${responseStatus})`);
   }
   if (!payload.id || !payload.path || !payload.batch_id || !payload.item_id) {
     throw new Error("Invalid server response");

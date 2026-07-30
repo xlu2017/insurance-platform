@@ -7,10 +7,10 @@ import { getSupabaseClient, resetSupabaseClient } from "./supabase";
 import type { AuthContextValue, AuthStatus } from "./auth-context";
 import type { AuthError } from "./auth";
 
-export const PUBLIC_PATHS = new Set(["/", "/welcome", "/sign-in", "/register", "/auth/callback"]);
+export const PUBLIC_PATHS = new Set(["/", "/welcome", "/sign-in", "/register", "/verify-email", "/auth/callback"]);
 export const AUTHENTICATION_PATHS = new Set(["/sign-in", "/register"]);
 
-function safeReplace(router: ReturnType<typeof useRouter>, href: string, onDone?: () => void) {
+export function safeReplace(router: ReturnType<typeof useRouter>, href: string, onDone?: () => void) {
   let attempts = 0;
   const maxAttempts = 10;
   const delay = 50;
