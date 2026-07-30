@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { loadRemoteConfig } from "./config";
@@ -6,7 +6,7 @@ import { getSupabaseClient, resetSupabaseClient } from "./supabase";
 import type { AuthStatus } from "./auth-context";
 import type { Session } from "@supabase/supabase-js";
 
-export const PUBLIC_PATHS = new Set(["/", "/welcome", "/sign-in", "/register"]);
+export const PUBLIC_PATHS = new Set(["/", "/welcome", "/sign-in", "/register", "/auth/callback"]);
 
 export interface AuthGateResult {
   session: Session | null;
@@ -15,21 +15,56 @@ export interface AuthGateResult {
   isUnauthenticated: boolean;
 }
 
+function safeReplaceToWelcome(router: ReturnType<typeof useRouter>, onDone?: () => void) {
+  let attempts = 0;
+  const maxAttempts = 10;
+  const delay = 50;
+
+  const tryReplace = () => {
+    attempts++;
+    try {
+      // Reset the navigation stack so the Android back button cannot reopen an
+      // authenticated screen after sign-out. dismissAll is best-effort on web.
+      if (typeof router.dismissAll === "function") {
+        try {
+          router.dismissAll();
+        } catch {
+          // ignore
+        }
+      }
+      router.replace("/welcome");
+      onDone?.();
+      return;
+    } catch {
+      if (attempts >= maxAttempts) {
+        onDone?.();
+        return;
+      }
+      setTimeout(tryReplace, delay * attempts);
+    }
+  };
+
+  tryReplace();
+}
+
 export function useAuthGate(): AuthGateResult {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
+  const [redirected, setRedirected] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
+    let subUnsubscribe = () => {};
 
     const init = async () => {
       await loadRemoteConfig({ timeoutMs: 10_000 });
       resetSupabaseClient();
       const { data } = await getSupabaseClient().auth.getSession();
-      if (!mounted) return;
+      if (!mountedRef.current) return;
       setSession(data.session ?? null);
       setStatus(data.session ? "authenticated" : "unauthenticated");
     };
@@ -38,7 +73,7 @@ export function useAuthGate(): AuthGateResult {
 
     const { data: subscription } = getSupabaseClient().auth.onAuthStateChange(
       (event, nextSession) => {
-        if (!mounted) return;
+        if (!mountedRef.current) return;
 
         if (event === "SIGNED_OUT" || nextSession === null) {
           setSession(null);
@@ -55,24 +90,26 @@ export function useAuthGate(): AuthGateResult {
         }
       },
     );
+    subUnsubscribe = subscription.subscription.unsubscribe;
 
     return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
+      mountedRef.current = false;
+      subUnsubscribe();
     };
   }, [queryClient]);
 
   useEffect(() => {
-    if (status !== "unauthenticated" || !pathname) return;
+    if (status !== "unauthenticated" || !pathname || redirected) return;
     if (!PUBLIC_PATHS.has(pathname)) {
-      // Reset the navigation stack so the Android back button cannot reopen an
-      // authenticated screen after sign-out.
-      if (typeof router.dismissAll === "function") {
-        router.dismissAll();
-      }
-      router.replace("/welcome");
+      setRedirected(true);
+      safeReplaceToWelcome(router, () => {
+        if (mountedRef.current) {
+          // Allow future redirects if the pathname changes again.
+          setRedirected(false);
+        }
+      });
     }
-  }, [status, pathname, router]);
+  }, [status, pathname, router, redirected]);
 
   return useMemo(
     () => ({

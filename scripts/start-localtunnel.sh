@@ -44,7 +44,7 @@ else
   echo "EXPO_PUBLIC_SUPABASE_URL=${URL}" > "$ENV_FILE"
 fi
 
-# Update Supabase config so the JWT issuer matches the public tunnel.
+# Update Supabase config so the JWT issuer and OAuth redirect_uri match the public tunnel.
 python3 - "$URL" "$ROOT/supabase/config.toml" <<'PY'
 import re
 import sys
@@ -58,6 +58,13 @@ text = re.sub(
     r'jwt_issuer = "https://[a-zA-Z0-9_-]+\.loca\.lt/auth/v1"',
     f'jwt_issuer = "{url}/auth/v1"',
     text,
+)
+# Update the Google OAuth redirect_uri to the tunnel callback.
+text = re.sub(
+    r'^redirect_uri = ".*?"$',
+    f'redirect_uri = "{url}/auth/v1/callback"',
+    text,
+    flags=re.MULTILINE,
 )
 with open(path, "w") as f:
     f.write(text)

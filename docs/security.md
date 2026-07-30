@@ -23,6 +23,28 @@
   go through `security definer` RPCs. Direct `update` on `optimization_cases`, `recommendations`,
   `switch_events` and related tables is blocked by RLS for non-staff callers.
 
+## External SSO (OAuth/OIDC)
+
+- Users can sign in with an external identity provider (Google OAuth/OIDC) in both the admin console
+  and the mobile app, in addition to email/password. The provider is configured in
+  `supabase/config.toml` under `[auth.external.google]`; `client_id` and `secret` are sourced from
+  environment variables (`env(...)`) and never hardcoded or committed.
+- **SSO users are not privileged.** A first-time SSO sign-in creates the auth user, which fires the
+  same `handle_new_user()` trigger as any other signup and forces the profile role to `customer`.
+  SSO does not and cannot set a staff role. Staff elevation remains exclusively through the
+  service-role `assign_staff_role()` RPC invoked from a trusted backend context.
+- **The admin console stays staff-only.** After an SSO round-trip, the callback route
+  (`apps/admin/src/app/auth/callback/route.ts`) exchanges the code for a session using the
+  `@supabase/ssr` server client and then applies the identical role gate used by the password flow:
+  it reads `profiles.role`, and if the role is `customer` or missing it signs the user out and
+  redirects to `/login` with the "This console is for operations, reviewer and administrator
+  accounts." error. Only `operations`, `reviewer` and `admin` reach the console; the existing
+  middleware repeats the same check on every subsequent request.
+- The mobile client keeps `detectSessionInUrl: false`, so the OAuth deep link is parsed explicitly
+  and the session is established via `exchangeCodeForSession` / `setSession` before persisting to
+  Expo SecureStore. Redirect targets (admin callback origin and the `insurance-autopilot://` /
+  `exp://` deep-link schemes) are allow-listed in `additional_redirect_urls`.
+
 ## Sensitive data handling
 
 - Documents live in the private `policy-documents` bucket; access is via short-lived signed URLs

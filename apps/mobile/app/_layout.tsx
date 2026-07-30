@@ -5,7 +5,8 @@ import { enableScreens } from "react-native-screens";
 enableScreens(false);
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack, usePathname } from "expo-router";
+import { Stack, usePathname } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
@@ -13,12 +14,32 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StackHeader } from "@/components/ui";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { AuthContext } from "@/lib/auth-context";
-import { PUBLIC_PATHS, useAuthGate } from "@/lib/auth-gate";
+import { useAuthGate } from "@/lib/auth-gate";
 import { colors } from "@autopilot/design-tokens";
 
 function AuthGate() {
   const auth = useAuthGate();
   const pathname = usePathname();
+
+  useEffect(() => {
+    // Let expo-web-browser clean up any pending auth session that may have
+    // survived a cold start or process switch.
+    WebBrowser.maybeCompleteAuthSession();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const style = document.createElement("style");
+    style.id = "hide-web-textarea-scrollbars";
+    style.textContent = `
+      textarea::-webkit-scrollbar { display: none; }
+      textarea { scrollbar-width: none; }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      style.remove();
+    };
+  }, []);
 
   if (auth.status === "loading") {
     return (
@@ -31,14 +52,12 @@ function AuthGate() {
     );
   }
 
-  if (auth.isUnauthenticated && pathname && !PUBLIC_PATHS.has(pathname)) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <Redirect href="/welcome" />
-      </SafeAreaProvider>
-    );
-  }
+  const showTabBar =
+    auth.isAuthenticated &&
+    pathname !== "/welcome" &&
+    pathname !== "/sign-in" &&
+    pathname !== "/register" &&
+    pathname !== "/auth/callback";
 
   return (
     <AuthContext.Provider value={auth}>
@@ -55,7 +74,7 @@ function AuthGate() {
                 contentStyle: { flex: 1, backgroundColor: colors.surfaceSubtle },
               }}
             />
-            {auth.isAuthenticated && <BottomTabBar />}
+            {showTabBar && <BottomTabBar />}
           </View>
         </View>
       </SafeAreaProvider>
@@ -67,20 +86,6 @@ export default function RootLayout() {
   const [client] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: 2, staleTime: 10_000 } } }),
   );
-
-  useEffect(() => {
-    if (Platform.OS !== "web" || typeof document === "undefined") return;
-    const style = document.createElement("style");
-    style.id = "hide-web-textarea-scrollbars";
-    style.textContent = `
-      textarea::-webkit-scrollbar { display: none; }
-      textarea { scrollbar-width: none; }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      style.remove();
-    };
-  }, []);
 
   return (
     <QueryClientProvider client={client}>

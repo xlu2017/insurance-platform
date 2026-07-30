@@ -1,4 +1,7 @@
 import type { User } from "@supabase/supabase-js";
+import { makeRedirectUri } from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
+import { Platform } from "react-native";
 import { getBypassHeaders, getSupabaseAnonKey, getSupabaseUrl } from "./config";
 import { getSupabaseClient, resetSupabaseClient } from "./supabase";
 
@@ -34,7 +37,6 @@ function isLoopback(url: URL): boolean {
 
 function logDev(message: string) {
   if (typeof __DEV__ !== "undefined" && __DEV__) {
-    // eslint-disable-next-line no-console
     console.warn(`[auth] ${message}`);
   }
 }
@@ -78,7 +80,7 @@ export function getSupabaseConfigError(url?: string, anonKey?: string): AuthErro
     };
   }
 
-  if (isLoopback(parsed)) {
+  if (Platform.OS !== "web" && isLoopback(parsed)) {
     return {
       category: "invalid_config",
       message:
@@ -307,5 +309,139 @@ export async function signInWithPassword(
     };
   } finally {
     cleanup();
+  }
+}
+
+export type OAuthProvider = "google";
+
+function ssoError(message: string, category: AuthErrorCategory = "unknown"): AuthError {
+  return { category, message, retryable: false };
+}
+
+/**
+ * Extracts the OAuth code (PKCE flow) or the access/refresh tokens (implicit
+ * flow) from the deep link returned by the provider. The client sets
+ * `detectSessionInUrl: false`, so the session must be established explicitly.
+ */
+function parseOAuthReturnUrl(returnUrl: string): {
+  code?: string;
+  accessToken?: string;
+  refreshToken?: string;
+} {
+  const parsed = new URL(returnUrl);
+  const hashParams = new URLSearchParams(
+    parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash,
+  );
+  return {
+    code: parsed.searchParams.get("code") ?? undefined,
+    accessToken:
+      parsed.searchParams.get("access_token") ?? hashParams.get("access_token") ?? undefined,
+    refreshToken:
+      parsed.searchParams.get("refresh_token") ?? hashParams.get("refresh_token") ?? undefined,
+  };
+}
+
+type ExchangeResult = { user: User; error?: undefined } | { user?: undefined; error: AuthError };
+const exchangeLocks = new Map<string, Promise<ExchangeResult>>();
+
+export async function exchangeOAuthCode(
+  code?: string,
+  accessToken?: string,
+  refreshToken?: string,
+): Promise<{ user?: User; error?: AuthError }> {
+  const key = code ?? accessToken ?? "none";
+  const existing = exchangeLocks.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = (async (): Promise<ExchangeResult> => {
+    const client = getSupabaseClient();
+    try {
+      if (code) {
+        const { data: exchanged, error: exchangeError } =
+          await client.auth.exchangeCodeForSession(code);
+        if (exchangeError || !exchanged.user) {
+          logDev(`exchangeCodeForSession failed: ${exchangeError?.message ?? "no user"}`);
+          return { error: ssoError("Could not complete SSO sign-in. Please try again.") };
+        }
+        return { user: exchanged.user };
+      }
+
+      if (accessToken && refreshToken) {
+        const { data: session, error: sessionError } = await client.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError || !session.user) {
+          logDev(`setSession failed: ${sessionError?.message ?? "no user"}`);
+          return { error: ssoError("Could not complete SSO sign-in. Please try again.") };
+        }
+        return { user: session.user };
+      }
+
+      return { error: ssoError("SSO sign-in returned no session. Please try again.") };
+    } catch (err) {
+      logDev(`SSO exchange error: ${(err as Error).message}`);
+      return {
+        error: {
+          category: "offline",
+          message: "Your device appears to be offline. Check your connection and try again.",
+          retryable: true,
+        },
+      };
+    } finally {
+      exchangeLocks.delete(key);
+    }
+  })();
+
+  exchangeLocks.set(key, promise);
+  return promise;
+}
+
+export async function signInWithOAuthProvider(
+  provider: OAuthProvider = "google",
+): Promise<{ user?: User; error?: AuthError }> {
+  const configError = getSupabaseConfigError();
+  if (configError) {
+    return { error: configError };
+  }
+
+  const redirectTo = makeRedirectUri({ scheme: "insurance-autopilot", path: "auth/callback" });
+  const client = getSupabaseClient();
+
+  try {
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+
+    if (error || !data?.url) {
+      logDev(`signInWithOAuth failed: ${error?.message ?? "no authorize url"}`);
+      return { error: ssoError("Could not start SSO sign-in. Please try again.") };
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+    if (result.type === "success" && result.url) {
+      // The browser was able to return the OAuth redirect URL directly (common on iOS).
+      const { code, accessToken, refreshToken } = parseOAuthReturnUrl(result.url);
+      return exchangeOAuthCode(code, accessToken, refreshToken);
+    }
+
+    // On Android, Chrome Custom Tabs can be dismissed by the OS when the app
+    // scheme redirect is intercepted. The deep link is delivered to the app via
+    // Linking and handled by app/auth/callback.tsx, which finishes the exchange.
+    // The caller should keep waiting for the global auth state to become authenticated.
+    return {};
+  } catch (err) {
+    logDev(`SSO network error: ${(err as Error).message}`);
+    return {
+      error: {
+        category: "offline",
+        message: "Your device appears to be offline. Check your connection and try again.",
+        retryable: true,
+      },
+    };
   }
 }
