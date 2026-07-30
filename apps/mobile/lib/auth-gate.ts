@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { loadRemoteConfig } from "./config";
 import { getSupabaseClient, resetSupabaseClient } from "./supabase";
@@ -18,8 +17,6 @@ export interface AuthGateResult {
 export function useAuthGate(): AuthGateResult {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
-  const pathname = usePathname();
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -61,18 +58,6 @@ export function useAuthGate(): AuthGateResult {
       subscription.subscription.unsubscribe();
     };
   }, [queryClient]);
-
-  useEffect(() => {
-    if (status !== "unauthenticated" || !pathname) return;
-    if (!PUBLIC_PATHS.has(pathname)) {
-      // Reset the navigation stack so the Android back button cannot reopen an
-      // authenticated screen after sign-out.
-      if (typeof router.dismissAll === "function") {
-        router.dismissAll();
-      }
-      router.replace("/welcome");
-    }
-  }, [status, pathname, router]);
 
   return useMemo(
     () => ({

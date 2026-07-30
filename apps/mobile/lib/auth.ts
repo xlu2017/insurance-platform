@@ -1,4 +1,5 @@
 import type { User } from "@supabase/supabase-js";
+import { Platform } from "react-native";
 import { getBypassHeaders, getSupabaseAnonKey, getSupabaseUrl } from "./config";
 import { getSupabaseClient, resetSupabaseClient } from "./supabase";
 
@@ -77,7 +78,7 @@ export function getSupabaseConfigError(url?: string, anonKey?: string): AuthErro
     };
   }
 
-  if (isLoopback(parsed)) {
+  if (Platform.OS !== "web" && isLoopback(parsed)) {
     return {
       category: "invalid_config",
       message:

@@ -1,5 +1,6 @@
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import { Text } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Profile from "../app/(tabs)/profile";
 import { useAuthGate } from "@/lib/auth-gate";
@@ -70,7 +71,7 @@ const mockLoadDangerous = documentProcessing.loadDangerousModeSetting as jest.Mo
 
 function GateInspector() {
   const { status } = useAuthGate();
-  return <>{status}</>;
+  return <Text testID="auth-status">{status}</Text>;
 }
 
 function renderWithQuery(element: React.ReactElement) {
@@ -93,8 +94,8 @@ describe("useAuthGate", () => {
     mockGetSession.mockResolvedValue({ data: { session: { user: { id: "user-1" } } } });
   });
 
-  it("redirects to welcome and clears caches when SIGNED_OUT fires", async () => {
-    const { client } = renderWithQuery(<GateInspector />);
+  it("sets status to unauthenticated and clears caches when SIGNED_OUT fires", async () => {
+    const { client, getByTestId } = renderWithQuery(<GateInspector />);
     const clearSpy = jest.spyOn(client, "clear");
 
     await waitFor(() => expect(mockGetSession).toHaveBeenCalled());
@@ -102,22 +103,22 @@ describe("useAuthGate", () => {
 
     act(() => authCallback!("SIGNED_OUT", null));
 
-    await waitFor(() => expect(clearSpy).toHaveBeenCalled());
-    expect(mockDismissAll).toHaveBeenCalled();
-    expect(mockReplace).toHaveBeenCalledWith("/welcome");
+    await waitFor(() => {
+      expect(clearSpy).toHaveBeenCalled();
+      expect(getByTestId("auth-status").props.children).toBe("unauthenticated");
+    });
   });
 
-  it("does not redirect when already on a public path", async () => {
+  it("does not navigate when signed out on a public path", async () => {
     mockPathname = "/welcome";
-    renderWithQuery(<GateInspector />);
+    const { getByTestId } = renderWithQuery(<GateInspector />);
 
     await waitFor(() => expect(mockGetSession).toHaveBeenCalled());
     act(() => authCallback!("SIGNED_OUT", null));
 
-    await waitFor(() => {
-      expect(mockReplace).not.toHaveBeenCalled();
-      expect(mockDismissAll).not.toHaveBeenCalled();
-    });
+    await waitFor(() => expect(getByTestId("auth-status").props.children).toBe("unauthenticated"));
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissAll).not.toHaveBeenCalled();
   });
 });
 
