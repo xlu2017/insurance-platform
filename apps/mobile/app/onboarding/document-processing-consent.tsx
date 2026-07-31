@@ -1,9 +1,14 @@
 import { router, Stack } from "expo-router";
-import { useState } from "react";
-import { Linking, ScrollView, View } from "react-native";
-import { supabase } from "@/lib/supabase";
+import * as Linking from "expo-linking";
+import { useMemo, useState } from "react";
+import { ScrollView, View } from "react-native";
+import {
+  DANGEROUS_MODE_DISCLOSURE_VERSION,
+  getPrivacyNoticeUrl,
+  getProcessorContractVersion,
+} from "@autopilot/schemas";
 import { useHousehold } from "@/lib/household";
-import { recordDocumentProcessingConsent } from "@/lib/document-processing";
+import { updateDangerousModeSetting } from "@/lib/document-processing";
 import { spacing } from "@autopilot/design-tokens";
 import {
   Body,
@@ -16,58 +21,54 @@ import {
   Title,
 } from "@/components/ui";
 
-const PRIVACY_URL = "https://example.com/privacy"; // Replace with real privacy notice URL.
-
 export default function DocumentProcessingConsent() {
   const { data: household, isLoading } = useHousehold();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const config = useMemo(() => {
+    const privacyNoticeUrl = getPrivacyNoticeUrl();
+    const processorContractVersion = getProcessorContractVersion();
+    return { privacyNoticeUrl, processorContractVersion };
+  }, []);
+
+  const isConfigured = Boolean(config.privacyNoticeUrl && config.processorContractVersion);
+
   if (isLoading || !household) return <Loading />;
 
-  const advance = async (mode: "safe" | "dangerous") => {
-    setError(null);
-    await supabase.from("households").update({ onboarding_step: "documents" }).eq("id", household.id);
-    router.push({ pathname: "/onboarding/documents", params: { mode } });
+  const advance = () => {
+    router.push("/onboarding/documents");
   };
 
-  const allowProcessing = async () => {
+  const openPrivacyNotice = () => {
+    if (config.privacyNoticeUrl) {
+      Linking.openURL(config.privacyNoticeUrl);
+    }
+  };
+
+  const setMode = async (enabled: boolean) => {
     setBusy(true);
     setError(null);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const profileId = userData.user?.id;
-      if (!profileId) {
-        setError("Not signed in");
-        return;
-      }
-      await recordDocumentProcessingConsent({
+      await updateDangerousModeSetting({
         householdId: household.id,
-        profileId,
-        purpose: "insurance_policy_extraction",
-        privacyNoticeVersion: "1.0.0",
-        processorContractVersion: "1.0.0",
-        foreignProcessingAcknowledged: true,
-        automatedProcessingAcknowledged: true,
-        rawProcessingApproved: true,
+        enabled,
+        explicitConfirmation: enabled,
+        foreignProcessingAcknowledged: enabled,
+        automatedProcessingAcknowledged: enabled,
+        rawProcessingApproved: enabled,
+        disclosureVersion: DANGEROUS_MODE_DISCLOSURE_VERSION,
       });
-      await advance("dangerous");
+      advance();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not record consent");
+      setError(caught instanceof Error ? caught.message : "Could not update processing preference");
     } finally {
       setBusy(false);
     }
   };
 
-  const uploadWithoutAi = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await advance("safe");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const allowProcessing = () => setMode(true);
+  const uploadWithoutAi = () => setMode(false);
 
   return (
     <Screen>
@@ -103,9 +104,16 @@ export default function DocumentProcessingConsent() {
           <View style={{ height: 12 }} />
           <SecondaryButton
             label="Read privacy notice"
-            onPress={() => Linking.openURL(PRIVACY_URL)}
+            onPress={openPrivacyNotice}
+            disabled={!config.privacyNoticeUrl}
           />
         </Card>
+
+        {!isConfigured ? (
+          <Body style={{ color: "#d00", marginTop: spacing.sm }}>
+            Document processing is not configured. Please contact support.
+          </Body>
+        ) : null}
 
         {error ? (
           <Body style={{ color: "#d00", marginTop: spacing.sm }}>{error}</Body>
@@ -116,13 +124,13 @@ export default function DocumentProcessingConsent() {
           label="Allow processing"
           onPress={allowProcessing}
           loading={busy}
-          disabled={busy}
+          disabled={busy || !isConfigured}
         />
         <View style={{ height: 12 }} />
         <SecondaryButton
           label="Upload without AI processing"
           onPress={uploadWithoutAi}
-          disabled={busy}
+          disabled={busy || !isConfigured}
         />
         <View style={{ height: 12 }} />
         <SecondaryButton

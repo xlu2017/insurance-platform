@@ -20,8 +20,8 @@ import {
   Subtitle,
 } from "@/components/ui";
 import { loadDangerousModeSetting, updateDangerousModeSetting } from "@/lib/document-processing";
+import { DANGEROUS_MODE_DISCLOSURE_VERSION } from "@autopilot/schemas";
 
-const DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
 const DANGEROUS_MODE_DISCLOSURE =
   "Your uploaded policies will be sent to an external AI service immediately. This may speed up setup, but the AI can make mistakes. You will review all information before anything is saved.";
 

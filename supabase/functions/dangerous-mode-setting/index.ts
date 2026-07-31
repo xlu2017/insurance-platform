@@ -3,6 +3,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   DANGEROUS_MODE_DISCLOSURE_VERSION,
+  getPrivacyNoticeUrl,
+  getProcessorContractVersion,
   validateDangerousModeEnablePolicy,
 } from "../_shared/document-extraction.js";
 
@@ -104,7 +106,12 @@ Deno.serve(async (req) => {
     // Active authentication plus explicit versioned consent is sufficient for
     // the closed pilot. A separate step-up credential is not required.
 
-    const processorContractVersion = Deno.env.get("PROCESSOR_CONTRACT_VERSION") ?? "";
+    const privacyNoticeUrl = getPrivacyNoticeUrl();
+    if (!privacyNoticeUrl) {
+      return jsonError("Privacy notice is not configured", 503, "PRIVACY_NOTICE_MISSING");
+    }
+
+    const processorContractVersion = getProcessorContractVersion();
     const configuredModel =
       Deno.env.get("DOCUMENT_MODEL_PRIMARY") ??
       Deno.env.get("GEMINI_MODEL_ID") ??

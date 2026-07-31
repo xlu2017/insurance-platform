@@ -7,3 +7,4 @@ export * from "./mandate-adapters";
 export * from "./quotes";
 export * from "./recommendation";
 export * from "./entities";
+export * from "./document-processing-config";

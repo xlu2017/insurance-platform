@@ -61,7 +61,9 @@ export default function AuthCallback() {
   const handledRef = useRef(false);
 
   useEffect(() => {
-    Linking.getInitialURL().then((value) => setInitialUrl(value ?? null));
+    Linking.getInitialURL()
+      .then((value) => setInitialUrl(value ?? null))
+      .catch(() => setInitialUrl(null));
   }, []);
 
   useEffect(() => {

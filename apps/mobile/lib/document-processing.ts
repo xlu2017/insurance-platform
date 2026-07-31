@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { getPrivacyNoticeVersion, getProcessorContractVersion } from "@autopilot/schemas";
 import { supabase } from "./supabase";
 import { invokeEdgeFunction } from "./edge-functions";
 
@@ -79,7 +80,6 @@ export async function loadLatestDocumentBatch(
 export async function createDocumentBatch(
   householdId: string,
   clientRequestId: string,
-  mode?: "safe" | "dangerous",
 ): Promise<DocumentBatchSummary> {
   const { data, error } = await invokeEdgeFunction<DocumentBatchSummary>(
     "document-processing-batch",
@@ -87,7 +87,6 @@ export async function createDocumentBatch(
       action: "create",
       household_id: householdId,
       client_request_id: clientRequestId,
-      mode,
     },
   );
   if (error) throw new Error(error.message);
@@ -199,8 +198,8 @@ export async function recordDocumentProcessingConsent(input: {
     p_household_id: input.householdId,
     p_profile_id: input.profileId,
     p_purpose: input.purpose ?? "insurance_policy_extraction",
-    p_privacy_notice_version: input.privacyNoticeVersion ?? "1.0.0",
-    p_processor_contract_version: input.processorContractVersion ?? "1.0.0",
+    p_privacy_notice_version: input.privacyNoticeVersion ?? getPrivacyNoticeVersion(),
+    p_processor_contract_version: input.processorContractVersion ?? getProcessorContractVersion() ?? "",
     p_foreign_processing_acknowledged: input.foreignProcessingAcknowledged ?? true,
     p_automated_processing_acknowledged: input.automatedProcessingAcknowledged ?? true,
     p_raw_processing_approved: input.rawProcessingApproved ?? true,

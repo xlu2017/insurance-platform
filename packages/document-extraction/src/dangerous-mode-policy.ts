@@ -1,4 +1,16 @@
-export const DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
+import {
+  DANGEROUS_MODE_DISCLOSURE_VERSION,
+  getPrivacyNoticeUrl,
+  getPrivacyNoticeVersion,
+  getProcessorContractVersion,
+} from "@autopilot/schemas";
+
+export {
+  DANGEROUS_MODE_DISCLOSURE_VERSION,
+  getPrivacyNoticeUrl,
+  getPrivacyNoticeVersion,
+  getProcessorContractVersion,
+};
 
 export interface DangerousModeEnablePolicyInput {
   explicitConfirmation: boolean;

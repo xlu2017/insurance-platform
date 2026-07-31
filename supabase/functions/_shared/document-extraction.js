@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: ddc3cfdf57cd4215297ab5c4577db1ddcd782faa3b6ccc07b56d272a7dbc300f
+// source-hash: 1c6b7cb03b285f7e80613e004ef61c682c23ea35f91150746f67a8690f100d49
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -6654,8 +6654,1017 @@ function buildCandidateMandateValues(reviews) {
   return result2;
 }
 
-// src/dangerous-mode-policy.ts
+// ../schemas/src/enums.ts
+var userRoles = ["customer", "operations", "reviewer", "admin"];
+var UserRole = z.enum(userRoles);
+var caseStates = [
+  "draft",
+  "awaiting_documents",
+  "extracting_information",
+  "awaiting_customer_confirmation",
+  "ready_for_market_search",
+  "requesting_quotes",
+  "awaiting_quotes",
+  "comparing_quotes",
+  "licensed_review",
+  "recommendation_ready",
+  "customer_decision",
+  "switching",
+  "completed",
+  "retained_incumbent",
+  "cancelled"
+];
+var CaseState = z.enum(caseStates);
+var quoteRequestStates = [
+  "draft",
+  "queued",
+  "sent",
+  "additional_information_required",
+  "response_received",
+  "declined",
+  "no_response",
+  "cancelled"
+];
+var QuoteRequestState = z.enum(quoteRequestStates);
+var quoteStates = [
+  "estimate",
+  "conditional",
+  "bindable",
+  "expired",
+  "rejected",
+  "selected"
+];
+var QuoteState = z.enum(quoteStates);
+var quoteValidationStatuses = [
+  "draft",
+  "incomplete",
+  "valid",
+  "invalid",
+  "superseded"
+];
+var QuoteValidationStatus = z.enum(quoteValidationStatuses);
+var quoteDataSources = [
+  "manual_entry",
+  "insurer_document",
+  "insurer_portal",
+  "api",
+  "customer_confirmed",
+  "migration_unknown"
+];
+var QuoteDataSource = z.enum(quoteDataSources);
+var switchStates = [
+  "customer_approved",
+  "replacement_pending",
+  "replacement_confirmed",
+  "incumbent_cancellation_pending",
+  "incumbent_cancelled",
+  "completed",
+  "failed"
+];
+var SwitchState = z.enum(switchStates);
+var productLines = ["auto", "property"];
+var ProductLine = z.enum(productLines);
+var documentCategories = [
+  "auto_detect",
+  "current_auto_policy",
+  "current_property_policy",
+  "renewal_notice",
+  "competing_quote",
+  "proof_of_insurance",
+  "signed_authorization",
+  "cancellation_confirmation",
+  "other"
+];
+var DocumentCategory = z.enum(documentCategories);
+var documentStatuses = ["uploaded", "in_review", "extracted", "rejected"];
+var DocumentStatus = z.enum(documentStatuses);
+var questionTypes = [
+  "yes_no",
+  "single_choice",
+  "multiple_choice",
+  "number",
+  "date",
+  "short_text"
+];
+var QuestionType = z.enum(questionTypes);
+var questionStatuses = ["pending", "answered", "cancelled"];
+var QuestionStatus = z.enum(questionStatuses);
+var consentTypes = [
+  "store_documents",
+  "share_for_quotation",
+  "generate_recommendations",
+  "electronic_communications"
+];
+var ConsentType = z.enum(consentTypes);
+var subscriptionStatuses = [
+  "inactive",
+  "pending",
+  "active",
+  "past_due",
+  "cancelled"
+];
+var SubscriptionStatus = z.enum(subscriptionStatuses);
+var recommendationStatuses = [
+  "draft",
+  "awaiting_review",
+  "approved",
+  "rejected",
+  "published",
+  "customer_approved",
+  "customer_declined",
+  "superseded"
+];
+var RecommendationStatus = z.enum(recommendationStatuses);
+var notificationChannels = ["push", "email", "local_log"];
+var NotificationChannel = z.enum(notificationChannels);
+var coveragePreferences = ["required", "preferred", "indifferent", "prohibited"];
+var CoveragePreference = z.enum(coveragePreferences);
+var coveragePresences = ["yes", "no", "unknown", "not_applicable"];
+var CoveragePresence = z.enum(coveragePresences);
+var limitRules = [
+  "minimum",
+  "maximum",
+  "exact",
+  "match_current_or_better",
+  "any"
+];
+var LimitRule = z.enum(limitRules);
+var deductibleRules = ["maximum", "exact", "match_current_or_better", "any"];
+var DeductibleRule = z.enum(deductibleRules);
+var autoCoverageForms = [
+  "unknown",
+  "liability_only",
+  "collision",
+  "comprehensive",
+  "specified_perils",
+  "all_perils"
+];
+var AutoCoverageForm = z.enum(autoCoverageForms);
+var propertyTypes = [
+  "homeowner",
+  "condo",
+  "tenant",
+  "landlord",
+  "seasonal",
+  "secondary_residence",
+  "unknown"
+];
+var PropertyType = z.enum(propertyTypes);
+var propertyCoverageForms = [
+  "unknown",
+  "comprehensive",
+  "broad",
+  "named_perils",
+  "basic"
+];
+var PropertyCoverageForm = z.enum(propertyCoverageForms);
+var propertySettlements = [
+  "unknown",
+  "replacement_cost",
+  "guaranteed_replacement_cost",
+  "extended_replacement_cost",
+  "actual_cash_value"
+];
+var PropertySettlement = z.enum(propertySettlements);
+var vehicleUseClasses = [
+  "personal",
+  "commercial",
+  "classic",
+  "modified",
+  "unknown"
+];
+var VehicleUseClass = z.enum(vehicleUseClasses);
+var financingStatuses = ["owned", "financed", "leased", "unknown"];
+var FinancingStatus = z.enum(financingStatuses);
+var paymentFrequencies = ["monthly", "quarterly", "semi_annual", "annual"];
+var PaymentFrequency = z.enum(paymentFrequencies);
+var billingMethods = ["automatic_bank", "credit_card", "mail"];
+var BillingMethod = z.enum(billingMethods);
+var brokerDirectPreferences = ["broker", "direct", "indifferent"];
+var BrokerDirectPreference = z.enum(brokerDirectPreferences);
+var insurerFinancialRatings = [
+  "unknown",
+  "A_plus",
+  "A",
+  "A_minus",
+  "B_plus",
+  "B_or_lower"
+];
+var InsurerFinancialRating = z.enum(insurerFinancialRatings);
+var customerMinimumInsurerFinancialRatings = [
+  "any",
+  "A_plus",
+  "A",
+  "A_minus",
+  "B_plus",
+  "B_or_lower"
+];
+var CustomerMinimumInsurerFinancialRating = z.enum(customerMinimumInsurerFinancialRatings);
+var FinancialRating = CustomerMinimumInsurerFinancialRating;
+
+// ../schemas/src/money.ts
+var Cents = z.number().int();
+var NonNegativeCents = Cents.nonnegative();
+
+// ../schemas/src/mandate.ts
+var LimitRequirement = z.object({
+  rule: LimitRule,
+  cents: NonNegativeCents.default(0)
+});
+var DeductibleRequirement = z.object({
+  rule: DeductibleRule,
+  cents: NonNegativeCents.default(0)
+});
+var AutoCoverageFormRequirement = z.object({
+  preference: CoveragePreference,
+  value: AutoCoverageForm.default("comprehensive")
+});
+var PropertyCoverageFormRequirement = z.object({
+  preference: CoveragePreference,
+  value: PropertyCoverageForm.default("comprehensive")
+});
+var PropertySettlementRequirement = z.object({
+  preference: CoveragePreference,
+  value: PropertySettlement.default("replacement_cost")
+});
+var autoEndorsementKeys = [
+  "accident_forgiveness",
+  "rental_vehicle_coverage",
+  "non_owned_automobile",
+  "family_protection",
+  "depreciation_waiver",
+  "oem_parts",
+  "roadside_assistance",
+  "disappearing_deductible",
+  "glass_coverage",
+  "telematics"
+];
+var AutoEndorsementKey = z.enum(autoEndorsementKeys);
+var autoEndorsementDefaults = Object.fromEntries(
+  autoEndorsementKeys.map((k) => [k, CoveragePreference.default("indifferent")])
+);
+var AutoEndorsementPreferences = z.object(autoEndorsementDefaults);
+var defaultAutoEndorsements = Object.fromEntries(
+  autoEndorsementKeys.map((k) => [k, "indifferent"])
+);
+var AutoRequirements = z.object({
+  coverageForm: AutoCoverageFormRequirement.default({
+    preference: "required",
+    value: "comprehensive"
+  }),
+  liability: LimitRequirement.default({ rule: "minimum", cents: 2e8 }),
+  collisionDeductible: DeductibleRequirement.default({ rule: "maximum", cents: 1e5 }),
+  comprehensiveDeductible: DeductibleRequirement.default({ rule: "maximum", cents: 1e5 }),
+  glassDeductible: DeductibleRequirement.default({ rule: "any", cents: 0 }),
+  endorsements: AutoEndorsementPreferences.default(defaultAutoEndorsements),
+  vehicleClass: VehicleUseClass.optional(),
+  financingStatus: FinancingStatus.optional()
+});
+var propertyOptionalCoverageKeys = [
+  "equipment_breakdown",
+  "service_line",
+  "bylaw_coverage",
+  "home_systems",
+  "cyber",
+  "scheduled_valuables",
+  "home_business",
+  "short_term_rental_permission",
+  "claims_forgiveness",
+  "groundwater_seepage",
+  "ice_dam",
+  "earthquake"
+];
+var PropertyOptionalCoverageKey = z.enum(propertyOptionalCoverageKeys);
+var propertyOptionalCoverageDefaults = Object.fromEntries(
+  propertyOptionalCoverageKeys.map((k) => [k, CoveragePreference.default("indifferent")])
+);
+var PropertyOptionalCoveragePreferences = z.object(propertyOptionalCoverageDefaults);
+var defaultPropertyOptionalCoverages = Object.fromEntries(
+  propertyOptionalCoverageKeys.map((k) => [k, "indifferent"])
+);
+var WaterCoverageRequirement = z.object({
+  preference: CoveragePreference,
+  limit: LimitRequirement.default({ rule: "any", cents: 0 }),
+  deductible: DeductibleRequirement.default({ rule: "any", cents: 0 })
+});
+var PropertyRequirements = z.object({
+  propertyType: PropertyType.optional(),
+  coverageForm: PropertyCoverageFormRequirement.default({
+    preference: "required",
+    value: "comprehensive"
+  }),
+  settlementBasis: PropertySettlementRequirement.default({
+    preference: "required",
+    value: "replacement_cost"
+  }),
+  dwellingLimit: LimitRequirement.default({ rule: "minimum", cents: 45e6 }),
+  contentsLimit: LimitRequirement.default({ rule: "any", cents: 0 }),
+  detachedStructuresLimit: LimitRequirement.default({ rule: "any", cents: 0 }),
+  personalLiabilityLimit: LimitRequirement.default({ rule: "any", cents: 0 }),
+  additionalLivingExpenseLimit: LimitRequirement.default({ rule: "any", cents: 0 }),
+  baseDeductible: DeductibleRequirement.default({ rule: "maximum", cents: 25e4 }),
+  waterDeductible: DeductibleRequirement.default({ rule: "any", cents: 0 }),
+  windHailDeductible: DeductibleRequirement.default({ rule: "any", cents: 0 }),
+  earthquakeDeductible: DeductibleRequirement.default({ rule: "any", cents: 0 }),
+  sewerBackup: WaterCoverageRequirement.default({ preference: "indifferent" }),
+  overlandWater: WaterCoverageRequirement.default({ preference: "indifferent" }),
+  optionalCoverages: PropertyOptionalCoveragePreferences.default(defaultPropertyOptionalCoverages)
+});
+var SwitchingPreferences = z.object({
+  minNetAnnualSavingsCents: NonNegativeCents.default(2e4),
+  maxPremiumIncreaseCents: NonNegativeCents.default(0),
+  maxDeductibleIncreaseCents: NonNegativeCents.default(0),
+  renewalOnlySwitching: z.boolean().default(true),
+  householdOptimizationEnabled: z.boolean().default(true),
+  splitInsurersAllowed: z.boolean().default(true),
+  allowBundleBreakup: z.boolean().default(false),
+  excludedInsurerIds: z.array(z.string().uuid()).default([]),
+  deductibleIncreasesAllowed: z.boolean().default(false),
+  materialCoverageReductionsAllowed: z.boolean().default(false),
+  customerApprovalRequired: z.literal(true).default(true),
+  switchOnlyAfterCustomerApproval: z.boolean().default(true),
+  preferredPaymentFrequency: PaymentFrequency.default("annual"),
+  preferredBillingMethod: BillingMethod.default("automatic_bank"),
+  brokerDirectPreference: BrokerDirectPreference.default("indifferent"),
+  minimumInsurerFinancialRating: FinancialRating.default("any")
+});
+var AssetAutoOverride = AutoRequirements.partial();
+var AssetPropertyOverride = PropertyRequirements.partial();
+var HouseholdMandate = z.object({
+  auto: AutoRequirements,
+  property: PropertyRequirements,
+  switching: SwitchingPreferences,
+  vehicleOverrides: z.record(z.string().uuid(), AssetAutoOverride).default({}),
+  propertyOverrides: z.record(z.string().uuid(), AssetPropertyOverride).default({})
+});
+
+// ../schemas/src/mandate-v2.ts
+var MonetaryRule = z.discriminatedUnion("rule", [
+  z.object({ rule: z.literal("minimum"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("maximum"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("exact"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("match_current_or_better") }).strict(),
+  z.object({ rule: z.literal("any") }).strict()
+]);
+var DeductibleRuleV2 = z.discriminatedUnion("rule", [
+  z.object({ rule: z.literal("maximum"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("exact"), amountCents: NonNegativeCents }).strict(),
+  z.object({ rule: z.literal("match_current_or_better") }).strict(),
+  z.object({ rule: z.literal("any") }).strict()
+]);
+var autoEndorsementKeys2 = AutoEndorsementKey.options;
+var propertyOptionalCoverageKeys2 = PropertyOptionalCoverageKey.options;
+var AutoEndorsementPreferencesV2 = z.object(
+  Object.fromEntries(autoEndorsementKeys2.map((key) => [key, CoveragePreference]))
+);
+var PropertyOptionalCoveragePreferencesV2 = z.object(
+  Object.fromEntries(
+    propertyOptionalCoverageKeys2.map((key) => [key, CoveragePreference])
+  )
+);
+var WaterCoverageRequirementV2 = z.object({
+  preference: CoveragePreference,
+  limit: MonetaryRule,
+  deductible: DeductibleRuleV2
+}).strict();
+var AutoCoverageFormRequirementV2 = z.object({
+  preference: CoveragePreference,
+  value: AutoCoverageForm
+});
+var AutoMandateV2 = z.object({
+  coverageForm: AutoCoverageFormRequirementV2,
+  liability: MonetaryRule,
+  collisionDeductible: DeductibleRuleV2,
+  comprehensiveDeductible: DeductibleRuleV2,
+  glassDeductible: DeductibleRuleV2,
+  endorsements: AutoEndorsementPreferencesV2
+}).strict();
+var PropertyCoverageFormRequirementV2 = z.object({
+  preference: CoveragePreference,
+  value: PropertyCoverageForm
+});
+var PropertySettlementRequirementV2 = z.object({
+  preference: CoveragePreference,
+  value: PropertySettlement
+});
+var PropertyMandateV2 = z.object({
+  coverageForm: PropertyCoverageFormRequirementV2,
+  settlementBasis: PropertySettlementRequirementV2,
+  dwellingLimit: MonetaryRule,
+  contentsLimit: MonetaryRule,
+  detachedStructuresLimit: MonetaryRule,
+  personalLiabilityLimit: MonetaryRule,
+  additionalLivingExpenseLimit: MonetaryRule,
+  baseDeductible: DeductibleRuleV2,
+  waterDeductible: DeductibleRuleV2,
+  windHailDeductible: DeductibleRuleV2,
+  earthquakeDeductible: DeductibleRuleV2,
+  sewerBackup: WaterCoverageRequirementV2,
+  overlandWater: WaterCoverageRequirementV2,
+  optionalCoverages: PropertyOptionalCoveragePreferencesV2
+}).strict();
+var AutoMandateOverrideValuesV2 = z.object({
+  coverageForm: AutoCoverageFormRequirementV2.optional(),
+  liability: MonetaryRule.optional(),
+  collisionDeductible: DeductibleRuleV2.optional(),
+  comprehensiveDeductible: DeductibleRuleV2.optional(),
+  glassDeductible: DeductibleRuleV2.optional(),
+  endorsements: AutoEndorsementPreferencesV2.partial().optional()
+}).strict();
+var VehicleMandateOverrideV2 = z.object({
+  vehicleId: z.string().uuid(),
+  values: AutoMandateOverrideValuesV2
+}).strict();
+var PropertyMandateOverrideValuesV2 = z.object({
+  coverageForm: PropertyCoverageFormRequirementV2.optional(),
+  settlementBasis: PropertySettlementRequirementV2.optional(),
+  dwellingLimit: MonetaryRule.optional(),
+  contentsLimit: MonetaryRule.optional(),
+  detachedStructuresLimit: MonetaryRule.optional(),
+  personalLiabilityLimit: MonetaryRule.optional(),
+  additionalLivingExpenseLimit: MonetaryRule.optional(),
+  baseDeductible: DeductibleRuleV2.optional(),
+  waterDeductible: DeductibleRuleV2.optional(),
+  windHailDeductible: DeductibleRuleV2.optional(),
+  earthquakeDeductible: DeductibleRuleV2.optional(),
+  sewerBackup: WaterCoverageRequirementV2.partial().optional(),
+  overlandWater: WaterCoverageRequirementV2.partial().optional(),
+  optionalCoverages: PropertyOptionalCoveragePreferencesV2.partial().optional()
+}).strict();
+var PropertyMandateOverrideV2 = z.object({
+  propertyId: z.string().uuid(),
+  values: PropertyMandateOverrideValuesV2
+}).strict();
+var HouseholdCoverageMandateV2 = z.object({
+  schemaVersion: z.literal(2),
+  jurisdiction: z.literal("AB"),
+  version: z.number().int().positive(),
+  effectiveFrom: z.string().datetime(),
+  householdAutoDefaults: AutoMandateV2,
+  householdPropertyDefaults: PropertyMandateV2,
+  vehicleOverrides: z.array(VehicleMandateOverrideV2).default([]),
+  propertyOverrides: z.array(PropertyMandateOverrideV2).default([])
+}).strict();
+var SwitchingPreferencesV2 = z.object({
+  minNetAnnualSavingsCents: NonNegativeCents.default(2e4),
+  maxPremiumIncreaseCents: NonNegativeCents.default(0),
+  maxDeductibleIncreaseCents: NonNegativeCents.default(0),
+  renewalOnlySwitching: z.boolean().default(true),
+  householdOptimizationEnabled: z.boolean().default(true),
+  splitInsurersAllowed: z.boolean().default(true),
+  allowBundleBreakup: z.boolean().default(false),
+  excludedInsurerIds: z.array(z.string().uuid()).default([]),
+  deductibleIncreasesAllowed: z.boolean().default(false),
+  materialCoverageReductionsAllowed: z.boolean().default(false),
+  customerApprovalRequired: z.literal(true).default(true),
+  switchOnlyAfterCustomerApproval: z.boolean().default(true),
+  preferredPaymentFrequency: PaymentFrequency.default("annual"),
+  preferredBillingMethod: BillingMethod.default("automatic_bank"),
+  brokerDirectPreference: BrokerDirectPreference.default("indifferent"),
+  minimumInsurerFinancialRating: CustomerMinimumInsurerFinancialRating.default("any")
+});
+
+// ../schemas/src/quotes.ts
+var AutoCoverageDetails = z.object({
+  thirdPartyLiabilityCents: NonNegativeCents,
+  coverageForm: AutoCoverageForm,
+  collisionIncluded: z.boolean(),
+  collisionDeductibleCents: NonNegativeCents.nullable(),
+  comprehensiveIncluded: z.boolean(),
+  comprehensiveDeductibleCents: NonNegativeCents.nullable(),
+  glassDeductibleCents: NonNegativeCents.nullable(),
+  accidentForgivenessIncluded: z.boolean(),
+  rentalVehicleCoverageIncluded: z.boolean(),
+  nonOwnedAutomobileIncluded: z.boolean(),
+  familyProtectionIncluded: z.boolean(),
+  depreciationWaiverIncluded: z.boolean(),
+  oemPartsIncluded: z.boolean(),
+  roadsideAssistanceIncluded: z.boolean(),
+  disappearingDeductibleIncluded: z.boolean(),
+  glassCoverageIncluded: z.boolean(),
+  telematicsRequired: z.boolean(),
+  vehicleClass: VehicleUseClass,
+  financingStatus: FinancingStatus
+});
+var PropertyCoverageDetails = z.object({
+  propertyType: PropertyType,
+  coverageForm: PropertyCoverageForm,
+  settlementBasis: PropertySettlement,
+  dwellingLimitCents: NonNegativeCents,
+  contentsLimitCents: NonNegativeCents,
+  detachedStructuresLimitCents: NonNegativeCents,
+  personalLiabilityLimitCents: NonNegativeCents,
+  additionalLivingExpenseLimitCents: NonNegativeCents.nullable(),
+  additionalLivingExpensesIncluded: z.boolean(),
+  replacementCostIncluded: z.boolean(),
+  baseDeductibleCents: NonNegativeCents,
+  waterDeductibleCents: NonNegativeCents.nullable(),
+  windHailIncluded: z.boolean(),
+  windHailDeductibleCents: NonNegativeCents.nullable(),
+  earthquakeIncluded: z.boolean(),
+  earthquakeDeductibleCents: NonNegativeCents.nullable(),
+  sewerBackupIncluded: z.boolean(),
+  sewerBackupLimitCents: NonNegativeCents.nullable(),
+  sewerBackupDeductibleCents: NonNegativeCents.nullable(),
+  overlandWaterIncluded: z.boolean(),
+  overlandWaterLimitCents: NonNegativeCents.nullable(),
+  overlandWaterDeductibleCents: NonNegativeCents.nullable(),
+  groundwaterIncluded: z.boolean(),
+  iceDamIncluded: z.boolean(),
+  equipmentBreakdownIncluded: z.boolean(),
+  serviceLineIncluded: z.boolean(),
+  bylawCoverageIncluded: z.boolean(),
+  homeSystemsIncluded: z.boolean(),
+  cyberCoverageIncluded: z.boolean(),
+  scheduledValuablesIncluded: z.boolean(),
+  homeBusinessIncluded: z.boolean(),
+  shortTermRentalPermissionIncluded: z.boolean(),
+  claimsForgivenessIncluded: z.boolean()
+});
+var FieldProvenance = z.object({
+  dataSource: QuoteDataSource,
+  validatedAt: z.string().datetime({ offset: true }).optional(),
+  validatedBy: z.string().uuid().optional(),
+  coverageSchemaVersion: z.number().int().nonnegative().optional()
+});
+var ComponentFieldProvenance = z.record(z.string(), FieldProvenance);
+var ComponentProvenance = z.object({
+  dataSource: QuoteDataSource.optional(),
+  validatedAt: z.string().datetime({ offset: true }).optional(),
+  validatedBy: z.string().uuid().optional(),
+  coverageSchemaVersion: z.number().int().nonnegative().optional()
+}).optional();
+var QuoteComponent = z.object({
+  id: z.string().uuid().optional(),
+  productLine: ProductLine,
+  assetId: z.string().uuid().nullable().optional(),
+  assetLabel: z.string().optional(),
+  annualPremiumCents: NonNegativeCents,
+  auto: AutoCoverageDetails.nullable(),
+  property: PropertyCoverageDetails.nullable(),
+  rawCoverage: z.record(z.unknown()).optional(),
+  fieldProvenance: ComponentFieldProvenance.optional(),
+  validationStatus: QuoteValidationStatus,
+  validationErrors: z.array(
+    z.object({
+      path: z.array(z.string()),
+      code: z.string(),
+      message: z.string()
+    })
+  ),
+  provenance: ComponentProvenance
+});
+var EngineQuoteInsurer = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  financialStrengthRating: InsurerFinancialRating,
+  paymentFrequencies: z.array(PaymentFrequency).default([]),
+  billingMethods: z.array(BillingMethod).default([]),
+  distribution: BrokerDirectPreference.nullable(),
+  version: z.number().int().nonnegative()
+});
+var EngineQuote = z.object({
+  id: z.string(),
+  state: QuoteState,
+  isIncumbent: z.boolean(),
+  policyFeesCents: NonNegativeCents,
+  paymentFeesCents: NonNegativeCents,
+  /** Discount applied when this quote's insurer holds both product lines. Negative reduction expressed as positive cents. */
+  bundleDiscountCents: NonNegativeCents,
+  /** Charge incurred by leaving the incumbent mid-term for this line, if known. */
+  cancellationChargeCents: NonNegativeCents,
+  underwritingConditions: z.array(z.string()),
+  components: z.array(QuoteComponent).min(1),
+  expiresAt: z.string().datetime().nullable(),
+  insurer: EngineQuoteInsurer
+});
+var QuoteValidationIssue = z.object({
+  path: z.array(z.string()),
+  code: z.string(),
+  expected: z.string().optional(),
+  received: z.unknown(),
+  message: z.string()
+});
+var AutoCoverageDetailsDraft = AutoCoverageDetails.partial();
+var PropertyCoverageDetailsDraft = PropertyCoverageDetails.partial();
+var QuoteComponentDraft = z.discriminatedUnion("productLine", [
+  z.object({
+    componentId: z.string().uuid().optional(),
+    productLine: z.literal("auto"),
+    assetId: z.string().uuid(),
+    annualPremiumCents: NonNegativeCents,
+    coverage: z.record(z.unknown())
+  }),
+  z.object({
+    componentId: z.string().uuid().optional(),
+    productLine: z.literal("property"),
+    assetId: z.string().uuid(),
+    annualPremiumCents: NonNegativeCents,
+    coverage: z.record(z.unknown())
+  })
+]);
+var QuoteSaveIntent = z.enum(["draft", "validate"]);
+var SaveCaseQuoteRequest = z.object({
+  caseId: z.string().uuid(),
+  quoteId: z.string().uuid().optional(),
+  expectedVersion: z.number().int().nonnegative().optional(),
+  saveIntent: QuoteSaveIntent,
+  insurerId: z.string().uuid(),
+  state: QuoteState,
+  isIncumbent: z.boolean(),
+  expiresAt: z.string().datetime().nullable().optional(),
+  policyFeesCents: NonNegativeCents.default(0),
+  paymentFeesCents: NonNegativeCents.default(0),
+  bundleDiscountCents: NonNegativeCents.default(0),
+  cancellationChargeCents: NonNegativeCents.default(0),
+  underwritingConditions: z.array(z.string()).default([]),
+  dataSource: QuoteDataSource,
+  components: z.array(QuoteComponentDraft).min(1)
+}).strict().superRefine((val, ctx) => {
+  const componentIds = val.components.map((c) => c.componentId).filter((id) => id !== void 0);
+  if (new Set(componentIds).size !== componentIds.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["components"],
+      message: "Duplicate componentId values are not allowed"
+    });
+  }
+  const pairs = val.components.map((c) => `${c.productLine}:${c.assetId}`);
+  if (new Set(pairs).size !== pairs.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["components"],
+      message: "Duplicate productLine and assetId pairs are not allowed"
+    });
+  }
+});
+
+// ../schemas/src/recommendation.ts
+var QuoteSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  updated_at: z.string().datetime({ offset: true }),
+  version: z.number().int().nonnegative(),
+  is_incumbent: z.boolean()
+}).strict();
+var CanonicalAutoCoverageSnapshot = AutoCoverageDetails.strict();
+var CanonicalPropertyCoverageSnapshot = PropertyCoverageDetails.strict();
+var CanonicalComponentSnapshotSchema = z.object({
+  id: z.string().uuid().optional(),
+  productLine: z.enum(["auto", "property"]),
+  assetId: z.string().uuid(),
+  annualPremiumCents: NonNegativeCents,
+  auto: CanonicalAutoCoverageSnapshot.nullable(),
+  property: CanonicalPropertyCoverageSnapshot.nullable(),
+  rawCoverage: z.record(z.unknown()),
+  fieldProvenance: ComponentFieldProvenance,
+  validationStatus: z.literal("valid"),
+  validationErrors: z.array(
+    z.object({
+      path: z.array(z.string()),
+      code: z.string(),
+      message: z.string()
+    })
+  ).default([]),
+  provenance: z.object({
+    dataSource: QuoteDataSource,
+    validatedAt: z.string().datetime({ offset: true }).optional(),
+    validatedBy: z.string().uuid().optional(),
+    coverageSchemaVersion: z.number().int().nonnegative()
+  })
+}).strict();
+var CanonicalInsurerMetadataSnapshotSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  financialStrengthRating: InsurerFinancialRating,
+  paymentFrequencies: z.array(PaymentFrequency),
+  billingMethods: z.array(BillingMethod),
+  distribution: BrokerDirectPreference.nullable(),
+  version: z.number().int().nonnegative()
+}).strict();
+var CanonicalReasonDetailSchema = z.object({
+  scope: z.string(),
+  quoteId: z.string().uuid().optional(),
+  componentId: z.string().uuid().optional(),
+  assetId: z.string().uuid().optional(),
+  field: z.string(),
+  expectedRule: z.string().optional(),
+  actualValue: z.unknown().optional(),
+  reasonCode: z.string()
+}).strict();
+var HexDigest = z.string().regex(/^[0-9a-f]{64}$/, "Expected a 64-character lowercase hex SHA-256 digest");
+var RankingFactorsSchema = z.object({
+  total_cents: z.number().int().nonnegative(),
+  coverage_reductions_count: z.number().int().nonnegative(),
+  deductible_total_cents: z.number().int().nonnegative(),
+  underwriting_condition_count: z.number().int().nonnegative(),
+  preference_missed_count: z.number().int().nonnegative(),
+  preference_unknown_count: z.number().int().nonnegative()
+});
+var PreferenceAlignmentSchema = z.object({
+  satisfied_count: z.number().int().nonnegative(),
+  missed_count: z.number().int().nonnegative(),
+  not_evaluable_count: z.number().int().nonnegative(),
+  details: z.array(
+    z.object({
+      scope: z.string(),
+      item: z.string(),
+      outcome: z.enum(["satisfied", "missed", "unknown", "not_applicable"])
+    })
+  )
+});
+var PersistedRecommendationOptionSchema = z.object({
+  rank: z.number().int().positive(),
+  auto_quote_id: z.string().uuid(),
+  property_quote_id: z.string().uuid(),
+  auto_component_id: z.string().uuid(),
+  property_component_id: z.string().uuid(),
+  auto_asset_id: z.string().uuid(),
+  property_asset_id: z.string().uuid(),
+  bundled: z.boolean(),
+  total_cents: z.number().int().nonnegative(),
+  net_savings_cents: z.number().int(),
+  eligible: z.boolean(),
+  reason_codes: z.array(z.string()),
+  ranking_factors: RankingFactorsSchema,
+  preference_alignment: PreferenceAlignmentSchema,
+  deductible_total_cents: z.number().int().nonnegative(),
+  underwriting_condition_count: z.number().int().nonnegative()
+}).strict();
+var CanonicalQuoteSnapshot = z.object({
+  id: z.string().uuid(),
+  state: QuoteState,
+  isIncumbent: z.boolean(),
+  policyFeesCents: NonNegativeCents,
+  paymentFeesCents: NonNegativeCents,
+  bundleDiscountCents: NonNegativeCents,
+  cancellationChargeCents: NonNegativeCents,
+  underwritingConditions: z.array(z.string()),
+  components: z.array(CanonicalComponentSnapshotSchema).min(1),
+  expiresAt: z.string().datetime().nullable(),
+  insurer: CanonicalInsurerMetadataSnapshotSchema
+}).strict();
+var CanonicalRecommendationInputSnapshotSchema = z.object({
+  caseId: z.string().uuid(),
+  householdId: z.string().uuid(),
+  mandateId: z.string().uuid(),
+  mandateVersion: z.number().int().positive(),
+  mandateSchemaVersion: z.literal(2),
+  jurisdiction: z.literal("AB"),
+  switchingPreferencesId: z.string().uuid(),
+  switchingPreferencesVersion: z.number().int().positive(),
+  assets: z.object({
+    vehicles: z.array(z.object({ id: z.string().uuid() }).strict()),
+    properties: z.array(z.object({ id: z.string().uuid() }).strict())
+  }).strict(),
+  quotes: z.array(CanonicalQuoteSnapshot).min(1),
+  quoteSnapshot: z.array(QuoteSnapshotSchema).min(1),
+  mandate: HouseholdCoverageMandateV2,
+  switching: SwitchingPreferencesV2,
+  engineVersion: z.string(),
+  engineSourceHash: HexDigest
+}).strict();
+var CanonicalEngineOutputSchema = z.object({
+  incumbentTotalCents: z.number().int().nonnegative(),
+  recommendedOption: PersistedRecommendationOptionSchema,
+  rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
+  rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([])
+}).strict();
+var EngineRecommendationPersistencePayloadSchema = z.object({
+  caseId: z.string().uuid(),
+  actorProfileId: z.string().uuid(),
+  mandate: z.object({
+    id: z.string().uuid(),
+    version: z.number().int().positive(),
+    schemaVersion: z.literal(2),
+    jurisdiction: z.literal("AB")
+  }).strict(),
+  switchingPreferences: z.object({
+    id: z.string().uuid(),
+    version: z.number().int().positive()
+  }).strict(),
+  engine: z.object({
+    version: z.string().min(1),
+    sourceHash: HexDigest
+  }).strict(),
+  inputSnapshotJson: CanonicalRecommendationInputSnapshotSchema,
+  inputSnapshotDigest: HexDigest,
+  inputSnapshotCanonical: z.string().min(1),
+  recommendedOption: PersistedRecommendationOptionSchema,
+  rankedOptions: z.array(PersistedRecommendationOptionSchema).min(1),
+  rejectedOptions: z.array(PersistedRecommendationOptionSchema).default([]),
+  engineOutputJson: CanonicalEngineOutputSchema,
+  engineOutputDigest: HexDigest,
+  engineOutputCanonical: z.string().min(1),
+  currentTotalCents: z.number().int().nonnegative(),
+  proposedTotalCents: z.number().int().nonnegative(),
+  netSavingsCents: z.number().int(),
+  reasonCodes: z.array(z.string()),
+  comparison: z.record(z.unknown()),
+  disclosureVersion: z.string().default("v1")
+}).strict();
+
+// ../schemas/src/entities.ts
+var uuid = z.string().uuid();
+var timestamptz = z.string();
+var Profile = z.object({
+  id: uuid,
+  role: UserRole,
+  full_name: z.string(),
+  email: z.string().email(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Household = z.object({
+  id: uuid,
+  owner_profile_id: uuid,
+  name: z.string(),
+  province: z.string().length(2),
+  timezone: z.string().default("America/Edmonton"),
+  autopilot_active: z.boolean(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Driver = z.object({
+  id: uuid,
+  household_id: uuid,
+  full_name: z.string(),
+  date_of_birth: z.string(),
+  licence_class: z.string(),
+  years_licensed: z.number().int().nonnegative(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Vehicle = z.object({
+  id: uuid,
+  household_id: uuid,
+  year: z.number().int(),
+  make: z.string(),
+  model: z.string(),
+  vin: z.string().nullable(),
+  annual_km: z.number().int().nonnegative().nullable(),
+  primary_use: z.string(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Property = z.object({
+  id: uuid,
+  household_id: uuid,
+  address_line1: z.string(),
+  city: z.string(),
+  province: z.string().length(2),
+  postal_code: z.string(),
+  year_built: z.number().int().nullable(),
+  dwelling_type: z.string(),
+  owner_occupied: z.boolean(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Policy = z.object({
+  id: uuid,
+  household_id: uuid,
+  insurer_id: uuid.nullable(),
+  insurer_name: z.string(),
+  product_line: ProductLine,
+  policy_number: z.string().nullable(),
+  annual_premium_cents: NonNegativeCents,
+  bundle_discount_cents: NonNegativeCents,
+  renewal_date: z.string(),
+  is_current: z.boolean(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var PolicyDocument = z.object({
+  id: uuid,
+  household_id: uuid,
+  policy_id: uuid.nullable(),
+  category: DocumentCategory,
+  status: DocumentStatus,
+  storage_path: z.string(),
+  file_name: z.string(),
+  mime_type: z.string(),
+  size_bytes: z.number().int().nonnegative(),
+  uploaded_by: uuid,
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var OptimizationCase = z.object({
+  id: uuid,
+  household_id: uuid,
+  state: CaseState,
+  renewal_date: z.string().nullable(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var QuoteRequest = z.object({
+  id: uuid,
+  case_id: uuid,
+  insurer_id: uuid,
+  state: QuoteRequestState,
+  product_lines: z.array(ProductLine),
+  inclusion_reason: z.string(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Quote = z.object({
+  id: uuid,
+  case_id: uuid,
+  quote_request_id: uuid.nullable(),
+  insurer_id: uuid,
+  state: QuoteState,
+  is_incumbent: z.boolean(),
+  policy_fees_cents: NonNegativeCents,
+  payment_fees_cents: NonNegativeCents,
+  bundle_discount_cents: NonNegativeCents,
+  cancellation_charge_cents: NonNegativeCents,
+  underwriting_conditions: z.array(z.string()),
+  expires_at: timestamptz.nullable(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var CustomerQuestion = z.object({
+  id: uuid,
+  case_id: uuid,
+  question_type: QuestionType,
+  status: QuestionStatus,
+  prompt: z.string(),
+  options: z.array(z.string()).nullable(),
+  answer: z.string().nullable(),
+  answered_by: uuid.nullable(),
+  answered_at: timestamptz.nullable(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Recommendation = z.object({
+  id: uuid,
+  case_id: uuid,
+  status: RecommendationStatus,
+  version: z.number().int().positive(),
+  mandate_version: z.number().int().positive(),
+  current_total_cents: NonNegativeCents,
+  proposed_total_cents: NonNegativeCents,
+  net_savings_cents: z.number().int(),
+  reason_codes: z.array(z.string()),
+  disclosure_version: z.string(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var SwitchEvent = z.object({
+  id: uuid,
+  case_id: uuid,
+  state: SwitchState,
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+var Consent = z.object({
+  id: uuid,
+  profile_id: uuid,
+  consent_type: ConsentType,
+  granted: z.boolean(),
+  granted_at: timestamptz,
+  created_at: timestamptz
+});
+var Subscription = z.object({
+  id: uuid,
+  profile_id: uuid,
+  status: SubscriptionStatus,
+  stripe_customer_id: z.string().nullable(),
+  stripe_subscription_id: z.string().nullable(),
+  current_period_end: timestamptz.nullable(),
+  created_at: timestamptz,
+  updated_at: timestamptz
+});
+
+// ../schemas/src/document-processing-config.ts
 var DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
+function envValue(name) {
+  try {
+    const g = globalThis;
+    if (g.Deno?.env?.get) {
+      const value = g.Deno.env.get(name);
+      if (value) return value;
+    }
+  } catch {
+  }
+  try {
+    const g = globalThis;
+    if (g.process?.env?.[name]) {
+      return g.process.env[name];
+    }
+  } catch {
+  }
+  return void 0;
+}
+function getPrivacyNoticeUrl() {
+  return envValue("EXPO_PUBLIC_PRIVACY_NOTICE_URL") ?? envValue("PRIVACY_NOTICE_URL");
+}
+function getProcessorContractVersion() {
+  return envValue("EXPO_PUBLIC_PROCESSOR_CONTRACT_VERSION") ?? envValue("PROCESSOR_CONTRACT_VERSION");
+}
+function getPrivacyNoticeVersion() {
+  return DANGEROUS_MODE_DISCLOSURE_VERSION;
+}
+
+// src/dangerous-mode-policy.ts
 function validateDangerousModeEnablePolicy(input) {
   if (!input.explicitConfirmation || !input.foreignProcessingAcknowledged || !input.automatedProcessingAcknowledged || !input.rawProcessingApproved) {
     return "ACKNOWLEDGEMENTS_REQUIRED";
@@ -11863,6 +12872,9 @@ export {
   createNativeDocumentAnalyzer,
   documentProcessingRoute,
   generateSupportReference,
+  getPrivacyNoticeUrl,
+  getPrivacyNoticeVersion,
+  getProcessorContractVersion,
   mergeIncrementalOnboardingUpload,
   normalizeDocumentValueState,
   normalizeLlmAnalysisResult,
@@ -11884,4 +12896,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "ddc3cfdf57cd4215297ab5c4577db1ddcd782faa3b6ccc07b56d272a7dbc300f";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "1c6b7cb03b285f7e80613e004ef61c682c23ea35f91150746f67a8690f100d49";

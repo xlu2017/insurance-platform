@@ -244,17 +244,15 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (existing) return jsonResponse(publicBatch(existing));
 
-    const requestedMode = String(body.mode ?? "");
-    const modeIsValid = requestedMode === "safe" || requestedMode === "dangerous";
-
     const { data: setting } = await admin
       .from("household_document_processing_settings")
       .select("*")
       .eq("household_id", householdId)
       .maybeSingle();
-    const dangerous = modeIsValid
-      ? requestedMode === "dangerous"
-      : setting?.dangerous_mode_enabled === true;
+
+    // The protected household setting and an active consent are the only
+    // authority for automatic processing. The client-supplied mode is not used.
+    const dangerous = setting?.dangerous_mode_enabled === true;
     const { data: consent } = dangerous
       ? await admin
           .from("document_processing_consent")
@@ -266,6 +264,14 @@ Deno.serve(async (req) => {
           .limit(1)
           .maybeSingle()
       : { data: null };
+
+    if (dangerous && !consent) {
+      return jsonError(
+        "Automatic document processing consent is required",
+        403,
+        "CONSENT_REQUIRED",
+      );
+    }
 
     const { data: newCase, error: caseError } = await admin
       .from("optimization_cases")
