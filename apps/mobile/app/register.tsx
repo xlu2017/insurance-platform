@@ -1,4 +1,4 @@
-import { router, Stack } from "expo-router";
+import { Redirect, router, Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { z } from "zod";
@@ -42,6 +42,7 @@ export default function Register() {
   }, [isAuthenticated]);
 
   if (status === "loading") return <Loading />;
+  if (isAuthenticated) return <Redirect href="/home" />;
 
   const register = async () => {
     const parsed = Registration.safeParse({ fullName, email: email.trim(), password });
@@ -88,11 +89,17 @@ export default function Register() {
     }, SSO_TIMEOUT_MS);
 
     try {
-      const { error: ssoError } = await signInWithOAuthProvider("google");
+      const { user, error: ssoError } = await signInWithOAuthProvider("google");
+      clearSsoTimeout();
       if (ssoError) {
-        clearSsoTimeout();
         setError(ssoError.message);
         setSsoLoading(false);
+        return;
+      }
+      if (user) {
+        setSsoLoading(false);
+        router.replace("/home");
+        return;
       }
       // The deep-link callback will complete sign-in; the auth listener will route
       // the authenticated user away from this screen.

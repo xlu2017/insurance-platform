@@ -3,6 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const publicRoutes = new Set(["/login", "/auth/callback", "/_next", "/favicon.ico"]);
 
+function redirectWithCookies(path: string, req: NextRequest, res: NextResponse) {
+  const redirect = NextResponse.redirect(new URL(path, req.url));
+  for (const cookie of res.cookies.getAll()) {
+    redirect.cookies.set(cookie);
+  }
+  return redirect;
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
 
@@ -33,8 +41,7 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const loginUrl = new URL("/login", req.url);
-    return NextResponse.redirect(loginUrl);
+    return redirectWithCookies("/login", req, res);
   }
 
   const { data: profile } = await supabase
@@ -46,8 +53,7 @@ export async function middleware(req: NextRequest) {
 
   if (!role || role === "customer") {
     await supabase.auth.signOut();
-    const loginUrl = new URL("/login", req.url);
-    return NextResponse.redirect(loginUrl);
+    return redirectWithCookies("/login", req, res);
   }
 
   return res;

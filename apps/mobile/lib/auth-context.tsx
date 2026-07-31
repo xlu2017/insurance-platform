@@ -7,7 +7,7 @@ export type AuthStatus =
   | "authenticated"
   | "unauthenticated"
   | "configuration_error"
-  | "network_error";
+  | "session_error";
 
 export interface AuthContextValue {
   session: Session | null;

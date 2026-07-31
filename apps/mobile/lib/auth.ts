@@ -1,9 +1,10 @@
 import type { User } from "@supabase/supabase-js";
+import * as Linking from "expo-linking";
 import { makeRedirectUri } from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Platform } from "react-native";
 import { getBypassHeaders, getSupabaseAnonKey, getSupabaseUrl } from "./config";
-import { getSupabaseClient, resetSupabaseClient } from "./supabase";
+import { getSupabaseClient } from "./supabase";
 
 declare const __DEV__: boolean;
 
@@ -14,6 +15,7 @@ export type AuthErrorCategory =
   | "offline"
   | "invalid_config"
   | "malformed_response"
+  | "cancelled"
   | "unknown";
 
 export interface AuthError {
@@ -28,6 +30,7 @@ export interface SignInCredentials {
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEEP_LINK_GRACE_MS = 1_500;
 const PLACEHOLDER_PATTERNS = /YOUR_|INSERT_|REPLACE_/i;
 
 function isLoopback(url: URL): boolean {
@@ -256,8 +259,8 @@ export async function signInWithPassword(
         };
       }
 
-      resetSupabaseClient();
-      const { error: sessionError } = await getSupabaseClient().auth.setSession({
+      const client = getSupabaseClient();
+      const { error: sessionError } = await client.auth.setSession({
         access_token: token.access_token,
         refresh_token: token.refresh_token,
       });
@@ -318,16 +321,20 @@ function ssoError(message: string, category: AuthErrorCategory = "unknown"): Aut
   return { category, message, retryable: false };
 }
 
+export interface OAuthPayload {
+  code?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  error?: string;
+  errorDescription?: string;
+}
+
 /**
  * Extracts the OAuth code (PKCE flow) or the access/refresh tokens (implicit
  * flow) from the deep link returned by the provider. The client sets
  * `detectSessionInUrl: false`, so the session must be established explicitly.
  */
-function parseOAuthReturnUrl(returnUrl: string): {
-  code?: string;
-  accessToken?: string;
-  refreshToken?: string;
-} {
+export function parseOAuthReturnUrl(returnUrl: string): OAuthPayload {
   const parsed = new URL(returnUrl);
   const hashParams = new URLSearchParams(
     parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash,
@@ -338,6 +345,11 @@ function parseOAuthReturnUrl(returnUrl: string): {
       parsed.searchParams.get("access_token") ?? hashParams.get("access_token") ?? undefined,
     refreshToken:
       parsed.searchParams.get("refresh_token") ?? hashParams.get("refresh_token") ?? undefined,
+    error: parsed.searchParams.get("error") ?? hashParams.get("error") ?? undefined,
+    errorDescription:
+      parsed.searchParams.get("error_description") ??
+      hashParams.get("error_description") ??
+      undefined,
   };
 }
 
@@ -410,6 +422,15 @@ export async function signInWithOAuthProvider(
   const redirectTo = makeRedirectUri({ scheme: "insurance-autopilot", path: "auth/callback" });
   const client = getSupabaseClient();
 
+  let capturedUrl: string | null = null;
+  let linkSubscription: { remove: () => void } | null = null;
+  const cleanupLinkListener = () => {
+    if (linkSubscription) {
+      linkSubscription.remove();
+      linkSubscription = null;
+    }
+  };
+
   try {
     const { data, error } = await client.auth.signInWithOAuth({
       provider,
@@ -421,20 +442,76 @@ export async function signInWithOAuthProvider(
       return { error: ssoError("Could not start SSO sign-in. Please try again.") };
     }
 
+    // Capture any deep link that arrives while the browser session is open. On
+    // Android the browser promise may resolve with 'dismiss' before the deep
+    // link is delivered, so we keep a listener running through the whole flow.
+    linkSubscription = Linking.addEventListener("url", ({ url }: { url: string }) => {
+      if (url && url.startsWith(redirectTo)) {
+        capturedUrl = url;
+        cleanupLinkListener();
+      }
+    });
+
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
-    if (result.type === "success" && result.url) {
-      // The browser was able to return the OAuth redirect URL directly (common on iOS).
-      const { code, accessToken, refreshToken } = parseOAuthReturnUrl(result.url);
+    if (result.type === "success") {
+      cleanupLinkListener();
+      const returnUrl = result.url ?? capturedUrl;
+      if (!returnUrl) {
+        return { error: ssoError("SSO sign-in returned no session. Please try again.") };
+      }
+      const { code, accessToken, refreshToken } = parseOAuthReturnUrl(returnUrl);
       return exchangeOAuthCode(code, accessToken, refreshToken);
     }
 
-    // On Android, Chrome Custom Tabs can be dismissed by the OS when the app
-    // scheme redirect is intercepted. The deep link is delivered to the app via
-    // Linking and handled by app/auth/callback.tsx, which finishes the exchange.
-    // The caller should keep waiting for the global auth state to become authenticated.
-    return {};
+    if (result.type === "cancel") {
+      cleanupLinkListener();
+      return {
+        error: {
+          category: "cancelled",
+          message: "Sign-in was cancelled.",
+          retryable: false,
+        },
+      };
+    }
+
+    // Ambiguous dismissal (Android 'dismiss' or no explicit URL). If a deep
+    // link was already captured, use it. Otherwise wait briefly for one to arrive.
+    if (capturedUrl) {
+      cleanupLinkListener();
+      const { code, accessToken, refreshToken } = parseOAuthReturnUrl(capturedUrl);
+      return exchangeOAuthCode(code, accessToken, refreshToken);
+    }
+
+    const deepLink = await new Promise<string | null>((resolve) => {
+      const sub = Linking.addEventListener("url", ({ url }: { url: string }) => {
+        if (url && url.startsWith(redirectTo)) {
+          sub.remove();
+          clearTimeout(timer);
+          resolve(url);
+        }
+      });
+      const timer = setTimeout(() => {
+        sub.remove();
+        resolve(null);
+      }, DEEP_LINK_GRACE_MS);
+    });
+    cleanupLinkListener();
+
+    if (deepLink) {
+      const { code, accessToken, refreshToken } = parseOAuthReturnUrl(deepLink);
+      return exchangeOAuthCode(code, accessToken, refreshToken);
+    }
+
+    return {
+      error: {
+        category: "cancelled",
+        message: "Sign-in was cancelled.",
+        retryable: false,
+      },
+    };
   } catch (err) {
+    cleanupLinkListener();
     logDev(`SSO network error: ${(err as Error).message}`);
     return {
       error: {

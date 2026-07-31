@@ -48,10 +48,15 @@ function getConfigEndpoint(): string | undefined {
 export async function loadRemoteConfig(options?: {
   signal?: AbortSignal;
   timeoutMs?: number;
+  force?: boolean;
 }): Promise<AppConfig | null> {
   const endpoint = getConfigEndpoint();
   if (!endpoint) {
     return null;
+  }
+
+  if (options?.force) {
+    loadPromise = null;
   }
 
   if (loadPromise) {

@@ -55,13 +55,19 @@ export default function Welcome() {
     }, SSO_TIMEOUT_MS);
 
     try {
-      const { error } = await signInWithOAuthProvider("google");
+      const { user, error } = await signInWithOAuthProvider("google");
+      clearSsoTimeout();
       if (error) {
-        clearSsoTimeout();
         setSsoError(error.message);
         setSsoLoading(false);
+        return;
       }
-      // If no error and no user, the browser was dismissed by the OS and the
+      if (user) {
+        setSsoLoading(false);
+        router.replace("/home");
+        return;
+      }
+      // No immediate user and no error: the browser was dismissed by the OS and the
       // deep-link callback will complete the sign-in. The auth listener above
       // will redirect once the session is set.
     } catch (err) {

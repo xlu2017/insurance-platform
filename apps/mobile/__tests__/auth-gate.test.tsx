@@ -144,7 +144,7 @@ describe("useAuthGate", () => {
     mockGetSupabaseClient.mockReturnValue(client);
 
     const { getByTestId } = renderWithQuery(<GateInspector />);
-    await waitFor(() => expect(getByTestId("status").children[0]).toBe("network_error"));
+    await waitFor(() => expect(getByTestId("status").children[0]).toBe("session_error"));
   });
 
   it("redirects to welcome when signed out on a protected route", async () => {

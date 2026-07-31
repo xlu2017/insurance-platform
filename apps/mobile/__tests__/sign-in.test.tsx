@@ -144,4 +144,49 @@ describe("SignIn screen", () => {
     resolve({ user: { id: "user-1" } as any });
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
   });
+
+  it("starts Google OAuth and navigates home when a user is returned immediately", async () => {
+    mockSSO.mockResolvedValueOnce({ user: { id: "user-1" } as any });
+
+    const { getByTestId } = render(<SignIn />);
+    fireEvent.press(getByTestId("google-sign-in-button"));
+
+    await waitFor(() => expect(mockSSO).toHaveBeenCalledWith("google"));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
+  });
+
+  it("shows a Google SSO cancellation without offering a retry", async () => {
+    mockSSO.mockResolvedValueOnce({
+      error: { category: "cancelled", message: "Sign-in was cancelled.", retryable: false },
+    });
+
+    const { getByTestId, queryByTestId } = render(<SignIn />);
+    fireEvent.press(getByTestId("google-sign-in-button"));
+
+    await waitFor(() => expect(getByTestId("sign-in-error")).toBeTruthy());
+    expect(getByTestId("sign-in-error").children[0]).toBe("Sign-in was cancelled.");
+    expect(queryByTestId("retry-button")).toBeNull();
+  });
+
+  it("retries the same authentication method (Google) on a retryable SSO error", async () => {
+    mockSSO
+      .mockResolvedValueOnce({
+        error: {
+          category: "timeout",
+          message: "Sign-in took too long. Please try again.",
+          retryable: true,
+        },
+      })
+      .mockResolvedValueOnce({ user: { id: "user-1" } as any });
+
+    const { getByTestId } = render(<SignIn />);
+    fireEvent.press(getByTestId("google-sign-in-button"));
+
+    await waitFor(() => expect(getByTestId("retry-button")).toBeTruthy());
+
+    fireEvent.press(getByTestId("retry-button"));
+
+    await waitFor(() => expect(mockSSO).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
+  });
 });

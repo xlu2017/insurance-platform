@@ -1,6 +1,19 @@
-import { getSupabaseConfigError, signInWithPassword } from "../lib/auth";
+import {
+  getSupabaseConfigError,
+  parseOAuthReturnUrl,
+  signInWithOAuthProvider,
+  signInWithPassword,
+} from "../lib/auth";
 
 const mockSetSession = jest.fn().mockResolvedValue({ error: null });
+const mockExchangeCodeForSession = jest.fn().mockResolvedValue({
+  data: { user: { id: "user-1" } },
+  error: null,
+});
+const mockSignInWithOAuth = jest.fn().mockResolvedValue({
+  data: { url: "https://provider.example.com/oauth" },
+  error: null,
+});
 const mockUrl = "https://test-project.example.com";
 const mockKey = "test-anon-key-with-enough-length";
 
@@ -18,10 +31,40 @@ jest.mock("../lib/supabase", () => ({
   getSupabaseClient: () => ({
     auth: {
       setSession: (...args: unknown[]) => mockSetSession(...args),
+      signInWithOAuth: (...args: unknown[]) => mockSignInWithOAuth(...args),
+      exchangeCodeForSession: (...args: unknown[]) => mockExchangeCodeForSession(...args),
     },
   }),
   resetSupabaseClient: jest.fn(),
 }));
+
+jest.mock("expo-auth-session", () => ({
+  makeRedirectUri: jest.fn().mockReturnValue("insurance-autopilot://auth/callback"),
+}));
+
+jest.mock("expo-web-browser", () => ({
+  openAuthSessionAsync: jest.fn(),
+  maybeCompleteAuthSession: jest.fn(),
+}));
+
+jest.mock("expo-linking", () => ({
+  addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  getInitialURL: jest.fn().mockResolvedValue(null),
+  useURL: jest.fn().mockReturnValue(null),
+}));
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockSetSession.mockResolvedValue({ error: null });
+  mockExchangeCodeForSession.mockResolvedValue({
+    data: { user: { id: "user-1" } },
+    error: null,
+  });
+  mockSignInWithOAuth.mockResolvedValue({
+    data: { url: "https://provider.example.com/oauth" },
+    error: null,
+  });
+});
 
 describe("getSupabaseConfigError", () => {
   it("accepts a valid https base URL and key", () => {
@@ -239,5 +282,93 @@ describe("signInWithPassword", () => {
       access_token: "access",
       refresh_token: "refresh",
     });
+  });
+});
+
+describe("parseOAuthReturnUrl", () => {
+  it("reads an authorization code from the query string", () => {
+    const url = "https://app.example.com/callback?code=abc123&state=xyz";
+    const payload = parseOAuthReturnUrl(url);
+    expect(payload.code).toBe("abc123");
+    expect(payload.accessToken).toBeUndefined();
+  });
+
+  it("reads access and refresh tokens from a hash fragment", () => {
+    const url = "insurance-autopilot://auth/callback#access_token=aaa&refresh_token=bbb";
+    const payload = parseOAuthReturnUrl(url);
+    expect(payload.code).toBeUndefined();
+    expect(payload.accessToken).toBe("aaa");
+    expect(payload.refreshToken).toBe("bbb");
+  });
+
+  it("prefers query-string access_token over a hash fragment", () => {
+    const url =
+      "insurance-autopilot://auth/callback?access_token=query#access_token=hash&refresh_token=bbb";
+    const payload = parseOAuthReturnUrl(url);
+    expect(payload.accessToken).toBe("query");
+    expect(payload.refreshToken).toBe("bbb");
+  });
+
+  it("reads OAuth error parameters", () => {
+    const url = "insurance-autopilot://auth/callback?error=access_denied&error_description=User%20cancelled";
+    const payload = parseOAuthReturnUrl(url);
+    expect(payload.error).toBe("access_denied");
+    expect(payload.errorDescription).toBe("User cancelled");
+  });
+});
+
+describe("signInWithOAuthProvider", () => {
+  const { openAuthSessionAsync } = jest.requireMock("expo-web-browser") as {
+    openAuthSessionAsync: jest.Mock;
+  };
+  const { addEventListener } = jest.requireMock("expo-linking") as {
+    addEventListener: jest.Mock;
+  };
+
+  it("returns the user when the browser directly returns a success URL", async () => {
+    mockSignInWithOAuth.mockResolvedValueOnce({
+      data: { url: "https://provider.example.com/oauth" },
+      error: null,
+    });
+    openAuthSessionAsync.mockResolvedValueOnce({
+      type: "success",
+      url: "insurance-autopilot://auth/callback?code=success-code",
+    });
+    mockSetSession.mockResolvedValueOnce({ error: null });
+
+    const { user, error } = await signInWithOAuthProvider("google");
+    expect(error).toBeUndefined();
+    expect(user).toBeDefined();
+    expect(openAuthSessionAsync).toHaveBeenCalled();
+  });
+
+  it("returns a cancellation error when the user cancels", async () => {
+    openAuthSessionAsync.mockResolvedValueOnce({ type: "cancel" });
+
+    const { user, error } = await signInWithOAuthProvider("google");
+    expect(user).toBeUndefined();
+    expect(error?.category).toBe("cancelled");
+    expect(error?.retryable).toBe(false);
+  });
+
+  it("uses a captured deep link after an ambiguous Android dismissal", async () => {
+    const deepLinkUrl = "insurance-autopilot://auth/callback?code=deep-link-code";
+    openAuthSessionAsync.mockResolvedValueOnce({ type: "dismiss" });
+    addEventListener.mockImplementationOnce((event: string, handler: (event: { url: string }) => void) => {
+      handler({ url: deepLinkUrl });
+      return { remove: jest.fn() };
+    });
+
+    const { user, error } = await signInWithOAuthProvider("google");
+    expect(error).toBeUndefined();
+    expect(user).toBeDefined();
+  });
+
+  it("returns a cancellation error when an explicit browser cancel is reported", async () => {
+    openAuthSessionAsync.mockResolvedValueOnce({ type: "cancel" });
+
+    const { user, error } = await signInWithOAuthProvider("google");
+    expect(user).toBeUndefined();
+    expect(error?.category).toBe("cancelled");
   });
 });

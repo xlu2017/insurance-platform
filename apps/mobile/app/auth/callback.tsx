@@ -2,66 +2,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
-import { Body, Loading, Screen } from "@/components/ui";
-import { exchangeOAuthCode } from "@/lib/auth";
+import { View } from "react-native";
+import { Body, Loading, PrimaryButton, Screen } from "@/components/ui";
+import { exchangeOAuthCode, parseOAuthReturnUrl, type OAuthPayload } from "@/lib/auth";
 import { safeReplace } from "@/lib/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-
-function parseCallbackParams(
-  local: ReturnType<typeof useLocalSearchParams>,
-  url: string | null,
-): {
-  code?: string;
-  access_token?: string;
-  refresh_token?: string;
-  error?: string;
-  error_description?: string;
-} {
-  const out: ReturnType<typeof parseCallbackParams> = {};
-
-  const read = (params: URLSearchParams | Record<string, unknown>) => {
-    const get = (key: string) => {
-      if (params instanceof URLSearchParams) {
-        const value = params.get(key);
-        if (typeof value === "string" && value.length > 0) return value;
-        return undefined;
-      }
-      const value = params[key];
-      if (typeof value === "string" && value.length > 0) return value;
-      if (Array.isArray(value) && value.length > 0 && typeof value[0] === "string") {
-        return value[0];
-      }
-      return undefined;
-    };
-    out.code = get("code") ?? out.code;
-    out.access_token = get("access_token") ?? out.access_token;
-    out.refresh_token = get("refresh_token") ?? out.refresh_token;
-    out.error = get("error") ?? out.error;
-    out.error_description = get("error_description") ?? out.error_description;
-  };
-
-  const stringParams: Record<string, unknown> = {};
-  for (const key of Object.keys(local)) {
-    const value = local[key];
-    if (typeof value === "string" && value.length > 0) {
-      stringParams[key] = value;
-    } else if (Array.isArray(value) && value.length > 0) {
-      stringParams[key] = value;
-    }
-  }
-  read(stringParams);
-
-  if (url) {
-    try {
-      const parsed = new URL(url);
-      read(parsed.searchParams);
-    } catch {
-      // Ignore malformed URL; local params may still be valid.
-    }
-  }
-
-  return out;
-}
 
 function dismissBrowserSafely() {
   if (typeof WebBrowser.dismissBrowser !== "function") return;
@@ -72,36 +17,74 @@ function dismissBrowserSafely() {
   }
 }
 
+function getPayload(
+  params: Record<string, string | string[]>,
+  url: string | null,
+  initialUrl: string | null,
+): OAuthPayload | null {
+  for (const candidate of [url, initialUrl]) {
+    if (!candidate) continue;
+    try {
+      const payload = parseOAuthReturnUrl(candidate);
+      if (payload.code || payload.accessToken || payload.error) return payload;
+    } catch {
+      // malformed URL; try other sources
+    }
+  }
+
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string" && value.length > 0) {
+      search.set(key, value);
+    } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === "string") {
+      search.set(key, value[0]);
+    }
+  }
+  const payload: OAuthPayload = {
+    code: search.get("code") ?? undefined,
+    accessToken: search.get("access_token") ?? undefined,
+    refreshToken: search.get("refresh_token") ?? undefined,
+    error: search.get("error") ?? undefined,
+    errorDescription: search.get("error_description") ?? undefined,
+  };
+  if (payload.code || payload.accessToken || payload.error) return payload;
+  return null;
+}
+
 export default function AuthCallback() {
   const { status, isAuthenticated } = useAuth();
   const params = useLocalSearchParams();
   const url = Linking.useURL();
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [initialUrl, setInitialUrl] = useState<string | null | undefined>(undefined);
   const handledRef = useRef(false);
 
   useEffect(() => {
+    Linking.getInitialURL().then((value) => setInitialUrl(value ?? null));
+  }, []);
+
+  useEffect(() => {
     if (isAuthenticated) {
-      // Close any Chrome Custom Tab / SFSafariViewController that is still open.
       dismissBrowserSafely();
       safeReplace(router, "/home");
-      return;
     }
   }, [isAuthenticated, router]);
 
   useEffect(() => {
-    if (status === "loading" || handledRef.current) return;
+    if (handledRef.current) return;
+    if (initialUrl === undefined) return;
+    if (status === "loading") return;
 
-    const parsed = parseCallbackParams(params, url);
+    const payload = getPayload(params, url, initialUrl);
 
-    if (parsed.error) {
+    if (payload?.error) {
       handledRef.current = true;
-      setErrorMessage(parsed.error_description ?? parsed.error);
+      setErrorMessage(payload.errorDescription ?? payload.error);
       return;
     }
 
-    if (!parsed.code && !parsed.access_token) {
-      // No OAuth payload in the deep link. Return to welcome so the user can retry.
+    if (!payload?.code && !payload?.accessToken) {
       handledRef.current = true;
       safeReplace(router, "/welcome");
       return;
@@ -110,25 +93,34 @@ export default function AuthCallback() {
     handledRef.current = true;
     let cancelled = false;
 
-    exchangeOAuthCode(parsed.code, parsed.access_token, parsed.refresh_token).then(({ error }) => {
-      if (cancelled) return;
-      if (error) {
-        setErrorMessage(error.message);
-        return;
-      }
-      dismissBrowserSafely();
-      // The auth listener will redirect to /home once the session is set.
-    });
+    exchangeOAuthCode(payload.code, payload.accessToken, payload.refreshToken).then(
+      ({ user, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setErrorMessage(error.message);
+          return;
+        }
+        if (user) {
+          dismissBrowserSafely();
+          safeReplace(router, "/home");
+        }
+      },
+    );
 
     return () => {
       cancelled = true;
     };
-  }, [status, params, url]);
+  }, [status, params, url, initialUrl, router]);
 
   if (errorMessage) {
     return (
-      <Screen style={{ justifyContent: "center" }}>
+      <Screen style={{ justifyContent: "center", padding: 24 }}>
         <Body style={{ color: "#d00", textAlign: "center" }}>{errorMessage}</Body>
+        <View style={{ height: 16 }} />
+        <PrimaryButton
+          label="Back to sign in"
+          onPress={() => safeReplace(router, "/welcome")}
+        />
       </Screen>
     );
   }

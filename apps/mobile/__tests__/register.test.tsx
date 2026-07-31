@@ -93,13 +93,39 @@ describe("Register screen", () => {
     expect(mockSignUp).not.toHaveBeenCalled();
   });
 
+  it("redirects an authenticated user away from the registration screen", async () => {
+    mockUseAuth.mockReturnValue({
+      session: { user: { id: "user-1" } },
+      status: "authenticated",
+      isAuthenticated: true,
+      isUnauthenticated: false,
+      error: null,
+      retry: jest.fn(),
+    } as any);
+
+    const { queryByText } = render(<Register />);
+    await waitFor(() => expect(queryByText(/Create your account/i)).toBeNull());
+  });
+
   it("starts Google OAuth from the registration screen", async () => {
-    mockSSO.mockResolvedValueOnce({ error: null } as any);
+    mockSSO.mockResolvedValueOnce({ user: { id: "user-1" } } as any);
 
     const { getByTestId } = render(<Register />);
     fireEvent.press(getByTestId("google-register-button"));
 
     await waitFor(() => expect(mockSSO).toHaveBeenCalledWith("google"));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
+  });
+
+  it("displays a Google SSO cancellation error", async () => {
+    mockSSO.mockResolvedValueOnce({
+      error: { category: "cancelled", message: "Sign-in was cancelled.", retryable: false },
+    } as any);
+
+    const { getByText, getByTestId } = render(<Register />);
+    fireEvent.press(getByTestId("google-register-button"));
+
+    await waitFor(() => expect(getByText("Sign-in was cancelled.")).toBeTruthy());
   });
 
   it("shows an error when signUp fails", async () => {

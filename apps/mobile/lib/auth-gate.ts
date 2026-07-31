@@ -67,11 +67,7 @@ export function useAuthGate(): AuthContextValue {
     let subUnsubscribe = () => {};
 
     const init = async () => {
-      try {
-        await loadRemoteConfig({ timeoutMs: 10_000 });
-      } catch {
-        // loadRemoteConfig swallows its own errors; missing configuration is detected below.
-      }
+      await loadRemoteConfig({ timeoutMs: 10_000, force: attempt > 0 });
 
       const url = getSupabaseUrl();
       const key = getSupabaseAnonKey();
@@ -112,7 +108,7 @@ export function useAuthGate(): AuthContextValue {
         ({ data } = await client.auth.getSession());
       } catch (sessionError) {
         if (!mountedRef.current) return;
-        setStatus("network_error");
+        setStatus("session_error");
         setError(
           buildError(
             "service_unavailable",

@@ -14,7 +14,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PrimaryButton, StackHeader } from "@/components/ui";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { AuthContext } from "@/lib/auth-context";
-import { useAuthGate } from "@/lib/auth-gate";
+import { useAuthGate, PUBLIC_PATHS } from "@/lib/auth-gate";
 import { colors } from "@autopilot/design-tokens";
 
 function AuthGate() {
@@ -41,7 +41,7 @@ function AuthGate() {
     };
   }, []);
 
-  if (auth.status === "configuration_error" || auth.status === "network_error") {
+  if (auth.status === "configuration_error" || auth.status === "session_error") {
     return (
       <SafeAreaProvider>
         <StatusBar style="dark" />
@@ -67,12 +67,7 @@ function AuthGate() {
     );
   }
 
-  const showTabBar =
-    auth.isAuthenticated &&
-    pathname !== "/welcome" &&
-    pathname !== "/sign-in" &&
-    pathname !== "/register" &&
-    pathname !== "/auth/callback";
+  const showTabBar = auth.isAuthenticated && !!pathname && !PUBLIC_PATHS.has(pathname);
 
   return (
     <AuthContext.Provider value={auth}>

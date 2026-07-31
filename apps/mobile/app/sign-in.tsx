@@ -35,6 +35,7 @@ export default function SignIn() {
   const [error, setError] = useState<AuthError | null>(null);
   const [loading, setLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [lastAttempt, setLastAttempt] = useState<"password" | "google" | null>(null);
   const ssoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isMounted = useRef(true);
@@ -101,6 +102,7 @@ export default function SignIn() {
     if (!isMounted.current) return;
     setLoading(true);
     setError(null);
+    setLastAttempt("password");
 
     try {
       const { user, error: authError } = await signInWithPassword(credentials, {
@@ -129,12 +131,13 @@ export default function SignIn() {
     }
   };
 
-  const performSSO = async () => {
+  const performSSO = async ({ isRetry = false }: { isRetry?: boolean } = {}) => {
     if (loading) return;
     if (!isMounted.current) return;
     setLoading(true);
     setError(null);
-    setRetryCount(0);
+    setRetryCount((count) => (isRetry ? count + 1 : 1));
+    setLastAttempt("google");
     clearSsoTimeout();
 
     ssoTimeoutRef.current = setTimeout(() => {
@@ -148,15 +151,21 @@ export default function SignIn() {
     }, SSO_TIMEOUT_MS);
 
     try {
-      const { error: ssoError } = await signInWithOAuthProvider("google");
+      const { user, error: ssoError } = await signInWithOAuthProvider("google");
       if (!isMounted.current) return;
+      clearSsoTimeout();
       if (ssoError) {
-        clearSsoTimeout();
         setError(ssoError);
         setLoading(false);
+        return;
       }
-      // If no error, the deep-link callback will complete the sign-in and the
-      // auth listener above will redirect once the session is set.
+      if (user) {
+        setLoading(false);
+        router.replace("/home");
+        return;
+      }
+      // No immediate user and no error: the deep-link callback will complete
+      // the exchange and the auth listener will redirect once the session is set.
     } catch (err) {
       if (!isMounted.current) return;
       clearSsoTimeout();
@@ -170,7 +179,7 @@ export default function SignIn() {
   };
 
   const displayError = getDisplayError(error, retryCount);
-  const canRetry = error?.retryable && retryCount < MAX_RETRIES;
+  const canRetry = error?.retryable && retryCount < MAX_RETRIES && lastAttempt !== null;
 
   return (
     <KeyboardAvoidingView
@@ -230,7 +239,13 @@ export default function SignIn() {
             <View style={{ height: 12 }} />
             <SecondaryButton
               label="Retry"
-              onPress={() => performSignIn({ email, password }, { isRetry: true })}
+              onPress={() => {
+                if (lastAttempt === "google") {
+                  performSSO({ isRetry: true });
+                } else {
+                  performSignIn({ email, password }, { isRetry: true });
+                }
+              }}
               disabled={loading}
               testID="retry-button"
             />
