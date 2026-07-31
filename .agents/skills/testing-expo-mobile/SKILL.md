@@ -73,8 +73,17 @@ Use a guarded `safeReplace` (retry with small backoff until the navigator is rea
 ### Expo web document upload (FIXED)
 `apps/mobile/lib/upload.ts` previously called `FileSystem.uploadAsync` unconditionally, which threw on web.  It now has a `Platform.OS === "web"` branch that fetches the picked file blob, builds a `FormData` with `file`, `householdId`, `category`, `batchId`, and `clientItemId`, and POSTs to `functions/v1/upload-document`.  Document uploads succeed on Expo web.
 
-### OAuth callback crash on web (STILL PRESENT as of PR #22 retest)
-`apps/mobile/app/auth/callback.tsx` attempts `WebBrowser.dismissBrowser().catch(() => {})`.  On Expo web, `dismissBrowser` is defined but returns `undefined`, so the `.catch()` raises `Cannot read properties of undefined (reading 'catch')`.  A proper fix is to guard the returned promise, e.g. `Promise.resolve(WebBrowser.dismissBrowser?.()).catch(() => {})`, and continue using `safeReplace` for `router.replace`.
+### OAuth callback crash on web (FIXED)
+`apps/mobile/app/auth/callback.tsx` now guards `WebBrowser.dismissBrowser()` before calling it and wraps any returned promise with `Promise.resolve(...).catch(() => {})` so it no longer crashes when `dismissBrowser` is missing or returns `undefined`.
+
+### Edge function "name resolution failed" (workaround)
+If edge-function requests return `{"message":"name resolution failed"}`, the `supabase_edge_runtime_insurance-autopilot` Docker container is likely stopped. Restart it with:
+```bash
+docker start supabase_edge_runtime_insurance-autopilot
+# or
+supabase start
+```
+Also ensure the gitignored `supabase/functions/.env` contains `DOCUMENT_MODEL_PRIMARY`, `CONFIGURED_PROVIDER`, and `PROCESSOR_CONTRACT_VERSION` when testing dangerous-mode enablement.
 
 ### Verify-email public path (FIXED)
 `/verify-email` is now included in `PUBLIC_PATHS` in `apps/mobile/lib/auth-gate.ts`, so an unauthenticated user who registers without auto-confirm can reach the verify screen.
