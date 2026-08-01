@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,9 +24,14 @@ import { colors, radii, spacing, typography } from "@autopilot/design-tokens";
 
 export function Screen({ children, style, ...props }: ViewProps) {
   return (
-    <View style={[styles.screen, style]} {...props}>
+    <ScrollView
+      style={styles.scrollContainer}
+      contentContainerStyle={[styles.screen, style]}
+      keyboardShouldPersistTaps="handled"
+      {...props}
+    >
       {children}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -638,10 +644,13 @@ export function Loading() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  scrollContainer: {
     flex: 1,
     backgroundColor: colors.surfaceSubtle,
+  },
+  screen: {
     paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   card: {
     backgroundColor: colors.surface,
