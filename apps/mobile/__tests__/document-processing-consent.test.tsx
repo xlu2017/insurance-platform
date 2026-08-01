@@ -148,6 +148,7 @@ describe("DocumentProcessingConsent", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["household"] });
 
     expect(router.replace).toHaveBeenCalledWith("/onboarding/documents");
+    expect(router.replace).toHaveBeenCalledTimes(1);
     expect(router.push).not.toHaveBeenCalled();
   });
 
@@ -172,6 +173,7 @@ describe("DocumentProcessingConsent", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["household"] });
 
     expect(router.replace).toHaveBeenCalledWith("/onboarding/documents");
+    expect(router.replace).toHaveBeenCalledTimes(1);
     expect(router.push).not.toHaveBeenCalled();
   });
 
