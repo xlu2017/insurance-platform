@@ -18,8 +18,23 @@ jest.mock("expo-linking", () => ({
 
 jest.mock("../lib/household");
 jest.mock("../lib/document-processing");
+jest.mock("../lib/supabase", () => ({
+  supabase: {
+    from: jest.fn(() => ({
+      update: jest.fn(() => ({
+        eq: jest.fn(() => Promise.resolve({ error: null })),
+      })),
+    })),
+  },
+}));
 
-jest.mock("@autopilot/schemas", () => ({
+jest.mock("@tanstack/react-query", () => ({
+  useQueryClient: jest.fn(() => ({
+    invalidateQueries: jest.fn(() => Promise.resolve()),
+  })),
+}));
+
+jest.mock("../lib/document-processing-config", () => ({
   DANGEROUS_MODE_DISCLOSURE_VERSION: "dangerous-mode-v1",
   getPrivacyNoticeUrl: jest.fn(),
   getProcessorContractVersion: jest.fn(),
@@ -36,7 +51,7 @@ import {
   DANGEROUS_MODE_DISCLOSURE_VERSION,
   getPrivacyNoticeUrl,
   getProcessorContractVersion,
-} from "@autopilot/schemas";
+} from "../lib/document-processing-config";
 
 const mockHousehold = { id: "10000000-0000-0000-0000-00000000h001" };
 
@@ -63,19 +78,38 @@ describe("DocumentProcessingConsent", () => {
     expect(mockedOpenURL).toHaveBeenCalledWith("https://autopilot.example.com/privacy");
   });
 
-  it("disables processing and shows an error when the privacy notice is not configured", () => {
+  it("disables Allow processing but keeps Upload without AI processing enabled when AI config is missing", () => {
     (getPrivacyNoticeUrl as jest.MockedFunction<typeof getPrivacyNoticeUrl>).mockReturnValue(
       undefined,
     );
     const { getByText, getAllByText } = render(<DocumentProcessingConsent />);
-    expect(getByText("Document processing is not configured. Please contact support.")).toBeTruthy();
+    expect(
+      getByText(
+        "Automatic document processing is not configured. You can still upload documents for manual review.",
+      ),
+    ).toBeTruthy();
+
     const allowButton = getByText("Allow processing");
     fireEvent.press(allowButton);
     expect(mockedUpdate).not.toHaveBeenCalled();
-    expect(getAllByText("Document processing is not configured. Please contact support.").length).toBeGreaterThanOrEqual(1);
+
+    const uploadButton = getByText("Upload without AI processing");
+    fireEvent.press(uploadButton);
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        householdId: mockHousehold.id,
+        enabled: false,
+      }),
+    );
+
+    expect(
+      getAllByText(
+        "Automatic document processing is not configured. You can still upload documents for manual review.",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
-  it("enables dangerous mode and advances to documents when Allow processing is pressed", async () => {
+  it("enables dangerous mode, persists onboarding step, and advances when Allow processing is pressed", async () => {
     const { getByText } = render(<DocumentProcessingConsent />);
     fireEvent.press(getByText("Allow processing"));
 
@@ -95,7 +129,7 @@ describe("DocumentProcessingConsent", () => {
     expect(router.push).toHaveBeenCalledWith("/onboarding/documents");
   });
 
-  it("disables dangerous mode and advances to documents when Upload without AI processing is pressed", async () => {
+  it("disables dangerous mode, persists onboarding step, and advances when Upload without AI processing is pressed", async () => {
     const { getByText } = render(<DocumentProcessingConsent />);
     fireEvent.press(getByText("Upload without AI processing"));
 

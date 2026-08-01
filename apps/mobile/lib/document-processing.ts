@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getPrivacyNoticeVersion, getProcessorContractVersion } from "@autopilot/schemas";
+import { getPrivacyNoticeVersion, getProcessorContractVersion } from "@/lib/document-processing-config";
 import { supabase } from "./supabase";
 import { invokeEdgeFunction } from "./edge-functions";
 

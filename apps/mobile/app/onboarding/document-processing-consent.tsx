@@ -2,13 +2,15 @@ import { router, Stack } from "expo-router";
 import * as Linking from "expo-linking";
 import { useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DANGEROUS_MODE_DISCLOSURE_VERSION,
   getPrivacyNoticeUrl,
   getProcessorContractVersion,
-} from "@autopilot/schemas";
+} from "@/lib/document-processing-config";
 import { useHousehold } from "@/lib/household";
 import { updateDangerousModeSetting } from "@/lib/document-processing";
+import { supabase } from "@/lib/supabase";
 import { spacing } from "@autopilot/design-tokens";
 import {
   Body,
@@ -23,6 +25,7 @@ import {
 
 export default function DocumentProcessingConsent() {
   const { data: household, isLoading } = useHousehold();
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +41,17 @@ export default function DocumentProcessingConsent() {
 
   const advance = () => {
     router.push("/onboarding/documents");
+  };
+
+  const persistOnboardingStep = async (step: string) => {
+    const { error: updateError } = await supabase
+      .from("households")
+      .update({ onboarding_step: step })
+      .eq("id", household.id);
+    if (updateError) {
+      throw new Error("Could not save onboarding progress");
+    }
+    await queryClient.invalidateQueries({ queryKey: ["household"] });
   };
 
   const openPrivacyNotice = () => {
@@ -59,6 +73,7 @@ export default function DocumentProcessingConsent() {
         rawProcessingApproved: enabled,
         disclosureVersion: DANGEROUS_MODE_DISCLOSURE_VERSION,
       });
+      await persistOnboardingStep("documents");
       advance();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not update processing preference");
@@ -67,7 +82,10 @@ export default function DocumentProcessingConsent() {
     }
   };
 
-  const allowProcessing = () => setMode(true);
+  const allowProcessing = () => {
+    if (!isConfigured) return;
+    setMode(true);
+  };
   const uploadWithoutAi = () => setMode(false);
 
   return (
@@ -111,7 +129,7 @@ export default function DocumentProcessingConsent() {
 
         {!isConfigured ? (
           <Body style={{ color: "#d00", marginTop: spacing.sm }}>
-            Document processing is not configured. Please contact support.
+            Automatic document processing is not configured. You can still upload documents for manual review.
           </Body>
         ) : null}
 
@@ -130,7 +148,7 @@ export default function DocumentProcessingConsent() {
         <SecondaryButton
           label="Upload without AI processing"
           onPress={uploadWithoutAi}
-          disabled={busy || !isConfigured}
+          disabled={busy}
         />
         <View style={{ height: 12 }} />
         <SecondaryButton
