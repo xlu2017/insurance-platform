@@ -37,13 +37,13 @@ export default function DocumentProcessingConsent() {
 
   const isConfigured = Boolean(config.privacyNoticeUrl && config.processorContractVersion);
 
-  if (isLoading || !household) return <Loading />;
-
   useEffect(() => {
-    if (household.onboarding_step === "documents") {
+    if (household?.onboarding_step === "documents") {
       router.replace("/onboarding/documents");
     }
-  }, [household.onboarding_step]);
+  }, [household?.onboarding_step]);
+
+  if (isLoading || !household) return <Loading />;
 
   const advance = () => {
     router.push("/onboarding/documents");
