@@ -65,14 +65,32 @@ async function createBatch(
 
 describe("document-processing-batch create action", () => {
   let accessToken: string;
+  const createdHouseholdIds: string[] = [];
 
   beforeAll(async () => {
     assertLocalSupabase();
     accessToken = await getCustomerAccessToken();
   });
 
+  afterEach(async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    for (const householdId of createdHouseholdIds) {
+      await admin.from("document_processing_batch_items").delete().eq("household_id", householdId);
+      await admin.from("document_processing_batches").delete().eq("household_id", householdId);
+      await admin.from("document_extraction_sessions").delete().eq("household_id", householdId);
+      await admin.from("optimization_cases").delete().eq("household_id", householdId);
+      await admin.from("document_processing_authorizations").delete().eq("household_id", householdId);
+      await admin.from("document_processing_consent").delete().eq("household_id", householdId);
+      await admin.from("household_document_processing_settings").delete().eq("household_id", householdId);
+      await admin.from("household_members").delete().eq("household_id", householdId);
+      await admin.from("households").delete().eq("id", householdId);
+    }
+    createdHouseholdIds.length = 0;
+  });
+
   async function setupHousehold(admin: AdminClient) {
     const householdId = `90000000-0000-0000-0000-${randomUUID().slice(-12)}`;
+    createdHouseholdIds.push(householdId);
     await admin.from("households").insert({
       id: householdId,
       owner_profile_id: CUSTOMER_ID,
@@ -85,18 +103,6 @@ describe("document-processing-batch create action", () => {
       .from("household_members")
       .insert({ household_id: householdId, profile_id: CUSTOMER_ID, member_role: "owner" });
     return householdId;
-  }
-
-  async function tearDownHousehold(admin: AdminClient, householdId: string) {
-    await admin.from("document_processing_batch_items").delete().eq("household_id", householdId);
-    await admin.from("document_processing_batches").delete().eq("household_id", householdId);
-    await admin.from("document_extraction_sessions").delete().eq("household_id", householdId);
-    await admin.from("optimization_cases").delete().eq("household_id", householdId);
-    await admin.from("document_processing_authorizations").delete().eq("household_id", householdId);
-    await admin.from("document_processing_consent").delete().eq("household_id", householdId);
-    await admin.from("household_document_processing_settings").delete().eq("household_id", householdId);
-    await admin.from("household_members").delete().eq("household_id", householdId);
-    await admin.from("households").delete().eq("id", householdId);
   }
 
   it("creates a safe batch when Dangerous mode is not enabled", async () => {
@@ -127,7 +133,6 @@ describe("document-processing-batch create action", () => {
     expect(batch?.mode_snapshot).toBe("safe");
     expect(batch?.consent_id).toBeNull();
 
-    await tearDownHousehold(admin, householdId);
   });
 
   it("returns CONSENT_REQUIRED when Dangerous mode is enabled without active consent", async () => {
@@ -151,7 +156,6 @@ describe("document-processing-batch create action", () => {
     expect(status).toBe(403);
     expect(body.code).toBe("CONSENT_REQUIRED");
 
-    await tearDownHousehold(admin, householdId);
   });
 
   it("creates a dangerous batch when Dangerous mode and active consent are present", async () => {
@@ -202,7 +206,6 @@ describe("document-processing-batch create action", () => {
     expect(batch?.mode_snapshot).toBe("dangerous");
     expect(batch?.consent_id).toBe(consent?.id);
 
-    await tearDownHousehold(admin, householdId);
   });
 
   it("ignores a client-supplied mode parameter and uses the protected setting", async () => {
@@ -249,7 +252,6 @@ describe("document-processing-batch create action", () => {
       .single();
     expect(batch?.mode_snapshot).toBe("dangerous");
 
-    await tearDownHousehold(admin, householdId);
   });
 
   it("creates a safe batch after Dangerous mode is explicitly disabled", async () => {
@@ -302,6 +304,5 @@ describe("document-processing-batch create action", () => {
     expect(batch?.mode_snapshot).toBe("safe");
     expect(batch?.consent_id).toBeNull();
 
-    await tearDownHousehold(admin, householdId);
   });
 });

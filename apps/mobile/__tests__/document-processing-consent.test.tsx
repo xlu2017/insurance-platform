@@ -2,9 +2,11 @@ import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import { router } from "expo-router";
 import * as Linking from "expo-linking";
+import * as ReactQuery from "@tanstack/react-query";
 import DocumentProcessingConsent from "../app/onboarding/document-processing-consent";
 import { updateDangerousModeSetting } from "../lib/document-processing";
 import { useHousehold } from "../lib/household";
+import { supabase } from "../lib/supabase";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
@@ -19,20 +21,17 @@ jest.mock("expo-linking", () => ({
 jest.mock("../lib/household");
 jest.mock("../lib/document-processing");
 jest.mock("../lib/supabase", () => ({
-  supabase: {
-    from: jest.fn(() => ({
-      update: jest.fn(() => ({
-        eq: jest.fn(() => Promise.resolve({ error: null })),
-      })),
-    })),
-  },
+  supabase: { from: jest.fn() },
 }));
 
-jest.mock("@tanstack/react-query", () => ({
-  useQueryClient: jest.fn(() => ({
-    invalidateQueries: jest.fn(() => Promise.resolve()),
-  })),
-}));
+jest.mock("@tanstack/react-query", () => {
+  const invalidateQueries = jest.fn(() => Promise.resolve());
+  const queryClient = { invalidateQueries };
+  return {
+    useQueryClient: jest.fn(() => queryClient),
+    useQuery: jest.fn(),
+  };
+});
 
 jest.mock("../lib/document-processing-config", () => ({
   DANGEROUS_MODE_DISCLOSURE_VERSION: "dangerous-mode-v1",
@@ -46,6 +45,10 @@ const mockedUpdate = updateDangerousModeSetting as jest.MockedFunction<
   typeof updateDangerousModeSetting
 >;
 const mockedOpenURL = Linking.openURL as jest.MockedFunction<typeof Linking.openURL>;
+const mockedFrom = supabase.from as jest.MockedFunction<typeof supabase.from>;
+const mockedUseQueryClient = ReactQuery.useQueryClient as jest.MockedFunction<
+  typeof ReactQuery.useQueryClient
+>;
 
 import {
   DANGEROUS_MODE_DISCLOSURE_VERSION,
@@ -56,6 +59,9 @@ import {
 const mockHousehold = { id: "10000000-0000-0000-0000-00000000h001" };
 
 describe("DocumentProcessingConsent", () => {
+  let eqMock: jest.Mock;
+  let updateMock: jest.Mock;
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockedUseHousehold.mockReturnValue({ data: mockHousehold, isLoading: false } as any);
@@ -70,6 +76,10 @@ describe("DocumentProcessingConsent", () => {
       disclosure_version: "dangerous-mode-v1",
       enabled_at: new Date().toISOString(),
     });
+
+    eqMock = jest.fn(() => Promise.resolve({ error: null }));
+    updateMock = jest.fn(() => ({ eq: eqMock }));
+    mockedFrom.mockReturnValue({ update: updateMock } as any);
   });
 
   it("opens the configured privacy notice", () => {
@@ -126,6 +136,14 @@ describe("DocumentProcessingConsent", () => {
         }),
       ),
     );
+
+    expect(mockedFrom).toHaveBeenCalledWith("households");
+    expect(updateMock).toHaveBeenCalledWith({ onboarding_step: "documents" });
+    expect(eqMock).toHaveBeenCalledWith("id", mockHousehold.id);
+
+    const { invalidateQueries } = mockedUseQueryClient();
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["household"] });
+
     expect(router.push).toHaveBeenCalledWith("/onboarding/documents");
   });
 
@@ -141,6 +159,25 @@ describe("DocumentProcessingConsent", () => {
         }),
       ),
     );
+
+    expect(mockedFrom).toHaveBeenCalledWith("households");
+    expect(updateMock).toHaveBeenCalledWith({ onboarding_step: "documents" });
+    expect(eqMock).toHaveBeenCalledWith("id", mockHousehold.id);
+
+    const { invalidateQueries } = mockedUseQueryClient();
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["household"] });
+
     expect(router.push).toHaveBeenCalledWith("/onboarding/documents");
+  });
+
+  it("does not navigate when the onboarding-step persistence fails", async () => {
+    eqMock.mockResolvedValue({ error: new Error("Database unavailable") });
+    const { getByText } = render(<DocumentProcessingConsent />);
+    fireEvent.press(getByText("Allow processing"));
+
+    await waitFor(() =>
+      expect(getByText("Could not save onboarding progress")).toBeTruthy(),
+    );
+    expect(router.push).not.toHaveBeenCalled();
   });
 });
