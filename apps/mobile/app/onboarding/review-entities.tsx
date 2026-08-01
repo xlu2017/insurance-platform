@@ -6,6 +6,7 @@ import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
 import { openDocumentUrl } from "@/lib/open-url";
 import { supabase } from "@/lib/supabase";
+import { retryDocumentBatch, type DocumentBatchSummary } from "@/lib/document-processing";
 import {
   type CandidateFieldReview,
   type ExtractionCandidate,
@@ -649,6 +650,19 @@ export default function ReviewEntities() {
       return count ?? 0;
     },
   });
+  const { data: batch, isLoading: batchLoading } = useQuery({
+    queryKey: ["document-processing-batch-by-session", household?.id, sessionId],
+    enabled: !!household && !!sessionId,
+    queryFn: async (): Promise<Pick<DocumentBatchSummary, "id" | "status" | "retryable"> & { error_code?: string | null } | null> => {
+      const { data, error } = await supabase
+        .from("document_processing_batches")
+        .select("id, status, error_code, retryable")
+        .eq("session_id", sessionId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as (Pick<DocumentBatchSummary, "id" | "status" | "retryable"> & { error_code?: string | null }) | null;
+    },
+  });
   const candidateIds = useMemo(() => candidates?.map((c) => c.id) ?? [], [candidates]);
   const { data: fieldReviews, isLoading: reviewsLoading } = useCandidateFieldReviews(candidateIds);
   const saveReview = useSaveCandidateFieldReview();
@@ -703,12 +717,35 @@ export default function ReviewEntities() {
     });
   };
 
+  const handleRetryBatch = async () => {
+    if (!batch || !household) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await retryDocumentBatch(household.id, batch.id);
+      await queryClient.invalidateQueries({
+        queryKey: ["document-processing-batch-by-session", household.id, sessionId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["extraction-candidates", household.id, sessionId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["asset-candidate-count", household.id, sessionId],
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Retry failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (
     householdLoading ||
     sessionLoading ||
     candidatesLoading ||
     reviewsLoading ||
-    totalCountLoading
+    totalCountLoading ||
+    batchLoading
   )
     return <Loading />;
   if (!household) {
@@ -724,6 +761,56 @@ export default function ReviewEntities() {
     );
   }
   if (!candidates || candidates.length === 0) {
+    if (sessionId && batch?.status === "processing_unavailable") {
+      return (
+        <Screen style={{ justifyContent: "center" }}>
+          <Stack.Screen options={{ title: "Review" }} />
+          <Card style={{ paddingVertical: spacing.xl }}>
+            <Title style={[styles.title, { textAlign: "center" }]}>Processing unavailable</Title>
+            <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
+              We couldn't analyze the uploaded documents
+              {batch.error_code ? ` (${batch.error_code})` : ""}. You can retry or upload
+              different documents.
+            </Body>
+            {error ? <Body muted>{error}</Body> : null}
+            {batch.retryable ? (
+              <PrimaryButton
+                label="Try again"
+                onPress={handleRetryBatch}
+                loading={busy}
+                style={styles.uploadButton}
+              />
+            ) : null}
+            <SecondaryButton
+              label="Upload documents"
+              onPress={() => router.replace("/onboarding/documents")}
+              disabled={busy}
+            />
+          </Card>
+        </Screen>
+      );
+    }
+
+    if (sessionId && batch?.status === "manual_review") {
+      return (
+        <Screen style={{ justifyContent: "center" }}>
+          <Stack.Screen options={{ title: "Review" }} />
+          <Card style={{ paddingVertical: spacing.xl }}>
+            <Title style={[styles.title, { textAlign: "center" }]}>Sent for review</Title>
+            <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
+              We are reviewing your documents manually. We'll notify you when the results are
+              ready.
+            </Body>
+            <PrimaryButton
+              label="Back to home"
+              onPress={() => router.replace("/(tabs)/home")}
+              style={styles.uploadButton}
+            />
+          </Card>
+        </Screen>
+      );
+    }
+
     const hasExtractedItems = (totalCandidateCount ?? 0) > 0;
     const emptyState = sessionId
       ? hasExtractedItems
