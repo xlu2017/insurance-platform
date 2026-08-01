@@ -138,12 +138,34 @@ export default function Home() {
         : "Last case was cancelled."
     : null;
 
+  function onboardingRouteFor(step: string | null | undefined): string {
+    switch (step) {
+      case "complete":
+        return "/(tabs)/documents";
+      case "documents":
+        return "/onboarding/documents";
+      case "document_processing_consent":
+        return "/onboarding/document-processing-consent";
+      case "membership":
+        return "/onboarding/membership";
+      case "preferences":
+        return "/onboarding/preferences";
+      case "consents":
+        return "/onboarding/consents";
+      case "activate":
+        return "/onboarding/activate";
+      case "household":
+      default:
+        return "/onboarding/household";
+    }
+  }
+
   const isOnboardingComplete = household?.onboarding_step === "complete";
   const hasPolicies = (policies ?? []).length > 0;
   const showSetupAction = !requiredAction && (!isOnboardingComplete || !hasPolicies);
   const setupAction = isOnboardingComplete
     ? { label: "Upload documents", route: "/(tabs)/documents" }
-    : { label: "Continue setup", route: "/onboarding/document-processing-consent" };
+    : { label: "Continue setup", route: onboardingRouteFor(household?.onboarding_step) };
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>

@@ -9,7 +9,7 @@ import { useHousehold } from "../lib/household";
 import { supabase } from "../lib/supabase";
 
 jest.mock("expo-router", () => ({
-  router: { push: jest.fn(), back: jest.fn() },
+  router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
   Stack: { Screen: () => null },
 }));
 
@@ -56,7 +56,10 @@ import {
   getProcessorContractVersion,
 } from "../lib/document-processing-config";
 
-const mockHousehold = { id: "10000000-0000-0000-0000-00000000h001" };
+const mockHousehold = {
+  id: "10000000-0000-0000-0000-00000000h001",
+  onboarding_step: "document_processing_consent",
+};
 
 describe("DocumentProcessingConsent", () => {
   let eqMock: jest.Mock;

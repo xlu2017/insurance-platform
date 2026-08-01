@@ -91,6 +91,16 @@ Also ensure the gitignored `supabase/functions/.env` contains `DOCUMENT_MODEL_PR
 ### Onboarding membership blocked locally
 `/onboarding/membership` calls a Stripe checkout session edge function.  Without Stripe secrets configured, it returns a plain text error that the UI parses as JSON, producing `Unexpected token 'S', "Stripe is "... is not valid JSON`.  This blocks the full onboarding flow for new users unless Stripe is configured.
 
+### Onboarding resume at Documents not wired in home.tsx
+`document-processing-consent.tsx` persists `onboarding_step = 'documents'` after both **Allow processing** and **Upload without AI processing**.  However, `apps/mobile/app/(tabs)/home.tsx` computes `setupAction` with:
+```tsx
+const isOnboardingComplete = household?.onboarding_step === "complete";
+const setupAction = isOnboardingComplete
+  ? { label: "Upload documents", route: "/(tabs)/documents" }
+  : { label: "Continue setup", route: "/onboarding/document-processing-consent" };
+```
+When `onboarding_step` is `documents` (not `complete`), **Continue setup** routes back to the consent screen instead of `/onboarding/documents`.  Directly reloading `/onboarding/documents` works, but a root relaunch that lands on `/home` may send the user to the wrong screen.  Also, the demo seed creates an active `licensed_review` case and a pending `customer_questions` row, which can hide the `Continue setup` button entirely behind an `Answer question` / `Review coverage rules` action during relaunch tests.
+
 ## Golden-path and PR #22 checkpoints
 1. `http://localhost:8081/welcome` shows **"Insurance handled for you"** and **"Sign in"**.
 2. `/sign-in` shows **"Welcome back"** with Email/Password fields and no bottom tab bar.

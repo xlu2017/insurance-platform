@@ -1,6 +1,6 @@
 import { router, Stack } from "expo-router";
 import * as Linking from "expo-linking";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -38,6 +38,12 @@ export default function DocumentProcessingConsent() {
   const isConfigured = Boolean(config.privacyNoticeUrl && config.processorContractVersion);
 
   if (isLoading || !household) return <Loading />;
+
+  useEffect(() => {
+    if (household.onboarding_step === "documents") {
+      router.replace("/onboarding/documents");
+    }
+  }, [household.onboarding_step]);
 
   const advance = () => {
     router.push("/onboarding/documents");
