@@ -1,6 +1,6 @@
 import { router, Stack } from "expo-router";
 import * as Linking from "expo-linking";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -37,17 +37,7 @@ export default function DocumentProcessingConsent() {
 
   const isConfigured = Boolean(config.privacyNoticeUrl && config.processorContractVersion);
 
-  useEffect(() => {
-    if (household?.onboarding_step === "documents") {
-      router.replace("/onboarding/documents");
-    }
-  }, [household?.onboarding_step]);
-
   if (isLoading || !household) return <Loading />;
-
-  const advance = () => {
-    router.push("/onboarding/documents");
-  };
 
   const persistOnboardingStep = async (step: string) => {
     const { error: updateError } = await supabase
@@ -80,7 +70,7 @@ export default function DocumentProcessingConsent() {
         disclosureVersion: DANGEROUS_MODE_DISCLOSURE_VERSION,
       });
       await persistOnboardingStep("documents");
-      advance();
+      router.replace("/onboarding/documents");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not update processing preference");
     } finally {

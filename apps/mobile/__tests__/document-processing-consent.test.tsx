@@ -147,7 +147,8 @@ describe("DocumentProcessingConsent", () => {
     const { invalidateQueries } = mockedUseQueryClient();
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["household"] });
 
-    expect(router.push).toHaveBeenCalledWith("/onboarding/documents");
+    expect(router.replace).toHaveBeenCalledWith("/onboarding/documents");
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it("disables dangerous mode, persists onboarding step, and advances when Upload without AI processing is pressed", async () => {
@@ -170,7 +171,8 @@ describe("DocumentProcessingConsent", () => {
     const { invalidateQueries } = mockedUseQueryClient();
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["household"] });
 
-    expect(router.push).toHaveBeenCalledWith("/onboarding/documents");
+    expect(router.replace).toHaveBeenCalledWith("/onboarding/documents");
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it("does not navigate when the onboarding-step persistence fails", async () => {
@@ -181,6 +183,7 @@ describe("DocumentProcessingConsent", () => {
     await waitFor(() =>
       expect(getByText("Could not save onboarding progress")).toBeTruthy(),
     );
+    expect(router.replace).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
   });
 });
