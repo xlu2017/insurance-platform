@@ -195,11 +195,14 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!household) return jsonError("Household not found", 404);
 
+  const resumableStatuses = ["uploading_files", "additional_information_required"];
+
   if (action === "latest") {
     const { data: latest } = await admin
       .from("document_processing_batches")
       .select("*")
       .eq("household_id", householdId)
+      .in("status", resumableStatuses)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -222,6 +225,7 @@ Deno.serve(async (req) => {
       .select("*")
       .eq("household_id", householdId)
       .eq("case_id", caseId)
+      .in("status", resumableStatuses)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -255,16 +259,20 @@ Deno.serve(async (req) => {
   if (action === "create") {
     const caseId = String(body.case_id ?? "");
     const hasCaseId = isUuid(caseId);
+    const suppliedClientRequestId = String(body.client_request_id ?? "").trim();
+    if (!hasCaseId && suppliedClientRequestId.length === 0) {
+      return jsonError("client_request_id is required for a new household review", 400);
+    }
     const clientRequestId = hasCaseId
-      ? String(body.client_request_id ?? `case-upload:${caseId}`)
-      : String(body.client_request_id ?? "");
+      ? suppliedClientRequestId || `case-upload:${caseId}`
+      : suppliedClientRequestId;
     if (clientRequestId.length > 240) {
       return jsonError("Invalid client_request_id", 400);
     }
 
     // All batch creation is serialized inside the database via one RPC.
     const rpcArgs: Record<string, unknown> = {
-      p_client_request_id: clientRequestId || undefined,
+      p_client_request_id: clientRequestId,
       p_actor_id: user.id,
     };
     if (hasCaseId) {
@@ -279,7 +287,11 @@ Deno.serve(async (req) => {
 
     if (createError) {
       const message = createError.message ?? "Failed to create document batch";
+      if (/IDEMPOTENCY_KEY_CONFLICT/.test(message)) {
+        return jsonError(message, 409, "IDEMPOTENCY_KEY_CONFLICT");
+      }
       if (/Not authenticated/.test(message)) return jsonError(message, 401);
+      if (/client_request_id is required/.test(message)) return jsonError(message, 400);
       if (/Household not found|Case not found|access denied/.test(message)) {
         return jsonError(message, 403);
       }
@@ -302,14 +314,45 @@ Deno.serve(async (req) => {
     return jsonResponse(publicBatch(batch as Record<string, unknown>), 201);
   }
 
-  const batchId = String(body.batch_id ?? "");
-  if (!isUuid(batchId)) return jsonError("Invalid batch_id", 400);
-  const { data: batch } = await admin
-    .from("document_processing_batches")
-    .select("*")
-    .eq("id", batchId)
-    .eq("household_id", householdId)
-    .maybeSingle();
+  let batchId = "";
+  let batch: Record<string, unknown> | null = null;
+
+  if (action === "status") {
+    const requestedBatchId = String(body.batch_id ?? "");
+    const requestedSessionId = String(body.session_id ?? "");
+    if (isUuid(requestedBatchId)) {
+      batchId = requestedBatchId;
+      const { data } = await admin
+        .from("document_processing_batches")
+        .select("*")
+        .eq("id", batchId)
+        .eq("household_id", householdId)
+        .maybeSingle();
+      batch = data ?? null;
+    } else if (isUuid(requestedSessionId)) {
+      const { data } = await admin
+        .from("document_processing_batches")
+        .select("*")
+        .eq("session_id", requestedSessionId)
+        .eq("household_id", householdId)
+        .maybeSingle();
+      batch = data ?? null;
+      if (batch) batchId = String(batch.id);
+    } else {
+      return jsonError("Invalid batch_id or session_id", 400);
+    }
+  } else {
+    batchId = String(body.batch_id ?? "");
+    if (!isUuid(batchId)) return jsonError("Invalid batch_id", 400);
+    const { data } = await admin
+      .from("document_processing_batches")
+      .select("*")
+      .eq("id", batchId)
+      .eq("household_id", householdId)
+      .maybeSingle();
+    batch = data ?? null;
+  }
+
   if (!batch) return jsonError("Document batch not found", 404);
 
   if (action === "status") {

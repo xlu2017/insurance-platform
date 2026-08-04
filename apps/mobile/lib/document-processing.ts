@@ -158,6 +158,18 @@ export async function retryDocumentBatch(
   return data;
 }
 
+export async function loadDocumentBatchBySession(
+  householdId: string,
+  sessionId: string,
+): Promise<DocumentBatchSummary | null> {
+  const { data, error } = await invokeEdgeFunction<DocumentBatchSummary | null>(
+    "document-processing-batch",
+    { action: "status", household_id: householdId, session_id: sessionId },
+  );
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
 export async function loadDocumentBatch(
   householdId: string,
   batchId: string,

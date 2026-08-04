@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,6 +18,7 @@ import {
   documentBatchStatusTooltips,
   loadDangerousModeSetting,
   loadDocumentBatch,
+  loadDocumentBatchBySession,
   loadDocumentBatchForCase,
   loadLatestDocumentBatch,
   retryDocumentBatch,
@@ -115,8 +116,10 @@ export default function Documents() {
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeConfirmDoc, setRemoveConfirmDoc] = useState<DocumentRow | null>(null);
+  const newReviewRequestId = useRef<string>(createClientRequestId("review"));
 
-  const hasIdentifiers = !!caseId || !!batchId;
+  const hasIdentifiers = Boolean(caseId || batchId || sessionId);
+  const requiresExistingBatch = Boolean(batchId || sessionId);
 
   // Load a batch specified by route parameters and verify identity.
   const { data: paramBatch, error: paramBatchError } = useQuery({
@@ -136,6 +139,19 @@ export default function Documents() {
         }
         return b;
       }
+      if (sessionId) {
+        const b = await loadDocumentBatchBySession(household!.id, sessionId);
+        if (!b) {
+          throw new Error("The selected session could not be resumed.");
+        }
+        if (caseId && b.case_id !== caseId) {
+          throw new Error("Batch does not belong to the selected case.");
+        }
+        if (!additionalUploadAllowedStatuses.has(b.status)) {
+          throw new Error("This batch is not available for additional uploads.");
+        }
+        return b;
+      }
       if (caseId) {
         const b = await loadDocumentBatchForCase(household!.id, caseId);
         if (!b) return null;
@@ -151,7 +167,7 @@ export default function Documents() {
     },
   });
 
-  // Load the most recent batch only when no route identifiers are supplied.
+  // Load the most recent resumable batch only when no route identifiers are supplied.
   const { data: latestBatch, error: latestBatchError } = useQuery({
     queryKey: ["document-processing-latest-batch", household?.id],
     enabled: !!household && !hasIdentifiers && !batch,
@@ -266,17 +282,15 @@ export default function Documents() {
       if (awaitingResumeChoice) {
         throw new Error("Choose whether to continue the existing review or start a new one.");
       }
-      if (hasIdentifiers && !visibleBatch) {
-        throw new Error("No open batch was found for the selected case or session.");
+      if (requiresExistingBatch && !visibleBatch) {
+        throw new Error("The selected batch or session could not be resumed.");
       }
       const targetBatch =
         visibleBatch ??
         (await createDocumentBatch({
           householdId: household.id,
           caseId: caseId,
-          clientRequestId: caseId
-            ? `case-upload:${caseId}`
-            : createClientRequestId("mobile-documents"),
+          clientRequestId: caseId ? `case-upload:${caseId}` : newReviewRequestId.current,
         }));
       if (!visibleBatch) setBatch(targetBatch);
       for (const item of pending.filter(

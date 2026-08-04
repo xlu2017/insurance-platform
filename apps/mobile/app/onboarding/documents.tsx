@@ -1,5 +1,5 @@
 import { router, Stack } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHousehold } from "@/lib/household";
@@ -71,6 +71,7 @@ export default function OnboardingDocuments() {
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [resumeChoice, setResumeChoice] = useState<"continue" | "new" | null>(null);
   const [busy, setBusy] = useState(false);
+  const newReviewRequestId = useRef<string>(createClientRequestId("review"));
 
   const { data: latestBatch, error: latestBatchError } = useQuery({
     queryKey: ["latest-document-processing-batch", household?.id],
@@ -164,7 +165,7 @@ export default function OnboardingDocuments() {
         visibleBatch ??
         (await createDocumentBatch({
           householdId: household.id,
-          clientRequestId: createClientRequestId("mobile-onboarding"),
+          clientRequestId: newReviewRequestId.current,
         }));
       if (!visibleBatch) setBatch(created);
 

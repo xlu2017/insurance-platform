@@ -155,6 +155,15 @@ const activeProcessingStatuses = new Set<DocumentBatchSummary["status"]>([
   "validating_extracted_details",
 ]);
 
+const questionOverrideStates = new Set<CaseState>([
+  "ready_for_market_search",
+  "requesting_quotes",
+  "awaiting_quotes",
+  "comparing_quotes",
+  "licensed_review",
+  "recommendation_ready",
+]);
+
 const terminalBatchStatuses = new Set<DocumentBatchSummary["status"]>([
   "ready_for_review",
   "additional_information_required",
@@ -189,7 +198,8 @@ function statusForState(state: CaseState): {
     awaiting_quotes: "Waiting for insurers to respond with quotes.",
     comparing_quotes: "We are comparing the quotes and coverage options.",
     licensed_review: "A licensed advisor is reviewing your case.",
-    recommendation_ready: "A recommendation has been prepared and is ready for you to review.",
+    recommendation_ready:
+      "The recommendation is being finalized internally before it is ready for you.",
     customer_decision: "Please choose whether to switch or keep your current policy.",
     switching: "We are completing the policy switch with your chosen insurer.",
     completed: "This review is complete. Your new policy is in place.",
@@ -203,28 +213,36 @@ function statusForState(state: CaseState): {
     return { label: step?.waiting ?? "Kept current insurance", tone: "neutral", tooltip };
   if (state === "cancelled") return { label: step?.waiting ?? "Cancelled", tone: "error", tooltip };
   if (state === "recommendation_ready")
-    return { label: step?.waiting ?? "Recommendation ready", tone: "success", tooltip };
+    return { label: "Preparing recommendation", tone: "warning", tooltip };
   if (state === "awaiting_quotes")
     return { label: step?.waiting ?? "Waiting for insurer responses", tone: "warning", tooltip };
   return { label: step?.waiting ?? "In progress", tone: "accent", tooltip };
+}
+
+export interface ResolveCustomerCasePresentationErrors {
+  cases?: Error | null;
+  batch?: Error | null;
+  pendingQuestion?: Error | null;
 }
 
 export interface ResolveCustomerCasePresentationInput {
   c: OptimizationCase;
   batch?: DocumentBatchSummary | null;
   pendingQuestion?: { id: string; prompt?: string } | null;
+  errors?: ResolveCustomerCasePresentationErrors;
 }
 
 export function resolveCustomerCasePresentation({
   c,
   batch,
   pendingQuestion,
+  errors,
 }: ResolveCustomerCasePresentationInput): CustomerCasePresentation {
   const state = c.state as CaseState;
   const step = workflowByState.get(state);
   const base = statusForState(state);
 
-  if (pendingQuestion) {
+  if (pendingQuestion && questionOverrideStates.has(state) && !errors?.pendingQuestion) {
     return {
       statusLabel: base.label,
       statusTone: base.tone,
@@ -254,6 +272,14 @@ export function resolveCustomerCasePresentation({
 
   if (state === "extracting_information") {
     if (!batch) {
+      if (errors?.batch) {
+        return {
+          statusLabel: "Document batch unavailable",
+          statusTone: "error",
+          tooltip: "Could not load the document batch. Please try again.",
+          actor: step?.actor ?? "our team",
+        };
+      }
       return {
         statusLabel: base.label,
         statusTone: base.tone,
@@ -526,10 +552,11 @@ function buildSession(
   isCurrent: boolean,
   batches: DocumentBatchSummary[],
   pendingQuestion?: { id: string; prompt?: string } | null,
+  errors?: ResolveCustomerCasePresentationErrors,
 ): AutopilotSession {
   const isTerminal = terminalStates.has(c.state as CaseState);
   const batch = batches.find((b) => b.case_id === c.id);
-  const presentation = resolveCustomerCasePresentation({ c, batch, pendingQuestion });
+  const presentation = resolveCustomerCasePresentation({ c, batch, pendingQuestion, errors });
   const { steps, currentStepIndex } = buildCaseTimeline({
     state: c.state,
     closedFromState: c.closed_from_state,
@@ -555,8 +582,12 @@ function buildSession(
 }
 
 export function useAutopilotSessions(householdId: string | undefined) {
-  const { data: cases, isLoading, error, refetch } = useOptimizationCases(householdId);
-  const { data: batches, isLoading: batchesLoading } = useQuery<DocumentBatchSummary[]>({
+  const { data: cases, isLoading, error: casesError, refetch } = useOptimizationCases(householdId);
+  const {
+    data: batches,
+    isLoading: batchesLoading,
+    error: batchesError,
+  } = useQuery<DocumentBatchSummary[]>({
     queryKey: ["document-processing-batches", householdId],
     enabled: !!householdId,
     queryFn: async () => {
@@ -579,7 +610,11 @@ export function useAutopilotSessions(householdId: string | undefined) {
   );
   const currentCaseId = currentCase?.id;
 
-  const { data: pendingQuestion, isLoading: pendingQuestionLoading } = useQuery<{
+  const {
+    data: pendingQuestion,
+    isLoading: pendingQuestionLoading,
+    error: pendingQuestionError,
+  } = useQuery<{
     id: string;
     prompt?: string;
   } | null>({
@@ -598,6 +633,15 @@ export function useAutopilotSessions(householdId: string | undefined) {
     },
   });
 
+  const errors = useMemo<ResolveCustomerCasePresentationErrors>(
+    () => ({
+      cases: casesError,
+      batch: batchesError,
+      pendingQuestion: pendingQuestionError,
+    }),
+    [casesError, batchesError, pendingQuestionError],
+  );
+
   const sessions = useMemo(() => {
     if (!cases) return { current: null, past: [] };
     const current = cases.find((c) => !terminalStates.has(c.state as CaseState)) ?? null;
@@ -609,11 +653,14 @@ export function useAutopilotSessions(householdId: string | undefined) {
             true,
             batches ?? [],
             current.id === currentCaseId ? (pendingQuestion ?? undefined) : undefined,
+            errors,
           )
         : null,
-      past: others.map((c) => buildSession(c, false, batches ?? [])),
+      past: others.map((c) => buildSession(c, false, batches ?? [], undefined, errors)),
     };
-  }, [cases, batches, pendingQuestion, currentCaseId]);
+  }, [cases, batches, pendingQuestion, currentCaseId, errors]);
+
+  const error = casesError ?? batchesError ?? pendingQuestionError ?? null;
 
   return {
     ...sessions,

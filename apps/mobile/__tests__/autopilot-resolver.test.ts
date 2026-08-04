@@ -174,11 +174,11 @@ describe("resolveCustomerCasePresentation", () => {
     expect(result.action).toBeUndefined();
   });
 
-  it("returns no approval CTA for recommendation_ready", () => {
+  it("returns no approval CTA for recommendation_ready and uses internal wording", () => {
     const result = resolveCustomerCasePresentation({ c: caseStub("recommendation_ready") });
     expect(result.action).toBeUndefined();
-    expect(result.statusLabel).toBe("Recommendation ready");
-    expect(result.tooltip).not.toMatch(/awaiting final licensed sign-off/);
+    expect(result.statusLabel).toBe("Preparing recommendation");
+    expect(result.tooltip).toMatch(/finalized internally/);
   });
 
   it("returns review recommendation with exact caseId", () => {

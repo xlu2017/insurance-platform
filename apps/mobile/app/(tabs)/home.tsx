@@ -26,7 +26,11 @@ export default function Home() {
   const queryClient = useQueryClient();
   const { data: household, isLoading } = useHousehold();
   const { data: historicalCase } = useHistoricalCase(household?.id);
-  const { current, isLoading: sessionsLoading } = useAutopilotSessions(household?.id);
+  const {
+    current,
+    isLoading: sessionsLoading,
+    error: sessionsError,
+  } = useAutopilotSessions(household?.id);
 
   const { data: policies } = useQuery({
     queryKey: ["current-policies", household?.id],
@@ -168,13 +172,15 @@ export default function Home() {
 
   const subtitle = action
     ? statusLabel
-    : !isOnboardingComplete
-      ? "Complete your setup so we can extract your coverage and start comparing."
-      : !hasPolicies
-        ? "Upload your current policies so we can monitor renewals and compare options."
-        : !household.autopilot_active
-          ? "Autopilot is paused and will not monitor your policies."
-          : "Autopilot is monitoring your policies and will alert you before renewal.";
+    : sessionsError
+      ? "Could not load your Autopilot session."
+      : !isOnboardingComplete
+        ? "Complete your setup so we can extract your coverage and start comparing."
+        : !hasPolicies
+          ? "Upload your current policies so we can monitor renewals and compare options."
+          : !household.autopilot_active
+            ? "Autopilot is paused and will not monitor your policies."
+            : "Autopilot is monitoring your policies and will alert you before renewal.";
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
