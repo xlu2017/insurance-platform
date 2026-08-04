@@ -1,6 +1,31 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never;
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json;
+          operationName?: string;
+          query?: string;
+          variables?: Json;
+        };
+        Returns: Json;
+      };
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
+  };
   public: {
     Tables: {
       asset_candidates: {
@@ -1051,6 +1076,7 @@ export type Database = {
       };
       document_extraction_sessions: {
         Row: {
+          case_id: string | null;
           created_at: string;
           created_by: string | null;
           household_id: string;
@@ -1059,6 +1085,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          case_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           household_id: string;
@@ -1067,6 +1094,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          case_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           household_id?: string;
@@ -1075,6 +1103,13 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "document_extraction_sessions_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "optimization_cases";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "document_extraction_sessions_created_by_fkey";
             columns: ["created_by"];
@@ -1244,6 +1279,7 @@ export type Database = {
       document_processing_batches: {
         Row: {
           authorization_id: string | null;
+          case_id: string | null;
           client_request_id: string;
           completed_at: string | null;
           configured_model_id: string | null;
@@ -1274,6 +1310,7 @@ export type Database = {
         };
         Insert: {
           authorization_id?: string | null;
+          case_id?: string | null;
           client_request_id: string;
           completed_at?: string | null;
           configured_model_id?: string | null;
@@ -1304,6 +1341,7 @@ export type Database = {
         };
         Update: {
           authorization_id?: string | null;
+          case_id?: string | null;
           client_request_id?: string;
           completed_at?: string | null;
           configured_model_id?: string | null;
@@ -1338,6 +1376,13 @@ export type Database = {
             columns: ["authorization_id"];
             isOneToOne: false;
             referencedRelation: "document_processing_authorizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_processing_batches_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "optimization_cases";
             referencedColumns: ["id"];
           },
           {
@@ -3767,13 +3812,6 @@ export type Database = {
         Args: { p_answer: string; p_question_id: string };
         Returns: Json;
       };
-      confirm_customer_case_details: {
-        Args: {
-          p_case_id: string;
-          p_expected_state?: Database["public"]["Enums"]["case_state"];
-        };
-        Returns: Json;
-      };
       app_role: {
         Args: never;
         Returns: Database["public"]["Enums"]["user_role"];
@@ -3863,8 +3901,21 @@ export type Database = {
         };
         Returns: undefined;
       };
+      confirm_customer_case_details: {
+        Args: { p_case_id: string };
+        Returns: Json;
+      };
       create_customer_support_question: {
         Args: { p_case_id: string; p_prompt: string };
+        Returns: Json;
+      };
+      create_document_processing_batch: {
+        Args: {
+          p_actor_id?: string;
+          p_case_id?: string;
+          p_client_request_id?: string;
+          p_household_id?: string;
+        };
         Returns: Json;
       };
       decline_customer_recommendation: {
@@ -4395,6 +4446,9 @@ export type CompositeTypes<
     : never;
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       assertion_authority: [

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -9,6 +9,8 @@ import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { openDocumentUrl } from "@/lib/open-url";
 import {
+  additionalUploadAllowedStatuses,
+  batchAllowsAdditionalUploads,
   createClientRequestId,
   createDocumentBatch,
   documentItemStatusLabel,
@@ -96,7 +98,7 @@ interface PendingDocument {
 }
 
 export default function Documents() {
-  const { caseId, batchId } = useLocalSearchParams<{
+  const { caseId, batchId, sessionId } = useLocalSearchParams<{
     caseId?: string;
     batchId?: string;
     sessionId?: string;
@@ -107,23 +109,67 @@ export default function Documents() {
   const [pending, setPending] = useState<PendingDocument[]>([]);
   const [batch, setBatch] = useState<DocumentBatchSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeChoice, setResumeChoice] = useState<"continue" | "new" | null>(null);
   const [busy, setBusy] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeConfirmDoc, setRemoveConfirmDoc] = useState<DocumentRow | null>(null);
 
-  // Resume the exact batch when the route supplies one, or load the open batch
-  // for an existing case. This prevents creating a second case/batch silently.
-  const { data: resumedBatch } = useQuery({
-    queryKey: ["document-processing-batch-resume", household?.id, caseId, batchId],
-    enabled: !!household && !batch,
+  const hasIdentifiers = !!caseId || !!batchId;
+
+  // Load a batch specified by route parameters and verify identity.
+  const { data: paramBatch, error: paramBatchError } = useQuery({
+    queryKey: ["document-processing-param-batch", household?.id, caseId, batchId, sessionId],
+    enabled: !!household && hasIdentifiers && !batch,
     queryFn: async () => {
-      if (batchId) return loadDocumentBatch(household!.id, batchId);
-      if (caseId) return loadDocumentBatchForCase(household!.id, caseId);
-      return loadLatestDocumentBatch(household!.id);
+      if (batchId) {
+        const b = await loadDocumentBatch(household!.id, batchId);
+        if (!additionalUploadAllowedStatuses.has(b.status)) {
+          throw new Error("This batch is not available for additional uploads.");
+        }
+        if (caseId && b.case_id !== caseId) {
+          throw new Error("Batch does not belong to the selected case.");
+        }
+        if (sessionId && b.session_id !== sessionId) {
+          throw new Error("Batch does not match the selected session.");
+        }
+        return b;
+      }
+      if (caseId) {
+        const b = await loadDocumentBatchForCase(household!.id, caseId);
+        if (!b) return null;
+        if (!additionalUploadAllowedStatuses.has(b.status)) {
+          throw new Error("This case does not have an open upload.");
+        }
+        if (sessionId && b.session_id !== sessionId) {
+          throw new Error("Session mismatch.");
+        }
+        return b;
+      }
+      return null;
     },
   });
-  const visibleBatch = batch ?? resumedBatch ?? null;
+
+  // Load the most recent batch only when no route identifiers are supplied.
+  const { data: latestBatch, error: latestBatchError } = useQuery({
+    queryKey: ["document-processing-latest-batch", household?.id],
+    enabled: !!household && !hasIdentifiers && !batch,
+    queryFn: () => loadLatestDocumentBatch(household!.id),
+  });
+
+  useEffect(() => {
+    const e = paramBatchError ?? latestBatchError;
+    if (e) setResumeError(e instanceof Error ? e.message : "Could not load batch");
+  }, [paramBatchError, latestBatchError]);
+
+  const resumableLatestBatch =
+    !hasIdentifiers && latestBatch && batchAllowsAdditionalUploads(latestBatch)
+      ? latestBatch
+      : null;
+  const visibleBatch =
+    batch ?? paramBatch ?? (resumeChoice === "continue" ? resumableLatestBatch : null) ?? null;
+  const awaitingResumeChoice = !hasIdentifiers && !!resumableLatestBatch && !resumeChoice && !batch;
 
   const { data: documents } = useQuery({
     queryKey: ["documents", household?.id],
@@ -210,22 +256,27 @@ export default function Documents() {
     );
   };
 
-  const batchIsOpen =
-    !currentBatch ||
-    currentBatch.status === "uploading_files" ||
-    currentBatch.status === "additional_information_required";
+  const batchIsOpen = batchAllowsAdditionalUploads(currentBatch);
 
   const uploadAndAnalyze = async () => {
     if (pending.length === 0) return;
     setBusy(true);
     setError(null);
     try {
+      if (awaitingResumeChoice) {
+        throw new Error("Choose whether to continue the existing review or start a new one.");
+      }
+      if (hasIdentifiers && !visibleBatch) {
+        throw new Error("No open batch was found for the selected case or session.");
+      }
       const targetBatch =
         visibleBatch ??
         (await createDocumentBatch({
           householdId: household.id,
           caseId: caseId,
-          clientRequestId: caseId ? undefined : createClientRequestId("mobile-documents"),
+          clientRequestId: caseId
+            ? `case-upload:${caseId}`
+            : createClientRequestId("mobile-documents"),
         }));
       if (!visibleBatch) setBatch(targetBatch);
       for (const item of pending.filter(
@@ -392,7 +443,19 @@ export default function Documents() {
               </View>
             ) : null}
 
-            {batchIsOpen ? (
+            {awaitingResumeChoice ? (
+              <View style={{ marginTop: spacing.md, gap: 8 }}>
+                <Body muted>An open review already exists. Continue it or start a new one?</Body>
+                <PrimaryButton
+                  label="Continue existing review"
+                  onPress={() => setResumeChoice("continue")}
+                />
+                <SecondaryButton
+                  label="Start a new review"
+                  onPress={() => setResumeChoice("new")}
+                />
+              </View>
+            ) : batchIsOpen ? (
               <PrimaryButton
                 label={
                   pending.length === 0
@@ -405,9 +468,12 @@ export default function Documents() {
                 }
                 onPress={uploadAndAnalyze}
                 loading={busy}
-                disabled={pending.length === 0}
+                disabled={pending.length === 0 || !!awaitingResumeChoice}
                 style={{ marginTop: spacing.md }}
               />
+            ) : null}
+            {resumeError ? (
+              <Body style={{ color: colors.danger, marginTop: spacing.sm }}>{resumeError}</Body>
             ) : null}
             {error ? (
               <Body muted style={{ marginTop: spacing.sm }}>

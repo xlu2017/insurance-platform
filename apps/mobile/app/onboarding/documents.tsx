@@ -1,10 +1,11 @@
 import { router, Stack } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHousehold } from "@/lib/household";
-import { spacing } from "@autopilot/design-tokens";
+import { colors, spacing } from "@autopilot/design-tokens";
 import {
+  batchAllowsAdditionalUploads,
   createClientRequestId,
   createDocumentBatch,
   documentItemStatusLabel,
@@ -67,14 +68,27 @@ export default function OnboardingDocuments() {
   const [batch, setBatch] = useState<DocumentBatchSummary | null>(null);
   const [batchSubmitted, setBatchSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeChoice, setResumeChoice] = useState<"continue" | "new" | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const { data: latestBatch } = useQuery({
+  const { data: latestBatch, error: latestBatchError } = useQuery({
     queryKey: ["latest-document-processing-batch", household?.id],
     enabled: !!household && !batch,
     queryFn: () => loadLatestDocumentBatch(household!.id),
   });
-  const visibleBatch = batch ?? latestBatch ?? null;
+
+  useEffect(() => {
+    if (latestBatchError)
+      setResumeError(
+        latestBatchError instanceof Error ? latestBatchError.message : "Could not load batch",
+      );
+  }, [latestBatchError]);
+
+  const resumableLatestBatch =
+    latestBatch && batchAllowsAdditionalUploads(latestBatch) ? latestBatch : null;
+  const awaitingResumeChoice = !!resumableLatestBatch && !resumeChoice && !batch;
+  const visibleBatch = batch ?? (resumeChoice === "continue" ? resumableLatestBatch : null) ?? null;
 
   const { data: currentBatch } = useQuery({
     queryKey: ["document-processing-batch", household?.id, visibleBatch?.id],
@@ -143,13 +157,16 @@ export default function OnboardingDocuments() {
     setBusy(true);
     setError(null);
     try {
+      if (awaitingResumeChoice) {
+        throw new Error("Choose whether to continue the existing review or start a new one.");
+      }
       const created =
-        batch ??
+        visibleBatch ??
         (await createDocumentBatch({
           householdId: household.id,
           clientRequestId: createClientRequestId("mobile-onboarding"),
         }));
-      if (!batch) setBatch(created);
+      if (!visibleBatch) setBatch(created);
 
       for (const item of pending.filter(
         (candidate) => candidate.status === "pending" || candidate.status === "failed",
@@ -282,8 +299,16 @@ export default function OnboardingDocuments() {
         </Card>
       ) : null}
 
-      {error ? <Body muted>{error}</Body> : null}
-      {!batchSubmitted ? (
+      {awaitingResumeChoice ? (
+        <View style={{ gap: 8 }}>
+          <Body muted>An open review already exists. Continue it or start a new one?</Body>
+          <PrimaryButton
+            label="Continue existing review"
+            onPress={() => setResumeChoice("continue")}
+          />
+          <SecondaryButton label="Start a new review" onPress={() => setResumeChoice("new")} />
+        </View>
+      ) : !batchSubmitted ? (
         <View style={{ gap: 8 }}>
           <PrimaryButton
             label={
@@ -295,11 +320,15 @@ export default function OnboardingDocuments() {
             }
             onPress={uploadAndAnalyze}
             loading={busy}
-            disabled={pending.length === 0}
+            disabled={pending.length === 0 || !!awaitingResumeChoice}
           />
           <SecondaryButton label="Do this later" onPress={skip} disabled={busy} />
         </View>
       ) : null}
+      {resumeError ? (
+        <Body style={{ color: colors.danger, marginTop: 8 }}>{resumeError}</Body>
+      ) : null}
+      {error ? <Body muted>{error}</Body> : null}
     </Screen>
   );
 }

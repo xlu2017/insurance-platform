@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useHistoricalCase, useHousehold } from "@/lib/household";
-import { useAutopilotSessions, type CustomerCaseAction } from "@/lib/autopilot";
+import { useAutopilotSessions } from "@/lib/autopilot";
 import { retryDocumentBatch } from "@/lib/document-processing";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { formatCad, formatEdmontonDate } from "@/lib/format";
@@ -28,8 +28,6 @@ export default function Home() {
   const { data: historicalCase } = useHistoricalCase(household?.id);
   const { current, isLoading: sessionsLoading } = useAutopilotSessions(household?.id);
 
-  const activeCaseId = current?.id;
-
   const { data: policies } = useQuery({
     queryKey: ["current-policies", household?.id],
     enabled: !!household,
@@ -41,22 +39,6 @@ export default function Home() {
         )
         .eq("household_id", household!.id)
         .eq("is_current", true);
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: pendingQuestion } = useQuery({
-    queryKey: ["pending-question", activeCaseId],
-    enabled: !!activeCaseId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customer_questions")
-        .select("id, prompt")
-        .eq("case_id", activeCaseId!)
-        .eq("status", "pending")
-        .limit(1)
-        .maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -78,6 +60,7 @@ export default function Home() {
   });
 
   const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   if (isLoading || sessionsLoading) return <Loading />;
   if (!household) {
@@ -116,19 +99,11 @@ export default function Home() {
         : "Last case was cancelled."
     : null;
 
-  const statusLabel = pendingQuestion
-    ? "Answer a question from your insurer"
-    : (current?.status ?? (isOnboardingComplete ? "No active review" : "Finish setting up"));
-
-  const action: CustomerCaseAction | undefined = pendingQuestion
-    ? {
-        type: "route",
-        label: "Answer question",
-        href: { pathname: `/question/${pendingQuestion.id}` },
-      }
-    : current?.action;
+  const action = current?.action;
+  const statusLabel = current?.status ?? "No active review";
 
   const handleAction = async () => {
+    setRetryError(null);
     if (!action) return;
     if (action.type === "route") {
       router.push(action.href);
@@ -139,13 +114,17 @@ export default function Home() {
       try {
         await retryDocumentBatch(action.householdId, action.batchId);
         await queryClient.invalidateQueries({ queryKey: ["document-processing-batches"] });
+      } catch (caught) {
+        setRetryError(caught instanceof Error ? caught.message : "Retry failed");
       } finally {
         setRetrying(false);
       }
     }
   };
 
-  const showSetupAction = !action && !pendingQuestion && (!isOnboardingComplete || !hasPolicies);
+  const autopilotReady = isOnboardingComplete && hasPolicies && household.autopilot_active;
+  const showSetupAction =
+    !action && (!isOnboardingComplete || !hasPolicies || !household.autopilot_active);
 
   function onboardingRouteFor(step: string | null | undefined): string {
     switch (step) {
@@ -169,9 +148,13 @@ export default function Home() {
     }
   }
 
-  const setupAction = isOnboardingComplete
-    ? { label: "Upload documents", route: "/(tabs)/documents" }
-    : { label: "Continue setup", route: onboardingRouteFor(household?.onboarding_step) };
+  const setupAction = !isOnboardingComplete
+    ? { label: "Continue setup", route: onboardingRouteFor(household?.onboarding_step) }
+    : !hasPolicies
+      ? { label: "Upload documents", route: "/(tabs)/documents" }
+      : !household.autopilot_active
+        ? { label: "Activate Autopilot", route: "/onboarding/activate" }
+        : { label: "Upload documents", route: "/(tabs)/documents" };
 
   const title = action
     ? "One item needs your attention"
@@ -179,7 +162,9 @@ export default function Home() {
       ? "Finish setting up"
       : !hasPolicies
         ? "Upload your policies"
-        : "Your insurance is covered";
+        : !household.autopilot_active
+          ? "Autopilot paused"
+          : "Your insurance is covered";
 
   const subtitle = action
     ? statusLabel
@@ -187,7 +172,9 @@ export default function Home() {
       ? "Complete your setup so we can extract your coverage and start comparing."
       : !hasPolicies
         ? "Upload your current policies so we can monitor renewals and compare options."
-        : "Autopilot is monitoring your policies and will alert you before renewal.";
+        : !household.autopilot_active
+          ? "Autopilot is paused and will not monitor your policies."
+          : "Autopilot is monitoring your policies and will alert you before renewal.";
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -212,19 +199,19 @@ export default function Home() {
             >
               <StatusPill
                 label={
-                  hasPolicies
-                    ? household.autopilot_active
+                  !isOnboardingComplete || !hasPolicies
+                    ? "Setup incomplete"
+                    : household.autopilot_active
                       ? "Autopilot active"
                       : "Autopilot paused"
-                    : "Setup incomplete"
                 }
-                tone={hasPolicies && household.autopilot_active ? "accent" : "neutral"}
+                tone={autopilotReady ? "accent" : "neutral"}
                 tooltip={
-                  hasPolicies
-                    ? household.autopilot_active
+                  !isOnboardingComplete || !hasPolicies
+                    ? "Autopilot cannot monitor policies until setup is complete and current policies are uploaded."
+                    : household.autopilot_active
                       ? "Autopilot is monitoring your policies and renewals."
                       : "Autopilot is paused and will not monitor your policies."
-                    : "Autopilot cannot monitor policies until current policies are uploaded."
                 }
               />
               {historicalOutcome && !action ? <Caption>{historicalOutcome}</Caption> : null}
@@ -236,6 +223,9 @@ export default function Home() {
                 loading={retrying}
                 testID="required-action"
               />
+            ) : null}
+            {retryError ? (
+              <Body style={{ color: colors.danger, marginTop: 8 }}>{retryError}</Body>
             ) : null}
             {showSetupAction ? (
               <>

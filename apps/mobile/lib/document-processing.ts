@@ -59,6 +59,17 @@ export interface DocumentBatchSummary {
   processing_started_at: string | null;
 }
 
+export const additionalUploadAllowedStatuses: Set<DocumentBatchStatus> = new Set([
+  "uploading_files",
+  "additional_information_required",
+]);
+
+export function batchAllowsAdditionalUploads(
+  batch: DocumentBatchSummary | null | undefined,
+): boolean {
+  return !batch || additionalUploadAllowedStatuses.has(batch.status);
+}
+
 export function documentItemStatusLabel(
   uploadStatus: string,
   batch: DocumentBatchSummary | null | undefined,

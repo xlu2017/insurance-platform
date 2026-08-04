@@ -48,6 +48,8 @@ describe("confirm_customer_case_details RPC", () => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     for (const caseId of createdCaseIds) {
       await admin.from("audit_events").delete().eq("case_id", caseId);
+      await admin.from("document_processing_batches").delete().eq("case_id", caseId);
+      await admin.from("document_extraction_sessions").delete().eq("case_id", caseId);
       await admin.from("optimization_cases").delete().eq("id", caseId);
     }
     for (const householdId of createdHouseholdIds) {
@@ -89,14 +91,11 @@ describe("confirm_customer_case_details RPC", () => {
     return caseId;
   }
 
-  async function confirmAsCustomer(caseId: string, expectedState?: string) {
+  async function confirmAsCustomer(caseId: string) {
     const client = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${accessToken}` } },
     });
-    return client.rpc("confirm_customer_case_details", {
-      p_case_id: caseId,
-      p_expected_state: expectedState,
-    });
+    return client.rpc("confirm_customer_case_details", { p_case_id: caseId });
   }
 
   it("transitions the case and writes an audit event", async () => {
@@ -115,24 +114,27 @@ describe("confirm_customer_case_details RPC", () => {
       .single();
     expect(caseRow?.state).toBe("ready_for_market_search");
 
-    const { data: audit } = await admin
+    const { data: auditRows } = await admin
       .from("audit_events")
       .select("action")
       .eq("case_id", caseId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-    expect(audit?.action).toBe("customer_confirmed_extracted_information");
+      .eq("action", "customer_confirmed_extracted_information");
+    expect(auditRows?.length).toBe(1);
+    expect(auditRows?.[0]?.action).toBe("customer_confirmed_extracted_information");
   });
 
-  it("is idempotent for an already confirmed case", async () => {
+  it("is idempotent and leaves exactly one audit event after two calls", async () => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const householdId = await createHousehold(admin);
-    const caseId = await createCase(householdId, "ready_for_market_search");
+    const caseId = await createCase(householdId);
 
-    const { data, error } = await confirmAsCustomer(caseId);
-    expect(error).toBeNull();
-    expect(data?.already_confirmed).toBe(true);
+    const first = await confirmAsCustomer(caseId);
+    expect(first.error).toBeNull();
+    expect(first.data?.success).toBe(true);
+
+    const second = await confirmAsCustomer(caseId);
+    expect(second.error).toBeNull();
+    expect(second.data?.already_confirmed).toBe(true);
 
     const { data: events } = await admin
       .from("audit_events")
@@ -149,16 +151,87 @@ describe("confirm_customer_case_details RPC", () => {
 
     const { error } = await confirmAsCustomer(caseId);
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/household/);
+    expect(error?.message).toMatch(/household|access|denied/i);
   });
 
-  it("rejects a case that is not in the expected state", async () => {
+  it("rejects a case that is not awaiting_customer_confirmation", async () => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const householdId = await createHousehold(admin);
     const caseId = await createCase(householdId, "draft");
 
     const { error } = await confirmAsCustomer(caseId);
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/not ready/);
+    expect(error?.message).toMatch(/not ready|awaiting_customer_confirmation/i);
+
+    const { data: caseRow } = await admin
+      .from("optimization_cases")
+      .select("state")
+      .eq("id", caseId)
+      .single();
+    expect(caseRow?.state).toBe("draft");
+  });
+
+  it("cannot force non-confirmation states into ready_for_market_search", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const householdId = await createHousehold(admin);
+
+    for (const state of [
+      "draft",
+      "licensed_review",
+      "completed",
+      "retained_incumbent",
+      "cancelled",
+    ] as const) {
+      const caseId = await createCase(householdId, state);
+
+      const { error } = await confirmAsCustomer(caseId);
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(/not ready|already_confirmed/i);
+
+      const { data: caseRow } = await admin
+        .from("optimization_cases")
+        .select("state")
+        .eq("id", caseId)
+        .single();
+      expect(caseRow?.state).toBe(state);
+
+      const { data: audit } = await admin
+        .from("audit_events")
+        .select("id")
+        .eq("case_id", caseId)
+        .eq("action", "customer_confirmed_extracted_information")
+        .single();
+      expect(audit).toBeNull();
+    }
+  });
+
+  it("returns already_confirmed after subsequent workflow advancement only when the confirmation event exists", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const householdId = await createHousehold(admin);
+
+    // Without confirmation event, an advanced case is rejected.
+    const advancedWithoutAudit = await createCase(householdId, "requesting_quotes");
+    const rejectResult = await confirmAsCustomer(advancedWithoutAudit);
+    expect(rejectResult.error).not.toBeNull();
+    expect(rejectResult.error?.message).toMatch(/not ready/i);
+
+    // Confirm a fresh case, then manually simulate workflow advancement.
+    const caseId = await createCase(householdId);
+    const { data: confirmData, error: confirmError } = await confirmAsCustomer(caseId);
+    expect(confirmError).toBeNull();
+    expect(confirmData?.success).toBe(true);
+
+    await admin.from("optimization_cases").update({ state: "requesting_quotes" }).eq("id", caseId);
+
+    const retry = await confirmAsCustomer(caseId);
+    expect(retry.error).toBeNull();
+    expect(retry.data?.already_confirmed).toBe(true);
+
+    const { data: events } = await admin
+      .from("audit_events")
+      .select("id")
+      .eq("case_id", caseId)
+      .eq("action", "customer_confirmed_extracted_information");
+    expect(events?.length).toBe(1);
   });
 });

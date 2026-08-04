@@ -32,10 +32,12 @@ function StepMarker({ state }: { state: SessionStep["state"] }) {
         ? "#F59E0B"
         : state === "failed"
           ? "#B91C1C"
-          : colors.border;
+          : state === "neutral"
+            ? colors.inkMuted
+            : colors.border;
   const backgroundColor =
     state === "upcoming" ? colors.surface : state === "current" ? "#FEF3C7" : color;
-  const borderWidth = state === "upcoming" || state === "current" ? 1 : 0;
+  const borderWidth = state === "upcoming" || state === "current" || state === "neutral" ? 1 : 0;
   return (
     <View
       style={{
@@ -123,6 +125,7 @@ function SessionStepList({
               >
                 {step.label}
               </Body>
+              {step.subtitle ? <Caption style={{ color }}>{step.subtitle}</Caption> : null}
               {isCurrent && processing ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
                   <ActivityIndicator color={color} size="small" />
@@ -149,8 +152,10 @@ function SessionCard({
   onRetryComplete?: () => void;
 }) {
   const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const handleAction = async (action: CustomerCaseAction) => {
+    setRetryError(null);
     if (action.type === "route") {
       router.push(action.href);
       return;
@@ -160,8 +165,8 @@ function SessionCard({
       try {
         await retryDocumentBatch(action.householdId, action.batchId);
         onRetryComplete?.();
-      } catch {
-        // Retry failures surface on the next batch poll; no extra UI here.
+      } catch (caught) {
+        setRetryError(caught instanceof Error ? caught.message : "Retry failed");
       } finally {
         setRetrying(false);
       }
@@ -202,6 +207,7 @@ function SessionCard({
           testID="session-action"
         />
       ) : null}
+      {retryError ? <Body style={{ color: colors.danger, marginTop: 8 }}>{retryError}</Body> : null}
     </Card>
   );
 }

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Href } from "expo-router";
 import type { CaseState } from "@autopilot/schemas";
 import { invokeEdgeFunction } from "./edge-functions";
+import { supabase } from "./supabase";
 import { useOptimizationCases, type OptimizationCase } from "./household";
 import { formatEdmontonDate, formatEdmontonDateTimeLong } from "./format";
 import {
@@ -11,12 +12,13 @@ import {
   type DocumentBatchSummary,
 } from "./document-processing";
 
-export type SessionStepState = "completed" | "current" | "upcoming" | "failed";
+export type SessionStepState = "completed" | "current" | "upcoming" | "failed" | "neutral";
 
 export interface SessionStep {
-  key: CaseState | "terminal";
+  key: string;
   label: string;
   state: SessionStepState;
+  subtitle?: string;
 }
 
 export type Actor = "you" | "our team" | "insurer" | "broker" | "operations";
@@ -187,8 +189,7 @@ function statusForState(state: CaseState): {
     awaiting_quotes: "Waiting for insurers to respond with quotes.",
     comparing_quotes: "We are comparing the quotes and coverage options.",
     licensed_review: "A licensed advisor is reviewing your case.",
-    recommendation_ready:
-      "A recommendation has been prepared and is awaiting final licensed sign-off before it is presented to you.",
+    recommendation_ready: "A recommendation has been prepared and is ready for you to review.",
     customer_decision: "Please choose whether to switch or keep your current policy.",
     switching: "We are completing the policy switch with your chosen insurer.",
     completed: "This review is complete. Your new policy is in place.",
@@ -232,7 +233,7 @@ export function resolveCustomerCasePresentation({
       action: {
         type: "route",
         label: "Answer question",
-        href: { pathname: `/question/${pendingQuestion.id}` },
+        href: { pathname: "/question/[id]", params: { id: pendingQuestion.id } },
       },
     };
   }
@@ -317,7 +318,7 @@ export function resolveCustomerCasePresentation({
             type: "retry",
             label: "Retry processing",
             batchId: batch.id,
-            householdId: c.household_id ?? "",
+            householdId: c.household_id,
           },
         };
       }
@@ -386,54 +387,154 @@ export function resolveCustomerCasePresentation({
   };
 }
 
-function buildSteps(c: OptimizationCase): { steps: SessionStep[]; currentStepIndex: number } {
-  const isTerminal = terminalStates.has(c.state as CaseState);
-  const currentIndex = caseWorkflow.findIndex((s) => s.state === c.state);
+interface DisplayPhase {
+  key: string;
+  label: string;
+  states: CaseState[];
+}
 
-  if (isTerminal) {
-    const closedFrom = c.closed_from_state as CaseState | undefined;
-    const sourceIndex = closedFrom ? caseWorkflow.findIndex((s) => s.state === closedFrom) : -1;
-    const completedIndex = sourceIndex >= 0 ? sourceIndex : currentIndex === -1 ? 0 : currentIndex;
+const displayPhases: DisplayPhase[] = [
+  {
+    key: "review_information",
+    label: "Review your information",
+    states: [
+      "draft",
+      "awaiting_documents",
+      "extracting_information",
+      "awaiting_customer_confirmation",
+    ],
+  },
+  {
+    key: "search_market",
+    label: "Search the market",
+    states: ["ready_for_market_search", "requesting_quotes", "awaiting_quotes"],
+  },
+  { key: "compare_options", label: "Compare options", states: ["comparing_quotes"] },
+  { key: "expert_review", label: "Expert review", states: ["licensed_review"] },
+  {
+    key: "review_recommendation",
+    label: "Review recommendation",
+    states: ["recommendation_ready", "customer_decision"],
+  },
+  { key: "complete_switch", label: "Complete your switch", states: ["switching", "completed"] },
+];
 
-    const steps: SessionStep[] = caseWorkflow.map((def, index) => ({
-      key: def.state,
-      label: def.label,
-      state: index <= completedIndex ? "completed" : "upcoming",
-    }));
+function phaseForState(state: CaseState): DisplayPhase | undefined {
+  return displayPhases.find((p) => p.states.includes(state));
+}
 
-    const terminalLabel =
-      c.state === "completed"
-        ? "Switch completed"
-        : c.state === "retained_incumbent"
-          ? "Kept current insurance"
-          : "Review cancelled";
-    const terminalState: SessionStepState = c.state === "cancelled" ? "failed" : "completed";
-    steps.push({ key: "terminal", label: terminalLabel, state: terminalState });
+function terminalOutcome(state: CaseState): { label: string; state: SessionStepState } {
+  switch (state) {
+    case "completed":
+      return { label: "Switch completed", state: "completed" };
+    case "retained_incumbent":
+      return { label: "Kept current insurance", state: "neutral" };
+    case "cancelled":
+      return { label: "Review cancelled", state: "failed" };
+    default:
+      return { label: "Closed", state: "neutral" };
+  }
+}
 
-    return { steps, currentStepIndex: completedIndex };
+export interface BuildCaseTimelineInput {
+  state: string;
+  closedFromState?: string | null;
+  preciseStatus?: string;
+}
+
+export function buildCaseTimeline(input: BuildCaseTimelineInput): {
+  steps: SessionStep[];
+  currentStepIndex: number;
+} {
+  const state = input.state as CaseState;
+  const closedFrom = (input.closedFromState ?? null) as CaseState | null;
+  const preciseStatus = input.preciseStatus;
+
+  if (terminalStates.has(state)) {
+    if (!closedFrom) {
+      const outcome = terminalOutcome(state);
+      return {
+        steps: [
+          {
+            key: "terminal",
+            label: outcome.label,
+            state: outcome.state,
+            subtitle: "History incomplete",
+          },
+        ],
+        currentStepIndex: 0,
+      };
+    }
+
+    const sourcePhase = phaseForState(closedFrom);
+    if (!sourcePhase) {
+      const outcome = terminalOutcome(state);
+      return {
+        steps: [
+          {
+            key: "terminal",
+            label: outcome.label,
+            state: outcome.state,
+            subtitle: "History incomplete",
+          },
+        ],
+        currentStepIndex: 0,
+      };
+    }
+
+    const sourceIndex = displayPhases.indexOf(sourcePhase);
+    const steps: SessionStep[] = [];
+
+    for (let i = 0; i < sourceIndex; i++) {
+      const phase = displayPhases[i];
+      if (!phase) continue;
+      steps.push({ key: phase.key, label: phase.label, state: "completed" });
+    }
+
+    if (state === "completed" && sourcePhase.key === "complete_switch") {
+      steps.push({ key: "terminal", label: "Switch completed", state: "completed" });
+      return { steps, currentStepIndex: steps.length - 1 };
+    }
+
+    const sourceCompleted =
+      state === "completed" ||
+      (state === "retained_incumbent" && sourcePhase.key === "review_recommendation");
+    steps.push({
+      key: sourcePhase.key,
+      label: sourcePhase.label,
+      state: sourceCompleted ? "completed" : state === "cancelled" ? "failed" : "neutral",
+    });
+
+    const outcome = terminalOutcome(state);
+    steps.push({ key: "terminal", label: outcome.label, state: outcome.state });
+    return { steps, currentStepIndex: steps.length - 1 };
   }
 
-  const effectiveIndex = currentIndex === -1 ? 0 : currentIndex;
-  const steps: SessionStep[] = caseWorkflow.map((def, index) => {
-    let stepState: SessionStepState;
-    if (index < effectiveIndex) stepState = "completed";
-    else if (index === effectiveIndex) stepState = "current";
-    else stepState = "upcoming";
-    return { key: def.state, label: def.label, state: stepState };
+  const currentPhase = phaseForState(state);
+  const currentIndex = currentPhase ? displayPhases.indexOf(currentPhase) : 0;
+  const steps: SessionStep[] = displayPhases.map((phase, i) => {
+    if (i < currentIndex) return { key: phase.key, label: phase.label, state: "completed" };
+    if (i === currentIndex)
+      return { key: phase.key, label: phase.label, state: "current", subtitle: preciseStatus };
+    return { key: phase.key, label: phase.label, state: "upcoming" };
   });
-
-  return { steps, currentStepIndex: effectiveIndex };
+  return { steps, currentStepIndex: currentIndex };
 }
 
 function buildSession(
   c: OptimizationCase,
   isCurrent: boolean,
   batches: DocumentBatchSummary[],
+  pendingQuestion?: { id: string; prompt?: string } | null,
 ): AutopilotSession {
   const isTerminal = terminalStates.has(c.state as CaseState);
   const batch = batches.find((b) => b.case_id === c.id);
-  const presentation = resolveCustomerCasePresentation({ c, batch });
-  const { steps, currentStepIndex } = buildSteps(c);
+  const presentation = resolveCustomerCasePresentation({ c, batch, pendingQuestion });
+  const { steps, currentStepIndex } = buildCaseTimeline({
+    state: c.state,
+    closedFromState: c.closed_from_state,
+    preciseStatus: presentation.statusLabel,
+  });
 
   return {
     id: c.id,
@@ -472,18 +573,52 @@ export function useAutopilotSessions(householdId: string | undefined) {
     },
   });
 
+  const currentCase = useMemo(
+    () => cases?.find((c) => !terminalStates.has(c.state as CaseState)) ?? null,
+    [cases],
+  );
+  const currentCaseId = currentCase?.id;
+
+  const { data: pendingQuestion, isLoading: pendingQuestionLoading } = useQuery<{
+    id: string;
+    prompt?: string;
+  } | null>({
+    queryKey: ["pending-question", currentCaseId],
+    enabled: !!currentCaseId,
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("customer_questions")
+        .select("id, prompt")
+        .eq("case_id", currentCaseId!)
+        .eq("status", "pending")
+        .limit(1)
+        .maybeSingle();
+      if (queryError) throw queryError;
+      return data;
+    },
+  });
+
   const sessions = useMemo(() => {
     if (!cases) return { current: null, past: [] };
-    const active = cases.filter((c) => !terminalStates.has(c.state as CaseState));
-    const current = active[0] ?? null;
-    const others = active
-      .slice(1)
-      .concat(cases.filter((c) => terminalStates.has(c.state as CaseState)));
+    const current = cases.find((c) => !terminalStates.has(c.state as CaseState)) ?? null;
+    const others = cases.filter((c) => c.id !== current?.id);
     return {
-      current: current ? buildSession(current, true, batches ?? []) : null,
+      current: current
+        ? buildSession(
+            current,
+            true,
+            batches ?? [],
+            current.id === currentCaseId ? (pendingQuestion ?? undefined) : undefined,
+          )
+        : null,
       past: others.map((c) => buildSession(c, false, batches ?? [])),
     };
-  }, [cases, batches]);
+  }, [cases, batches, pendingQuestion, currentCaseId]);
 
-  return { ...sessions, isLoading: isLoading || batchesLoading, error, refetch };
+  return {
+    ...sessions,
+    isLoading: isLoading || batchesLoading || pendingQuestionLoading,
+    error,
+    refetch,
+  };
 }

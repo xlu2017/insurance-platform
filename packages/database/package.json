@@ -13,7 +13,7 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:integration": "vitest run test/mandate-save-reload.integration.test.ts"
+    "test:integration": "vitest run test/*.integration.test.ts"
   },
   "dependencies": {
     "@autopilot/schemas": "workspace:*",

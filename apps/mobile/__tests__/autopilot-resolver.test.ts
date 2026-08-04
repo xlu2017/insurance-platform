@@ -1,12 +1,17 @@
-import { resolveCustomerCasePresentation, type AutopilotSession } from "@/lib/autopilot";
+import {
+  buildCaseTimeline,
+  resolveCustomerCasePresentation,
+  type SessionStep,
+} from "@/lib/autopilot";
 import { type OptimizationCase } from "@/lib/household";
 import { type DocumentBatchSummary } from "@/lib/document-processing";
 
-function caseStub(state: string, id = "case-1"): OptimizationCase {
+function caseStub(state: string, id = "case-1", closedFromState?: string): OptimizationCase {
   return {
     id,
     household_id: "h1",
     state,
+    closed_from_state: closedFromState ?? null,
     renewal_date: null,
     notes: null,
     created_at: "2026-08-04T00:00:00Z",
@@ -33,6 +38,10 @@ function batchStub(
     processing_started_at: "2026-08-04T00:00:00Z",
     ...extras,
   };
+}
+
+function stepSummary(steps: SessionStep[]) {
+  return steps.map((s) => ({ label: s.label, state: s.state, subtitle: s.subtitle }));
 }
 
 describe("resolveCustomerCasePresentation", () => {
@@ -168,6 +177,8 @@ describe("resolveCustomerCasePresentation", () => {
   it("returns no approval CTA for recommendation_ready", () => {
     const result = resolveCustomerCasePresentation({ c: caseStub("recommendation_ready") });
     expect(result.action).toBeUndefined();
+    expect(result.statusLabel).toBe("Recommendation ready");
+    expect(result.tooltip).not.toMatch(/awaiting final licensed sign-off/);
   });
 
   it("returns review recommendation with exact caseId", () => {
@@ -180,7 +191,7 @@ describe("resolveCustomerCasePresentation", () => {
     });
   });
 
-  it("prioritizes a pending question with answer question action", () => {
+  it("prioritizes a pending question with answer question action using typed route", () => {
     const result = resolveCustomerCasePresentation({
       c: caseStub("requesting_quotes"),
       pendingQuestion: { id: "q-1" },
@@ -188,41 +199,121 @@ describe("resolveCustomerCasePresentation", () => {
     expect(result.action).toEqual({
       type: "route",
       label: "Answer question",
-      href: { pathname: "/question/q-1" },
+      href: { pathname: "/question/[id]", params: { id: "q-1" } },
     });
   });
 });
 
-describe("AutopilotSession timeline", () => {
-  it("builds terminal cancelled timeline from the closed_from_state", () => {
-    const session: AutopilotSession = {
-      id: "c1",
+describe("buildCaseTimeline", () => {
+  it("cancellation during document upload marks only prior phase failed", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({
       state: "cancelled",
-      name: "Review",
-      startedAt: "now",
-      status: "Cancelled",
-      statusTone: "error",
-      tooltip: "",
-      isCurrent: false,
-      steps: [
-        { key: "awaiting_documents", label: "Upload your documents", state: "completed" },
-        { key: "extracting_information", label: "Extract policy information", state: "completed" },
-        { key: "awaiting_customer_confirmation", label: "Confirm your details", state: "upcoming" },
-        { key: "ready_for_market_search", label: "Ready for market search", state: "upcoming" },
-        { key: "requesting_quotes", label: "Request insurer quotes", state: "upcoming" },
-        { key: "awaiting_quotes", label: "Wait for insurer responses", state: "upcoming" },
-        { key: "comparing_quotes", label: "Compare eligible options", state: "upcoming" },
-        { key: "licensed_review", label: "Licensed review", state: "upcoming" },
-        { key: "recommendation_ready", label: "Recommendation ready", state: "upcoming" },
-        { key: "customer_decision", label: "Choose to switch", state: "upcoming" },
-        { key: "switching", label: "Complete policy change", state: "upcoming" },
-        { key: "completed", label: "Switch completed", state: "upcoming" },
-        { key: "terminal", label: "Review cancelled", state: "failed" },
-      ],
-      currentStepIndex: 1,
-    };
-    expect(session.steps[session.currentStepIndex]?.key).toBe("extracting_information");
-    expect(session.steps.find((s) => s.key === "licensed_review")?.state).toBe("upcoming");
-    expect(session.steps.find((s) => s.key === "terminal")?.state).toBe("failed");
+      closedFromState: "awaiting_documents",
+    });
+    expect(stepSummary(steps)).toEqual([
+      { label: "Review your information", state: "failed" },
+      { label: "Review cancelled", state: "failed" },
+    ]);
+    expect(currentStepIndex).toBe(1);
+  });
+
+  it("cancellation during extraction marks only review info failed", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({
+      state: "cancelled",
+      closedFromState: "extracting_information",
+    });
+    expect(stepSummary(steps)).toEqual([
+      { label: "Review your information", state: "failed" },
+      { label: "Review cancelled", state: "failed" },
+    ]);
+    expect(currentStepIndex).toBe(1);
+  });
+
+  it("cancellation while awaiting quotes marks search market failed", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({
+      state: "cancelled",
+      closedFromState: "awaiting_quotes",
+    });
+    expect(stepSummary(steps)).toEqual([
+      { label: "Review your information", state: "completed" },
+      { label: "Search the market", state: "failed" },
+      { label: "Review cancelled", state: "failed" },
+    ]);
+    expect(currentStepIndex).toBe(2);
+  });
+
+  it("retention from quote comparison marks compare options incomplete", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({
+      state: "retained_incumbent",
+      closedFromState: "comparing_quotes",
+    });
+    expect(stepSummary(steps)).toEqual([
+      { label: "Review your information", state: "completed" },
+      { label: "Search the market", state: "completed" },
+      { label: "Compare options", state: "neutral" },
+      { label: "Kept current insurance", state: "neutral" },
+    ]);
+    expect(currentStepIndex).toBe(3);
+  });
+
+  it("retention from customer decision marks review recommendation completed", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({
+      state: "retained_incumbent",
+      closedFromState: "customer_decision",
+    });
+    expect(stepSummary(steps)).toEqual([
+      { label: "Review your information", state: "completed" },
+      { label: "Search the market", state: "completed" },
+      { label: "Compare options", state: "completed" },
+      { label: "Expert review", state: "completed" },
+      { label: "Review recommendation", state: "completed" },
+      { label: "Kept current insurance", state: "neutral" },
+    ]);
+    expect(currentStepIndex).toBe(5);
+  });
+
+  it("normal completion after switching produces a single Switch completed row", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({
+      state: "completed",
+      closedFromState: "switching",
+    });
+    expect(stepSummary(steps)).toEqual([
+      { label: "Review your information", state: "completed" },
+      { label: "Search the market", state: "completed" },
+      { label: "Compare options", state: "completed" },
+      { label: "Expert review", state: "completed" },
+      { label: "Review recommendation", state: "completed" },
+      { label: "Switch completed", state: "completed" },
+    ]);
+    expect(currentStepIndex).toBe(5);
+    expect(steps.filter((s) => s.label === "Switch completed")).toHaveLength(1);
+  });
+
+  it("legacy terminal case without closed_from_state reports incomplete history", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({ state: "completed" });
+    expect(stepSummary(steps)).toEqual([
+      { label: "Switch completed", state: "completed", subtitle: "History incomplete" },
+    ]);
+    expect(currentStepIndex).toBe(0);
+  });
+
+  it("active awaiting_quotes shows search market current with precise status subtitle", () => {
+    const { steps, currentStepIndex } = buildCaseTimeline({
+      state: "awaiting_quotes",
+      preciseStatus: "Waiting for insurer responses",
+    });
+    expect(steps.map((s) => s.label)).toEqual([
+      "Review your information",
+      "Search the market",
+      "Compare options",
+      "Expert review",
+      "Review recommendation",
+      "Complete your switch",
+    ]);
+    expect(steps[0]?.state).toBe("completed");
+    expect(steps[1]?.state).toBe("current");
+    expect(steps[1]?.subtitle).toBe("Waiting for insurer responses");
+    expect(steps[2]?.state).toBe("upcoming");
+    expect(currentStepIndex).toBe(1);
   });
 });

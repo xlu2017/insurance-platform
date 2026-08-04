@@ -258,178 +258,48 @@ Deno.serve(async (req) => {
     const clientRequestId = hasCaseId
       ? String(body.client_request_id ?? `case-upload:${caseId}`)
       : String(body.client_request_id ?? "");
-    if (!clientRequestId || clientRequestId.length > 240) {
+    if (clientRequestId.length > 240) {
       return jsonError("Invalid client_request_id", 400);
     }
 
-    const { data: setting } = await admin
-      .from("household_document_processing_settings")
-      .select("*")
-      .eq("household_id", householdId)
-      .maybeSingle();
-
-    // The protected household setting and an active consent are the only
-    // authority for automatic processing. The client-supplied mode is not used.
-    const dangerous = setting?.dangerous_mode_enabled === true;
-    const { data: consent } = dangerous
-      ? await admin
-          .from("document_processing_consent")
-          .select("id")
-          .eq("household_id", householdId)
-          .eq("purpose", "insurance_policy_extraction")
-          .eq("status", "active")
-          .order("consented_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : { data: null };
-
-    if (dangerous && !consent) {
-      return jsonError(
-        "Automatic document processing consent is required",
-        403,
-        "CONSENT_REQUIRED",
-      );
-    }
-
-    // Serialize per-case batch creation so concurrent uploads cannot create
-    // multiple open batches for the same case.
+    // All batch creation is serialized inside the database via one RPC.
+    const rpcArgs: Record<string, unknown> = {
+      p_client_request_id: clientRequestId || undefined,
+      p_actor_id: user.id,
+    };
     if (hasCaseId) {
-      const { error: lockError } = await admin.rpc("lock_case_batch", { p_case_id: caseId });
-      if (lockError) return jsonError("Could not acquire batch lock", 500);
-
-      const { data: existingCase } = await admin
-        .from("optimization_cases")
-        .select("id, state, household_id")
-        .eq("id", caseId)
-        .eq("household_id", householdId)
-        .maybeSingle();
-      if (!existingCase) return jsonError("Case not found", 404);
-      if (existingCase.state !== "draft" && existingCase.state !== "awaiting_documents") {
-        return jsonError("Case is not accepting document uploads", 409);
-      }
-
-      // Idempotency: return an existing batch for this case/request.
-      const { data: existingBatch } = await admin
-        .from("document_processing_batches")
-        .select("*")
-        .eq("household_id", householdId)
-        .eq("client_request_id", clientRequestId)
-        .maybeSingle();
-      if (existingBatch) return jsonResponse(publicBatch(existingBatch));
-
-      const { data: openBatch } = await admin
-        .from("document_processing_batches")
-        .select("*")
-        .eq("household_id", householdId)
-        .eq("case_id", caseId)
-        .eq("status", "uploading_files")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (openBatch) return jsonResponse(publicBatch(openBatch));
-
-      const { data: session, error: sessionError } = await admin
-        .from("document_extraction_sessions")
-        .insert({
-          household_id: householdId,
-          created_by: user.id,
-          case_id: caseId,
-          status: "open",
-        })
-        .select("id")
-        .single();
-      if (sessionError || !session) return jsonError("Failed to create extraction session", 500);
-
-      const { data: batch, error: batchError } = await admin
-        .from("document_processing_batches")
-        .insert({
-          household_id: householdId,
-          created_by: user.id,
-          client_request_id: clientRequestId,
-          session_id: session.id,
-          case_id: caseId,
-          mode_snapshot: dangerous ? "dangerous" : "safe",
-          settings_version: Number(setting?.setting_version ?? 1),
-          disclosure_version: setting?.disclosure_version ?? null,
-          configured_provider: setting?.configured_provider ?? null,
-          configured_model_id: setting?.configured_model_id ?? null,
-          consent_id: consent?.id ?? null,
-          status: "uploading_files",
-        })
-        .select("*")
-        .single();
-      if (batchError || !batch) return jsonError("Failed to create document batch", 500);
-
-      await admin.from("audit_events").insert({
-        actor_profile_id: user.id,
-        action: "document_processing_batch_created",
-        entity_type: "document_processing_batch",
-        entity_id: batch.id,
-        household_id: householdId,
-        case_id: caseId,
-        after_summary: { mode: dangerous ? "automatic" : "manual" },
-      });
-      return jsonResponse(publicBatch(batch), 201);
+      rpcArgs.p_case_id = caseId;
+    } else {
+      rpcArgs.p_household_id = householdId;
     }
 
-    // Generic upload without an existing case: create a fresh case/batch.
-    const { data: existing } = await admin
-      .from("document_processing_batches")
-      .select("*")
-      .eq("household_id", householdId)
-      .eq("client_request_id", clientRequestId)
-      .maybeSingle();
-    if (existing) return jsonResponse(publicBatch(existing));
-
-    const { data: newCase, error: caseError } = await admin
-      .from("optimization_cases")
-      .insert({ household_id: householdId, created_by: user.id, state: "awaiting_documents" })
-      .select("id")
+    const { data: createResult, error: createError } = await admin
+      .rpc("create_document_processing_batch", rpcArgs)
       .single();
-    if (caseError || !newCase) return jsonError("Failed to create optimization case", 500);
 
-    const { data: session, error: sessionError } = await admin
-      .from("document_extraction_sessions")
-      .insert({
-        household_id: householdId,
-        created_by: user.id,
-        case_id: newCase.id,
-        status: "open",
-      })
-      .select("id")
-      .single();
-    if (sessionError || !session) return jsonError("Failed to create extraction session", 500);
+    if (createError) {
+      const message = createError.message ?? "Failed to create document batch";
+      if (/Not authenticated/.test(message)) return jsonError(message, 401);
+      if (/Household not found|Case not found|access denied/.test(message)) {
+        return jsonError(message, 403);
+      }
+      if (/consent is required|Consent required/i.test(message)) {
+        return jsonError(
+          "Automatic document processing consent is required",
+          403,
+          "CONSENT_REQUIRED",
+        );
+      }
+      if (/not accepting document uploads/.test(message)) return jsonError(message, 409);
+      return jsonError(message, 400);
+    }
 
-    const { data: batch, error: batchError } = await admin
-      .from("document_processing_batches")
-      .insert({
-        household_id: householdId,
-        created_by: user.id,
-        client_request_id: clientRequestId,
-        session_id: session.id,
-        case_id: newCase.id,
-        mode_snapshot: dangerous ? "dangerous" : "safe",
-        settings_version: Number(setting?.setting_version ?? 1),
-        disclosure_version: setting?.disclosure_version ?? null,
-        configured_provider: setting?.configured_provider ?? null,
-        configured_model_id: setting?.configured_model_id ?? null,
-        consent_id: consent?.id ?? null,
-        status: "uploading_files",
-      })
-      .select("*")
-      .single();
-    if (batchError || !batch) return jsonError("Failed to create document batch", 500);
-
-    await admin.from("audit_events").insert({
-      actor_profile_id: user.id,
-      action: "document_processing_batch_created",
-      entity_type: "document_processing_batch",
-      entity_id: batch.id,
-      household_id: householdId,
-      case_id: newCase.id,
-      after_summary: { mode: dangerous ? "automatic" : "manual" },
-    });
-    return jsonResponse(publicBatch(batch), 201);
+    const createData = createResult as { batch?: unknown } | null;
+    const batch = createData?.batch;
+    if (!batch || typeof batch !== "object") {
+      return jsonError("Failed to create document batch", 500);
+    }
+    return jsonResponse(publicBatch(batch as Record<string, unknown>), 201);
   }
 
   const batchId = String(body.batch_id ?? "");
