@@ -20,7 +20,7 @@ import {
   loadDocumentBatch,
   loadDocumentBatchBySession,
   loadDocumentBatchForCase,
-  loadLatestDocumentBatch,
+  loadLatestResumableDocumentBatch,
   retryDocumentBatch,
   submitDocumentBatch,
   type DocumentBatchSummary,
@@ -169,9 +169,9 @@ export default function Documents() {
 
   // Load the most recent resumable batch only when no route identifiers are supplied.
   const { data: latestBatch, error: latestBatchError } = useQuery({
-    queryKey: ["document-processing-latest-batch", household?.id],
+    queryKey: ["document-processing-latest-resumable-batch", household?.id],
     enabled: !!household && !hasIdentifiers && !batch,
-    queryFn: () => loadLatestDocumentBatch(household!.id),
+    queryFn: () => loadLatestResumableDocumentBatch(household!.id),
   });
 
   useEffect(() => {

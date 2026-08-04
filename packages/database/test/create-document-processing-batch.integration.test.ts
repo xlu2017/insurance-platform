@@ -1,46 +1,76 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  assertLocalSupabase,
+  LOCAL_SUPABASE_ANON_KEY,
+  LOCAL_SUPABASE_SERVICE_ROLE_KEY,
+  LOCAL_SUPABASE_URL,
+} from "@autopilot/test-fixtures";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "http://127.0.0.1:54321";
-const SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
-const ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODMxMjk5Nn0.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? LOCAL_SUPABASE_URL;
+const SERVICE_ROLE_KEY = LOCAL_SUPABASE_SERVICE_ROLE_KEY;
+const ANON_KEY = LOCAL_SUPABASE_ANON_KEY;
 
 const CUSTOMER_ID = "00000000-0000-0000-0000-000000000001";
 const CUSTOMER_EMAIL = "customer@example.com";
 const CUSTOMER_PASSWORD = "DemoCustomer123!";
+
+type AdminClient = SupabaseClient<any, "public", any>;
 
 interface BatchCreateResult {
   batch: { id: string; case_id?: string | null } & Record<string, unknown>;
   session_id: string;
 }
 
+async function cleanup(
+  admin: AdminClient,
+  householdIds: string[],
+  caseIds: string[],
+  userIds: string[],
+) {
+  for (const householdId of householdIds) {
+    await admin.from("audit_events").delete().eq("household_id", householdId);
+    await admin.from("document_processing_batches").delete().eq("household_id", householdId);
+    await admin.from("document_extraction_sessions").delete().eq("household_id", householdId);
+    await admin.from("optimization_cases").delete().eq("household_id", householdId);
+    await admin.from("household_members").delete().eq("household_id", householdId);
+    await admin.from("households").delete().eq("id", householdId);
+  }
+  for (const caseId of caseIds) {
+    await admin.from("audit_events").delete().eq("case_id", caseId);
+    await admin.from("document_processing_batches").delete().eq("case_id", caseId);
+    await admin.from("document_extraction_sessions").delete().eq("case_id", caseId);
+    await admin.from("optimization_cases").delete().eq("id", caseId);
+  }
+  for (const userId of userIds) {
+    await admin.auth.admin.deleteUser(userId);
+  }
+}
+
 describe("create_document_processing_batch RPC generic idempotency", () => {
   const createdHouseholdIds: string[] = [];
   const createdCaseIds: string[] = [];
+  const createdUserIds: string[] = [];
+
+  beforeAll(() => {
+    assertLocalSupabase(SUPABASE_URL);
+  });
 
   afterEach(async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    for (const caseId of createdCaseIds) {
-      await admin.from("audit_events").delete().eq("case_id", caseId);
-      await admin.from("document_processing_batches").delete().eq("case_id", caseId);
-      await admin.from("document_extraction_sessions").delete().eq("case_id", caseId);
-      await admin.from("optimization_cases").delete().eq("id", caseId);
-    }
-    for (const householdId of createdHouseholdIds) {
-      await admin.from("household_members").delete().eq("household_id", householdId);
-      await admin.from("households").delete().eq("id", householdId);
-    }
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
+    await cleanup(admin, createdHouseholdIds, createdCaseIds, createdUserIds);
     createdCaseIds.length = 0;
     createdHouseholdIds.length = 0;
+    createdUserIds.length = 0;
   });
 
   async function createHousehold(ownerId: string = CUSTOMER_ID) {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = `b0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
     createdHouseholdIds.push(householdId);
     await admin.from("households").insert({
@@ -58,7 +88,9 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
   }
 
   async function createCase(householdId: string) {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const caseId = `c0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
     const { error } = await admin.from("optimization_cases").insert({
       id: caseId,
@@ -84,7 +116,9 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
   }
 
   it("requires a non-empty client_request_id for generic household uploads", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await createHousehold();
     const { error } = await admin
       .rpc("create_document_processing_batch", {
@@ -97,7 +131,9 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
   });
 
   it("returns the same batch for two sequential generic calls with the same key", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await createHousehold();
     const clientRequestId = `generic-review:${randomUUID()}`;
 
@@ -134,7 +170,9 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
   });
 
   it("serializes three concurrent generic calls into one case, batch, session, and audit event", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await createHousehold();
     const clientRequestId = `generic-concurrent:${randomUUID()}`;
 
@@ -192,7 +230,9 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
   });
 
   it("rejects a generic call with a key that already belongs to another case", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await createHousehold();
     const case1 = await createCase(householdId);
 
@@ -220,7 +260,9 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
 
   it("works when invoked by an authenticated customer", async () => {
     const client = await getAuthenticatedClient();
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await createHousehold();
     const clientRequestId = `generic-auth:${randomUUID()}`;
 
@@ -244,15 +286,18 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
   });
 
   it("rejects unauthorized household and case access", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const otherCustomerId = `d0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
     // Ensure the other "customer" has a profile so membership checks are meaningful.
-    await admin.auth.admin.createUser({
+    const { error: userError } = await admin.auth.admin.createUser({
       email: `test-${randomUUID()}@example.com`,
       password: "password123",
       id: otherCustomerId,
       email_confirm: true,
     });
+    if (!userError) createdUserIds.push(otherCustomerId);
 
     const householdId = await createHousehold(otherCustomerId);
     const caseId = await createCase(householdId);
@@ -282,25 +327,26 @@ describe("create_document_processing_batch RPC generic idempotency", () => {
 describe("create_document_processing_batch RPC case branch", () => {
   const createdHouseholdIds: string[] = [];
   const createdCaseIds: string[] = [];
+  const createdUserIds: string[] = [];
+
+  beforeAll(() => {
+    assertLocalSupabase(SUPABASE_URL);
+  });
 
   afterEach(async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    for (const caseId of createdCaseIds) {
-      await admin.from("audit_events").delete().eq("case_id", caseId);
-      await admin.from("document_processing_batches").delete().eq("case_id", caseId);
-      await admin.from("document_extraction_sessions").delete().eq("case_id", caseId);
-      await admin.from("optimization_cases").delete().eq("id", caseId);
-    }
-    for (const householdId of createdHouseholdIds) {
-      await admin.from("household_members").delete().eq("household_id", householdId);
-      await admin.from("households").delete().eq("id", householdId);
-    }
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
+    await cleanup(admin, createdHouseholdIds, createdCaseIds, createdUserIds);
     createdCaseIds.length = 0;
     createdHouseholdIds.length = 0;
+    createdUserIds.length = 0;
   });
 
   async function createHousehold(ownerId: string = CUSTOMER_ID) {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = `b0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
     createdHouseholdIds.push(householdId);
     await admin.from("households").insert({
@@ -318,7 +364,9 @@ describe("create_document_processing_batch RPC case branch", () => {
   }
 
   async function createCase(householdId: string) {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const caseId = `c0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
     const { error } = await admin.from("optimization_cases").insert({
       id: caseId,
@@ -332,7 +380,9 @@ describe("create_document_processing_batch RPC case branch", () => {
   }
 
   it("creates the first batch for an existing awaiting_documents case without duplicating the case", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await createHousehold();
     const caseId = await createCase(householdId);
 
@@ -370,7 +420,9 @@ describe("create_document_processing_batch RPC case branch", () => {
   });
 
   it("reuses the same batch for repeated first-batch calls on the same case", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await createHousehold();
     const caseId = await createCase(householdId);
 
@@ -400,5 +452,78 @@ describe("create_document_processing_batch RPC case branch", () => {
       .select("*", { count: "exact", head: true })
       .eq("id", caseId);
     expect(caseCount).toBe(1);
+  });
+
+  it("rejects a malformed case_id and does not create any records", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
+    const householdId = await createHousehold();
+
+    const { data, error } = await admin
+      .rpc("create_document_processing_batch", {
+        p_case_id: "not-a-uuid",
+        p_client_request_id: "malformed-key",
+        p_actor_id: CUSTOMER_ID,
+      })
+      .single();
+
+    expect(error).toBeTruthy();
+    expect(error?.message).toMatch(/invalid input syntax for type uuid|invalid input syntax/i);
+
+    const { count: caseCount } = await admin
+      .from("optimization_cases")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(caseCount).toBe(0);
+
+    const { count: batchCount } = await admin
+      .from("document_processing_batches")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(batchCount).toBe(0);
+
+    const { count: sessionCount } = await admin
+      .from("document_extraction_sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(sessionCount).toBe(0);
+
+    const { count: auditCount } = await admin
+      .from("audit_events")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(auditCount).toBe(0);
+  });
+
+  it("returns IDEMPOTENCY_KEY_CONFLICT when the existing batch's case was deleted", async () => {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
+    const householdId = await createHousehold();
+    const firstCaseId = await createCase(householdId);
+    const secondCaseId = await createCase(householdId);
+    const clientRequestId = `shared-key:${randomUUID()}`;
+
+    const first = await admin
+      .rpc("create_document_processing_batch", {
+        p_case_id: firstCaseId,
+        p_client_request_id: clientRequestId,
+        p_actor_id: CUSTOMER_ID,
+      })
+      .single();
+    expect(first.error).toBeNull();
+
+    await admin.from("optimization_cases").delete().eq("id", firstCaseId);
+
+    const second = await admin
+      .rpc("create_document_processing_batch", {
+        p_case_id: secondCaseId,
+        p_client_request_id: clientRequestId,
+        p_actor_id: CUSTOMER_ID,
+      })
+      .single();
+    expect(second.error).toBeTruthy();
+    expect(second.error?.message).toMatch(/IDEMPOTENCY_KEY_CONFLICT/i);
   });
 });

@@ -43,7 +43,9 @@ async function getCustomerClient() {
 describe("save_manual_policy_review_v1", () => {
   beforeAll(async () => {
     assertLocalSupabase();
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     await admin.from("asset_candidates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     await admin
       .from("manual_policy_reviews")
@@ -72,7 +74,9 @@ describe("save_manual_policy_review_v1", () => {
   });
 
   it("creates a property candidate from a manually reviewed policy document", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const staff = await getAdminClient();
 
     const { data: policyDoc, error: policyDocErr } = await staff
@@ -140,7 +144,9 @@ describe("save_manual_policy_review_v1", () => {
   });
 
   it("rejects a source policy document from another household", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const staff = await getAdminClient();
 
     const { data: otherHousehold } = await admin

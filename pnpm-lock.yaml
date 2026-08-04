@@ -259,6 +259,9 @@ importers:
       '@autopilot/config':
         specifier: workspace:*
         version: link:../config
+      '@autopilot/test-fixtures':
+        specifier: workspace:*
+        version: link:../test-fixtures
       eslint:
         specifier: 9.17.0
         version: 9.17.0(jiti@1.21.7)

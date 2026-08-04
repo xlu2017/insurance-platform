@@ -1,27 +1,22 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  assertLocalSupabase,
+  LOCAL_SUPABASE_ANON_KEY,
+  LOCAL_SUPABASE_SERVICE_ROLE_KEY,
+  LOCAL_SUPABASE_URL,
+} from "@autopilot/test-fixtures";
 
 type AdminClient = SupabaseClient<any, "public", any>;
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "http://127.0.0.1:54321";
-const SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
-const ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblY8_IU";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? LOCAL_SUPABASE_URL;
+const SERVICE_ROLE_KEY = LOCAL_SUPABASE_SERVICE_ROLE_KEY;
+const ANON_KEY = LOCAL_SUPABASE_ANON_KEY;
 
 const CUSTOMER_ID = "00000000-0000-0000-0000-000000000001";
 const CUSTOMER_EMAIL = "customer@example.com";
 const CUSTOMER_PASSWORD = "DemoCustomer123!";
-
-function assertLocalSupabase() {
-  const host = new URL(SUPABASE_URL).hostname;
-  if (host !== "127.0.0.1" && host !== "localhost") {
-    throw new Error("Destructive integration tests may only run against local Supabase.");
-  }
-}
 
 async function getCustomerAccessToken(): Promise<string> {
   const client = createClient(SUPABASE_URL, ANON_KEY);
@@ -68,12 +63,14 @@ describe("document-processing-batch create action", () => {
   const createdHouseholdIds: string[] = [];
 
   beforeAll(async () => {
-    assertLocalSupabase();
+    assertLocalSupabase(SUPABASE_URL);
     accessToken = await getCustomerAccessToken();
   });
 
   afterEach(async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     for (const householdId of createdHouseholdIds) {
       await admin.from("document_processing_batch_items").delete().eq("household_id", householdId);
       await admin.from("document_processing_batches").delete().eq("household_id", householdId);
@@ -112,7 +109,9 @@ describe("document-processing-batch create action", () => {
   }
 
   it("creates a safe batch when Dangerous mode is not enabled", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await setupHousehold(admin);
 
     await admin.from("household_document_processing_settings").insert({
@@ -137,7 +136,9 @@ describe("document-processing-batch create action", () => {
   });
 
   it("returns CONSENT_REQUIRED when Dangerous mode is enabled without active consent", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await setupHousehold(admin);
 
     await admin.from("household_document_processing_settings").insert({
@@ -159,7 +160,9 @@ describe("document-processing-batch create action", () => {
   });
 
   it("creates a dangerous batch when Dangerous mode and active consent are present", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await setupHousehold(admin);
 
     await admin.from("household_document_processing_settings").insert({
@@ -208,7 +211,9 @@ describe("document-processing-batch create action", () => {
   });
 
   it("ignores a client-supplied mode parameter and uses the protected setting", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await setupHousehold(admin);
 
     await admin.from("household_document_processing_settings").insert({
@@ -253,7 +258,9 @@ describe("document-processing-batch create action", () => {
   });
 
   it("creates a safe batch after Dangerous mode is explicitly disabled", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = await setupHousehold(admin);
 
     await admin.from("household_document_processing_settings").insert({

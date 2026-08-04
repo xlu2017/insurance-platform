@@ -38,11 +38,7 @@ function publicBatch(batch: Record<string, unknown>) {
     unique_document_count: Number(batch.unique_document_count ?? 0),
     deduplicated_count: Number(batch.deduplicated_count ?? 0),
     retryable: Boolean(batch.retryable),
-    is_terminal:
-      status === "ready_for_review" ||
-      status === "additional_information_required" ||
-      status === "processing_unavailable" ||
-      status === "manual_review",
+    is_terminal: status === "ready_for_review" || status === "manual_review",
     created_at: String(batch.created_at),
     processing_started_at: batch.processing_started_at ? String(batch.processing_started_at) : null,
   };
@@ -196,8 +192,32 @@ Deno.serve(async (req) => {
   if (!household) return jsonError("Household not found", 404);
 
   const resumableStatuses = ["uploading_files", "additional_information_required"];
+  const relevantStatuses = [
+    "uploading_files",
+    "checking_duplicates",
+    "queued",
+    "reading_policy_documents",
+    "comparing_policies",
+    "validating_extracted_details",
+    "ready_for_review",
+    "additional_information_required",
+    "processing_unavailable",
+    "manual_review",
+  ];
 
-  if (action === "latest") {
+  if (action === "latest" || action === "latest-relevant") {
+    const { data: latest } = await admin
+      .from("document_processing_batches")
+      .select("*")
+      .eq("household_id", householdId)
+      .in("status", relevantStatuses)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return jsonResponse(latest ? publicBatch(latest) : null);
+  }
+
+  if (action === "latest-resumable") {
     const { data: latest } = await admin
       .from("document_processing_batches")
       .select("*")
@@ -209,9 +229,19 @@ Deno.serve(async (req) => {
     return jsonResponse(latest ? publicBatch(latest) : null);
   }
 
-  if (action === "latest-for-case") {
-    const caseId = String(body.case_id ?? "");
-    if (!isUuid(caseId)) return jsonError("Invalid case_id", 400);
+  if (action === "latest-for-case" || action === "latest-resumable-for-case") {
+    const rawCaseId = body.case_id;
+    if (
+      rawCaseId !== undefined &&
+      rawCaseId !== null &&
+      rawCaseId !== "" &&
+      (typeof rawCaseId !== "string" || !isUuid(rawCaseId))
+    ) {
+      return jsonError("Invalid case_id", 400);
+    }
+    const caseId = typeof rawCaseId === "string" && isUuid(rawCaseId) ? rawCaseId : "";
+    if (!caseId) return jsonError("Invalid case_id", 400);
+
     const { data: existingCase } = await admin
       .from("optimization_cases")
       .select("id")
@@ -230,6 +260,40 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
     if (openBatch) return jsonResponse(publicBatch(openBatch));
+    return jsonResponse(null);
+  }
+
+  if (action === "latest-relevant-for-case") {
+    const rawCaseId = body.case_id;
+    if (
+      rawCaseId !== undefined &&
+      rawCaseId !== null &&
+      rawCaseId !== "" &&
+      (typeof rawCaseId !== "string" || !isUuid(rawCaseId))
+    ) {
+      return jsonError("Invalid case_id", 400);
+    }
+    const caseId = typeof rawCaseId === "string" && isUuid(rawCaseId) ? rawCaseId : "";
+    if (!caseId) return jsonError("Invalid case_id", 400);
+
+    const { data: existingCase } = await admin
+      .from("optimization_cases")
+      .select("id")
+      .eq("id", caseId)
+      .eq("household_id", householdId)
+      .maybeSingle();
+    if (!existingCase) return jsonError("Case not found", 404);
+
+    const { data: latest } = await admin
+      .from("document_processing_batches")
+      .select("*")
+      .eq("household_id", householdId)
+      .eq("case_id", caseId)
+      .in("status", relevantStatuses)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latest) return jsonResponse(publicBatch(latest));
     return jsonResponse(null);
   }
 
@@ -257,8 +321,24 @@ Deno.serve(async (req) => {
   }
 
   if (action === "create") {
-    const caseId = String(body.case_id ?? "");
-    const hasCaseId = isUuid(caseId);
+    const rawCaseId = body.case_id;
+    const hasCaseId =
+      rawCaseId !== undefined &&
+      rawCaseId !== null &&
+      rawCaseId !== "" &&
+      typeof rawCaseId === "string" &&
+      isUuid(rawCaseId);
+
+    if (
+      rawCaseId !== undefined &&
+      rawCaseId !== null &&
+      rawCaseId !== "" &&
+      (typeof rawCaseId !== "string" || !isUuid(rawCaseId))
+    ) {
+      return jsonError("Invalid case_id", 400);
+    }
+
+    const caseId = hasCaseId ? String(rawCaseId) : "";
     const suppliedClientRequestId = String(body.client_request_id ?? "").trim();
     if (!hasCaseId && suppliedClientRequestId.length === 0) {
       return jsonError("client_request_id is required for a new household review", 400);
@@ -290,8 +370,20 @@ Deno.serve(async (req) => {
       if (/IDEMPOTENCY_KEY_CONFLICT/.test(message)) {
         return jsonError(message, 409, "IDEMPOTENCY_KEY_CONFLICT");
       }
+      if (
+        /unique constraint.*document_processing_batches_household_id_client_request_id_key|23505|duplicate key value violates unique constraint/.test(
+          message,
+        )
+      ) {
+        return jsonError(
+          "The provided client_request_id is already in use",
+          409,
+          "IDEMPOTENCY_KEY_CONFLICT",
+        );
+      }
       if (/Not authenticated/.test(message)) return jsonError(message, 401);
-      if (/client_request_id is required/.test(message)) return jsonError(message, 400);
+      if (/client_request_id is required|Invalid client_request_id/.test(message))
+        return jsonError(message, 400);
       if (/Household not found|Case not found|access denied/.test(message)) {
         return jsonError(message, 403);
       }

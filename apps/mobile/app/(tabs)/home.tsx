@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useHistoricalCase, useHousehold } from "@/lib/household";
@@ -17,19 +17,20 @@ import {
   PrimaryButton,
   Row,
   Screen,
+  SecondaryButton,
   StatusPill,
   Subtitle,
   Title,
 } from "@/components/ui";
 
 export default function Home() {
-  const queryClient = useQueryClient();
   const { data: household, isLoading } = useHousehold();
   const { data: historicalCase } = useHistoricalCase(household?.id);
   const {
     current,
     isLoading: sessionsLoading,
     error: sessionsError,
+    refetch: refetchSessions,
   } = useAutopilotSessions(household?.id);
 
   const { data: policies } = useQuery({
@@ -103,7 +104,7 @@ export default function Home() {
         : "Last case was cancelled."
     : null;
 
-  const action = current?.action;
+  const action = sessionsError ? undefined : current?.action;
   const statusLabel = current?.status ?? "No active review";
 
   const handleAction = async () => {
@@ -117,7 +118,7 @@ export default function Home() {
       setRetrying(true);
       try {
         await retryDocumentBatch(action.householdId, action.batchId);
-        await queryClient.invalidateQueries({ queryKey: ["document-processing-batches"] });
+        await refetchSessions();
       } catch (caught) {
         setRetryError(caught instanceof Error ? caught.message : "Retry failed");
       } finally {
@@ -126,7 +127,8 @@ export default function Home() {
     }
   };
 
-  const autopilotReady = isOnboardingComplete && hasPolicies && household.autopilot_active;
+  const autopilotReady =
+    !sessionsError && isOnboardingComplete && hasPolicies && household.autopilot_active;
   const showSetupAction =
     !action && (!isOnboardingComplete || !hasPolicies || !household.autopilot_active);
 
@@ -160,20 +162,22 @@ export default function Home() {
         ? { label: "Activate Autopilot", route: "/onboarding/activate" }
         : { label: "Upload documents", route: "/(tabs)/documents" };
 
-  const title = action
-    ? "One item needs your attention"
-    : !isOnboardingComplete
-      ? "Finish setting up"
-      : !hasPolicies
-        ? "Upload your policies"
-        : !household.autopilot_active
-          ? "Autopilot paused"
-          : "Your insurance is covered";
+  const title = sessionsError
+    ? "Could not load Autopilot"
+    : action
+      ? "One item needs your attention"
+      : !isOnboardingComplete
+        ? "Finish setting up"
+        : !hasPolicies
+          ? "Upload your policies"
+          : !household.autopilot_active
+            ? "Autopilot paused"
+            : "Your insurance is covered";
 
-  const subtitle = action
-    ? statusLabel
-    : sessionsError
-      ? "Could not load your Autopilot session."
+  const subtitle = sessionsError
+    ? "Could not load your Autopilot session. Check your connection and try again."
+    : action
+      ? statusLabel
       : !isOnboardingComplete
         ? "Complete your setup so we can extract your coverage and start comparing."
         : !hasPolicies
@@ -205,19 +209,23 @@ export default function Home() {
             >
               <StatusPill
                 label={
-                  !isOnboardingComplete || !hasPolicies
-                    ? "Setup incomplete"
-                    : household.autopilot_active
-                      ? "Autopilot active"
-                      : "Autopilot paused"
+                  sessionsError
+                    ? "Session unavailable"
+                    : !isOnboardingComplete || !hasPolicies
+                      ? "Setup incomplete"
+                      : household.autopilot_active
+                        ? "Autopilot active"
+                        : "Autopilot paused"
                 }
-                tone={autopilotReady ? "accent" : "neutral"}
+                tone={sessionsError ? "error" : autopilotReady ? "accent" : "neutral"}
                 tooltip={
-                  !isOnboardingComplete || !hasPolicies
-                    ? "Autopilot cannot monitor policies until setup is complete and current policies are uploaded."
-                    : household.autopilot_active
-                      ? "Autopilot is monitoring your policies and renewals."
-                      : "Autopilot is paused and will not monitor your policies."
+                  sessionsError
+                    ? "Could not load your Autopilot session. Check your connection and try again."
+                    : !isOnboardingComplete || !hasPolicies
+                      ? "Autopilot cannot monitor policies until setup is complete and current policies are uploaded."
+                      : household.autopilot_active
+                        ? "Autopilot is monitoring your policies and renewals."
+                        : "Autopilot is paused and will not monitor your policies."
                 }
               />
               {historicalOutcome && !action ? <Caption>{historicalOutcome}</Caption> : null}
@@ -233,6 +241,13 @@ export default function Home() {
             {retryError ? (
               <Body style={{ color: colors.danger, marginTop: 8 }}>{retryError}</Body>
             ) : null}
+            {sessionsError ? (
+              <SecondaryButton
+                label="Try again"
+                onPress={() => refetchSessions()}
+                testID="retry-autopilot"
+              />
+            ) : null}
             {showSetupAction ? (
               <>
                 <Body muted style={{ marginBottom: 12 }}>
@@ -247,7 +262,9 @@ export default function Home() {
                 />
               </>
             ) : null}
-            {!action && !showSetupAction ? <Body muted>No action required</Body> : null}
+            {!sessionsError && !action && !showSetupAction ? (
+              <Body muted>No action required</Body>
+            ) : null}
           </Card>
 
           <Card>

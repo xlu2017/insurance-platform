@@ -166,8 +166,6 @@ const questionOverrideStates = new Set<CaseState>([
 
 const terminalBatchStatuses = new Set<DocumentBatchSummary["status"]>([
   "ready_for_review",
-  "additional_information_required",
-  "processing_unavailable",
   "manual_review",
 ]);
 
@@ -582,11 +580,17 @@ function buildSession(
 }
 
 export function useAutopilotSessions(householdId: string | undefined) {
-  const { data: cases, isLoading, error: casesError, refetch } = useOptimizationCases(householdId);
+  const {
+    data: cases,
+    isLoading,
+    error: casesError,
+    refetch: refetchCases,
+  } = useOptimizationCases(householdId);
   const {
     data: batches,
     isLoading: batchesLoading,
     error: batchesError,
+    refetch: refetchBatches,
   } = useQuery<DocumentBatchSummary[]>({
     queryKey: ["document-processing-batches", householdId],
     enabled: !!householdId,
@@ -614,6 +618,7 @@ export function useAutopilotSessions(householdId: string | undefined) {
     data: pendingQuestion,
     isLoading: pendingQuestionLoading,
     error: pendingQuestionError,
+    refetch: refetchPendingQuestion,
   } = useQuery<{
     id: string;
     prompt?: string;
@@ -661,6 +666,14 @@ export function useAutopilotSessions(householdId: string | undefined) {
   }, [cases, batches, pendingQuestion, currentCaseId, errors]);
 
   const error = casesError ?? batchesError ?? pendingQuestionError ?? null;
+
+  const refetch = async () => {
+    await Promise.all([
+      refetchCases(),
+      refetchBatches(),
+      currentCaseId ? refetchPendingQuestion() : Promise.resolve(),
+    ]);
+  };
 
   return {
     ...sessions,

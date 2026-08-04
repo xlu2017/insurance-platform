@@ -61,6 +61,20 @@ const categoryLabel: Record<DocumentCategory, string> = {
   other: "Other",
 };
 
+function statusTone(status: DocumentBatchSummary["status"]) {
+  switch (status) {
+    case "ready_for_review":
+      return "accent" as const;
+    case "additional_information_required":
+    case "manual_review":
+      return "warning" as const;
+    case "processing_unavailable":
+      return "error" as const;
+    default:
+      return "neutral" as const;
+  }
+}
+
 export default function OnboardingDocuments() {
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
@@ -89,7 +103,10 @@ export default function OnboardingDocuments() {
   const resumableLatestBatch =
     latestBatch && batchAllowsAdditionalUploads(latestBatch) ? latestBatch : null;
   const awaitingResumeChoice = !!resumableLatestBatch && !resumeChoice && !batch;
-  const visibleBatch = batch ?? (resumeChoice === "continue" ? resumableLatestBatch : null) ?? null;
+  const showLatestBatch =
+    latestBatch && (!batchAllowsAdditionalUploads(latestBatch) || resumeChoice === "continue");
+  const visibleBatch = batch ?? (showLatestBatch ? latestBatch : null) ?? null;
+  const canAddFiles = batchAllowsAdditionalUploads(visibleBatch);
 
   const { data: currentBatch } = useQuery({
     queryKey: ["document-processing-batch", household?.id, visibleBatch?.id],
@@ -161,6 +178,9 @@ export default function OnboardingDocuments() {
       if (awaitingResumeChoice) {
         throw new Error("Choose whether to continue the existing review or start a new one.");
       }
+      if (visibleBatch && !canAddFiles) {
+        throw new Error("This batch is not accepting additional files.");
+      }
       const created =
         visibleBatch ??
         (await createDocumentBatch({
@@ -229,17 +249,17 @@ export default function OnboardingDocuments() {
           <SecondaryButton
             label="Add PDF or image files"
             onPress={() => chooseDocuments()}
-            disabled={busy || !!batch}
+            disabled={busy || !!batch || !canAddFiles}
           />
           <SecondaryButton
             label="Take a photo"
             onPress={() => chooseImages(true)}
-            disabled={busy || !!batch}
+            disabled={busy || !!batch || !canAddFiles}
           />
           <SecondaryButton
             label="Add photos from library"
             onPress={() => chooseImages(false)}
-            disabled={busy || !!batch}
+            disabled={busy || !!batch || !canAddFiles}
           />
         </View>
       </Card>
@@ -277,7 +297,7 @@ export default function OnboardingDocuments() {
         <Card>
           <StatusPill
             label={documentBatchStatusLabels[currentBatch.status]}
-            tone={currentBatch.status === "ready_for_review" ? "accent" : "neutral"}
+            tone={statusTone(currentBatch.status)}
             tooltip={documentBatchStatusTooltips[currentBatch.status]}
           />
           <Caption>{`${currentBatch.document_count} ${currentBatch.document_count === 1 ? "file" : "files"} added`}</Caption>
@@ -309,7 +329,7 @@ export default function OnboardingDocuments() {
           />
           <SecondaryButton label="Start a new review" onPress={() => setResumeChoice("new")} />
         </View>
-      ) : !batchSubmitted ? (
+      ) : visibleBatch && !canAddFiles ? null : !batchSubmitted ? (
         <View style={{ gap: 8 }}>
           <PrimaryButton
             label={

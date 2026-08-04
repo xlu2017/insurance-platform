@@ -47,7 +47,9 @@ async function getCustomerClient() {
 describe("manual intake acceptance lifecycle", () => {
   beforeAll(async () => {
     assertLocalSupabase();
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     await admin.from("asset_candidates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     await admin
       .from("manual_policy_reviews")
@@ -103,7 +105,9 @@ describe("manual intake acceptance lifecycle", () => {
       return;
     }
 
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const staff = await getAdminClient();
     const customer = await getCustomerClient();
 

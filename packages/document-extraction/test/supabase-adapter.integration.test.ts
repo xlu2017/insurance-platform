@@ -40,7 +40,9 @@ describe("Supabase document extraction adapters", () => {
   });
 
   it("persists and updates authorization snapshots using snake_case columns", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const authStore = new SupabaseAuthorizationStore(admin);
     const user = await getUserClient();
 
@@ -91,7 +93,9 @@ describe("Supabase document extraction adapters", () => {
   });
 
   it("persists provider-file lifecycle records linked to an analysis request", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const authStore = new SupabaseAuthorizationStore(admin);
     const lifecycleStore = new SupabaseFileLifecycleStore(admin);
     const user = await getUserClient();

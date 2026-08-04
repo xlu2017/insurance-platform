@@ -1,25 +1,34 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   createDefaultHouseholdCoverageMandateV2,
   createDefaultSwitchingPreferencesV2,
   updateVehicleOverrideV2,
 } from "@autopilot/schemas";
+import {
+  assertLocalSupabase,
+  LOCAL_SUPABASE_SERVICE_ROLE_KEY,
+  LOCAL_SUPABASE_URL,
+} from "@autopilot/test-fixtures";
 import { loadHouseholdMandateV2, saveHouseholdMandateV2 } from "../src/mandate-repository";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "http://127.0.0.1:54321";
-const SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? LOCAL_SUPABASE_URL;
+const SERVICE_ROLE_KEY = LOCAL_SUPABASE_SERVICE_ROLE_KEY;
 
 const CUSTOMER_ID = "00000000-0000-0000-0000-000000000001";
 
 describe("mandate save/reload integration", () => {
   const createdHouseholdIds: string[] = [];
 
+  beforeAll(() => {
+    assertLocalSupabase(SUPABASE_URL);
+  });
+
   afterEach(async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     for (const householdId of createdHouseholdIds) {
       const { data: mandates } = await admin
         .from("household_coverage_mandates")
@@ -40,7 +49,9 @@ describe("mandate save/reload integration", () => {
   });
 
   async function setupHouseholdAndVehicle(): Promise<{ householdId: string; vehicleId: string }> {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const householdId = `a0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
     const vehicleId = `b0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
     createdHouseholdIds.push(householdId);
@@ -74,7 +85,9 @@ describe("mandate save/reload integration", () => {
   }
 
   it("saves and reloads a versioned mandate atomically using the actual initial versions", async () => {
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const { householdId, vehicleId } = await setupHouseholdAndVehicle();
 
     const initial = await loadHouseholdMandateV2(supabase, householdId);
@@ -118,7 +131,9 @@ describe("mandate save/reload integration", () => {
   });
 
   it("rejects a stale version with STALE_VERSION", async () => {
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const { householdId } = await setupHouseholdAndVehicle();
 
     const initial = await loadHouseholdMandateV2(supabase, householdId);

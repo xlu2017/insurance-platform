@@ -37,7 +37,9 @@ async function getUserClient() {
 describe("cleanup-provider-files worker integration", () => {
   beforeAll(async () => {
     assertLocalSupabase();
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     // Clean up any leftover rows from interrupted prior test runs so the
     // readiness check can observe a known, healthy baseline.
     await admin
@@ -74,7 +76,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("records a not-ready status when the provider credential is missing", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
 
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/cleanup-provider-files`, {
       method: "POST",
@@ -95,7 +99,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("reports cleanup readiness as ready when the cron schedule and vault secrets exist", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const { data, error } = await admin.rpc("check_cleanup_readiness");
     expect(error).toBeNull();
     expect(data).toBeTruthy();
@@ -108,7 +114,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("reports cleanup readiness as not ready when a permanent failure exists", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const user = await getUserClient();
 
     const { data: policyDoc, error: policyDocErr } = await user
@@ -164,7 +172,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("records an emergency cleanup row with the actual provider file ID and pending status", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const store = new SupabaseFileLifecycleStore(admin);
     const providerFileId = `file_emergency_${crypto.randomUUID()}`;
 
@@ -194,7 +204,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("keeps a permanent emergency failure unresolved and flagged for operator action", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const providerFileId = `permanent_emergency_${crypto.randomUUID()}`;
 
     await admin.from("document_analysis_emergency_cleanup").insert({
@@ -222,7 +234,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("prevents concurrent workers from claiming the same emergency cleanup row", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const providerFileId = `emergency_concurrent_${crypto.randomUUID()}`;
     const now = new Date().toISOString();
 
@@ -282,7 +296,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("prevents concurrent workers from both claiming the same queued lease", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const authStore = new SupabaseAuthorizationStore(admin);
     const workerA = "worker-a";
     const workerB = "worker-b";
@@ -397,7 +413,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("reclaims an emergency cleanup row stuck in processing with an expired lease", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const providerFileId = `emergency_expired_${crypto.randomUUID()}`;
     const pastLease = new Date(Date.now() - 1000).toISOString();
     const now = new Date().toISOString();
@@ -443,7 +461,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("prevents a stale normal cleanup worker from finalizing a row reclaimed by another worker", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const authStore = new SupabaseAuthorizationStore(admin);
     const workerA = "stale-worker-a";
     const workerB = "fresh-worker-b";
@@ -561,7 +581,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("reports cleanup readiness as false when an emergency permanent failure exists", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const providerFileId = `emergency_permanent_${crypto.randomUUID()}`;
 
     await admin.from("document_analysis_emergency_cleanup").insert({
@@ -595,7 +617,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("does not expose a get_cleanup_secrets RPC", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const { data, error } = await admin.rpc("get_cleanup_secrets" as any);
     expect(data).toBeNull();
     expect(error).not.toBeNull();
@@ -615,14 +639,18 @@ describe("cleanup-provider-files worker integration", () => {
     expect(authData).toBeNull();
     expect(authError).not.toBeNull();
 
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const { data: svcData, error: svcError } = await admin.rpc("check_cleanup_readiness");
     expect(svcError).toBeNull();
     expect(svcData?.ready).toBe(true);
   });
 
   it("does not report a fenced emergency final update as successful when the lease is lost", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const providerFileId = `emergency_zero_row_${crypto.randomUUID()}`;
     const workerA = "emergency-stale-a";
     const workerB = "emergency-reclaim-b";
@@ -680,7 +708,9 @@ describe("cleanup-provider-files worker integration", () => {
   });
 
   it("survives a forward repair migration with existing queued and emergency records", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const providerFileId = `survival_${crypto.randomUUID()}`;
 
     const { data: inserted } = await admin

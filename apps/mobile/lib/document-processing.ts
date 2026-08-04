@@ -87,7 +87,18 @@ export async function loadLatestDocumentBatch(
 ): Promise<DocumentBatchSummary | null> {
   const { data, error } = await invokeEdgeFunction<DocumentBatchSummary | null>(
     "document-processing-batch",
-    { action: "latest", household_id: householdId },
+    { action: "latest-relevant", household_id: householdId },
+  );
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
+export async function loadLatestResumableDocumentBatch(
+  householdId: string,
+): Promise<DocumentBatchSummary | null> {
+  const { data, error } = await invokeEdgeFunction<DocumentBatchSummary | null>(
+    "document-processing-batch",
+    { action: "latest-resumable", household_id: householdId },
   );
   if (error) throw new Error(error.message);
   return data ?? null;
@@ -99,7 +110,19 @@ export async function loadDocumentBatchForCase(
 ): Promise<DocumentBatchSummary | null> {
   const { data, error } = await invokeEdgeFunction<DocumentBatchSummary | null>(
     "document-processing-batch",
-    { action: "latest-for-case", household_id: householdId, case_id: caseId },
+    { action: "latest-resumable-for-case", household_id: householdId, case_id: caseId },
+  );
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
+export async function loadRelevantDocumentBatchForCase(
+  householdId: string,
+  caseId: string,
+): Promise<DocumentBatchSummary | null> {
+  const { data, error } = await invokeEdgeFunction<DocumentBatchSummary | null>(
+    "document-processing-batch",
+    { action: "latest-relevant-for-case", household_id: householdId, case_id: caseId },
   );
   if (error) throw new Error(error.message);
   return data ?? null;

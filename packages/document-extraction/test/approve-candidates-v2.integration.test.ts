@@ -89,7 +89,9 @@ async function createManualCandidate(
 describe("approve_candidate_assets_v2", () => {
   beforeAll(async () => {
     assertLocalSupabase();
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     await admin.from("asset_candidates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     await admin
       .from("manual_policy_reviews")
@@ -132,7 +134,9 @@ describe("approve_candidate_assets_v2", () => {
   });
 
   it("rejects non-member callers", async () => {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const otherUser = createClient(SUPABASE_URL, ANON_KEY);
     const email = `other-candidate-test-${Date.now()}@example.com`;
     const password = "OtherPass123!";
@@ -270,7 +274,9 @@ describe("approve_candidate_assets_v2", () => {
     expect(data?.properties?.length).toBe(3);
     expect(data?.vehicles?.length).toBe(1);
 
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
     const { data: properties } = await admin
       .from("properties")
       .select("id")
@@ -304,7 +310,9 @@ describe("approve_candidate_assets_v2", () => {
   it("skips a candidate and links to an existing asset", async () => {
     const staff = await getAdminClient();
     const customer = await getCustomerClient();
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
 
     // Use the seed property as an existing asset to link.
     const existingPropertyId = "23000000-0000-0000-0000-000000000001";
@@ -460,7 +468,9 @@ describe("approve_candidate_assets_v2", () => {
   it("does not duplicate assets on concurrent approval retries", async () => {
     const staff = await getAdminClient();
     const customer = await getCustomerClient();
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    });
 
     const doc = await createPolicyDocument(staff, "concurrent");
     const candidate = await createManualCandidate(
