@@ -15,12 +15,13 @@ jest.mock("@/lib/autopilot", () => ({
   useAutopilotSessions: jest.fn().mockReturnValue({
     current: {
       id: "c1",
+      state: "recommendation_ready",
       name: "2027 Renewal Review",
       startedAt: "Started July 20, 2026 at 2:14 PM",
-      status: "Waiting for your decision",
-      statusTone: "accent",
+      status: "Recommendation ready",
+      statusTone: "success",
       isCurrent: true,
-      tooltip: "We are reading your documents and extracting policy details.",
+      tooltip: "We have compared quotes and prepared a recommendation.",
       steps: [
         { key: "awaiting_documents", label: "Upload your documents", state: "completed" },
         { key: "extracting_information", label: "Extract policy information", state: "completed" },
@@ -33,7 +34,11 @@ jest.mock("@/lib/autopilot", () => ({
         { key: "completed", label: "Switch completed", state: "upcoming" },
       ],
       currentStepIndex: 3,
-      action: { label: "View details", route: "/recommendation" },
+      action: {
+        type: "route",
+        label: "View details",
+        href: { pathname: "/recommendation", params: { caseId: "c1" } },
+      },
     },
     past: [
       {
@@ -63,11 +68,16 @@ describe("Autopilot screen", () => {
   it("renders the current session, workflow steps, and past sessions", async () => {
     const { findByText, getByTestId, getAllByText } = render(<Autopilot />);
     expect(await findByText(/2027 Renewal Review/)).toBeTruthy();
-    expect(await findByText(/Waiting for your decision/)).toBeTruthy();
-    expect(getAllByText(/View details/).length).toBeGreaterThan(0);
+    expect(getByTestId("session-action")).toBeTruthy();
+    expect(getAllByText(/View details/).length).toBe(1);
     expect(await findByText(/Other sessions/)).toBeTruthy();
     expect(await findByText(/2026 Renewal Review/)).toBeTruthy();
     expect(getByTestId("current-session")).toBeTruthy();
     expect(getByTestId("past-sessions-section")).toBeTruthy();
+  });
+
+  it("exposes a single primary workflow action on the current session", async () => {
+    const { getAllByText } = render(<Autopilot />);
+    expect(getAllByText(/View details/).length).toBe(1);
   });
 });

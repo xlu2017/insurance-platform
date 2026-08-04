@@ -4,7 +4,15 @@ import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
 import { signInWithOAuthProvider } from "@/lib/auth";
-import { Body, Field, Loading, PrimaryButton, Screen, SecondaryButton, Title } from "@/components/ui";
+import {
+  Body,
+  Field,
+  Loading,
+  PrimaryButton,
+  Screen,
+  SecondaryButton,
+  Title,
+} from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 
 const Registration = z.object({
@@ -149,7 +157,12 @@ export default function Register() {
         />
         {error ? <Body error>{error}</Body> : null}
         <View style={{ height: 12 }} />
-        <PrimaryButton label="Create account" onPress={register} loading={loading} testID="register-button" />
+        <PrimaryButton
+          label="Create account"
+          onPress={register}
+          loading={loading}
+          testID="register-button"
+        />
         <View style={{ height: 12 }} />
         <SecondaryButton
           label="Continue with Google"

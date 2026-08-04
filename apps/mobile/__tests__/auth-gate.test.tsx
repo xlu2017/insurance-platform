@@ -64,7 +64,10 @@ function GateInspector() {
 
 function renderWithQuery(element: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return { client, ...render(<QueryClientProvider client={client}>{element}</QueryClientProvider>) };
+  return {
+    client,
+    ...render(<QueryClientProvider client={client}>{element}</QueryClientProvider>),
+  };
 }
 
 function createMockClient(session: unknown) {

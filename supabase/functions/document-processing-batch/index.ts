@@ -27,11 +27,7 @@ function isUuid(value: string): boolean {
 }
 
 function publicBatch(batch: Record<string, unknown>) {
-  const internalStatus = String(batch.status);
-  const status =
-    internalStatus === "queued" || internalStatus === "manual_review"
-      ? "reading_policy_documents"
-      : internalStatus;
+  const status = String(batch.status);
   return {
     id: String(batch.id),
     session_id: String(batch.session_id),
@@ -43,10 +39,10 @@ function publicBatch(batch: Record<string, unknown>) {
     deduplicated_count: Number(batch.deduplicated_count ?? 0),
     retryable: Boolean(batch.retryable),
     is_terminal:
-      internalStatus === "ready_for_review" ||
-      internalStatus === "additional_information_required" ||
-      internalStatus === "processing_unavailable" ||
-      internalStatus === "manual_review",
+      status === "ready_for_review" ||
+      status === "additional_information_required" ||
+      status === "processing_unavailable" ||
+      status === "manual_review",
     created_at: String(batch.created_at),
     processing_started_at: batch.processing_started_at ? String(batch.processing_started_at) : null,
   };
@@ -58,9 +54,11 @@ function publicCase(
 ): Record<string, unknown> {
   return {
     id: String(caseRow.id),
+    household_id: String(caseRow.household_id),
     state: String(caseRow.state),
     renewal_date: caseRow.renewal_date ? String(caseRow.renewal_date) : null,
     notes: caseRow.notes ? String(caseRow.notes) : null,
+    closed_from_state: caseRow.closed_from_state ? String(caseRow.closed_from_state) : null,
     created_at: String(caseRow.created_at),
     updated_at: String(caseRow.updated_at),
     session_id: sessionId ?? null,
@@ -208,6 +206,29 @@ Deno.serve(async (req) => {
     return jsonResponse(latest ? publicBatch(latest) : null);
   }
 
+  if (action === "latest-for-case") {
+    const caseId = String(body.case_id ?? "");
+    if (!isUuid(caseId)) return jsonError("Invalid case_id", 400);
+    const { data: existingCase } = await admin
+      .from("optimization_cases")
+      .select("id")
+      .eq("id", caseId)
+      .eq("household_id", householdId)
+      .maybeSingle();
+    if (!existingCase) return jsonError("Case not found", 404);
+
+    const { data: openBatch } = await admin
+      .from("document_processing_batches")
+      .select("*")
+      .eq("household_id", householdId)
+      .eq("case_id", caseId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (openBatch) return jsonResponse(publicBatch(openBatch));
+    return jsonResponse(null);
+  }
+
   if (action === "list") {
     const { data: rows } = await admin
       .from("document_processing_batches")
@@ -232,17 +253,14 @@ Deno.serve(async (req) => {
   }
 
   if (action === "create") {
-    const clientRequestId = String(body.client_request_id ?? "");
+    const caseId = String(body.case_id ?? "");
+    const hasCaseId = isUuid(caseId);
+    const clientRequestId = hasCaseId
+      ? String(body.client_request_id ?? `case-upload:${caseId}`)
+      : String(body.client_request_id ?? "");
     if (!clientRequestId || clientRequestId.length > 240) {
       return jsonError("Invalid client_request_id", 400);
     }
-    const { data: existing } = await admin
-      .from("document_processing_batches")
-      .select("*")
-      .eq("household_id", householdId)
-      .eq("client_request_id", clientRequestId)
-      .maybeSingle();
-    if (existing) return jsonResponse(publicBatch(existing));
 
     const { data: setting } = await admin
       .from("household_document_processing_settings")
@@ -272,6 +290,96 @@ Deno.serve(async (req) => {
         "CONSENT_REQUIRED",
       );
     }
+
+    // Serialize per-case batch creation so concurrent uploads cannot create
+    // multiple open batches for the same case.
+    if (hasCaseId) {
+      const { error: lockError } = await admin.rpc("lock_case_batch", { p_case_id: caseId });
+      if (lockError) return jsonError("Could not acquire batch lock", 500);
+
+      const { data: existingCase } = await admin
+        .from("optimization_cases")
+        .select("id, state, household_id")
+        .eq("id", caseId)
+        .eq("household_id", householdId)
+        .maybeSingle();
+      if (!existingCase) return jsonError("Case not found", 404);
+      if (existingCase.state !== "draft" && existingCase.state !== "awaiting_documents") {
+        return jsonError("Case is not accepting document uploads", 409);
+      }
+
+      // Idempotency: return an existing batch for this case/request.
+      const { data: existingBatch } = await admin
+        .from("document_processing_batches")
+        .select("*")
+        .eq("household_id", householdId)
+        .eq("client_request_id", clientRequestId)
+        .maybeSingle();
+      if (existingBatch) return jsonResponse(publicBatch(existingBatch));
+
+      const { data: openBatch } = await admin
+        .from("document_processing_batches")
+        .select("*")
+        .eq("household_id", householdId)
+        .eq("case_id", caseId)
+        .eq("status", "uploading_files")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (openBatch) return jsonResponse(publicBatch(openBatch));
+
+      const { data: session, error: sessionError } = await admin
+        .from("document_extraction_sessions")
+        .insert({
+          household_id: householdId,
+          created_by: user.id,
+          case_id: caseId,
+          status: "open",
+        })
+        .select("id")
+        .single();
+      if (sessionError || !session) return jsonError("Failed to create extraction session", 500);
+
+      const { data: batch, error: batchError } = await admin
+        .from("document_processing_batches")
+        .insert({
+          household_id: householdId,
+          created_by: user.id,
+          client_request_id: clientRequestId,
+          session_id: session.id,
+          case_id: caseId,
+          mode_snapshot: dangerous ? "dangerous" : "safe",
+          settings_version: Number(setting?.setting_version ?? 1),
+          disclosure_version: setting?.disclosure_version ?? null,
+          configured_provider: setting?.configured_provider ?? null,
+          configured_model_id: setting?.configured_model_id ?? null,
+          consent_id: consent?.id ?? null,
+          status: "uploading_files",
+        })
+        .select("*")
+        .single();
+      if (batchError || !batch) return jsonError("Failed to create document batch", 500);
+
+      await admin.from("audit_events").insert({
+        actor_profile_id: user.id,
+        action: "document_processing_batch_created",
+        entity_type: "document_processing_batch",
+        entity_id: batch.id,
+        household_id: householdId,
+        case_id: caseId,
+        after_summary: { mode: dangerous ? "automatic" : "manual" },
+      });
+      return jsonResponse(publicBatch(batch), 201);
+    }
+
+    // Generic upload without an existing case: create a fresh case/batch.
+    const { data: existing } = await admin
+      .from("document_processing_batches")
+      .select("*")
+      .eq("household_id", householdId)
+      .eq("client_request_id", clientRequestId)
+      .maybeSingle();
+    if (existing) return jsonResponse(publicBatch(existing));
 
     const { data: newCase, error: caseError } = await admin
       .from("optimization_cases")
@@ -318,6 +426,7 @@ Deno.serve(async (req) => {
       entity_type: "document_processing_batch",
       entity_id: batch.id,
       household_id: householdId,
+      case_id: newCase.id,
       after_summary: { mode: dangerous ? "automatic" : "manual" },
     });
     return jsonResponse(publicBatch(batch), 201);

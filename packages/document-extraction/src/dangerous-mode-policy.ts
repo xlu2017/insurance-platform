@@ -20,7 +20,9 @@ export interface DangerousModeEnablePolicyInput {
   disclosureVersion: string;
 }
 
-export type DangerousModePolicyFailure = "ACKNOWLEDGEMENTS_REQUIRED" | "DISCLOSURE_VERSION_MISMATCH";
+export type DangerousModePolicyFailure =
+  | "ACKNOWLEDGEMENTS_REQUIRED"
+  | "DISCLOSURE_VERSION_MISMATCH";
 
 export function validateDangerousModeEnablePolicy(
   input: DangerousModeEnablePolicyInput,

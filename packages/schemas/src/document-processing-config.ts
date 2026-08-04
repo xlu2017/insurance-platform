@@ -1,23 +1,32 @@
 export const DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
 
+interface DenoEnv {
+  get(name: string): string | undefined;
+}
+
+interface DenoLike {
+  env?: DenoEnv;
+}
+
+interface ProcessLike {
+  env?: Record<string, string | undefined>;
+}
+
+interface GlobalLike {
+  Deno?: DenoLike;
+  process?: ProcessLike;
+}
+
 function envValue(name: string): string | undefined {
-  try {
-    const g = globalThis as any;
-    if (g.Deno?.env?.get) {
-      const value = g.Deno.env.get(name);
-      if (value) return value;
-    }
-  } catch {
-    // Deno may not be available or env access may be restricted.
+  const g = globalThis as unknown as GlobalLike;
+
+  if (g.Deno?.env?.get) {
+    const value = g.Deno.env.get(name);
+    if (value) return value;
   }
 
-  try {
-    const g = globalThis as any;
-    if (g.process?.env?.[name]) {
-      return g.process.env[name];
-    }
-  } catch {
-    // process may not be available in some runtimes.
+  if (g.process?.env?.[name]) {
+    return g.process.env[name];
   }
 
   return undefined;

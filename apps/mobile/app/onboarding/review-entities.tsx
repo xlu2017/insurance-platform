@@ -653,14 +653,21 @@ export default function ReviewEntities() {
   const { data: batch, isLoading: batchLoading } = useQuery({
     queryKey: ["document-processing-batch-by-session", household?.id, sessionId],
     enabled: !!household && !!sessionId,
-    queryFn: async (): Promise<Pick<DocumentBatchSummary, "id" | "status" | "retryable"> & { error_code?: string | null } | null> => {
+    queryFn: async (): Promise<
+      | (Pick<DocumentBatchSummary, "id" | "status" | "retryable"> & { error_code?: string | null })
+      | null
+    > => {
       const { data, error } = await supabase
         .from("document_processing_batches")
         .select("id, status, error_code, retryable")
         .eq("session_id", sessionId!)
         .maybeSingle();
       if (error) throw error;
-      return data as (Pick<DocumentBatchSummary, "id" | "status" | "retryable"> & { error_code?: string | null }) | null;
+      return data as
+        | (Pick<DocumentBatchSummary, "id" | "status" | "retryable"> & {
+            error_code?: string | null;
+          })
+        | null;
     },
   });
   const candidateIds = useMemo(() => candidates?.map((c) => c.id) ?? [], [candidates]);
@@ -769,8 +776,8 @@ export default function ReviewEntities() {
             <Title style={[styles.title, { textAlign: "center" }]}>Processing unavailable</Title>
             <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
               We couldn't analyze the uploaded documents
-              {batch.error_code ? ` (${batch.error_code})` : ""}. You can retry or upload
-              different documents.
+              {batch.error_code ? ` (${batch.error_code})` : ""}. You can retry or upload different
+              documents.
             </Body>
             {error ? <Body muted>{error}</Body> : null}
             {batch.retryable ? (
@@ -798,8 +805,7 @@ export default function ReviewEntities() {
           <Card style={{ paddingVertical: spacing.xl }}>
             <Title style={[styles.title, { textAlign: "center" }]}>Sent for review</Title>
             <Body muted style={{ textAlign: "center", marginBottom: spacing.md }}>
-              We are reviewing your documents manually. We'll notify you when the results are
-              ready.
+              We are reviewing your documents manually. We'll notify you when the results are ready.
             </Body>
             <PrimaryButton
               label="Back to home"

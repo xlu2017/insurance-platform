@@ -30,10 +30,7 @@ export default function VerifyEmail() {
         We sent a confirmation link to {email ?? "your email address"}. Please open it to continue.
       </Body>
       <View style={{ height: 24 }} />
-      <PrimaryButton
-        label="I confirmed my email"
-        onPress={() => router.replace("/sign-in")}
-      />
+      <PrimaryButton label="I confirmed my email" onPress={() => router.replace("/sign-in")} />
       <View style={{ height: 12 }} />
       <SecondaryButton label="Resend verification email" onPress={resend} loading={loading} />
       {status ? (

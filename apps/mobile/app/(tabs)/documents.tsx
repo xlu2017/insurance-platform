@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import {
   documentBatchStatusTooltips,
   loadDangerousModeSetting,
   loadDocumentBatch,
+  loadDocumentBatchForCase,
   loadLatestDocumentBatch,
   retryDocumentBatch,
   submitDocumentBatch,
@@ -95,24 +96,34 @@ interface PendingDocument {
 }
 
 export default function Documents() {
+  const { caseId, batchId } = useLocalSearchParams<{
+    caseId?: string;
+    batchId?: string;
+    sessionId?: string;
+  }>();
   const { data: household, isLoading } = useHousehold();
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<DocumentCategory>("auto_detect");
   const [pending, setPending] = useState<PendingDocument[]>([]);
   const [batch, setBatch] = useState<DocumentBatchSummary | null>(null);
-  const [batchSubmitted, setBatchSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeConfirmDoc, setRemoveConfirmDoc] = useState<DocumentRow | null>(null);
 
-  const { data: latestBatch } = useQuery({
-    queryKey: ["latest-document-processing-batch", household?.id],
+  // Resume the exact batch when the route supplies one, or load the open batch
+  // for an existing case. This prevents creating a second case/batch silently.
+  const { data: resumedBatch } = useQuery({
+    queryKey: ["document-processing-batch-resume", household?.id, caseId, batchId],
     enabled: !!household && !batch,
-    queryFn: () => loadLatestDocumentBatch(household!.id),
+    queryFn: async () => {
+      if (batchId) return loadDocumentBatch(household!.id, batchId);
+      if (caseId) return loadDocumentBatchForCase(household!.id, caseId);
+      return loadLatestDocumentBatch(household!.id);
+    },
   });
-  const visibleBatch = batch ?? latestBatch ?? null;
+  const visibleBatch = batch ?? resumedBatch ?? null;
 
   const { data: documents } = useQuery({
     queryKey: ["documents", household?.id],
@@ -199,15 +210,24 @@ export default function Documents() {
     );
   };
 
+  const batchIsOpen =
+    !currentBatch ||
+    currentBatch.status === "uploading_files" ||
+    currentBatch.status === "additional_information_required";
+
   const uploadAndAnalyze = async () => {
     if (pending.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      const created =
-        batch ??
-        (await createDocumentBatch(household.id, createClientRequestId("mobile-documents")));
-      if (!batch) setBatch(created);
+      const targetBatch =
+        visibleBatch ??
+        (await createDocumentBatch({
+          householdId: household.id,
+          caseId: caseId,
+          clientRequestId: caseId ? undefined : createClientRequestId("mobile-documents"),
+        }));
+      if (!visibleBatch) setBatch(targetBatch);
       for (const item of pending.filter(
         (candidate) => candidate.status === "pending" || candidate.status === "failed",
       )) {
@@ -217,7 +237,7 @@ export default function Documents() {
             household.id,
             item.category,
             item.file,
-            created.id,
+            targetBatch.id,
             item.clientItemId,
           );
           updatePending(item.clientItemId, {
@@ -231,8 +251,7 @@ export default function Documents() {
           throw caught;
         }
       }
-      setBatch(await submitDocumentBatch(household.id, created.id));
-      setBatchSubmitted(true);
+      setBatch(await submitDocumentBatch(household.id, targetBatch.id));
       await queryClient.invalidateQueries({ queryKey: ["documents", household.id] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Upload failed");
@@ -309,19 +328,19 @@ export default function Documents() {
               <SecondaryButton
                 label="Files"
                 onPress={() => choose("document")}
-                disabled={busy || !!batch}
+                disabled={busy || !batchIsOpen}
                 style={{ flex: 1, paddingVertical: 10 }}
               />
               <SecondaryButton
                 label="Camera"
                 onPress={() => choose("camera")}
-                disabled={busy || !!batch}
+                disabled={busy || !batchIsOpen}
                 style={{ flex: 1, paddingVertical: 10 }}
               />
               <SecondaryButton
                 label="Photos"
                 onPress={() => choose("library")}
-                disabled={busy || !!batch}
+                disabled={busy || !batchIsOpen}
                 style={{ flex: 1, paddingVertical: 10 }}
               />
             </View>
@@ -373,7 +392,7 @@ export default function Documents() {
               </View>
             ) : null}
 
-            {!batchSubmitted ? (
+            {batchIsOpen ? (
               <PrimaryButton
                 label={
                   pending.length === 0

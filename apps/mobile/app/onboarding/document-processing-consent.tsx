@@ -125,13 +125,12 @@ export default function DocumentProcessingConsent() {
 
         {!isConfigured ? (
           <Body style={{ color: "#d00", marginTop: spacing.sm }}>
-            Automatic document processing is not configured. You can still upload documents for manual review.
+            Automatic document processing is not configured. You can still upload documents for
+            manual review.
           </Body>
         ) : null}
 
-        {error ? (
-          <Body style={{ color: "#d00", marginTop: spacing.sm }}>{error}</Body>
-        ) : null}
+        {error ? <Body style={{ color: "#d00", marginTop: spacing.sm }}>{error}</Body> : null}
 
         <View style={{ height: 24 }} />
         <PrimaryButton
@@ -147,11 +146,7 @@ export default function DocumentProcessingConsent() {
           disabled={busy}
         />
         <View style={{ height: 12 }} />
-        <SecondaryButton
-          label="Cancel"
-          onPress={() => router.back()}
-          disabled={busy}
-        />
+        <SecondaryButton label="Cancel" onPress={() => router.back()} disabled={busy} />
       </ScrollView>
     </Screen>
   );

@@ -55,10 +55,8 @@ function defaultParseImplementation(url: string) {
   );
   return {
     code: search.get("code") ?? undefined,
-    accessToken:
-      search.get("access_token") ?? hashParams.get("access_token") ?? undefined,
-    refreshToken:
-      search.get("refresh_token") ?? hashParams.get("refresh_token") ?? undefined,
+    accessToken: search.get("access_token") ?? hashParams.get("access_token") ?? undefined,
+    refreshToken: search.get("refresh_token") ?? hashParams.get("refresh_token") ?? undefined,
     error: search.get("error") ?? hashParams.get("error") ?? undefined,
     errorDescription:
       search.get("error_description") ?? hashParams.get("error_description") ?? undefined,
@@ -85,14 +83,14 @@ beforeEach(() => {
   mockParse.mockImplementation(defaultParseImplementation);
   mockExchange.mockResolvedValue({ user: { id: "user-1" } } as any);
   mockUseAuth.mockReturnValue(defaultAuthValue());
-  (Linking.getInitialURL as jest.Mock).mockImplementation(() =>
-    Promise.resolve(mockInitialUrl),
-  );
+  (Linking.getInitialURL as jest.Mock).mockImplementation(() => Promise.resolve(mockInitialUrl));
 });
 
 describe("AuthCallback screen", () => {
   it("navigates home when already authenticated", async () => {
-    mockUseAuth.mockReturnValue(defaultAuthValue({ isAuthenticated: true, status: "authenticated" }));
+    mockUseAuth.mockReturnValue(
+      defaultAuthValue({ isAuthenticated: true, status: "authenticated" }),
+    );
     render(<AuthCallback />);
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
   });
@@ -117,7 +115,9 @@ describe("AuthCallback screen", () => {
     mockParams = {};
     mockInitialUrl = "insurance-autopilot://auth/callback?code=cold-start-code";
     render(<AuthCallback />);
-    await waitFor(() => expect(mockExchange).toHaveBeenCalledWith("cold-start-code", undefined, undefined));
+    await waitFor(() =>
+      expect(mockExchange).toHaveBeenCalledWith("cold-start-code", undefined, undefined),
+    );
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
   });
 
@@ -154,14 +154,18 @@ describe("AuthCallback screen", () => {
   it("navigates home when the auth state becomes authenticated during processing", async () => {
     mockParams = { code: "deferred-code" };
     mockExchange.mockImplementation(() => new Promise(() => {}));
-    mockUseAuth.mockReturnValue(defaultAuthValue({ isAuthenticated: true, status: "authenticated" }));
+    mockUseAuth.mockReturnValue(
+      defaultAuthValue({ isAuthenticated: true, status: "authenticated" }),
+    );
     render(<AuthCallback />);
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
   });
 
   it("dismisses the browser after a successful exchange", async () => {
     mockParams = { code: "auth-code-123" };
-    const dismissSpy = jest.spyOn(WebBrowser, "dismissBrowser").mockResolvedValueOnce(undefined as any);
+    const dismissSpy = jest
+      .spyOn(WebBrowser, "dismissBrowser")
+      .mockResolvedValueOnce(undefined as any);
     render(<AuthCallback />);
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/home"));
     expect(dismissSpy).toHaveBeenCalled();

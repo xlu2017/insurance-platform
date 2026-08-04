@@ -29,12 +29,14 @@ export function useHousehold() {
 
 export interface OptimizationCase {
   id: string;
+  household_id: string;
   state: string;
   renewal_date: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
   session_id?: string | null;
+  closed_from_state?: string | null;
 }
 
 export function useOptimizationCases(householdId: string | undefined) {
@@ -60,7 +62,7 @@ export function useActiveCase(householdId: string | undefined, caseId?: string) 
       if (caseId) {
         const { data, error } = await supabase
           .from("optimization_cases")
-          .select("id, state, renewal_date")
+          .select("id, household_id, state, renewal_date, closed_from_state")
           .eq("id", caseId)
           .eq("household_id", householdId!)
           .maybeSingle();
@@ -69,7 +71,7 @@ export function useActiveCase(householdId: string | undefined, caseId?: string) 
       }
       const { data, error } = await supabase
         .from("optimization_cases")
-        .select("id, state, renewal_date")
+        .select("id, household_id, state, renewal_date, closed_from_state")
         .eq("household_id", householdId!)
         .not("state", "in", "(completed,retained_incumbent,cancelled)")
         .order("created_at", { ascending: false })

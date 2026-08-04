@@ -1,58 +1,77 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { Href } from "expo-router";
 import type { CaseState } from "@autopilot/schemas";
 import { invokeEdgeFunction } from "./edge-functions";
 import { useOptimizationCases, type OptimizationCase } from "./household";
 import { formatEdmontonDate, formatEdmontonDateTimeLong } from "./format";
+import {
+  documentBatchStatusLabels,
+  documentBatchStatusTooltips,
+  type DocumentBatchSummary,
+} from "./document-processing";
 
 export type SessionStepState = "completed" | "current" | "upcoming" | "failed";
 
 export interface SessionStep {
-  key: CaseState;
+  key: CaseState | "terminal";
   label: string;
   state: SessionStepState;
 }
 
-export interface AutopilotSession {
-  id: string;
-  name: string;
-  startedAt: string;
-  status: string;
+export type Actor = "you" | "our team" | "insurer" | "broker" | "operations";
+
+export interface RouteAction {
+  type: "route";
+  label: string;
+  href: Href;
+}
+
+export interface RetryAction {
+  type: "retry";
+  label: string;
+  batchId: string;
+  householdId: string;
+}
+
+export type CustomerCaseAction = RouteAction | RetryAction;
+
+export interface CustomerCasePresentation {
+  statusLabel: string;
   statusTone: "accent" | "warning" | "error" | "success" | "neutral";
   tooltip: string;
-  isCurrent: boolean;
-  steps: SessionStep[];
-  currentStepIndex: number;
-  action?: {
-    label: string;
-    route: string;
-    params?: Record<string, string>;
-  };
+  actor: Actor;
+  action?: CustomerCaseAction;
   isProcessing?: boolean;
   processingSince?: string;
 }
 
-const terminalStates = new Set<CaseState>(["completed", "retained_incumbent", "cancelled"]);
-
-interface BatchSummary {
+export interface AutopilotSession {
   id: string;
-  session_id: string;
-  case_id: string | null;
+  state: CaseState;
+  name: string;
+  startedAt: string;
   status: string;
-  is_terminal: boolean;
-  created_at: string;
-  processing_started_at: string | null;
+  statusTone: CustomerCasePresentation["statusTone"];
+  tooltip: string;
+  isCurrent: boolean;
+  steps: SessionStep[];
+  currentStepIndex: number;
+  action?: CustomerCaseAction;
+  isProcessing?: boolean;
+  processingSince?: string;
+  closedFromState?: CaseState | null;
 }
 
 interface WorkflowStepDef {
   state: CaseState;
   label: string;
-  actor: "you" | "our team" | "insurer" | "broker";
+  actor: Actor;
   waiting: string;
 }
 
 const caseWorkflow: WorkflowStepDef[] = [
-  { state: "draft", label: "Start review", actor: "our team", waiting: "Review not started" },
+  { state: "draft", label: "Start review", actor: "operations", waiting: "Review not started" },
   {
     state: "awaiting_documents",
     label: "Upload your documents",
@@ -124,6 +143,23 @@ const caseWorkflow: WorkflowStepDef[] = [
 
 const workflowByState = new Map<CaseState, WorkflowStepDef>(caseWorkflow.map((s) => [s.state, s]));
 
+const terminalStates = new Set<CaseState>(["completed", "retained_incumbent", "cancelled"]);
+
+const activeProcessingStatuses = new Set<DocumentBatchSummary["status"]>([
+  "checking_duplicates",
+  "queued",
+  "reading_policy_documents",
+  "comparing_policies",
+  "validating_extracted_details",
+]);
+
+const terminalBatchStatuses = new Set<DocumentBatchSummary["status"]>([
+  "ready_for_review",
+  "additional_information_required",
+  "processing_unavailable",
+  "manual_review",
+]);
+
 function sessionName(c: OptimizationCase): string {
   if (c.renewal_date) {
     const year = new Date(c.renewal_date).getFullYear();
@@ -137,7 +173,7 @@ function sessionName(c: OptimizationCase): string {
 
 function statusForState(state: CaseState): {
   label: string;
-  tone: AutopilotSession["statusTone"];
+  tone: CustomerCasePresentation["statusTone"];
   tooltip: string;
 } {
   const step = workflowByState.get(state);
@@ -151,7 +187,8 @@ function statusForState(state: CaseState): {
     awaiting_quotes: "Waiting for insurers to respond with quotes.",
     comparing_quotes: "We are comparing the quotes and coverage options.",
     licensed_review: "A licensed advisor is reviewing your case.",
-    recommendation_ready: "A recommendation is ready for you to review.",
+    recommendation_ready:
+      "A recommendation has been prepared and is awaiting final licensed sign-off before it is presented to you.",
     customer_decision: "Please choose whether to switch or keep your current policy.",
     switching: "We are completing the policy switch with your chosen insurer.",
     completed: "This review is complete. Your new policy is in place.",
@@ -171,58 +208,217 @@ function statusForState(state: CaseState): {
   return { label: step?.waiting ?? "In progress", tone: "accent", tooltip };
 }
 
-function actionForState(
-  state: CaseState,
-  caseId?: string,
-  sessionId?: string | null,
-): AutopilotSession["action"] {
-  if (state === "awaiting_documents") {
-    return { label: "Upload document", route: "/(tabs)/documents" };
-  }
-  if (state === "extracting_information" && sessionId) {
-    return {
-      label: "Review",
-      route: "/onboarding/review-entities",
-      params: { sessionId },
-    };
-  }
-  if (state === "awaiting_customer_confirmation" && caseId) {
-    return { label: "Confirm", route: "/confirm-details", params: { caseId } };
-  }
-  if ((state === "recommendation_ready" || state === "customer_decision") && caseId) {
-    return { label: "View details", route: "/recommendation", params: { caseId } };
-  }
-  return undefined;
+export interface ResolveCustomerCasePresentationInput {
+  c: OptimizationCase;
+  batch?: DocumentBatchSummary | null;
+  pendingQuestion?: { id: string; prompt?: string } | null;
 }
 
-function buildSteps(
-  state: CaseState,
-  mode: "current" | "past",
-): { steps: SessionStep[]; currentStepIndex: number } {
-  let currentIndex = caseWorkflow.findIndex((s) => s.state === state);
-  let terminalStepState: SessionStepState | null = null;
+export function resolveCustomerCasePresentation({
+  c,
+  batch,
+  pendingQuestion,
+}: ResolveCustomerCasePresentationInput): CustomerCasePresentation {
+  const state = c.state as CaseState;
+  const step = workflowByState.get(state);
+  const base = statusForState(state);
 
-  if (state === "retained_incumbent") {
-    terminalStepState = "completed";
-    currentIndex = caseWorkflow.findIndex((s) => s.state === "customer_decision");
-  } else if (state === "cancelled") {
-    terminalStepState = "failed";
-    currentIndex = caseWorkflow.findIndex((s) => s.state === "customer_decision");
+  if (pendingQuestion) {
+    return {
+      statusLabel: base.label,
+      statusTone: base.tone,
+      tooltip: "Your insurer needs an answer before we can continue.",
+      actor: "you",
+      action: {
+        type: "route",
+        label: "Answer question",
+        href: { pathname: `/question/${pendingQuestion.id}` },
+      },
+    };
+  }
+
+  if (state === "awaiting_documents") {
+    return {
+      statusLabel: base.label,
+      statusTone: base.tone,
+      tooltip: base.tooltip,
+      actor: step?.actor ?? "you",
+      action: {
+        type: "route",
+        label: "Upload documents",
+        href: { pathname: "/(tabs)/documents", params: { caseId: c.id } },
+      },
+    };
+  }
+
+  if (state === "extracting_information") {
+    if (!batch) {
+      return {
+        statusLabel: base.label,
+        statusTone: base.tone,
+        tooltip: "Document batch information is missing. Please contact support.",
+        actor: step?.actor ?? "our team",
+      };
+    }
+
+    if (activeProcessingStatuses.has(batch.status)) {
+      return {
+        statusLabel: documentBatchStatusLabels[batch.status],
+        statusTone: base.tone,
+        tooltip: documentBatchStatusTooltips[batch.status],
+        actor: step?.actor ?? "our team",
+        isProcessing: true,
+        processingSince: batch.processing_started_at ?? batch.created_at,
+      };
+    }
+
+    if (batch.status === "ready_for_review") {
+      return {
+        statusLabel: documentBatchStatusLabels[batch.status],
+        statusTone: "accent",
+        tooltip: documentBatchStatusTooltips[batch.status],
+        actor: "you",
+        action: {
+          type: "route",
+          label: "Review extracted details",
+          href: {
+            pathname: "/onboarding/review-entities",
+            params: { sessionId: batch.session_id },
+          },
+        },
+      };
+    }
+
+    if (batch.status === "additional_information_required") {
+      return {
+        statusLabel: documentBatchStatusLabels[batch.status],
+        statusTone: "warning",
+        tooltip: documentBatchStatusTooltips[batch.status],
+        actor: "you",
+        action: {
+          type: "route",
+          label: "Provide missing information",
+          href: {
+            pathname: "/(tabs)/documents",
+            params: { caseId: c.id, batchId: batch.id, sessionId: batch.session_id },
+          },
+        },
+      };
+    }
+
+    if (batch.status === "processing_unavailable") {
+      if (batch.retryable) {
+        return {
+          statusLabel: documentBatchStatusLabels[batch.status],
+          statusTone: "error",
+          tooltip: documentBatchStatusTooltips[batch.status],
+          actor: step?.actor ?? "our team",
+          action: {
+            type: "retry",
+            label: "Retry processing",
+            batchId: batch.id,
+            householdId: c.household_id ?? "",
+          },
+        };
+      }
+      return {
+        statusLabel: documentBatchStatusLabels[batch.status],
+        statusTone: "error",
+        tooltip:
+          "Processing could not be completed and requires manual assistance. Please contact support.",
+        actor: step?.actor ?? "our team",
+      };
+    }
+
+    if (batch.status === "manual_review") {
+      return {
+        statusLabel: documentBatchStatusLabels[batch.status],
+        statusTone: "neutral",
+        tooltip: "Documents sent for manual review.",
+        actor: step?.actor ?? "our team",
+      };
+    }
+
+    // Any other batch status is not a customer action state.
+    return {
+      statusLabel: documentBatchStatusLabels[batch.status] ?? base.label,
+      statusTone: base.tone,
+      tooltip: documentBatchStatusTooltips[batch.status] ?? base.tooltip,
+      actor: step?.actor ?? "our team",
+    };
+  }
+
+  if (state === "awaiting_customer_confirmation") {
+    return {
+      statusLabel: base.label,
+      statusTone: base.tone,
+      tooltip: base.tooltip,
+      actor: step?.actor ?? "you",
+      action: {
+        type: "route",
+        label: "Confirm details",
+        href: { pathname: "/confirm-details", params: { caseId: c.id } },
+      },
+    };
+  }
+
+  if (state === "customer_decision") {
+    return {
+      statusLabel: base.label,
+      statusTone: base.tone,
+      tooltip: base.tooltip,
+      actor: step?.actor ?? "you",
+      action: {
+        type: "route",
+        label: "Review recommendation",
+        href: { pathname: "/recommendation", params: { caseId: c.id } },
+      },
+    };
+  }
+
+  // ready_for_market_search, requesting_quotes, awaiting_quotes, comparing_quotes,
+  // licensed_review, switching, and terminal states have no customer action.
+  return {
+    statusLabel: base.label,
+    statusTone: base.tone,
+    tooltip: base.tooltip,
+    actor: step?.actor ?? "our team",
+  };
+}
+
+function buildSteps(c: OptimizationCase): { steps: SessionStep[]; currentStepIndex: number } {
+  const isTerminal = terminalStates.has(c.state as CaseState);
+  const currentIndex = caseWorkflow.findIndex((s) => s.state === c.state);
+
+  if (isTerminal) {
+    const closedFrom = c.closed_from_state as CaseState | undefined;
+    const sourceIndex = closedFrom ? caseWorkflow.findIndex((s) => s.state === closedFrom) : -1;
+    const completedIndex = sourceIndex >= 0 ? sourceIndex : currentIndex === -1 ? 0 : currentIndex;
+
+    const steps: SessionStep[] = caseWorkflow.map((def, index) => ({
+      key: def.state,
+      label: def.label,
+      state: index <= completedIndex ? "completed" : "upcoming",
+    }));
+
+    const terminalLabel =
+      c.state === "completed"
+        ? "Switch completed"
+        : c.state === "retained_incumbent"
+          ? "Kept current insurance"
+          : "Review cancelled";
+    const terminalState: SessionStepState = c.state === "cancelled" ? "failed" : "completed";
+    steps.push({ key: "terminal", label: terminalLabel, state: terminalState });
+
+    return { steps, currentStepIndex: completedIndex };
   }
 
   const effectiveIndex = currentIndex === -1 ? 0 : currentIndex;
-
   const steps: SessionStep[] = caseWorkflow.map((def, index) => {
     let stepState: SessionStepState;
-    if (mode === "past") {
-      if (index < effectiveIndex) stepState = "completed";
-      else if (index === effectiveIndex) stepState = terminalStepState ?? "completed";
-      else stepState = "upcoming";
-    } else {
-      if (index < effectiveIndex) stepState = "completed";
-      else if (index === effectiveIndex) stepState = terminalStepState ?? "current";
-      else stepState = "upcoming";
-    }
+    if (index < effectiveIndex) stepState = "completed";
+    else if (index === effectiveIndex) stepState = "current";
+    else stepState = "upcoming";
     return { key: def.state, label: def.label, state: stepState };
   });
 
@@ -232,43 +428,38 @@ function buildSteps(
 function buildSession(
   c: OptimizationCase,
   isCurrent: boolean,
-  batches?: BatchSummary[],
+  batches: DocumentBatchSummary[],
 ): AutopilotSession {
   const isTerminal = terminalStates.has(c.state as CaseState);
-  const { steps, currentStepIndex } = buildSteps(
-    c.state as CaseState,
-    isTerminal ? "past" : "current",
-  );
-  const status = statusForState(c.state as CaseState);
-  const batch = batches?.find((b) => b.case_id === c.id);
-  const isProcessing =
-    !isTerminal && c.state === "extracting_information" && !!batch && !batch.is_terminal;
+  const batch = batches.find((b) => b.case_id === c.id);
+  const presentation = resolveCustomerCasePresentation({ c, batch });
+  const { steps, currentStepIndex } = buildSteps(c);
+
   return {
     id: c.id,
+    state: c.state as CaseState,
     name: sessionName(c),
     startedAt: formatEdmontonDateTimeLong(c.created_at),
-    status: status.label,
-    statusTone: status.tone,
-    tooltip: status.tooltip,
+    status: presentation.statusLabel,
+    statusTone: presentation.statusTone,
+    tooltip: presentation.tooltip,
     isCurrent: isCurrent && !isTerminal,
     steps,
     currentStepIndex,
-    action:
-      isProcessing || isTerminal
-        ? undefined
-        : actionForState(c.state as CaseState, c.id, c.session_id),
-    isProcessing,
-    processingSince: isProcessing ? (batch.processing_started_at ?? batch.created_at) : undefined,
+    action: isTerminal ? undefined : presentation.action,
+    isProcessing: presentation.isProcessing,
+    processingSince: presentation.processingSince,
+    closedFromState: c.closed_from_state as CaseState | undefined,
   };
 }
 
 export function useAutopilotSessions(householdId: string | undefined) {
   const { data: cases, isLoading, error, refetch } = useOptimizationCases(householdId);
-  const { data: batches, isLoading: batchesLoading } = useQuery<BatchSummary[]>({
+  const { data: batches, isLoading: batchesLoading } = useQuery<DocumentBatchSummary[]>({
     queryKey: ["document-processing-batches", householdId],
     enabled: !!householdId,
     queryFn: async () => {
-      const { data, error: queryError } = await invokeEdgeFunction<BatchSummary[]>(
+      const { data, error: queryError } = await invokeEdgeFunction<DocumentBatchSummary[]>(
         "document-processing-batch",
         { action: "list", household_id: householdId },
       );
@@ -277,7 +468,7 @@ export function useAutopilotSessions(householdId: string | undefined) {
     },
     refetchInterval: (query) => {
       const rows = query.state.data ?? [];
-      return rows.some((b) => !b.is_terminal) ? 2000 : false;
+      return rows.some((b) => !terminalBatchStatuses.has(b.status)) ? 2000 : false;
     },
   });
 
@@ -289,8 +480,8 @@ export function useAutopilotSessions(householdId: string | undefined) {
       .slice(1)
       .concat(cases.filter((c) => terminalStates.has(c.state as CaseState)));
     return {
-      current: current ? buildSession(current, true, batches) : null,
-      past: others.map((c) => buildSession(c, false, batches)),
+      current: current ? buildSession(current, true, batches ?? []) : null,
+      past: others.map((c) => buildSession(c, false, batches ?? [])),
     };
   }, [cases, batches]);
 

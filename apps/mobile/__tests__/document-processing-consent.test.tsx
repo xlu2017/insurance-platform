@@ -71,9 +71,9 @@ describe("DocumentProcessingConsent", () => {
     (getPrivacyNoticeUrl as jest.MockedFunction<typeof getPrivacyNoticeUrl>).mockReturnValue(
       "https://autopilot.example.com/privacy",
     );
-    (getProcessorContractVersion as jest.MockedFunction<typeof getProcessorContractVersion>).mockReturnValue(
-      "processor-contract-v1",
-    );
+    (
+      getProcessorContractVersion as jest.MockedFunction<typeof getProcessorContractVersion>
+    ).mockReturnValue("processor-contract-v1");
     mockedUpdate.mockResolvedValue({
       enabled: true,
       disclosure_version: "dangerous-mode-v1",
@@ -182,9 +182,7 @@ describe("DocumentProcessingConsent", () => {
     const { getByText } = render(<DocumentProcessingConsent />);
     fireEvent.press(getByText("Allow processing"));
 
-    await waitFor(() =>
-      expect(getByText("Could not save onboarding progress")).toBeTruthy(),
-    );
+    await waitFor(() => expect(getByText("Could not save onboarding progress")).toBeTruthy());
     expect(router.replace).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
   });

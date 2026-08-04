@@ -79,9 +79,15 @@ describe("document-processing-batch create action", () => {
       await admin.from("document_processing_batches").delete().eq("household_id", householdId);
       await admin.from("document_extraction_sessions").delete().eq("household_id", householdId);
       await admin.from("optimization_cases").delete().eq("household_id", householdId);
-      await admin.from("document_processing_authorizations").delete().eq("household_id", householdId);
+      await admin
+        .from("document_processing_authorizations")
+        .delete()
+        .eq("household_id", householdId);
       await admin.from("document_processing_consent").delete().eq("household_id", householdId);
-      await admin.from("household_document_processing_settings").delete().eq("household_id", householdId);
+      await admin
+        .from("household_document_processing_settings")
+        .delete()
+        .eq("household_id", householdId);
       await admin.from("household_members").delete().eq("household_id", householdId);
       await admin.from("households").delete().eq("id", householdId);
     }
@@ -115,11 +121,7 @@ describe("document-processing-batch create action", () => {
       setting_version: 1,
     });
 
-    const { status, body } = await createBatch(
-      accessToken,
-      householdId,
-      `safe-${randomUUID()}`,
-    );
+    const { status, body } = await createBatch(accessToken, householdId, `safe-${randomUUID()}`);
     expect(status).toBe(201);
     expect(body.automatic_processing).toBe(false);
 
@@ -132,7 +134,6 @@ describe("document-processing-batch create action", () => {
       .single();
     expect(batch?.mode_snapshot).toBe("safe");
     expect(batch?.consent_id).toBeNull();
-
   });
 
   it("returns CONSENT_REQUIRED when Dangerous mode is enabled without active consent", async () => {
@@ -155,7 +156,6 @@ describe("document-processing-batch create action", () => {
     );
     expect(status).toBe(403);
     expect(body.code).toBe("CONSENT_REQUIRED");
-
   });
 
   it("creates a dangerous batch when Dangerous mode and active consent are present", async () => {
@@ -205,7 +205,6 @@ describe("document-processing-batch create action", () => {
       .single();
     expect(batch?.mode_snapshot).toBe("dangerous");
     expect(batch?.consent_id).toBe(consent?.id);
-
   });
 
   it("ignores a client-supplied mode parameter and uses the protected setting", async () => {
@@ -251,7 +250,6 @@ describe("document-processing-batch create action", () => {
       .limit(1)
       .single();
     expect(batch?.mode_snapshot).toBe("dangerous");
-
   });
 
   it("creates a safe batch after Dangerous mode is explicitly disabled", async () => {
@@ -303,6 +301,5 @@ describe("document-processing-batch create action", () => {
       .single();
     expect(batch?.mode_snapshot).toBe("safe");
     expect(batch?.consent_id).toBeNull();
-
   });
 });

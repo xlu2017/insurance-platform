@@ -145,10 +145,10 @@ export default function OnboardingDocuments() {
     try {
       const created =
         batch ??
-        (await createDocumentBatch(
-          household.id,
-          createClientRequestId("mobile-onboarding"),
-        ));
+        (await createDocumentBatch({
+          householdId: household.id,
+          clientRequestId: createClientRequestId("mobile-onboarding"),
+        }));
       if (!batch) setBatch(created);
 
       for (const item of pending.filter(

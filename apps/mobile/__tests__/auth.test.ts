@@ -310,7 +310,8 @@ describe("parseOAuthReturnUrl", () => {
   });
 
   it("reads OAuth error parameters", () => {
-    const url = "insurance-autopilot://auth/callback?error=access_denied&error_description=User%20cancelled";
+    const url =
+      "insurance-autopilot://auth/callback?error=access_denied&error_description=User%20cancelled";
     const payload = parseOAuthReturnUrl(url);
     expect(payload.error).toBe("access_denied");
     expect(payload.errorDescription).toBe("User cancelled");
@@ -354,10 +355,12 @@ describe("signInWithOAuthProvider", () => {
   it("uses a captured deep link after an ambiguous Android dismissal", async () => {
     const deepLinkUrl = "insurance-autopilot://auth/callback?code=deep-link-code";
     openAuthSessionAsync.mockResolvedValueOnce({ type: "dismiss" });
-    addEventListener.mockImplementationOnce((event: string, handler: (event: { url: string }) => void) => {
-      handler({ url: deepLinkUrl });
-      return { remove: jest.fn() };
-    });
+    addEventListener.mockImplementationOnce(
+      (event: string, handler: (event: { url: string }) => void) => {
+        handler({ url: deepLinkUrl });
+        return { remove: jest.fn() };
+      },
+    );
 
     const { user, error } = await signInWithOAuthProvider("google");
     expect(error).toBeUndefined();

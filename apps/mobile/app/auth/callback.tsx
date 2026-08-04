@@ -119,10 +119,7 @@ export default function AuthCallback() {
       <Screen style={{ justifyContent: "center", padding: 24 }}>
         <Body style={{ color: "#d00", textAlign: "center" }}>{errorMessage}</Body>
         <View style={{ height: 16 }} />
-        <PrimaryButton
-          label="Back to sign in"
-          onPress={() => safeReplace(router, "/welcome")}
-        />
+        <PrimaryButton label="Back to sign in" onPress={() => safeReplace(router, "/welcome")} />
       </Screen>
     );
   }

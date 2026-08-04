@@ -48,22 +48,14 @@ export default function ConfirmDetails() {
   const confirm = async () => {
     setBusy(true);
     setError(null);
-    const { error: caseError } = await supabase
-      .from("optimization_cases")
-      .update({ state: "ready_for_market_search" })
-      .eq("id", activeCase.id);
-    if (caseError) {
+    const { error: rpcError } = await supabase.rpc("confirm_customer_case_details", {
+      p_case_id: activeCase.id,
+    });
+    if (rpcError) {
       setBusy(false);
-      setError(caseError.message);
+      setError(rpcError.message);
       return;
     }
-    await supabase.from("audit_events").insert({
-      action: "customer_confirmed_extracted_information",
-      entity_type: "optimization_case",
-      entity_id: activeCase.id,
-      household_id: household?.id,
-      case_id: activeCase.id,
-    });
     queryClient.invalidateQueries();
     setBusy(false);
     router.replace("/(tabs)/autopilot");

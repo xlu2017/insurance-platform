@@ -2220,6 +2220,7 @@ export type Database = {
       };
       optimization_cases: {
         Row: {
+          closed_from_state: Database["public"]["Enums"]["case_state"] | null;
           created_at: string;
           created_by: string | null;
           household_id: string;
@@ -2231,6 +2232,7 @@ export type Database = {
           updated_by: string | null;
         };
         Insert: {
+          closed_from_state?: Database["public"]["Enums"]["case_state"] | null;
           created_at?: string;
           created_by?: string | null;
           household_id: string;
@@ -2242,6 +2244,7 @@ export type Database = {
           updated_by?: string | null;
         };
         Update: {
+          closed_from_state?: Database["public"]["Enums"]["case_state"] | null;
           created_at?: string;
           created_by?: string | null;
           household_id?: string;
@@ -3762,6 +3765,13 @@ export type Database = {
       };
       answer_customer_question: {
         Args: { p_answer: string; p_question_id: string };
+        Returns: Json;
+      };
+      confirm_customer_case_details: {
+        Args: {
+          p_case_id: string;
+          p_expected_state?: Database["public"]["Enums"]["case_state"];
+        };
         Returns: Json;
       };
       app_role: {

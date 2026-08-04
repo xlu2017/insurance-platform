@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { getPrivacyNoticeVersion, getProcessorContractVersion } from "@/lib/document-processing-config";
+import {
+  getPrivacyNoticeVersion,
+  getProcessorContractVersion,
+} from "@/lib/document-processing-config";
 import { supabase } from "./supabase";
 import { invokeEdgeFunction } from "./edge-functions";
 
@@ -44,6 +47,7 @@ export const documentBatchStatusTooltips: Record<DocumentBatchStatus, string> = 
 export interface DocumentBatchSummary {
   id: string;
   session_id: string;
+  case_id: string | null;
   status: DocumentBatchStatus;
   automatic_processing: boolean;
   document_count: number;
@@ -52,6 +56,7 @@ export interface DocumentBatchSummary {
   retryable: boolean;
   is_terminal: boolean;
   created_at: string;
+  processing_started_at: string | null;
 }
 
 export function documentItemStatusLabel(
@@ -77,16 +82,30 @@ export async function loadLatestDocumentBatch(
   return data ?? null;
 }
 
-export async function createDocumentBatch(
+export async function loadDocumentBatchForCase(
   householdId: string,
-  clientRequestId: string,
-): Promise<DocumentBatchSummary> {
+  caseId: string,
+): Promise<DocumentBatchSummary | null> {
+  const { data, error } = await invokeEdgeFunction<DocumentBatchSummary | null>(
+    "document-processing-batch",
+    { action: "latest-for-case", household_id: householdId, case_id: caseId },
+  );
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
+export async function createDocumentBatch(input: {
+  householdId: string;
+  caseId?: string;
+  clientRequestId?: string;
+}): Promise<DocumentBatchSummary> {
   const { data, error } = await invokeEdgeFunction<DocumentBatchSummary>(
     "document-processing-batch",
     {
       action: "create",
-      household_id: householdId,
-      client_request_id: clientRequestId,
+      household_id: input.householdId,
+      case_id: input.caseId,
+      client_request_id: input.clientRequestId,
     },
   );
   if (error) throw new Error(error.message);
@@ -199,7 +218,8 @@ export async function recordDocumentProcessingConsent(input: {
     p_profile_id: input.profileId,
     p_purpose: input.purpose ?? "insurance_policy_extraction",
     p_privacy_notice_version: input.privacyNoticeVersion ?? getPrivacyNoticeVersion(),
-    p_processor_contract_version: input.processorContractVersion ?? getProcessorContractVersion() ?? "",
+    p_processor_contract_version:
+      input.processorContractVersion ?? getProcessorContractVersion() ?? "",
     p_foreign_processing_acknowledged: input.foreignProcessingAcknowledged ?? true,
     p_automated_processing_acknowledged: input.automatedProcessingAcknowledged ?? true,
     p_raw_processing_approved: input.rawProcessingApproved ?? true,

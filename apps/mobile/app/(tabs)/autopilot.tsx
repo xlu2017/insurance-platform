@@ -1,10 +1,16 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { useHousehold } from "@/lib/household";
-import { useAutopilotSessions, type AutopilotSession, type SessionStep } from "@/lib/autopilot";
+import { retryDocumentBatch } from "@/lib/document-processing";
+import {
+  type AutopilotSession,
+  type CustomerCaseAction,
+  type SessionStep,
+  useAutopilotSessions,
+} from "@/lib/autopilot";
 import {
   Body,
   Caption,
@@ -46,8 +52,6 @@ function StepMarker({ state }: { state: SessionStep["state"] }) {
 }
 
 function formatElapsed(since: string): string {
-  // Add 334ms so the elapsed second increments right as the third dot appears
-  // during a 3-step, 1-second ellipsis cycle.
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(since).getTime() + 334) / 1000));
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -56,12 +60,10 @@ function formatElapsed(since: string): string {
 
 function SessionStepList({
   steps,
-  action,
   processing,
   processingSince,
 }: {
   steps: SessionStep[];
-  action?: AutopilotSession["action"];
   processing?: boolean;
   processingSince?: string;
 }) {
@@ -77,6 +79,7 @@ function SessionStepList({
     }, 1000 / 3);
     return () => clearInterval(interval);
   }, [processing, processingSince]);
+
   return (
     <View>
       {steps.map((step, index) => {
@@ -90,10 +93,10 @@ function SessionStepList({
               : step.state === "failed"
                 ? "#B91C1C"
                 : colors.inkMuted;
-        const lineColor =
-          index < steps.findIndex((s) => s.state === "current" || s.state === "failed")
-            ? colors.success
-            : colors.border;
+        // The connector below a completed marker is completed; otherwise it
+        // keeps the neutral border color. This also fixes fully-completed
+        // timelines, which previously had no current/failed marker to key off.
+        const lineColor = step.state === "completed" ? colors.success : colors.border;
         return (
           <View
             key={step.key}
@@ -112,45 +115,22 @@ function SessionStepList({
               ) : null}
             </View>
             <View style={{ flex: 1, paddingBottom: 12 }}>
-              <View
+              <Body
                 style={{
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  gap: 8,
+                  color,
+                  fontWeight: isCurrent ? "700" : step.state === "completed" ? "600" : "400",
                 }}
               >
-                <Body
-                  style={{
-                    color,
-                    fontWeight: isCurrent ? "700" : step.state === "completed" ? "600" : "400",
-                  }}
-                >
-                  {step.label}
-                </Body>
-                {isCurrent && processing ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <ActivityIndicator color={color} size="small" />
-                    <Body
-                      style={{ color, fontWeight: "700" }}
-                    >{`Processing${".".repeat(dots)} ${elapsed}`}</Body>
-                  </View>
-                ) : isCurrent && action ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={action.label}
-                    onPress={() =>
-                      router.push({
-                        pathname: action.route,
-                        params: action.params,
-                      })
-                    }
-                    style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-                  >
-                    <Body style={{ color: "#F59E0B", fontWeight: "600" }}>{action.label}</Body>
-                  </Pressable>
-                ) : null}
-              </View>
+                {step.label}
+              </Body>
+              {isCurrent && processing ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                  <ActivityIndicator color={color} size="small" />
+                  <Body
+                    style={{ color, fontWeight: "700" }}
+                  >{`Processing${".".repeat(dots)} ${elapsed}`}</Body>
+                </View>
+              ) : null}
             </View>
           </View>
         );
@@ -159,7 +139,35 @@ function SessionStepList({
   );
 }
 
-function SessionCard({ session, testID }: { session: AutopilotSession; testID?: string }) {
+function SessionCard({
+  session,
+  testID,
+  onRetryComplete,
+}: {
+  session: AutopilotSession;
+  testID?: string;
+  onRetryComplete?: () => void;
+}) {
+  const [retrying, setRetrying] = useState(false);
+
+  const handleAction = async (action: CustomerCaseAction) => {
+    if (action.type === "route") {
+      router.push(action.href);
+      return;
+    }
+    if (action.type === "retry") {
+      setRetrying(true);
+      try {
+        await retryDocumentBatch(action.householdId, action.batchId);
+        onRetryComplete?.();
+      } catch {
+        // Retry failures surface on the next batch poll; no extra UI here.
+      } finally {
+        setRetrying(false);
+      }
+    }
+  };
+
   return (
     <Card testID={testID} style={{ marginBottom: 0 }}>
       <View style={{ marginBottom: 12, gap: 4 }}>
@@ -183,19 +191,15 @@ function SessionCard({ session, testID }: { session: AutopilotSession; testID?: 
       </View>
       <SessionStepList
         steps={session.steps}
-        action={session.action}
         processing={session.isProcessing}
         processingSince={session.processingSince}
       />
       {session.action && !session.isProcessing ? (
         <PrimaryButton
           label={session.action.label}
-          onPress={() =>
-            router.push({
-              pathname: session.action!.route,
-              params: session.action!.params,
-            })
-          }
+          onPress={() => handleAction(session.action!)}
+          loading={retrying}
+          testID="session-action"
         />
       ) : null}
     </Card>
@@ -230,7 +234,11 @@ export default function Autopilot() {
         >
           <Subtitle style={{ marginBottom: spacing.md }}>Current Session</Subtitle>
           {current ? (
-            <SessionCard session={current} testID="current-session" />
+            <SessionCard
+              session={current}
+              testID="current-session"
+              onRetryComplete={() => refetch()}
+            />
           ) : (
             <Card>
               <Subtitle style={{ marginBottom: 4 }}>No active Autopilot session</Subtitle>
@@ -252,7 +260,7 @@ export default function Autopilot() {
             ) : (
               past.map((session, index) => (
                 <View key={session.id} style={{ marginBottom: index < past.length - 1 ? 16 : 0 }}>
-                  <SessionCard session={session} />
+                  <SessionCard session={session} onRetryComplete={() => refetch()} />
                 </View>
               ))
             )}

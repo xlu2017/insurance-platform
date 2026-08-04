@@ -6,9 +6,11 @@ description: How to run the end-to-end customer golden path and PR auth flows ag
 # Testing the Insurance Autopilot Expo mobile app
 
 ## Devin Secrets Needed
-None for the local stack.  If you want to test dangerous-mode external document processing locally, create `supabase/functions/.env` with `DOCUMENT_MODEL_PRIMARY`, `CONFIGURED_PROVIDER`, and `PROCESSOR_CONTRACT_VERSION` before `supabase start`.
+
+None for the local stack. If you want to test dangerous-mode external document processing locally, create `supabase/functions/.env` with `DOCUMENT_MODEL_PRIMARY`, `CONFIGURED_PROVIDER`, and `PROCESSOR_CONTRACT_VERSION` before `supabase start`.
 
 ## Repository setup
+
 - Repo root: `/home/ubuntu/repos/insurance-platform`
 - App package: `@autopilot/mobile`
 - Supabase local backend should be started and seeded:
@@ -21,6 +23,7 @@ None for the local stack.  If you want to test dangerous-mode external document 
   ```
 
 ## Environment
+
 The app reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` from `apps/mobile/.env`.
 For local Expo web testing, the default `http://127.0.0.1:54321` URL is accepted by `apps/mobile/lib/auth.ts` as long as `Platform.OS === "web"`.
 
@@ -35,6 +38,7 @@ pnpm --filter @autopilot/mobile dev --web
 Otherwise, type `customer@example.com` / `DemoCustomer123!` into the sign-in form fields.
 
 ## Data state for repeated golden-path runs
+
 The demo `customer_questions` row (`34000000-0000-0000-0000-000000000001`) is updated to `answered` when the question is submitted. To re-test the full pending-question flow, reset it before a new run:
 
 ```bash
@@ -45,6 +49,7 @@ PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres \
 ## Common blockers and workarounds
 
 ### 1. Welcome/SecondaryButton Pressable may not respond to mouse clicks
+
 In the configured test Chrome instance, `SecondaryButton` components (welcome **"Sign in"**, sign-in **"Sign in with test account"**, question **Yes/No** options) may not advance when clicked with `left_click` at the visible center, while `PrimaryButton` components (green **"Sign in"**, **"Submit answer** when answer already selected, bottom tab bar) usually respond. If a secondary button does not advance the UI, fall back to:
 
 - Typing the target URL directly in the browser address bar (e.g. `http://localhost:8081/sign-in`).
@@ -56,10 +61,12 @@ In the configured test Chrome instance, `SecondaryButton` components (welcome **
 This is likely a browser pointer-event configuration issue rather than an app bug, but it can interfere with a smooth recording.
 
 ### 2. File picker on Expo web
-The visible **Add PDF or image files** button in `expo-document-picker` sometimes does not open the OS file picker with mouse clicks.  When the dialog is open, you can use the keyboard: type the file name (e.g. `auto-policy.png`) to filter and press `Enter` (or `Alt+O` on some GTK file dialogs) to confirm.  If that fails, exercise the upload path via the hidden `<input type="file">` or a test script.
+
+The visible **Add PDF or image files** button in `expo-document-picker` sometimes does not open the OS file picker with mouse clicks. When the dialog is open, you can use the keyboard: type the file name (e.g. `auto-policy.png`) to filter and press `Enter` (or `Alt+O` on some GTK file dialogs) to confirm. If that fails, exercise the upload path via the hidden `<input type="file">` or a test script.
 
 ### 3. Console error: "The 'navigation' object hasn't been initialized yet"
-`AuthGate`/callback routes may call `router.replace` before the Expo Router navigator mounts.  This produces a console error:
+
+`AuthGate`/callback routes may call `router.replace` before the Expo Router navigator mounts. This produces a console error:
 
 > "The 'navigation' object hasn't been initialized yet."
 
@@ -68,40 +75,52 @@ Use a guarded `safeReplace` (retry with small backoff until the navigator is rea
 ## Other known runtime issues
 
 ### Profile sign-out Rules-of-Hooks crash (FIXED)
-`apps/mobile/app/(tabs)/profile.tsx` previously declared `signingOut` and `signOutError` `useState` hooks after `if (isLoading) return <Loading />;`.  This caused a `Rendered more hooks than during the previous render` crash when the component re-rendered after sign-out.  The hooks are now declared above the early return; sign-out returns to `/welcome` cleanly.
+
+`apps/mobile/app/(tabs)/profile.tsx` previously declared `signingOut` and `signOutError` `useState` hooks after `if (isLoading) return <Loading />;`. This caused a `Rendered more hooks than during the previous render` crash when the component re-rendered after sign-out. The hooks are now declared above the early return; sign-out returns to `/welcome` cleanly.
 
 ### Expo web document upload (FIXED)
-`apps/mobile/lib/upload.ts` previously called `FileSystem.uploadAsync` unconditionally, which threw on web.  It now has a `Platform.OS === "web"` branch that fetches the picked file blob, builds a `FormData` with `file`, `householdId`, `category`, `batchId`, and `clientItemId`, and POSTs to `functions/v1/upload-document`.  Document uploads succeed on Expo web.
+
+`apps/mobile/lib/upload.ts` previously called `FileSystem.uploadAsync` unconditionally, which threw on web. It now has a `Platform.OS === "web"` branch that fetches the picked file blob, builds a `FormData` with `file`, `householdId`, `category`, `batchId`, and `clientItemId`, and POSTs to `functions/v1/upload-document`. Document uploads succeed on Expo web.
 
 ### OAuth callback crash on web (FIXED)
+
 `apps/mobile/app/auth/callback.tsx` now guards `WebBrowser.dismissBrowser()` before calling it and wraps any returned promise with `Promise.resolve(...).catch(() => {})` so it no longer crashes when `dismissBrowser` is missing or returns `undefined`.
 
 ### Edge function "name resolution failed" (workaround)
+
 If edge-function requests return `{"message":"name resolution failed"}`, the `supabase_edge_runtime_insurance-autopilot` Docker container is likely stopped. Restart it with:
+
 ```bash
 docker start supabase_edge_runtime_insurance-autopilot
 # or
 supabase start
 ```
+
 Also ensure the gitignored `supabase/functions/.env` contains `DOCUMENT_MODEL_PRIMARY`, `CONFIGURED_PROVIDER`, and `PROCESSOR_CONTRACT_VERSION` when testing dangerous-mode enablement.
 
 ### Verify-email public path (FIXED)
+
 `/verify-email` is now included in `PUBLIC_PATHS` in `apps/mobile/lib/auth-gate.ts`, so an unauthenticated user who registers without auto-confirm can reach the verify screen.
 
 ### Onboarding membership blocked locally
-`/onboarding/membership` calls a Stripe checkout session edge function.  Without Stripe secrets configured, it returns a plain text error that the UI parses as JSON, producing `Unexpected token 'S', "Stripe is "... is not valid JSON`.  This blocks the full onboarding flow for new users unless Stripe is configured.
+
+`/onboarding/membership` calls a Stripe checkout session edge function. Without Stripe secrets configured, it returns a plain text error that the UI parses as JSON, producing `Unexpected token 'S', "Stripe is "... is not valid JSON`. This blocks the full onboarding flow for new users unless Stripe is configured.
 
 ### Onboarding resume at Documents not wired in home.tsx
-`document-processing-consent.tsx` persists `onboarding_step = 'documents'` after both **Allow processing** and **Upload without AI processing**.  However, `apps/mobile/app/(tabs)/home.tsx` computes `setupAction` with:
+
+`document-processing-consent.tsx` persists `onboarding_step = 'documents'` after both **Allow processing** and **Upload without AI processing**. However, `apps/mobile/app/(tabs)/home.tsx` computes `setupAction` with:
+
 ```tsx
 const isOnboardingComplete = household?.onboarding_step === "complete";
 const setupAction = isOnboardingComplete
   ? { label: "Upload documents", route: "/(tabs)/documents" }
   : { label: "Continue setup", route: "/onboarding/document-processing-consent" };
 ```
-When `onboarding_step` is `documents` (not `complete`), **Continue setup** routes back to the consent screen instead of `/onboarding/documents`.  Directly reloading `/onboarding/documents` works, but a root relaunch that lands on `/home` may send the user to the wrong screen.  Also, the demo seed creates an active `licensed_review` case and a pending `customer_questions` row, which can hide the `Continue setup` button entirely behind an `Answer question` / `Review coverage rules` action during relaunch tests.
+
+When `onboarding_step` is `documents` (not `complete`), **Continue setup** routes back to the consent screen instead of `/onboarding/documents`. Directly reloading `/onboarding/documents` works, but a root relaunch that lands on `/home` may send the user to the wrong screen. Also, the demo seed creates an active `licensed_review` case and a pending `customer_questions` row, which can hide the `Continue setup` button entirely behind an `Answer question` / `Review coverage rules` action during relaunch tests.
 
 ## Golden-path and PR #22 checkpoints
+
 1. `http://localhost:8081/welcome` shows **"Insurance handled for you"** and **"Sign in"**.
 2. `/sign-in` shows **"Welcome back"** with Email/Password fields and no bottom tab bar.
 3. After sign-in, `/home` shows:
@@ -119,6 +138,7 @@ When `onboarding_step` is `documents` (not `complete`), **Continue setup** route
 11. Document upload on Expo web works through the `fetch`/`FormData` branch.
 
 ## Useful DOM selectors for console fallbacks
+
 - `button[aria-label="Sign in"]` (welcome)
 - `input[aria-label="Email"]` / `input[aria-label="Password"]` (sign-in)
 - `button[aria-label="Sign in"]` (green sign-in button)
@@ -134,6 +154,7 @@ When `onboarding_step` is `documents` (not `complete`), **Continue setup** route
 - `button[aria-label="Back to sign in"]` (verify-email)
 
 ## Console log signals
+
 - `[auth] sign-in request: hostname=127.0.0.1` — a successful auth token request is being sent to the local Supabase backend.
 - `[auth] invalid config: invalid_config` — the Supabase URL is being rejected.
 - `The 'navigation' object hasn't been initialized yet` — an imperative redirect is firing before the Expo Router navigator is mounted.

@@ -1,9 +1,12 @@
 import { router } from "expo-router";
+import { useState } from "react";
 import { ScrollView, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
-import { useActiveCase, useHistoricalCase, useHousehold } from "@/lib/household";
+import { useHistoricalCase, useHousehold } from "@/lib/household";
+import { useAutopilotSessions, type CustomerCaseAction } from "@/lib/autopilot";
+import { retryDocumentBatch } from "@/lib/document-processing";
 import { colors, spacing } from "@autopilot/design-tokens";
 import { formatCad, formatEdmontonDate } from "@/lib/format";
 import {
@@ -20,9 +23,12 @@ import {
 } from "@/components/ui";
 
 export default function Home() {
+  const queryClient = useQueryClient();
   const { data: household, isLoading } = useHousehold();
-  const { data: activeCase } = useActiveCase(household?.id);
   const { data: historicalCase } = useHistoricalCase(household?.id);
+  const { current, isLoading: sessionsLoading } = useAutopilotSessions(household?.id);
+
+  const activeCaseId = current?.id;
 
   const { data: policies } = useQuery({
     queryKey: ["current-policies", household?.id],
@@ -41,13 +47,13 @@ export default function Home() {
   });
 
   const { data: pendingQuestion } = useQuery({
-    queryKey: ["pending-question", activeCase?.id],
-    enabled: !!activeCase,
+    queryKey: ["pending-question", activeCaseId],
+    enabled: !!activeCaseId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customer_questions")
         .select("id, prompt")
-        .eq("case_id", activeCase!.id)
+        .eq("case_id", activeCaseId!)
         .eq("status", "pending")
         .limit(1)
         .maybeSingle();
@@ -71,7 +77,9 @@ export default function Home() {
     },
   });
 
-  if (isLoading) return <Loading />;
+  const [retrying, setRetrying] = useState(false);
+
+  if (isLoading || sessionsLoading) return <Loading />;
   if (!household) {
     return (
       <Screen style={{ justifyContent: "center" }}>
@@ -97,38 +105,8 @@ export default function Home() {
     .filter(Boolean)
     .sort()[0];
 
-  const requiredAction = pendingQuestion
-    ? {
-        label: "Answer a question from your insurer",
-        buttonLabel: "Answer question",
-        action: () => router.push(`/question/${pendingQuestion.id}`),
-      }
-    : activeCase?.state === "customer_decision"
-      ? {
-          label: "Review your recommendation",
-          buttonLabel: "Review recommendation",
-          action: () => router.push("/recommendation"),
-        }
-      : activeCase?.state === "awaiting_customer_confirmation"
-        ? {
-            label: "Confirm your policy details",
-            buttonLabel: "Confirm policy details",
-            action: () => router.push("/confirm-details"),
-          }
-        : activeCase?.state === "extracting_information" ||
-            activeCase?.state === "awaiting_documents"
-          ? {
-              label: "Review document details",
-              buttonLabel: "Review document details",
-              action: () => router.push("/onboarding/review-entities"),
-            }
-          : activeCase?.state === "comparing_quotes" || activeCase?.state === "licensed_review"
-            ? {
-                label: "Review coverage rules",
-                buttonLabel: "Review coverage rules",
-                action: () => router.push("/onboarding/reconcile-mandates"),
-              }
-            : null;
+  const isOnboardingComplete = household?.onboarding_step === "complete";
+  const hasPolicies = (policies ?? []).length > 0;
 
   const historicalOutcome = historicalCase
     ? historicalCase.state === "completed"
@@ -137,6 +115,37 @@ export default function Home() {
         ? "Last case completed; you kept your current insurance."
         : "Last case was cancelled."
     : null;
+
+  const statusLabel = pendingQuestion
+    ? "Answer a question from your insurer"
+    : (current?.status ?? (isOnboardingComplete ? "No active review" : "Finish setting up"));
+
+  const action: CustomerCaseAction | undefined = pendingQuestion
+    ? {
+        type: "route",
+        label: "Answer question",
+        href: { pathname: `/question/${pendingQuestion.id}` },
+      }
+    : current?.action;
+
+  const handleAction = async () => {
+    if (!action) return;
+    if (action.type === "route") {
+      router.push(action.href);
+      return;
+    }
+    if (action.type === "retry") {
+      setRetrying(true);
+      try {
+        await retryDocumentBatch(action.householdId, action.batchId);
+        await queryClient.invalidateQueries({ queryKey: ["document-processing-batches"] });
+      } finally {
+        setRetrying(false);
+      }
+    }
+  };
+
+  const showSetupAction = !action && !pendingQuestion && (!isOnboardingComplete || !hasPolicies);
 
   function onboardingRouteFor(step: string | null | undefined): string {
     switch (step) {
@@ -160,12 +169,25 @@ export default function Home() {
     }
   }
 
-  const isOnboardingComplete = household?.onboarding_step === "complete";
-  const hasPolicies = (policies ?? []).length > 0;
-  const showSetupAction = !requiredAction && (!isOnboardingComplete || !hasPolicies);
   const setupAction = isOnboardingComplete
     ? { label: "Upload documents", route: "/(tabs)/documents" }
     : { label: "Continue setup", route: onboardingRouteFor(household?.onboarding_step) };
+
+  const title = action
+    ? "One item needs your attention"
+    : !isOnboardingComplete
+      ? "Finish setting up"
+      : !hasPolicies
+        ? "Upload your policies"
+        : "Your insurance is covered";
+
+  const subtitle = action
+    ? statusLabel
+    : !isOnboardingComplete
+      ? "Complete your setup so we can extract your coverage and start comparing."
+      : !hasPolicies
+        ? "Upload your current policies so we can monitor renewals and compare options."
+        : "Autopilot is monitoring your policies and will alert you before renewal.";
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -174,13 +196,9 @@ export default function Home() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.md }}
         >
-          <Title>
-            {requiredAction ? "One item needs your attention" : "Your insurance is covered"}
-          </Title>
+          <Title>{title}</Title>
           <Body muted style={{ marginBottom: 16 }}>
-            {requiredAction
-              ? requiredAction.label
-              : "Autopilot is monitoring your policies and will alert you before renewal."}
+            {subtitle}
           </Body>
 
           <Card testID="autopilot-status-card">
@@ -193,20 +211,29 @@ export default function Home() {
               }}
             >
               <StatusPill
-                label={household.autopilot_active ? "Autopilot active" : "Autopilot paused"}
-                tone={household.autopilot_active ? "accent" : "neutral"}
+                label={
+                  hasPolicies
+                    ? household.autopilot_active
+                      ? "Autopilot active"
+                      : "Autopilot paused"
+                    : "Setup incomplete"
+                }
+                tone={hasPolicies && household.autopilot_active ? "accent" : "neutral"}
                 tooltip={
-                  household.autopilot_active
-                    ? "Autopilot is monitoring your policies and renewals."
-                    : "Autopilot is paused and will not monitor your policies."
+                  hasPolicies
+                    ? household.autopilot_active
+                      ? "Autopilot is monitoring your policies and renewals."
+                      : "Autopilot is paused and will not monitor your policies."
+                    : "Autopilot cannot monitor policies until current policies are uploaded."
                 }
               />
-              {historicalOutcome && !requiredAction ? <Caption>{historicalOutcome}</Caption> : null}
+              {historicalOutcome && !action ? <Caption>{historicalOutcome}</Caption> : null}
             </View>
-            {requiredAction ? (
+            {action ? (
               <PrimaryButton
-                label={requiredAction.buttonLabel}
-                onPress={requiredAction.action}
+                label={action.label}
+                onPress={handleAction}
+                loading={retrying}
                 testID="required-action"
               />
             ) : null}
@@ -224,7 +251,7 @@ export default function Home() {
                 />
               </>
             ) : null}
-            {!requiredAction && !showSetupAction ? <Body muted>No action required</Body> : null}
+            {!action && !showSetupAction ? <Body muted>No action required</Body> : null}
           </Card>
 
           <Card>
