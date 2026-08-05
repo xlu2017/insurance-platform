@@ -43,7 +43,15 @@ function generateRequestId(prefix: string, batchId: string): string {
 
 function isValidDate(value: string): boolean {
   if (!value) return true;
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  // Strict calendar validation: reject impossible dates (e.g. 2026-02-31).
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
 }
 
 function isValidPostalCode(value: string): boolean {
@@ -68,7 +76,7 @@ function parseMoney(value: string): number | null {
   const trimmed = value.trim();
   if (trimmed === "") return null;
   const parsed = Number(trimmed);
-  if (Number.isNaN(parsed) || parsed < 0) return null;
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
   return Math.round(parsed * 100);
 }
 
@@ -94,6 +102,10 @@ export default function ManualEntry() {
 
   const [assetType, setAssetType] = useState<AssetType>("property");
   const [label, setLabel] = useState("");
+  const [decision, setDecision] = useState<
+    "approve_new" | "link_existing" | "skip" | "needs_correction"
+  >("approve_new");
+  const [existingAssetId, setExistingAssetId] = useState("");
 
   // Common policy fields
   const [insurerName, setInsurerName] = useState("");
@@ -162,6 +174,34 @@ export default function ManualEntry() {
         .order("created_at", { ascending: false });
       if (queryError) throw queryError;
       return (data as Candidate[]) ?? [];
+    },
+  });
+
+  const { data: existingAssets } = useQuery<{ id: string; label: string }[]>({
+    queryKey: ["manual-entry-existing-assets", household?.id, assetType],
+    enabled: !!household,
+    queryFn: async () => {
+      if (!household) return [];
+      if (assetType === "vehicle") {
+        const { data, error: qErr } = await supabase
+          .from("vehicles")
+          .select("id, year, make, model")
+          .eq("household_id", household.id);
+        if (qErr) throw qErr;
+        return (data ?? []).map((v) => ({
+          id: v.id as string,
+          label: `${v.year} ${v.make} ${v.model}`,
+        }));
+      }
+      const { data, error: qErr } = await supabase
+        .from("properties")
+        .select("id, address_line1, city")
+        .eq("household_id", household.id);
+      if (qErr) throw qErr;
+      return (data ?? []).map((p) => ({
+        id: p.id as string,
+        label: `${p.address_line1}, ${p.city}`,
+      }));
     },
   });
 
@@ -238,10 +278,15 @@ export default function ManualEntry() {
               comprehensiveDeductibleCents,
             },
       mandateSuggestions: assetType === "property" ? propertyMandate : vehicleMandate,
+      _draftDecision: decision,
+      _draftExistingAssetId: decision === "link_existing" ? existingAssetId : null,
+      _draftExistingAssetType: decision === "link_existing" ? assetType : null,
     };
     return common;
   }, [
     assetType,
+    decision,
+    existingAssetId,
     fullAddress,
     city,
     province,
@@ -293,43 +338,69 @@ export default function ManualEntry() {
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
     if (!label.trim()) errors.label = "Display label is required";
-    if (!insurerName.trim()) errors.insurerName = "Insurer name is required";
+
+    // approve_new and link_existing both require a valid current policy; skip and
+    // needs_correction require neither policy nor identity.
+    const requiresPolicy = decision === "approve_new" || decision === "link_existing";
+    // Only a brand-new asset needs a complete identity; link_existing reuses an existing one.
+    const requiresIdentity = decision === "approve_new";
+
+    if (requiresPolicy && !insurerName.trim()) errors.insurerName = "Insurer name is required";
 
     if (assetType === "property") {
-      if (!fullAddress.trim()) errors.fullAddress = "Address is required";
-      if (!city.trim()) errors.city = "City is required";
-      if (!province.trim()) errors.province = "Province is required";
-      if (!isValidPostalCode(postalCode)) errors.postalCode = "Enter a valid postal code";
-      if (yearBuilt.trim() && !isValidYear(yearBuilt.trim())) {
-        errors.yearBuilt = "Enter a valid year between 1900 and 2100";
+      if (requiresIdentity) {
+        if (!fullAddress.trim()) errors.fullAddress = "Address is required";
+        if (!city.trim()) errors.city = "City is required";
+        if (!province.trim()) errors.province = "Province is required";
+        if (!isValidPostalCode(postalCode)) errors.postalCode = "Enter a valid postal code";
+        if (yearBuilt.trim() && !isValidYear(yearBuilt.trim())) {
+          errors.yearBuilt = "Enter a valid year between 1900 and 2100";
+        }
       }
       if (parseMoney(dwellingLimit) === null && dwellingLimit.trim() !== "") {
         errors.dwellingLimit = formatMoneyError("Dwelling limit");
+      }
+      if (parseMoney(contentsLimit) === null && contentsLimit.trim() !== "") {
+        errors.contentsLimit = formatMoneyError("Contents limit");
+      }
+      if (parseMoney(propertyLiabilityLimit) === null && propertyLiabilityLimit.trim() !== "") {
+        errors.propertyLiabilityLimit = formatMoneyError("Personal liability limit");
       }
       if (parseMoney(baseDeductible) === null && baseDeductible.trim() !== "") {
         errors.baseDeductible = formatMoneyError("Base deductible");
       }
     } else {
-      if (!isValidYear(year.trim())) {
-        errors.year = "Enter a valid year between 1900 and 2100";
+      if (requiresIdentity) {
+        if (!isValidYear(year.trim())) {
+          errors.year = "Enter a valid year between 1900 and 2100";
+        }
+        if (!make.trim()) errors.make = "Make is required";
+        if (!model.trim()) errors.model = "Model is required";
+        if (vin.trim() && !isValidVin(vin.trim()))
+          errors.vin = "VIN must be 17 alphanumeric characters (I, O and Q not allowed)";
       }
-      if (!make.trim()) errors.make = "Make is required";
-      if (!model.trim()) errors.model = "Model is required";
-      if (vin.trim() && !isValidVin(vin.trim()))
-        errors.vin = "VIN must be 17 alphanumeric characters (I, O and Q not allowed)";
       if (parseMoney(thirdPartyLiability) === null && thirdPartyLiability.trim() !== "") {
         errors.thirdPartyLiability = formatMoneyError("Liability limit");
       }
       if (parseMoney(collisionDeductible) === null && collisionDeductible.trim() !== "") {
         errors.collisionDeductible = formatMoneyError("Collision deductible");
       }
+      if (parseMoney(comprehensiveDeductible) === null && comprehensiveDeductible.trim() !== "") {
+        errors.comprehensiveDeductible = formatMoneyError("Comprehensive deductible");
+      }
     }
 
-    const premiumCents = parseMoney(annualPremiumDollars);
-    if (premiumCents === null || premiumCents <= 0) {
-      errors.annualPremium = "Annual premium must be a positive amount";
+    if (requiresPolicy) {
+      const premiumCents = parseMoney(annualPremiumDollars);
+      if (premiumCents === null || premiumCents <= 0) {
+        errors.annualPremium = "Annual premium must be a positive amount";
+      }
     }
-    if (!isValidDate(expiryDate)) errors.expiryDate = "Use YYYY-MM-DD";
+    if (!isValidDate(expiryDate)) errors.expiryDate = "Enter a valid date (YYYY-MM-DD)";
+
+    if (decision === "link_existing" && !existingAssetId) {
+      errors.existingAsset = "Select an existing asset to link";
+    }
 
     if (selectedDocIds.length === 0) errors.documents = "Select at least one source document";
 
@@ -362,6 +433,8 @@ export default function ManualEntry() {
     setSelectedDocIds([]);
     setValidationErrors({});
     setEditingCandidate(null);
+    setDecision("approve_new");
+    setExistingAssetId("");
     draftRequestIdRef.current = null;
     editRequestIdRef.current = null;
   };
@@ -450,6 +523,15 @@ export default function ManualEntry() {
 
     setAssetType(candidate.asset_type);
     setLabel(candidate.display_label);
+    const draftDecision = String(facts._draftDecision ?? "approve_new");
+    setDecision(
+      draftDecision === "link_existing" ||
+        draftDecision === "skip" ||
+        draftDecision === "needs_correction"
+        ? (draftDecision as "link_existing" | "skip" | "needs_correction")
+        : "approve_new",
+    );
+    setExistingAssetId(String(facts._draftExistingAssetId ?? ""));
     setInsurerName(String(policy.insurerName ?? ""));
     setPolicyNumber(String(policy.policyNumber ?? ""));
     setAnnualPremiumDollars(formatCents(policy.annualPremiumCents));
@@ -710,12 +792,14 @@ export default function ManualEntry() {
           value={contentsLimit}
           onChangeText={setContentsLimit}
           keyboardType="numeric"
+          error={validationErrors.contentsLimit}
         />
         <Field
           label="Personal liability limit ($)"
           value={propertyLiabilityLimit}
           onChangeText={setPropertyLiabilityLimit}
           keyboardType="numeric"
+          error={validationErrors.propertyLiabilityLimit}
         />
         <Field
           label="Base deductible ($)"
@@ -746,6 +830,7 @@ export default function ManualEntry() {
           value={comprehensiveDeductible}
           onChangeText={setComprehensiveDeductible}
           keyboardType="numeric"
+          error={validationErrors.comprehensiveDeductible}
         />
       </View>
     );
@@ -791,8 +876,46 @@ export default function ManualEntry() {
               { value: "vehicle", label: "Vehicle" },
             ]}
             value={assetType}
-            onValueChange={(value) => setAssetType(value as AssetType)}
+            onValueChange={(value) => {
+              setAssetType(value as AssetType);
+              setExistingAssetId("");
+            }}
           />
+        </Card>
+
+        <Card>
+          <Subtitle>Decision</Subtitle>
+          <Select
+            label="Decision"
+            options={[
+              { value: "approve_new", label: "Approve as new asset" },
+              { value: "link_existing", label: "Link to existing asset" },
+              { value: "skip", label: "Skip" },
+              { value: "needs_correction", label: "Needs correction" },
+            ]}
+            value={decision}
+            onValueChange={(value) =>
+              setDecision(value as "approve_new" | "link_existing" | "skip" | "needs_correction")
+            }
+          />
+          {decision === "link_existing" ? (
+            <View style={{ marginTop: spacing.md }}>
+              <Select
+                label={`Existing ${assetType}`}
+                options={[
+                  { value: "", label: `Select an existing ${assetType}…` },
+                  ...(existingAssets ?? []).map((a) => ({ value: a.id, label: a.label })),
+                ]}
+                value={existingAssetId}
+                onValueChange={setExistingAssetId}
+              />
+              {validationErrors.existingAsset ? (
+                <Body style={{ color: colors.danger, marginTop: spacing.sm }}>
+                  {validationErrors.existingAsset}
+                </Body>
+              ) : null}
+            </View>
+          ) : null}
         </Card>
 
         <Card>

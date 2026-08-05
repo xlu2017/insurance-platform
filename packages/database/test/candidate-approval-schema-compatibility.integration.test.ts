@@ -217,6 +217,7 @@ function autoVehicleFacts() {
       comprehensiveDeductibleCents: extractedValue(50000, 0.94),
     },
     mandateSuggestions: { thirdPartyLiability: { rule: "minimum", amountCents: 1000000 } },
+    _draftDecision: "approve_new",
   };
 }
 
@@ -242,6 +243,7 @@ function autoPropertyFacts() {
       baseDeductibleCents: extractedValue(100000),
     },
     mandateSuggestions: { dwelling: { rule: "minimum", amountCents: 50000000 } },
+    _draftDecision: "approve_new",
   };
 }
 

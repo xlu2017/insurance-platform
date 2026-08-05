@@ -110,6 +110,30 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
   const [policy, setPolicy] = useState<Record<string, string>>({});
   const [coverage, setCoverage] = useState<Record<string, string>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [decision, setDecision] = useState<
+    "approve_new" | "link_existing" | "skip" | "needs_correction"
+  >("approve_new");
+  const [existingAssetId, setExistingAssetId] = useState("");
+
+  const { data: existingAssets } = useQuery({
+    queryKey: ["manual-existing-assets", caseRow.household_id, assetType],
+    queryFn: async () => {
+      if (assetType === "vehicle") {
+        const { data, error } = await supabaseBrowser()
+          .from("vehicles")
+          .select("id, year, make, model")
+          .eq("household_id", caseRow.household_id);
+        if (error) throw error;
+        return (data ?? []).map((v) => ({ id: v.id, label: `${v.year} ${v.make} ${v.model}` }));
+      }
+      const { data, error } = await supabaseBrowser()
+        .from("properties")
+        .select("id, address_line1, city")
+        .eq("household_id", caseRow.household_id);
+      if (error) throw error;
+      return (data ?? []).map((p) => ({ id: p.id, label: `${p.address_line1}, ${p.city}` }));
+    },
+  });
 
   const fingerprint = useMemo(
     () =>
@@ -142,19 +166,42 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
     const trimmed = value.trim();
     if (trimmed === "") return null;
     const parsed = Number(trimmed);
-    if (Number.isNaN(parsed) || parsed <= 0) return null;
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
     return Math.round(parsed * 100);
+  }
+
+  function isValidCalendarDate(value: string): boolean {
+    if (!value || value.trim() === "") return true;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (!m) return false;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    return (
+      dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d
+    );
   }
 
   function validate(): boolean {
     const errors: Record<string, string> = {};
     if (!displayLabel.trim()) errors.displayLabel = "Display label is required";
-    if (!policy.insurerName?.trim()) errors.insurerName = "Insurer name is required";
-    const premiumCents = parseMoney(policy.annualPremiumDollars ?? "");
-    if (premiumCents === null)
-      errors.annualPremiumDollars = "Annual premium must be a positive amount";
 
-    if (assetType === "property") {
+    // approve_new and link_existing both require a valid current policy; skip and
+    // needs_correction require neither policy nor identity.
+    const requiresPolicy = decision === "approve_new" || decision === "link_existing";
+    // Only a brand-new asset needs a complete identity; link_existing reuses an existing one.
+    const requiresIdentity = decision === "approve_new";
+
+    if (requiresPolicy) {
+      if (!policy.insurerName?.trim()) errors.insurerName = "Insurer name is required";
+      const premiumCents = parseMoney(policy.annualPremiumDollars ?? "");
+      if (premiumCents === null)
+        errors.annualPremiumDollars = "Annual premium must be a positive amount";
+    }
+
+    if (requiresIdentity && assetType === "property") {
       if (!identity.fullAddress?.trim()) errors.fullAddress = "Address is required";
       if (!identity.city?.trim()) errors.city = "City is required";
       if (!identity.province?.trim()) errors.province = "Province is required";
@@ -163,7 +210,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       if (identity.yearBuilt?.trim() && !isValidYear(identity.yearBuilt.trim())) {
         errors.yearBuilt = "Enter a valid year between 1900 and 2100";
       }
-    } else {
+    } else if (requiresIdentity) {
       if (!isValidYear(identity.year ?? ""))
         errors.year = "Enter a valid year between 1900 and 2100";
       if (!identity.make?.trim()) errors.make = "Make is required";
@@ -171,6 +218,26 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       if (identity.vin?.trim() && !isValidVin(identity.vin.trim())) {
         errors.vin = "VIN must be 17 alphanumeric characters (I, O and Q not allowed)";
       }
+    }
+
+    // Every provided monetary coverage field must be numeric, finite and non-negative.
+    for (const [key, rawValue] of Object.entries(coverage)) {
+      if (rawValue === undefined || rawValue.trim() === "") continue;
+      const parsed = Number(rawValue.trim());
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        errors[key] = "Enter a valid non-negative amount";
+      }
+    }
+
+    if (policy.effectiveDate && !isValidCalendarDate(policy.effectiveDate)) {
+      errors.effectiveDate = "Enter a valid calendar date";
+    }
+    if (policy.expiryDate && !isValidCalendarDate(policy.expiryDate)) {
+      errors.expiryDate = "Enter a valid calendar date";
+    }
+
+    if (decision === "link_existing" && !existingAssetId) {
+      errors.existingAsset = "Select an existing asset to link";
     }
 
     if (selectedDocIds.length === 0) errors.documents = "Select at least one source document";
@@ -217,6 +284,9 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
           Object.entries(coverage).map(([k, v]) => [k, v ? Math.round(Number(v) * 100) : null]),
         ),
         mandateSuggestions,
+        _draftDecision: decision,
+        _draftExistingAssetId: decision === "link_existing" ? existingAssetId : null,
+        _draftExistingAssetType: decision === "link_existing" ? assetType : null,
       };
 
       if (!saveRequestIdRef.current) {
@@ -253,6 +323,8 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       setIdentity({});
       setPolicy({});
       setCoverage({});
+      setDecision("approve_new");
+      setExistingAssetId("");
     },
     onError: (e: Error) => setMessage(e.message),
   });
@@ -439,12 +511,47 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
             <Label>Asset type</Label>
             <Select
               value={assetType}
-              onChange={(e) => setAssetType(e.target.value as "property" | "vehicle")}
+              onChange={(e) => {
+                setAssetType(e.target.value as "property" | "vehicle");
+                setExistingAssetId("");
+              }}
             >
               <option value="property">Property</option>
               <option value="vehicle">Vehicle</option>
             </Select>
           </div>
+          <div>
+            <Label>Decision</Label>
+            <Select
+              value={decision}
+              onChange={(e) =>
+                setDecision(
+                  e.target.value as "approve_new" | "link_existing" | "skip" | "needs_correction",
+                )
+              }
+            >
+              <option value="approve_new">Approve as new asset</option>
+              <option value="link_existing">Link to existing asset</option>
+              <option value="skip">Skip</option>
+              <option value="needs_correction">Needs correction</option>
+            </Select>
+          </div>
+          {decision === "link_existing" ? (
+            <div>
+              <Label>Existing {assetType}</Label>
+              <Select value={existingAssetId} onChange={(e) => setExistingAssetId(e.target.value)}>
+                <option value="">Select an existing {assetType}…</option>
+                {(existingAssets ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </Select>
+              {validationErrors.existingAsset ? (
+                <p className="text-xs text-danger">{validationErrors.existingAsset}</p>
+              ) : null}
+            </div>
+          ) : null}
           <div>
             <Label>Display label</Label>
             <Input
@@ -522,7 +629,11 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
                   type="number"
                   value={coverage[f.key] || ""}
                   onChange={(e) => update(setCoverage, f.key, e.target.value)}
+                  className={cn(validationErrors[f.key] && "border-danger")}
                 />
+                {validationErrors[f.key] ? (
+                  <p className="text-xs text-danger">{validationErrors[f.key]}</p>
+                ) : null}
               </div>
             ))}
           </div>

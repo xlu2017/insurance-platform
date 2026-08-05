@@ -247,17 +247,11 @@ export const coverageSpecsByType: Record<CompareAssetType, CoverageSpec[]> = {
   property: propertyCoverageSpecs,
 };
 
-interface CandidateRow {
-  approved_asset_id: string | null;
-  approved_asset_type: CompareAssetType | null;
-  display_label: string | null;
-  approved_policy_id: string | null;
-  selected_facts_json: CoverageDetails | null;
-}
-
-interface PolicyRow {
-  id: string;
-  coverage_details: CoverageDetails;
+interface PolicyAssetLinkRow {
+  asset_id: string;
+  asset_type: CompareAssetType;
+  policy_id: string;
+  policies: { coverage_details: CoverageDetails } | { coverage_details: CoverageDetails }[] | null;
 }
 
 export async function loadCompareAssets(householdId: string): Promise<CompareAsset[]> {
@@ -283,69 +277,42 @@ export async function loadCompareAssets(householdId: string): Promise<CompareAss
     (properties ?? []).map((p) => [p.id, { type: "property" as const, display: p.address_line1 }]),
   );
 
-  const { data: candidates, error: candidatesError } = await supabase
-    .from("asset_candidates")
-    .select(
-      "approved_asset_id, approved_asset_type, display_label, approved_policy_id, selected_facts_json",
-    )
+  // Canonical current policy per asset comes from policy_asset_links, never from an
+  // unordered approved-candidate map. This guarantees comparison always reflects the
+  // current policy and never restores a value the customer corrected or rejected.
+  const { data: links, error: linksError } = await supabase
+    .from("policy_asset_links")
+    .select("asset_id, asset_type, policy_id, policies(coverage_details)")
     .eq("household_id", householdId)
-    .in("review_status", ["approved", "confirmed"])
-    .not("approved_asset_id", "is", null)
-    .not("approved_asset_type", "is", null);
+    .eq("is_current", true);
 
-  if (candidatesError) throw candidatesError;
+  if (linksError) throw linksError;
 
-  const candidateLookup = new Map<string, CandidateRow>();
-  const policyIds: string[] = [];
-  for (const c of (candidates as unknown as CandidateRow[]) ?? []) {
-    if (!c.approved_asset_id || !c.approved_asset_type) continue;
-    const key = `${c.approved_asset_type}:${c.approved_asset_id}`;
-    candidateLookup.set(key, c);
-    if (c.approved_policy_id) policyIds.push(c.approved_policy_id);
+  const coverageByAsset = new Map<string, CoverageDetails>();
+  for (const link of (links as unknown as PolicyAssetLinkRow[]) ?? []) {
+    if (!link.asset_id || !link.asset_type) continue;
+    const policy = Array.isArray(link.policies) ? link.policies[0] : link.policies;
+    const coverage = (policy?.coverage_details ?? {}) as CoverageDetails;
+    coverageByAsset.set(`${link.asset_type}:${link.asset_id}`, coverage);
   }
-
-  const { data: policies, error: policiesError } = await supabase
-    .from("policies")
-    .select("id, coverage_details")
-    .in("id", policyIds.length ? policyIds : ["00000000-0000-0000-0000-000000000000"]);
-
-  if (policiesError) throw policiesError;
-
-  const policyMap = new Map(
-    ((policies as unknown as PolicyRow[]) ?? []).map((p) => [p.id, p.coverage_details]),
-  );
 
   const assets: CompareAsset[] = [];
 
-  function mergeCoverage(candidate: CandidateRow | undefined): CoverageDetails {
-    const selectedFacts = (candidate?.selected_facts_json ?? {}) as Record<string, unknown>;
-    const selectedCoverage =
-      typeof selectedFacts.currentCoverage === "object" && selectedFacts.currentCoverage !== null
-        ? (selectedFacts.currentCoverage as CoverageDetails)
-        : {};
-    const policyCoverage = candidate?.approved_policy_id
-      ? policyMap.get(candidate.approved_policy_id)
-      : undefined;
-    return { ...selectedCoverage, ...(policyCoverage ?? {}) } as CoverageDetails;
-  }
-
   for (const [id, info] of vehicleMap.entries()) {
-    const candidate = candidateLookup.get(`vehicle:${id}`);
     assets.push({
       id,
       type: "vehicle",
-      displayName: candidate?.display_label ?? info.display,
-      coverageDetails: mergeCoverage(candidate),
+      displayName: info.display,
+      coverageDetails: coverageByAsset.get(`vehicle:${id}`) ?? {},
     });
   }
 
   for (const [id, info] of propertyMap.entries()) {
-    const candidate = candidateLookup.get(`property:${id}`);
     assets.push({
       id,
       type: "property",
-      displayName: candidate?.display_label ?? info.display,
-      coverageDetails: mergeCoverage(candidate),
+      displayName: info.display,
+      coverageDetails: coverageByAsset.get(`property:${id}`) ?? {},
     });
   }
 

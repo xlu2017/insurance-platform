@@ -132,6 +132,7 @@ function selectedFactsForProperty() {
       baseDeductibleCents: 100000,
     },
     mandateSuggestions: { dwelling: { rule: "minimum", amountCents: 50000000 } },
+    _draftDecision: "approve_new",
   };
 }
 
@@ -150,6 +151,7 @@ function selectedFactsForVehicle() {
       comprehensiveDeductibleCents: 50000,
     },
     mandateSuggestions: { thirdPartyLiability: { rule: "minimum", amountCents: 1000000 } },
+    _draftDecision: "approve_new",
   };
 }
 
