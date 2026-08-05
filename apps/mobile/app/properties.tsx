@@ -111,11 +111,12 @@ export default function Properties() {
   };
 
   const handleRename = async (asset: PropertyListItem, newName: string) => {
-    if (asset.data.candidate) {
-      const { error: updateError } = await supabase
-        .from("asset_candidates")
-        .update({ display_label: newName })
-        .eq("id", asset.data.candidate.id);
+    if (asset.data.candidate && household) {
+      const { error: updateError } = await supabase.rpc("update_candidate_display_label_v1", {
+        p_candidate_id: asset.data.candidate.id,
+        p_household_id: household.id,
+        p_display_label: newName.trim(),
+      });
       if (updateError) throw new Error(updateError.message);
     }
     queryClient.invalidateQueries({ queryKey: ["properties", household?.id] });

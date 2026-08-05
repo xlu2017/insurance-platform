@@ -47,8 +47,21 @@ function isValidDate(value: string): boolean {
 }
 
 function isValidPostalCode(value: string): boolean {
-  if (!value) return true;
+  if (!value || value.trim() === "") return false;
   return /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(value.trim());
+}
+
+function isValidVin(value: string): boolean {
+  if (!value) return true;
+  const cleaned = value.replace(/\s/g, "").toUpperCase();
+  if (cleaned.length !== 17) return false;
+  return /^[A-HJ-NPR-Z0-9]{17}$/.test(cleaned);
+}
+
+function isValidYear(value: string): boolean {
+  if (!value || !/^\d{4}$/.test(value.trim())) return false;
+  const year = Number(value.trim());
+  return year >= 1900 && year <= 2100;
 }
 
 function parseMoney(value: string): number | null {
@@ -280,14 +293,15 @@ export default function ManualEntry() {
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
     if (!label.trim()) errors.label = "Display label is required";
+    if (!insurerName.trim()) errors.insurerName = "Insurer name is required";
 
     if (assetType === "property") {
       if (!fullAddress.trim()) errors.fullAddress = "Address is required";
       if (!city.trim()) errors.city = "City is required";
       if (!province.trim()) errors.province = "Province is required";
       if (!isValidPostalCode(postalCode)) errors.postalCode = "Enter a valid postal code";
-      if (yearBuilt.trim() && !/^\d{4}$/.test(yearBuilt.trim())) {
-        errors.yearBuilt = "Enter a valid 4-digit year";
+      if (yearBuilt.trim() && !isValidYear(yearBuilt.trim())) {
+        errors.yearBuilt = "Enter a valid year between 1900 and 2100";
       }
       if (parseMoney(dwellingLimit) === null && dwellingLimit.trim() !== "") {
         errors.dwellingLimit = formatMoneyError("Dwelling limit");
@@ -296,12 +310,13 @@ export default function ManualEntry() {
         errors.baseDeductible = formatMoneyError("Base deductible");
       }
     } else {
-      if (!year.trim() || !/^\d{4}$/.test(year.trim())) {
-        errors.year = "Enter a valid 4-digit year";
+      if (!isValidYear(year.trim())) {
+        errors.year = "Enter a valid year between 1900 and 2100";
       }
       if (!make.trim()) errors.make = "Make is required";
       if (!model.trim()) errors.model = "Model is required";
-      if (vin.trim() && vin.trim().length !== 17) errors.vin = "VIN must be 17 characters";
+      if (vin.trim() && !isValidVin(vin.trim()))
+        errors.vin = "VIN must be 17 alphanumeric characters (I, O and Q not allowed)";
       if (parseMoney(thirdPartyLiability) === null && thirdPartyLiability.trim() !== "") {
         errors.thirdPartyLiability = formatMoneyError("Liability limit");
       }
@@ -794,7 +809,12 @@ export default function ManualEntry() {
         <Card>
           <Subtitle>Current policy</Subtitle>
           <View style={{ gap: spacing.md }}>
-            <Field label="Insurer name" value={insurerName} onChangeText={setInsurerName} />
+            <Field
+              label="Insurer name"
+              value={insurerName}
+              onChangeText={setInsurerName}
+              error={validationErrors.insurerName}
+            />
             <Field label="Policy number" value={policyNumber} onChangeText={setPolicyNumber} />
             <View style={{ flexDirection: "row", gap: spacing.md }}>
               <View style={{ flex: 1 }}>

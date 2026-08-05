@@ -127,6 +127,7 @@ export default function VehicleDetail() {
         onClose={() => setEditOpen(false)}
         payload={{ type: "vehicle", asset: vehicle }}
         candidate={candidate ?? null}
+        householdId={household!.id}
         onSaved={() => refetch()}
       />
     </SafeAreaView>

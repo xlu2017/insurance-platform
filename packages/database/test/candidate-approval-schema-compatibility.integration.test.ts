@@ -984,4 +984,348 @@ describe("candidate approval schema compatibility", () => {
       expect(link.relationship_type).toBe("candidate_source");
     }
   });
+
+  it("a candidate with no insurer can be skipped", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const sessionId = await createExtractionSession(householdId);
+    const { extractedDocumentId } = await createExtractedDocument(admin, householdId, sessionId);
+    const analysisRunId = await createAnalysisRun(admin, householdId, sessionId);
+
+    const { data: candidate, error: candidateError } = await admin
+      .from("asset_candidates")
+      .insert({
+        session_id: sessionId,
+        household_id: householdId,
+        asset_type: "vehicle",
+        identity_fingerprint: `skip-${randomUUID()}`,
+        display_label: "Skipped vehicle",
+        match_classification: "new",
+        decision: "undecided",
+        review_status: "pending",
+        source_document_ids: [extractedDocumentId],
+        selected_facts_json: {
+          identity: { year: 2020, make: "Honda", model: "Civic" },
+          currentPolicy: { annualPremiumCents: 100000, expiryDate: "2026-12-31" },
+          currentCoverage: { thirdPartyLiabilityCents: 1000000 },
+          mandateSuggestions: {},
+        },
+        analysis_run_id: analysisRunId,
+      })
+      .select("id")
+      .single();
+    if (candidateError) throw candidateError;
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `skip-${randomUUID()}`,
+      p_decisions: [{ candidate_id: candidate!.id, decision: "skip" }],
+    });
+
+    expect(error).toBeNull();
+    expect(data?.skipped?.length).toBe(1);
+    expect(data?.policies?.length).toBe(0);
+
+    const { data: row } = await admin
+      .from("asset_candidates")
+      .select("decision, review_status")
+      .eq("id", candidate!.id)
+      .single();
+    expect(row?.decision).toBe("skip");
+    expect(row?.review_status).toBe("skipped");
+  });
+
+  it("a candidate with missing identity can be marked needs_correction", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const sessionId = await createExtractionSession(householdId);
+    const { extractedDocumentId } = await createExtractedDocument(admin, householdId, sessionId);
+    const analysisRunId = await createAnalysisRun(admin, householdId, sessionId);
+
+    const { data: candidate, error: candidateError } = await admin
+      .from("asset_candidates")
+      .insert({
+        session_id: sessionId,
+        household_id: householdId,
+        asset_type: "vehicle",
+        identity_fingerprint: `needs-correction-${randomUUID()}`,
+        display_label: "Needs correction vehicle",
+        match_classification: "new",
+        decision: "undecided",
+        review_status: "pending",
+        source_document_ids: [extractedDocumentId],
+        selected_facts_json: {
+          identity: { make: "Honda" },
+          currentPolicy: {
+            insurerName: "Test Insurer",
+            annualPremiumCents: 100000,
+            expiryDate: "2026-12-31",
+          },
+          currentCoverage: { thirdPartyLiabilityCents: 1000000 },
+          mandateSuggestions: {},
+        },
+        analysis_run_id: analysisRunId,
+      })
+      .select("id")
+      .single();
+    if (candidateError) throw candidateError;
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `needs-correction-${randomUUID()}`,
+      p_decisions: [{ candidate_id: candidate!.id, decision: "needs_correction" }],
+    });
+
+    expect(error).toBeNull();
+    expect(data?.needsCorrection?.length).toBe(1);
+
+    const { data: row } = await admin
+      .from("asset_candidates")
+      .select("decision, review_status")
+      .eq("id", candidate!.id)
+      .single();
+    expect(row?.decision).toBe("needs_correction");
+    expect(row?.review_status).toBe("needs_correction");
+  });
+
+  it("partial-identity renewal candidate links to existing asset and creates a policy", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const { data: property, error: propertyError } = await admin
+      .from("properties")
+      .insert({
+        household_id: householdId,
+        address_line1: "999 Existing Rd",
+        city: "Calgary",
+        province: "AB",
+        postal_code: "T9Z9Z9",
+        dwelling_type: "detached",
+        owner_occupied: true,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (propertyError) throw propertyError;
+
+    const sessionId = await createExtractionSession(householdId);
+    const { extractedDocumentId } = await createExtractedDocument(admin, householdId, sessionId);
+    const analysisRunId = await createAnalysisRun(admin, householdId, sessionId);
+
+    const { data: candidate, error: candidateError } = await admin
+      .from("asset_candidates")
+      .insert({
+        session_id: sessionId,
+        household_id: householdId,
+        asset_type: "property",
+        identity_fingerprint: `partial-link-${randomUUID()}`,
+        display_label: "Partial linked residence",
+        match_classification: "exact_existing_match",
+        decision: "undecided",
+        review_status: "pending",
+        source_document_ids: [extractedDocumentId],
+        selected_facts_json: {
+          identity: { fullAddress: "999 Existing Rd", city: "Calgary", province: "AB" },
+          currentPolicy: {
+            insurerName: "Renewal Insurer",
+            annualPremiumCents: 120000,
+            expiryDate: "2026-12-31",
+          },
+          currentCoverage: { dwellingLimitCents: 50000000, personalLiabilityLimitCents: 2000000 },
+          mandateSuggestions: { dwelling: { rule: "minimum", amountCents: 50000000 } },
+        },
+        analysis_run_id: analysisRunId,
+      })
+      .select("id")
+      .single();
+    if (candidateError) throw candidateError;
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `partial-link-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidate!.id,
+          decision: "link_existing",
+          existing_asset_id: property!.id,
+          existing_asset_type: "property",
+        },
+      ],
+    });
+
+    expect(error).toBeNull();
+    expect(data?.linked?.length).toBe(1);
+    expect(data?.policies?.length).toBe(1);
+
+    const { data: row } = await admin
+      .from("asset_candidates")
+      .select("approved_asset_id, approved_asset_type, approved_policy_id")
+      .eq("id", candidate!.id)
+      .single();
+    expect(row?.approved_asset_id).toBe(property!.id);
+    expect(row?.approved_asset_type).toBe("property");
+    expect(row?.approved_policy_id).toBe(data?.policies?.[0]);
+
+    const { data: approveErrorData, error: approveError } = await customer.rpc(
+      "approve_candidate_assets_v2" as any,
+      {
+        p_household_id: householdId,
+        p_actor_profile_id: CUSTOMER_ID,
+        p_client_request_id: `partial-new-${randomUUID()}`,
+        p_decisions: [{ candidate_id: candidate!.id, decision: "approve_new" }],
+      },
+    );
+    expect(approveError).not.toBeNull();
+    expect(approveErrorData).toBeNull();
+  });
+
+  it("authenticated customer cannot directly insert an asset candidate", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const sessionId = await createExtractionSession(householdId);
+    const { data: session } = await admin
+      .from("document_extraction_sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .single();
+    const { data: batch } = await admin.rpc("create_document_processing_batch", {
+      p_household_id: householdId,
+      p_client_request_id: `direct-insert-${randomUUID()}`,
+      p_actor_id: CUSTOMER_ID,
+    });
+    const batchId = batch?.batch?.id as string;
+    const caseId = batch?.batch?.case_id as string;
+
+    const { error } = await customer.from("asset_candidates").insert({
+      session_id: sessionId,
+      household_id: householdId,
+      asset_type: "property",
+      identity_fingerprint: `direct-${randomUUID()}`,
+      display_label: "Direct insert",
+      match_classification: "new",
+      source_document_ids: [],
+      selected_facts_json: {
+        _source: "customer_manual_entry",
+        _manual_entry_session_id: sessionId,
+        _manual_entry_batch_id: batchId,
+        _manual_entry_case_id: caseId,
+      },
+    });
+
+    expect(error).not.toBeNull();
+  });
+
+  it("coverage states known, unknown, not_applicable, and conflicting are preserved in policy", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const sessionId = await createExtractionSession(householdId);
+    const { extractedDocumentId } = await createExtractedDocument(admin, householdId, sessionId);
+    const analysisRunId = await createAnalysisRun(admin, householdId, sessionId);
+
+    const facts = {
+      identity: { year: 2020, make: "Honda", model: "Civic", vin: "2HGFC2F59JH500001" },
+      currentPolicy: {
+        insurer: "State Coverage",
+        policyNumber: "POL-COV",
+        annualPremiumCents: 150000,
+        expiryDate: "2026-12-31",
+      },
+      currentCoverage: {
+        thirdPartyLiabilityCents: extractedValue(1000000),
+        collisionDeductibleCents: {
+          status: "not_included",
+          value: null,
+          confidence: 1,
+          evidence: [],
+        },
+        comprehensiveDeductibleCents: {
+          status: "unknown",
+          value: null,
+          confidence: 0,
+          evidence: [],
+        },
+        accidentBenefitCents: {
+          status: "not_applicable",
+          value: null,
+          confidence: 1,
+          evidence: [],
+        },
+        specifiedPerilsLimitCents: {
+          status: "conflicting",
+          value: 50000,
+          confidence: 0.5,
+          evidence: [],
+        },
+      },
+      mandateSuggestions: { thirdPartyLiability: { rule: "minimum", amountCents: 1000000 } },
+    };
+
+    const { data: candidate, error: candidateError } = await admin
+      .from("asset_candidates")
+      .insert({
+        session_id: sessionId,
+        household_id: householdId,
+        asset_type: "vehicle",
+        identity_fingerprint: `coverage-states-${randomUUID()}`,
+        display_label: "Coverage state vehicle",
+        match_classification: "new",
+        decision: "undecided",
+        review_status: "pending",
+        source_document_ids: [extractedDocumentId],
+        selected_facts_json: facts,
+        analysis_run_id: analysisRunId,
+      })
+      .select("id")
+      .single();
+    if (candidateError) throw candidateError;
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `coverage-states-${randomUUID()}`,
+      p_decisions: [{ candidate_id: candidate!.id, decision: "approve_new" }],
+    });
+
+    expect(error).toBeNull();
+    const { data: policy } = await admin
+      .from("policies")
+      .select("coverage_details")
+      .eq("id", data?.policies?.[0])
+      .single();
+    const coverage = policy?.coverage_details as Record<string, unknown> | null;
+    expect(coverage?.thirdPartyLiabilityCents).toBe(1000000);
+    expect(coverage?.collisionDeductibleCents).toBeNull();
+    expect(coverage?.comprehensiveDeductibleCents).toBeNull();
+    expect(coverage?.accidentBenefitCents).toBeNull();
+    expect(coverage?.specifiedPerilsLimitCents).toBeNull();
+
+    const raw = coverage?._rawCoverage as Record<string, unknown> | undefined;
+    const state = coverage?._coverageState as Record<string, string> | undefined;
+    expect((raw?.collisionDeductibleCents as { status: string })?.status).toBe("not_included");
+    expect((raw?.comprehensiveDeductibleCents as { status: string })?.status).toBe("unknown");
+    expect((raw?.accidentBenefitCents as { status: string })?.status).toBe("not_applicable");
+    expect((raw?.specifiedPerilsLimitCents as { status: string })?.status).toBe("conflicting");
+    expect(state?.collisionDeductibleCents).toBe("not_included");
+    expect(state?.comprehensiveDeductibleCents).toBe("unknown");
+    expect(state?.accidentBenefitCents).toBe("not_applicable");
+    expect(state?.specifiedPerilsLimitCents).toBe("conflicting");
+  });
 });

@@ -4337,6 +4337,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      update_candidate_display_label_v1: {
+        Args: {
+          p_candidate_id: string;
+          p_display_label: string;
+          p_household_id: string;
+        };
+        Returns: Json;
+      };
       validate_candidate_approval_ready: {
         Args: {
           p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];

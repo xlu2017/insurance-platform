@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import { supabaseBrowser } from "@/lib/supabase";
 import {
   Button,
@@ -108,6 +109,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
   const [identity, setIdentity] = useState<Record<string, string>>({});
   const [policy, setPolicy] = useState<Record<string, string>>({});
   const [coverage, setCoverage] = useState<Record<string, string>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const fingerprint = useMemo(
     () =>
@@ -118,16 +120,73 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
     [identity],
   );
 
+  function isValidPostalCode(value: string): boolean {
+    if (!value || value.trim() === "") return false;
+    return /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(value.trim());
+  }
+
+  function isValidVin(value: string): boolean {
+    if (!value) return true;
+    const cleaned = value.replace(/\s/g, "").toUpperCase();
+    if (cleaned.length !== 17) return false;
+    return /^[A-HJ-NPR-Z0-9]{17}$/.test(cleaned);
+  }
+
+  function isValidYear(value: string): boolean {
+    if (!value || !/^\d{4}$/.test(value.trim())) return false;
+    const year = Number(value.trim());
+    return year >= 1900 && year <= 2100;
+  }
+
+  function parseMoney(value: string): number | null {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    const parsed = Number(trimmed);
+    if (Number.isNaN(parsed) || parsed <= 0) return null;
+    return Math.round(parsed * 100);
+  }
+
+  function validate(): boolean {
+    const errors: Record<string, string> = {};
+    if (!displayLabel.trim()) errors.displayLabel = "Display label is required";
+    if (!policy.insurerName?.trim()) errors.insurerName = "Insurer name is required";
+    const premiumCents = parseMoney(policy.annualPremiumDollars ?? "");
+    if (premiumCents === null)
+      errors.annualPremiumDollars = "Annual premium must be a positive amount";
+
+    if (assetType === "property") {
+      if (!identity.fullAddress?.trim()) errors.fullAddress = "Address is required";
+      if (!identity.city?.trim()) errors.city = "City is required";
+      if (!identity.province?.trim()) errors.province = "Province is required";
+      if (!isValidPostalCode(identity.postalCode ?? ""))
+        errors.postalCode = "Enter a valid postal code";
+      if (identity.yearBuilt?.trim() && !isValidYear(identity.yearBuilt.trim())) {
+        errors.yearBuilt = "Enter a valid year between 1900 and 2100";
+      }
+    } else {
+      if (!isValidYear(identity.year ?? ""))
+        errors.year = "Enter a valid year between 1900 and 2100";
+      if (!identity.make?.trim()) errors.make = "Make is required";
+      if (!identity.model?.trim()) errors.model = "Model is required";
+      if (identity.vin?.trim() && !isValidVin(identity.vin.trim())) {
+        errors.vin = "VIN must be 17 alphanumeric characters (I, O and Q not allowed)";
+      }
+    }
+
+    if (selectedDocIds.length === 0) errors.documents = "Select at least one source document";
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   const save = useMutation({
     mutationFn: async () => {
+      if (!validate()) throw new Error("Please correct the highlighted fields");
       const supabase = supabaseBrowser();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
-      if (selectedDocIds.length === 0)
-        throw new Error("Select at least one policy document from this batch");
-      if (!displayLabel) throw new Error("Display label is required");
       if (!batch) throw new Error("No manual review batch found for this case");
 
       const mandateSuggestions: Record<string, { rule: string; amountCents?: number }> = {};
@@ -357,6 +416,9 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         <div className="space-y-3">
           <div>
             <Label>Source documents</Label>
+            {validationErrors.documents ? (
+              <p className="text-xs text-danger">{validationErrors.documents}</p>
+            ) : null}
             <div className="max-h-40 space-y-1 overflow-auto rounded border p-2">
               {(batchDocuments ?? []).map((d) => (
                 <label key={d.id} className="flex items-center gap-2 text-sm">
@@ -385,7 +447,14 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
           </div>
           <div>
             <Label>Display label</Label>
-            <Input value={displayLabel} onChange={(e) => setDisplayLabel(e.target.value)} />
+            <Input
+              value={displayLabel}
+              onChange={(e) => setDisplayLabel(e.target.value)}
+              className={cn(validationErrors.displayLabel && "border-danger")}
+            />
+            {validationErrors.displayLabel ? (
+              <p className="text-xs text-danger">{validationErrors.displayLabel}</p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -395,7 +464,11 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
                 <Input
                   value={identity[f.key] || ""}
                   onChange={(e) => update(setIdentity, f.key, e.target.value)}
+                  className={cn(validationErrors[f.key] && "border-danger")}
                 />
+                {validationErrors[f.key] ? (
+                  <p className="text-xs text-danger">{validationErrors[f.key]}</p>
+                ) : null}
               </div>
             ))}
           </div>
@@ -406,7 +479,11 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
               <Input
                 value={policy.insurerName || ""}
                 onChange={(e) => update(setPolicy, "insurerName", e.target.value)}
+                className={cn(validationErrors.insurerName && "border-danger")}
               />
+              {validationErrors.insurerName ? (
+                <p className="text-xs text-danger">{validationErrors.insurerName}</p>
+              ) : null}
             </div>
             <div>
               <Label>Policy number</Label>
@@ -421,7 +498,11 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
                 type="number"
                 value={policy.annualPremiumDollars || ""}
                 onChange={(e) => update(setPolicy, "annualPremiumDollars", e.target.value)}
+                className={cn(validationErrors.annualPremiumDollars && "border-danger")}
               />
+              {validationErrors.annualPremiumDollars ? (
+                <p className="text-xs text-danger">{validationErrors.annualPremiumDollars}</p>
+              ) : null}
             </div>
             <div>
               <Label>Expiry date</Label>

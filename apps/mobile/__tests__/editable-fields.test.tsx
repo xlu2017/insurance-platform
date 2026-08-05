@@ -72,8 +72,20 @@ let mockSupabaseFrom = jest.fn((table: string) => {
   }
   return { update: fromImpls[table] };
 });
+const rpcCalls: { name: string; args: unknown }[] = [];
+let mockRpcResult: { error: { message: string } | null; data: unknown } = {
+  error: null,
+  data: { success: true },
+};
+let mockSupabaseRpc = jest.fn((name: string, args: unknown) => {
+  rpcCalls.push({ name, args });
+  return Promise.resolve(mockRpcResult);
+});
 jest.mock("@/lib/supabase", () => ({
-  supabase: { from: (table: string) => mockSupabaseFrom(table) },
+  supabase: {
+    from: (table: string) => mockSupabaseFrom(table),
+    rpc: (name: string, args: unknown) => mockSupabaseRpc(name, args),
+  },
 }));
 
 jest.mock("react-native-safe-area-context", () => ({
@@ -136,6 +148,8 @@ function setSwitch(getByLabelText: any, label: string, value: boolean) {
 beforeEach(() => {
   jest.clearAllMocks();
   Object.keys(fromImpls).forEach((key) => delete fromImpls[key]);
+  rpcCalls.length = 0;
+  mockRpcResult = { error: null, data: { success: true } };
   edgeResult = { success: true };
   setQueryResult({ data: buildEditMandateData(), isLoading: false });
 });
@@ -162,6 +176,7 @@ describe("AssetEditModal", () => {
         onSaved={onSaved}
         payload={{ type: "vehicle", asset }}
         candidate={{ id: "c1", display_label: "My car" }}
+        householdId="household-1"
       />,
     );
 
@@ -192,8 +207,11 @@ describe("AssetEditModal", () => {
       is_modified: true,
     });
 
-    expect(mockSupabaseFrom).toHaveBeenCalledWith("asset_candidates");
-    expect(fromImpls["asset_candidates"]).toHaveBeenCalledWith({ display_label: "My RAV4" });
+    expect(mockSupabaseRpc).toHaveBeenCalledWith("update_candidate_display_label_v1", {
+      p_candidate_id: "c1",
+      p_household_id: "household-1",
+      p_display_label: "My RAV4",
+    });
   });
 
   it("edits every property field", async () => {
@@ -216,6 +234,7 @@ describe("AssetEditModal", () => {
         onSaved={onSaved}
         payload={{ type: "property", asset }}
         candidate={{ id: "c1", display_label: "Home" }}
+        householdId="household-1"
       />,
     );
 
@@ -241,7 +260,11 @@ describe("AssetEditModal", () => {
       owner_occupied: false,
       year_built: 2010,
     });
-    expect(fromImpls["asset_candidates"]).toHaveBeenCalledWith({ display_label: "My home" });
+    expect(mockSupabaseRpc).toHaveBeenCalledWith("update_candidate_display_label_v1", {
+      p_candidate_id: "c1",
+      p_household_id: "household-1",
+      p_display_label: "My home",
+    });
   });
 
   it("shows an error when the save fails", async () => {
@@ -270,6 +293,7 @@ describe("AssetEditModal", () => {
         onSaved={onSaved}
         payload={{ type: "vehicle", asset }}
         candidate={null}
+        householdId="household-1"
       />,
     );
 

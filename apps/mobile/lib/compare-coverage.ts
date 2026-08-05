@@ -79,6 +79,26 @@ const KEY_ALIASES: Record<string, string[]> = {
   telematicsRequired: ["telematics"],
 };
 
+function getCoverageState(details: CoverageDetails, key: string): string | undefined {
+  const raw = details[key];
+  if (raw !== null && typeof raw === "object" && "status" in raw) {
+    return String((raw as { status: unknown }).status);
+  }
+  const state = (details._coverageState as Record<string, unknown> | undefined)?.[key];
+  if (state !== undefined) return String(state);
+
+  const aliases = KEY_ALIASES[key] ?? [];
+  for (const alias of aliases) {
+    const rawAlias = details[alias];
+    if (rawAlias !== null && typeof rawAlias === "object" && "status" in rawAlias) {
+      return String((rawAlias as { status: unknown }).status);
+    }
+    const aliasState = (details._coverageState as Record<string, unknown> | undefined)?.[alias];
+    if (aliasState !== undefined) return String(aliasState);
+  }
+  return undefined;
+}
+
 function getValue(details: CoverageDetails, key: string): unknown {
   const direct = details[key];
   if (direct !== undefined && direct !== null) return extractValue(direct);
@@ -106,7 +126,17 @@ function labelFor(options: { value: string; label: string }[], value: unknown): 
   return options.find((o) => o.value === str)?.label ?? str;
 }
 
-function formatValue(spec: CoverageSpec, raw: unknown, type?: CompareAssetType): string {
+function formatValue(
+  spec: CoverageSpec,
+  raw: unknown,
+  type?: CompareAssetType,
+  state?: string,
+): string {
+  if (state === "not_included") return "Not included";
+  if (state === "unknown") return "Unknown";
+  if (state === "not_applicable") return "Not applicable";
+  if (state === "conflicting") return "Needs review";
+
   if (raw === undefined || raw === null) return "—";
 
   if (spec.format === "money") {
@@ -147,7 +177,8 @@ export function getCellValue(
   type?: CompareAssetType,
 ): string {
   const raw = getValue(details, spec.key);
-  return formatValue(spec, raw, type);
+  const state = getCoverageState(details, spec.key);
+  return formatValue(spec, raw, type, state);
 }
 
 export const autoCoverageSpecs: CoverageSpec[] = [

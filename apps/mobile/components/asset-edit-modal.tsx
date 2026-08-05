@@ -39,12 +39,14 @@ export function AssetEditModal({
   onClose,
   payload,
   candidate,
+  householdId,
   onSaved,
 }: {
   visible: boolean;
   onClose: () => void;
   payload: EditableAsset;
   candidate: Candidate;
+  householdId: string;
   onSaved: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -103,10 +105,11 @@ export function AssetEditModal({
       }
 
       if (candidate) {
-        const { error: candidateError } = await supabase
-          .from("asset_candidates")
-          .update({ display_label: displayLabel.trim() || undefined })
-          .eq("id", candidate.id);
+        const { error: candidateError } = await supabase.rpc("update_candidate_display_label_v1", {
+          p_candidate_id: candidate.id,
+          p_household_id: householdId,
+          p_display_label: displayLabel.trim() || "",
+        });
         if (candidateError) throw new Error(candidateError.message);
       }
 

@@ -906,11 +906,11 @@ export default function ReviewEntities() {
   const handleDisplayNameChange = async (newName: string) => {
     if (!currentCandidate || !household) return;
     const trimmed = newName.trim();
-    const { error } = await supabase
-      .from("asset_candidates")
-      .update({ display_label: trimmed, updated_at: new Date().toISOString() })
-      .eq("id", currentCandidate.id)
-      .eq("household_id", household.id);
+    const { error } = await supabase.rpc("update_candidate_display_label_v1", {
+      p_candidate_id: currentCandidate.id,
+      p_household_id: household.id,
+      p_display_label: trimmed,
+    });
     if (error) throw error;
     await queryClient.invalidateQueries({
       queryKey: ["extraction-candidates", household.id, sessionId],

@@ -379,6 +379,26 @@ describe("manual-entry approval boundary", () => {
     const candidateId = (saveData as { candidate_id?: string } | null)?.candidate_id;
     expect(candidateId).toBeTruthy();
 
+    for (const reviewedDocId of [doc1, doc2, doc3]) {
+      const { error: reviewedError } = await customer.rpc("set_manual_entry_document_status_v1", {
+        p_batch_id: batchId,
+        p_policy_document_id: reviewedDocId,
+        p_household_id: householdId,
+        p_status: "reviewed",
+      });
+      expect(reviewedError).toBeNull();
+    }
+
+    const { error: completeError } = await completeCustomerManualEntry(customer, {
+      batchId,
+      sessionId,
+      caseId,
+      householdId,
+      requestId: `complete-three-${randomUUID()}`,
+      skippedDocumentIds: [],
+    });
+    expect(completeError).toBeNull();
+
     const approveRequestId = `approve-three-${randomUUID()}`;
     const { data: approveData, error: approveError } = await approveCandidates(customer, {
       householdId,
@@ -464,6 +484,24 @@ describe("manual-entry approval boundary", () => {
     expect(v1Id).toBeTruthy();
     expect(v2Id).toBeTruthy();
 
+    const { error: reviewedError } = await customer.rpc("set_manual_entry_document_status_v1", {
+      p_batch_id: batchId,
+      p_policy_document_id: docId,
+      p_household_id: householdId,
+      p_status: "reviewed",
+    });
+    expect(reviewedError).toBeNull();
+
+    const { error: completeError } = await completeCustomerManualEntry(customer, {
+      batchId,
+      sessionId,
+      caseId,
+      householdId,
+      requestId: `complete-multi-vehicle-${randomUUID()}`,
+      skippedDocumentIds: [],
+    });
+    expect(completeError).toBeNull();
+
     const { data: approveData, error: approveError } = await approveCandidates(customer, {
       householdId,
       actorId: CUSTOMER_ID,
@@ -521,6 +559,24 @@ describe("manual-entry approval boundary", () => {
 
     const propId = (propSave as { candidate_id?: string } | null)?.candidate_id;
     const vehId = (vehSave as { candidate_id?: string } | null)?.candidate_id;
+
+    const { error: reviewedError } = await customer.rpc("set_manual_entry_document_status_v1", {
+      p_batch_id: batchId,
+      p_policy_document_id: docId,
+      p_household_id: householdId,
+      p_status: "reviewed",
+    });
+    expect(reviewedError).toBeNull();
+
+    const { error: completeError } = await completeCustomerManualEntry(customer, {
+      batchId,
+      sessionId,
+      caseId,
+      householdId,
+      requestId: `complete-bundled-${randomUUID()}`,
+      skippedDocumentIds: [],
+    });
+    expect(completeError).toBeNull();
 
     const { data: approveData } = await approveCandidates(customer, {
       householdId,
@@ -786,6 +842,24 @@ describe("manual-entry approval boundary", () => {
       }),
     });
     const candidateId = (saveData as { candidate_id?: string } | null)?.candidate_id;
+
+    const { error: reviewedError } = await customer.rpc("set_manual_entry_document_status_v1", {
+      p_batch_id: batchId,
+      p_policy_document_id: docId,
+      p_household_id: householdId,
+      p_status: "reviewed",
+    });
+    expect(reviewedError).toBeNull();
+
+    const { error: completeError } = await completeCustomerManualEntry(customer, {
+      batchId,
+      sessionId,
+      caseId,
+      householdId,
+      requestId: `complete-liability-${randomUUID()}`,
+      skippedDocumentIds: [],
+    });
+    expect(completeError).toBeNull();
 
     const { data: approveData } = await approveCandidates(customer, {
       householdId,

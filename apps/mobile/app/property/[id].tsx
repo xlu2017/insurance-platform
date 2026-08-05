@@ -117,6 +117,7 @@ export default function PropertyDetail() {
         onClose={() => setEditOpen(false)}
         payload={{ type: "property", asset: property }}
         candidate={candidate ?? null}
+        householdId={household!.id}
         onSaved={() => refetch()}
       />
     </SafeAreaView>
