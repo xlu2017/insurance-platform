@@ -62,7 +62,22 @@ This is likely a browser pointer-event configuration issue rather than an app bu
 
 ### 2. File picker on Expo web
 
-The visible **Add PDF or image files** button in `expo-document-picker` sometimes does not open the OS file picker with mouse clicks. When the dialog is open, you can use the keyboard: type the file name (e.g. `auto-policy.png`) to filter and press `Enter` (or `Alt+O` on some GTK file dialogs) to confirm. If that fails, exercise the upload path via the hidden `<input type="file">` or a test script.
+The visible **Add PDF or image files** button in `expo-document-picker` sometimes does not open the OS file picker with mouse clicks. When the dialog is open, you can use the keyboard: type the file name (e.g. `auto-policy.png`) to filter and press `Enter` (or `Alt+O` on some GTK file dialogs) to confirm.
+
+In some test environments the GTK file picker opens but does not list the fixture files or does not close when **Open** is clicked. If the dialog is stuck, close it with `wmctrl -c "Open Files"` and fall back to uploading directly via the `upload-document` Edge Function:
+
+```bash
+curl -sS -X POST "$SUPABASE_URL/functions/v1/upload-document" \
+  -H "apikey: $ANON_KEY" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/tmp/insurance-fixtures/auto-policy.png" \
+  -F "householdId=$HH" \
+  -F "category=auto_detect" \
+  -F "batchId=$BATCH" \
+  -F "clientItemId=item-auto"
+```
+
+Then call `document-processing-batch` `submit` to move the batch to `manual_review`. Refresh the Documents screen to see the `Enter details manually` action.
 
 The Expo web picker may only return one file even when `multiple: true` is set. To add multiple files, press `Files` again and select the next file; `documents.tsx` appends each selection to the pending list. After each selection, the primary button updates to `Upload N files`.
 
@@ -89,7 +104,24 @@ With multiple rows this returns `PGRST116` and the app shows "Finish setting up"
 
 This is fixed: migration `20260804200008_manual_entry_ui_permissions.sql` grants `SELECT ON public.document_processing_batch_items TO authenticated;`, so the manual-entry screen can load its source documents.
 
-### 5. Console error: "The 'navigation' object hasn't been initialized yet"
+### 5. Manual-entry form input on Expo web
+
+The manual-entry screen (`/onboarding/manual-entry`) uses React Native `TextInput` components. In the test Chrome environment, setting `input.value` and dispatching `input`/`change` events does **not** update React state, so validation errors persist even though the DOM inputs appear filled. Simulated typing with `Tab` navigation is also unreliable because the tab order does not always match the visual layout.
+
+Workarounds:
+
+- Use the browser console to open dropdowns and click options (`document.querySelector('[aria-label="Asset type"]').click()`), but fill the fields and save the candidate via the authenticated RPCs:
+  - `save_customer_manual_policy_review_v1` for new candidates
+  - `update_manual_entry_candidate_v1` for edits
+  - `set_manual_entry_document_status_v1` to mark documents `not_relevant`
+  - `complete_customer_manual_entry_v1` to finish
+- After seeding candidates, refresh `/onboarding/manual-entry` or navigate directly to `/onboarding/review-entities?sessionId=<sessionId>` to test the review UI.
+
+### 6. Hosted testing: target the correct household for golden-path runs
+
+The hosted demo account `customer@example.com` can own multiple households. `useHousehold()` returns the most recently created household, which may not be the intended `Smoke Test Household`. If the `Home` action routes to an unexpected `caseId`, check which household is loaded and navigate directly to `/(tabs)/documents?caseId=<target-case-id>` (or temporarily target `Smoke Test Household` in `apps/mobile/lib/household.ts` and revert after the test).
+
+### 7. Console error: "The 'navigation' object hasn't been initialized yet"
 
 `AuthGate`/callback routes may call `router.replace` before the Expo Router navigator mounts. This produces a console error:
 
