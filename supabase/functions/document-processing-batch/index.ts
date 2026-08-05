@@ -1,6 +1,12 @@
 // Durable batch creation, provider-neutral status and asynchronous routing.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { documentProcessingRoute } from "../_shared/document-extraction.js";
+import {
+  isUuid,
+  parseCaseId,
+  relevantStatuses,
+  resumableStatuses,
+} from "../_shared/document-processing-contract.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,10 +26,6 @@ function jsonResponse(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 function publicBatch(batch: Record<string, unknown>) {
@@ -191,21 +193,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!household) return jsonError("Household not found", 404);
 
-  const resumableStatuses = ["uploading_files", "additional_information_required"];
-  const relevantStatuses = [
-    "uploading_files",
-    "checking_duplicates",
-    "queued",
-    "reading_policy_documents",
-    "comparing_policies",
-    "validating_extracted_details",
-    "ready_for_review",
-    "additional_information_required",
-    "processing_unavailable",
-    "manual_review",
-  ];
-
-  if (action === "latest" || action === "latest-relevant") {
+  if (action === "latest-relevant") {
     const { data: latest } = await admin
       .from("document_processing_batches")
       .select("*")
@@ -217,7 +205,9 @@ Deno.serve(async (req) => {
     return jsonResponse(latest ? publicBatch(latest) : null);
   }
 
-  if (action === "latest-resumable") {
+  // Legacy "latest" and the explicit "latest-resumable" both return batches
+  // that accept additional uploads.
+  if (action === "latest" || action === "latest-resumable") {
     const { data: latest } = await admin
       .from("document_processing_batches")
       .select("*")
@@ -229,18 +219,15 @@ Deno.serve(async (req) => {
     return jsonResponse(latest ? publicBatch(latest) : null);
   }
 
-  if (action === "latest-for-case" || action === "latest-resumable-for-case") {
-    const rawCaseId = body.case_id;
-    if (
-      rawCaseId !== undefined &&
-      rawCaseId !== null &&
-      rawCaseId !== "" &&
-      (typeof rawCaseId !== "string" || !isUuid(rawCaseId))
-    ) {
-      return jsonError("Invalid case_id", 400);
-    }
-    const caseId = typeof rawCaseId === "string" && isUuid(rawCaseId) ? rawCaseId : "";
-    if (!caseId) return jsonError("Invalid case_id", 400);
+  if (
+    action === "latest-relevant-for-case" ||
+    action === "latest-for-case" ||
+    action === "latest-resumable-for-case"
+  ) {
+    const caseParse = parseCaseId(body.case_id);
+    if (caseParse.kind === "invalid") return jsonError(caseParse.reason ?? "Invalid case_id", 400);
+    if (caseParse.kind === "none") return jsonError("case_id is required", 400);
+    const caseId = caseParse.value;
 
     const { data: existingCase } = await admin
       .from("optimization_cases")
@@ -250,46 +237,13 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!existingCase) return jsonError("Case not found", 404);
 
-    const { data: openBatch } = await admin
-      .from("document_processing_batches")
-      .select("*")
-      .eq("household_id", householdId)
-      .eq("case_id", caseId)
-      .in("status", resumableStatuses)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (openBatch) return jsonResponse(publicBatch(openBatch));
-    return jsonResponse(null);
-  }
-
-  if (action === "latest-relevant-for-case") {
-    const rawCaseId = body.case_id;
-    if (
-      rawCaseId !== undefined &&
-      rawCaseId !== null &&
-      rawCaseId !== "" &&
-      (typeof rawCaseId !== "string" || !isUuid(rawCaseId))
-    ) {
-      return jsonError("Invalid case_id", 400);
-    }
-    const caseId = typeof rawCaseId === "string" && isUuid(rawCaseId) ? rawCaseId : "";
-    if (!caseId) return jsonError("Invalid case_id", 400);
-
-    const { data: existingCase } = await admin
-      .from("optimization_cases")
-      .select("id")
-      .eq("id", caseId)
-      .eq("household_id", householdId)
-      .maybeSingle();
-    if (!existingCase) return jsonError("Case not found", 404);
-
+    const statuses = action === "latest-relevant-for-case" ? relevantStatuses : resumableStatuses;
     const { data: latest } = await admin
       .from("document_processing_batches")
       .select("*")
       .eq("household_id", householdId)
       .eq("case_id", caseId)
-      .in("status", relevantStatuses)
+      .in("status", statuses)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -321,24 +275,10 @@ Deno.serve(async (req) => {
   }
 
   if (action === "create") {
-    const rawCaseId = body.case_id;
-    const hasCaseId =
-      rawCaseId !== undefined &&
-      rawCaseId !== null &&
-      rawCaseId !== "" &&
-      typeof rawCaseId === "string" &&
-      isUuid(rawCaseId);
-
-    if (
-      rawCaseId !== undefined &&
-      rawCaseId !== null &&
-      rawCaseId !== "" &&
-      (typeof rawCaseId !== "string" || !isUuid(rawCaseId))
-    ) {
-      return jsonError("Invalid case_id", 400);
-    }
-
-    const caseId = hasCaseId ? String(rawCaseId) : "";
+    const caseParse = parseCaseId(body.case_id);
+    if (caseParse.kind === "invalid") return jsonError(caseParse.reason ?? "Invalid case_id", 400);
+    const hasCaseId = caseParse.kind === "valid";
+    const caseId = caseParse.value ?? "";
     const suppliedClientRequestId = String(body.client_request_id ?? "").trim();
     if (!hasCaseId && suppliedClientRequestId.length === 0) {
       return jsonError("client_request_id is required for a new household review", 400);

@@ -126,20 +126,34 @@ describe("resolveCustomerCasePresentation", () => {
     });
   });
 
-  it("returns no action when processing_unavailable and not retryable", () => {
+  it("returns manual entry action when processing_unavailable and not retryable", () => {
     const result = resolveCustomerCasePresentation({
       c: caseStub("extracting_information"),
       batch: batchStub("processing_unavailable", { retryable: false }),
     });
-    expect(result.action).toBeUndefined();
+    expect(result.action).toEqual({
+      type: "route",
+      label: "Enter details manually",
+      href: {
+        pathname: "/onboarding/manual-entry",
+        params: { batchId: "batch-1", sessionId: "session-1", caseId: "case-1" },
+      },
+    });
   });
 
-  it("returns no review action for manual_review", () => {
+  it("returns manual entry action for manual_review", () => {
     const result = resolveCustomerCasePresentation({
       c: caseStub("extracting_information"),
       batch: batchStub("manual_review"),
     });
-    expect(result.action).toBeUndefined();
+    expect(result.action).toEqual({
+      type: "route",
+      label: "Enter details manually",
+      href: {
+        pathname: "/onboarding/manual-entry",
+        params: { batchId: "batch-1", sessionId: "session-1", caseId: "case-1" },
+      },
+    });
     expect(result.statusLabel).toBe("Sent for review");
   });
 

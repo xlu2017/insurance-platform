@@ -14,6 +14,7 @@ import {
   loadDangerousModeSetting,
   loadDocumentBatch,
   loadLatestDocumentBatch,
+  retryDocumentBatch,
   submitDocumentBatch,
   type DocumentBatchSummary,
 } from "@/lib/document-processing";
@@ -87,7 +88,12 @@ export default function OnboardingDocuments() {
   const [busy, setBusy] = useState(false);
   const newReviewRequestId = useRef<string>(createClientRequestId("review"));
 
-  const { data: latestBatch, error: latestBatchError } = useQuery({
+  const {
+    data: latestBatch,
+    error: latestBatchError,
+    isLoading: latestBatchLoading,
+    refetch: refetchLatestBatch,
+  } = useQuery({
     queryKey: ["latest-document-processing-batch", household?.id],
     enabled: !!household && !batch,
     queryFn: () => loadLatestDocumentBatch(household!.id),
@@ -100,13 +106,20 @@ export default function OnboardingDocuments() {
       );
   }, [latestBatchError]);
 
+  const isResolving = latestBatchLoading;
+  const resolutionError = latestBatchError;
+
+  const retryResolution = async () => {
+    setResumeError(null);
+    await refetchLatestBatch();
+  };
+
   const resumableLatestBatch =
     latestBatch && batchAllowsAdditionalUploads(latestBatch) ? latestBatch : null;
   const awaitingResumeChoice = !!resumableLatestBatch && !resumeChoice && !batch;
   const showLatestBatch =
     latestBatch && (!batchAllowsAdditionalUploads(latestBatch) || resumeChoice === "continue");
   const visibleBatch = batch ?? (showLatestBatch ? latestBatch : null) ?? null;
-  const canAddFiles = batchAllowsAdditionalUploads(visibleBatch);
 
   const { data: currentBatch } = useQuery({
     queryKey: ["document-processing-batch", household?.id, visibleBatch?.id],
@@ -114,10 +127,21 @@ export default function OnboardingDocuments() {
     queryFn: () => loadDocumentBatch(household!.id, visibleBatch!.id),
     initialData: visibleBatch ?? undefined,
     refetchInterval: (query) => {
+      const status = query.state.data?.status;
       if (query.state.data?.is_terminal) return false;
-      return 2_000;
+      if (
+        status === "uploading_files" ||
+        status === "additional_information_required" ||
+        status === "processing_unavailable"
+      ) {
+        return false;
+      }
+      return 5_000;
     },
   });
+
+  const canAddFiles =
+    !isResolving && !resolutionError && batchAllowsAdditionalUploads(currentBatch ?? visibleBatch);
 
   const { data: dangerousMode } = useQuery({
     queryKey: ["dangerous-mode", household?.id],
@@ -175,6 +199,12 @@ export default function OnboardingDocuments() {
     setBusy(true);
     setError(null);
     try {
+      if (isResolving) {
+        throw new Error("Please wait while the existing review is loaded.");
+      }
+      if (resolutionError) {
+        throw new Error("Could not load the existing review. Please try again.");
+      }
       if (awaitingResumeChoice) {
         throw new Error("Choose whether to continue the existing review or start a new one.");
       }
@@ -249,17 +279,17 @@ export default function OnboardingDocuments() {
           <SecondaryButton
             label="Add PDF or image files"
             onPress={() => chooseDocuments()}
-            disabled={busy || !!batch || !canAddFiles}
+            disabled={busy || !!batch || !canAddFiles || isResolving}
           />
           <SecondaryButton
             label="Take a photo"
             onPress={() => chooseImages(true)}
-            disabled={busy || !!batch || !canAddFiles}
+            disabled={busy || !!batch || !canAddFiles || isResolving}
           />
           <SecondaryButton
             label="Add photos from library"
             onPress={() => chooseImages(false)}
-            disabled={busy || !!batch || !canAddFiles}
+            disabled={busy || !!batch || !canAddFiles || isResolving}
           />
         </View>
       </Card>
@@ -317,6 +347,32 @@ export default function OnboardingDocuments() {
               }
             />
           ) : null}
+          {currentBatch.status === "processing_unavailable" && currentBatch.retryable ? (
+            <SecondaryButton
+              label="Retry processing"
+              onPress={async () =>
+                setBatch(await retryDocumentBatch(household.id, currentBatch.id))
+              }
+              disabled={busy}
+            />
+          ) : null}
+          {(currentBatch.status === "manual_review" ||
+            (currentBatch.status === "processing_unavailable" && !currentBatch.retryable)) &&
+          currentBatch.case_id ? (
+            <SecondaryButton
+              label="Enter details manually"
+              onPress={() =>
+                router.push({
+                  pathname: "/onboarding/manual-entry",
+                  params: {
+                    batchId: currentBatch.id,
+                    sessionId: currentBatch.session_id,
+                    caseId: currentBatch.case_id!,
+                  },
+                })
+              }
+            />
+          ) : null}
         </Card>
       ) : null}
 
@@ -346,8 +402,12 @@ export default function OnboardingDocuments() {
           <SecondaryButton label="Do this later" onPress={skip} disabled={busy} />
         </View>
       ) : null}
-      {resumeError ? (
-        <Body style={{ color: colors.danger, marginTop: 8 }}>{resumeError}</Body>
+      {isResolving ? <Caption style={{ marginTop: 8 }}>Loading existing review…</Caption> : null}
+      {resolutionError ? (
+        <View style={{ marginTop: 8, gap: 8 }}>
+          <Body style={{ color: colors.danger }}>{resumeError}</Body>
+          <SecondaryButton label="Try again" onPress={retryResolution} disabled={busy} />
+        </View>
       ) : null}
       {error ? <Body muted>{error}</Body> : null}
     </Screen>

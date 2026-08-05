@@ -164,11 +164,6 @@ const questionOverrideStates = new Set<CaseState>([
   "recommendation_ready",
 ]);
 
-const terminalBatchStatuses = new Set<DocumentBatchSummary["status"]>([
-  "ready_for_review",
-  "manual_review",
-]);
-
 function sessionName(c: OptimizationCase): string {
   if (c.renewal_date) {
     const year = new Date(c.renewal_date).getFullYear();
@@ -350,17 +345,41 @@ export function resolveCustomerCasePresentation({
         statusLabel: documentBatchStatusLabels[batch.status],
         statusTone: "error",
         tooltip:
-          "Processing could not be completed and requires manual assistance. Please contact support.",
+          "Processing could not be completed. Enter the policy details manually or contact support.",
         actor: step?.actor ?? "our team",
+        action: {
+          type: "route",
+          label: "Enter details manually",
+          href: {
+            pathname: "/onboarding/manual-entry",
+            params: {
+              batchId: batch.id,
+              sessionId: batch.session_id,
+              caseId: batch.case_id ?? c.id,
+            },
+          },
+        },
       };
     }
 
     if (batch.status === "manual_review") {
       return {
         statusLabel: documentBatchStatusLabels[batch.status],
-        statusTone: "neutral",
-        tooltip: "Documents sent for manual review.",
-        actor: step?.actor ?? "our team",
+        statusTone: "warning",
+        tooltip: "We need you to enter the policy details manually.",
+        actor: "you",
+        action: {
+          type: "route",
+          label: "Enter details manually",
+          href: {
+            pathname: "/onboarding/manual-entry",
+            params: {
+              batchId: batch.id,
+              sessionId: batch.session_id,
+              caseId: batch.case_id ?? c.id,
+            },
+          },
+        },
       };
     }
 
@@ -604,7 +623,14 @@ export function useAutopilotSessions(householdId: string | undefined) {
     },
     refetchInterval: (query) => {
       const rows = query.state.data ?? [];
-      return rows.some((b) => !terminalBatchStatuses.has(b.status)) ? 2000 : false;
+      const activeStatuses = new Set<DocumentBatchSummary["status"]>([
+        "checking_duplicates",
+        "queued",
+        "reading_policy_documents",
+        "comparing_policies",
+        "validating_extracted_details",
+      ]);
+      return rows.some((b) => activeStatuses.has(b.status)) ? 5_000 : false;
     },
   });
 

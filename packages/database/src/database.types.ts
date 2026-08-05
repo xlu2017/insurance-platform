@@ -1,31 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never;
-    };
-    Views: {
-      [_ in never]: never;
-    };
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json;
-          operationName?: string;
-          query?: string;
-          variables?: Json;
-        };
-        Returns: Json;
-      };
-    };
-    Enums: {
-      [_ in never]: never;
-    };
-    CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
   public: {
     Tables: {
       asset_candidates: {
@@ -3883,6 +3858,17 @@ export type Database = {
         };
         Returns: boolean;
       };
+      complete_manual_review_v1: {
+        Args: {
+          p_actor_profile_id: string;
+          p_batch_id: string;
+          p_candidate_ids: string[];
+          p_case_id: string;
+          p_household_id: string;
+          p_session_id: string;
+        };
+        Returns: Json;
+      };
       complete_recommendation_generation_attempt: {
         Args: {
           p_attempt_id: string;
@@ -4108,6 +4094,24 @@ export type Database = {
           p_existing_asset_type?: Database["public"]["Enums"]["candidate_asset_type"];
           p_household_id: string;
           p_identity_confirmed?: boolean;
+        };
+        Returns: Json;
+      };
+      save_customer_manual_policy_review_v1: {
+        Args: {
+          p_actor_profile_id: string;
+          p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          p_batch_id: string;
+          p_case_id: string;
+          p_client_request_id: string;
+          p_display_label: string;
+          p_household_id: string;
+          p_identity_fingerprint: string;
+          p_match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
+          p_occupancy?: string;
+          p_provenance_json?: Json;
+          p_selected_facts_json?: Json;
+          p_session_id: string;
         };
         Returns: Json;
       };
@@ -4446,9 +4450,6 @@ export type CompositeTypes<
     : never;
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       assertion_authority: [

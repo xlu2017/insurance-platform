@@ -122,20 +122,25 @@ export default function Documents() {
   const requiresExistingBatch = Boolean(batchId || sessionId);
 
   // Load a batch specified by route parameters and verify identity.
-  const { data: paramBatch, error: paramBatchError } = useQuery({
+  const {
+    data: paramBatch,
+    error: paramBatchError,
+    isLoading: paramBatchLoading,
+    refetch: refetchParamBatch,
+  } = useQuery({
     queryKey: ["document-processing-param-batch", household?.id, caseId, batchId, sessionId],
     enabled: !!household && hasIdentifiers && !batch,
     queryFn: async () => {
       if (batchId) {
         const b = await loadDocumentBatch(household!.id, batchId);
-        if (!additionalUploadAllowedStatuses.has(b.status)) {
-          throw new Error("This batch is not available for additional uploads.");
-        }
         if (caseId && b.case_id !== caseId) {
           throw new Error("Batch does not belong to the selected case.");
         }
         if (sessionId && b.session_id !== sessionId) {
           throw new Error("Batch does not match the selected session.");
+        }
+        if (!additionalUploadAllowedStatuses.has(b.status)) {
+          throw new Error("This batch is not available for additional uploads.");
         }
         return b;
       }
@@ -155,11 +160,11 @@ export default function Documents() {
       if (caseId) {
         const b = await loadDocumentBatchForCase(household!.id, caseId);
         if (!b) return null;
-        if (!additionalUploadAllowedStatuses.has(b.status)) {
-          throw new Error("This case does not have an open upload.");
-        }
         if (sessionId && b.session_id !== sessionId) {
           throw new Error("Session mismatch.");
+        }
+        if (!additionalUploadAllowedStatuses.has(b.status)) {
+          throw new Error("This case does not have an open upload.");
         }
         return b;
       }
@@ -168,7 +173,12 @@ export default function Documents() {
   });
 
   // Load the most recent resumable batch only when no route identifiers are supplied.
-  const { data: latestBatch, error: latestBatchError } = useQuery({
+  const {
+    data: latestBatch,
+    error: latestBatchError,
+    isLoading: latestBatchLoading,
+    refetch: refetchLatestBatch,
+  } = useQuery({
     queryKey: ["document-processing-latest-resumable-batch", household?.id],
     enabled: !!household && !hasIdentifiers && !batch,
     queryFn: () => loadLatestResumableDocumentBatch(household!.id),
@@ -179,6 +189,9 @@ export default function Documents() {
     if (e) setResumeError(e instanceof Error ? e.message : "Could not load batch");
   }, [paramBatchError, latestBatchError]);
 
+  const isResolving = paramBatchLoading || latestBatchLoading;
+  const resolutionError = paramBatchError ?? latestBatchError;
+
   const resumableLatestBatch =
     !hasIdentifiers && latestBatch && batchAllowsAdditionalUploads(latestBatch)
       ? latestBatch
@@ -186,6 +199,11 @@ export default function Documents() {
   const visibleBatch =
     batch ?? paramBatch ?? (resumeChoice === "continue" ? resumableLatestBatch : null) ?? null;
   const awaitingResumeChoice = !hasIdentifiers && !!resumableLatestBatch && !resumeChoice && !batch;
+
+  const retryResolution = async () => {
+    setResumeError(null);
+    await Promise.all([refetchParamBatch(), refetchLatestBatch()]);
+  };
 
   const { data: documents } = useQuery({
     queryKey: ["documents", household?.id],
@@ -207,8 +225,16 @@ export default function Documents() {
     queryFn: () => loadDocumentBatch(household!.id, visibleBatch!.id),
     initialData: visibleBatch ?? undefined,
     refetchInterval: (query) => {
+      const status = query.state.data?.status;
       if (query.state.data?.is_terminal) return false;
-      return 2_000;
+      if (
+        status === "uploading_files" ||
+        status === "additional_information_required" ||
+        status === "processing_unavailable"
+      ) {
+        return false;
+      }
+      return 5_000;
     },
   });
 
@@ -272,13 +298,20 @@ export default function Documents() {
     );
   };
 
-  const batchIsOpen = batchAllowsAdditionalUploads(currentBatch);
+  const canAddFiles =
+    !isResolving && !resolutionError && batchAllowsAdditionalUploads(currentBatch ?? visibleBatch);
 
   const uploadAndAnalyze = async () => {
     if (pending.length === 0) return;
     setBusy(true);
     setError(null);
     try {
+      if (isResolving) {
+        throw new Error("Please wait while the existing review is loaded.");
+      }
+      if (resolutionError) {
+        throw new Error("Could not load the existing review. Please try again.");
+      }
       if (awaitingResumeChoice) {
         throw new Error("Choose whether to continue the existing review or start a new one.");
       }
@@ -393,19 +426,19 @@ export default function Documents() {
               <SecondaryButton
                 label="Files"
                 onPress={() => choose("document")}
-                disabled={busy || !batchIsOpen}
+                disabled={busy || !canAddFiles}
                 style={{ flex: 1, paddingVertical: 10 }}
               />
               <SecondaryButton
                 label="Camera"
                 onPress={() => choose("camera")}
-                disabled={busy || !batchIsOpen}
+                disabled={busy || !canAddFiles}
                 style={{ flex: 1, paddingVertical: 10 }}
               />
               <SecondaryButton
                 label="Photos"
                 onPress={() => choose("library")}
-                disabled={busy || !batchIsOpen}
+                disabled={busy || !canAddFiles}
                 style={{ flex: 1, paddingVertical: 10 }}
               />
             </View>
@@ -469,7 +502,7 @@ export default function Documents() {
                   onPress={() => setResumeChoice("new")}
                 />
               </View>
-            ) : batchIsOpen ? (
+            ) : canAddFiles ? (
               <PrimaryButton
                 label={
                   pending.length === 0
@@ -486,8 +519,14 @@ export default function Documents() {
                 style={{ marginTop: spacing.md }}
               />
             ) : null}
-            {resumeError ? (
-              <Body style={{ color: colors.danger, marginTop: spacing.sm }}>{resumeError}</Body>
+            {isResolving ? (
+              <Caption style={{ marginTop: spacing.sm }}>Loading existing review…</Caption>
+            ) : null}
+            {resolutionError ? (
+              <View style={{ marginTop: spacing.sm, gap: 8 }}>
+                <Body style={{ color: colors.danger }}>{resumeError}</Body>
+                <SecondaryButton label="Try again" onPress={retryResolution} disabled={busy} />
+              </View>
             ) : null}
             {error ? (
               <Body muted style={{ marginTop: spacing.sm }}>
@@ -540,6 +579,23 @@ export default function Documents() {
                     setBatch(await retryDocumentBatch(household.id, currentBatch.id))
                   }
                   disabled={busy}
+                />
+              ) : null}
+              {(currentBatch.status === "manual_review" ||
+                (currentBatch.status === "processing_unavailable" && !currentBatch.retryable)) &&
+              currentBatch.case_id ? (
+                <SecondaryButton
+                  label="Enter details manually"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/onboarding/manual-entry",
+                      params: {
+                        batchId: currentBatch.id,
+                        sessionId: currentBatch.session_id,
+                        caseId: currentBatch.case_id!,
+                      },
+                    })
+                  }
                 />
               ) : null}
             </Card>

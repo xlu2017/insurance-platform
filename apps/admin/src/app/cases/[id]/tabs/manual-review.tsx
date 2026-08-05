@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabaseBrowser } from "@/lib/supabase";
 import {
@@ -33,9 +33,16 @@ interface ManualCandidateRow {
   selected_facts_json: unknown;
 }
 
+interface ManualReviewBatch {
+  id: string;
+  session_id: string;
+  status: string;
+}
+
 export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
 
   const { data: documents, isLoading: docsLoading } = useQuery({
     queryKey: ["policy-documents", caseRow.household_id],
@@ -50,21 +57,46 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
     },
   });
 
-  const { data: candidates, isLoading: candidatesLoading } = useQuery<ManualCandidateRow[]>({
-    queryKey: ["manual-candidates", caseRow.household_id],
+  const { data: batch, isLoading: batchLoading } = useQuery({
+    queryKey: ["manual-review-batch", caseRow.id],
     queryFn: async () => {
       const { data, error } = await supabaseBrowser()
+        .from("document_processing_batches")
+        .select("id, session_id, status")
+        .eq("case_id", caseRow.id)
+        .in("status", ["manual_review", "ready_for_review", "uploading_files"])
+        .order("created_at", { ascending: false })
+        .maybeSingle();
+      if (error) throw error;
+      return data as ManualReviewBatch | null;
+    },
+  });
+
+  const { data: candidates, isLoading: candidatesLoading } = useQuery<ManualCandidateRow[]>({
+    queryKey: ["manual-candidates", batch?.session_id ?? caseRow.household_id],
+    queryFn: async () => {
+      const base = supabaseBrowser()
         .from("asset_candidates")
         .select(
           "id, asset_type, display_label, match_classification, review_status, decision, selected_facts_json",
         )
-        .eq("household_id", caseRow.household_id)
-        .not("manual_reviewed_by", "is", null)
-        .order("created_at", { ascending: false });
+        .eq("household_id", caseRow.household_id);
+      const { data, error } = batch?.session_id
+        ? await base.eq("session_id", batch.session_id).order("created_at", { ascending: false })
+        : await base
+            .not("manual_reviewed_by", "is", null)
+            .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ManualCandidateRow[];
     },
+    enabled: !batchLoading,
   });
+
+  useEffect(() => {
+    if (candidates) {
+      setSelectedCandidateIds(new Set(candidates.map((c) => c.id)));
+    }
+  }, [candidates]);
 
   const [assetType, setAssetType] = useState<"property" | "vehicle">("property");
   const [selectedDoc, setSelectedDoc] = useState<string>("");
@@ -91,6 +123,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       if (!user) throw new Error("Not signed in");
       if (!selectedDoc) throw new Error("Select a policy document");
       if (!displayLabel) throw new Error("Display label is required");
+      if (!batch) throw new Error("No manual review batch found for this case");
 
       const mandateSuggestions: Record<string, { rule: string; amountCents?: number }> = {};
       for (const [key, value] of Object.entries(coverage)) {
@@ -126,15 +159,22 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         p_asset_type: assetType,
         p_identity_fingerprint: fingerprint || `${assetType}-manual`,
         p_display_label: displayLabel,
+        p_session_id: batch.session_id,
         p_match_classification: "new",
         p_selected_facts_json: selectedFacts,
-        p_provenance_json: { source: "admin_manual_review", case_id: caseRow.id },
+        p_provenance_json: {
+          source: "admin_manual_review",
+          case_id: caseRow.id,
+          batch_id: batch.id,
+        },
       });
       if (error) throw error;
       return data as { candidate_id?: string };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["manual-candidates", caseRow.household_id] });
+      queryClient.invalidateQueries({
+        queryKey: ["manual-candidates", batch?.session_id ?? caseRow.household_id],
+      });
       setMessage("Manual candidate saved.");
       setDisplayLabel("");
       setIdentity({});
@@ -144,7 +184,49 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
     onError: (e: Error) => setMessage(e.message),
   });
 
-  if (docsLoading || candidatesLoading) return <Skeleton className="h-48" />;
+  const complete = useMutation({
+    mutationFn: async () => {
+      const supabase = supabaseBrowser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+      if (!batch) throw new Error("No manual review batch found for this case");
+      const ids = Array.from(selectedCandidateIds);
+      if (ids.length === 0) throw new Error("Select at least one candidate to complete the review");
+
+      const { data, error } = await supabase.rpc("complete_manual_review_v1", {
+        p_batch_id: batch.id,
+        p_session_id: batch.session_id,
+        p_case_id: caseRow.id,
+        p_household_id: caseRow.household_id,
+        p_actor_profile_id: user.id,
+        p_candidate_ids: ids,
+      });
+      if (error) throw error;
+      return data as { success?: boolean; linked_candidates?: number };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["manual-review-batch", caseRow.id] });
+      queryClient.invalidateQueries({ queryKey: ["case", caseRow.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["manual-candidates", batch?.session_id ?? caseRow.household_id],
+      });
+      setMessage(`Manual review completed. ${result?.linked_candidates ?? 0} candidate(s) linked.`);
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  const toggleCandidate = (id: string, checked: boolean) => {
+    setSelectedCandidateIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  if (docsLoading || batchLoading || candidatesLoading) return <Skeleton className="h-48" />;
 
   const identityFields =
     assetType === "property"
@@ -274,7 +356,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
             ))}
           </div>
 
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button onClick={() => save.mutate()} disabled={save.isPending || !batch}>
             Save manual candidate
           </Button>
           {message ? <p className="text-sm text-ink-muted">{message}</p> : null}
@@ -290,6 +372,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
             <Table>
               <thead>
                 <tr>
+                  <Th />
                   <Th>Type</Th>
                   <Th>Label</Th>
                   <Th>Status</Th>
@@ -299,6 +382,13 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
               <tbody>
                 {candidates!.map((c) => (
                   <tr key={c.id}>
+                    <Td>
+                      <Input
+                        type="checkbox"
+                        checked={selectedCandidateIds.has(c.id)}
+                        onChange={(e) => toggleCandidate(c.id, e.target.checked)}
+                      />
+                    </Td>
                     <Td>{c.asset_type}</Td>
                     <Td>{c.display_label}</Td>
                     <Td>{c.review_status}</Td>
@@ -307,6 +397,13 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
                 ))}
               </tbody>
             </Table>
+          )}
+          {batch && (candidates ?? []).length > 0 && (
+            <div className="mt-3">
+              <Button onClick={() => complete.mutate()} disabled={complete.isPending}>
+                Complete manual review
+              </Button>
+            </div>
           )}
         </Card>
       </div>
