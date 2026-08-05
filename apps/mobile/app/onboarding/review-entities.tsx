@@ -44,7 +44,7 @@ import {
 
 interface CandidateDecision {
   candidateId: string;
-  decision: "approve_new" | "skip";
+  decision: "approve_new" | "link_existing" | "skip" | "needs_correction";
 }
 
 type ReviewAction = CandidateFieldReview["action"];
@@ -502,9 +502,12 @@ function CandidateSummary({
   const policyPaths = allPaths.filter((p) => p.startsWith("currentPolicy."));
   const typeLabel = candidate.asset_type === "vehicle" ? "Vehicle" : "Property";
   const isProperty = candidate.asset_type === "property";
-  const canAdd = isProperty
-    ? addressVerified[candidate.id] || addressDraft?.action === "correct"
-    : true;
+  const canAdd =
+    candidate.draft_decision === "link_existing"
+      ? true
+      : isProperty
+        ? addressVerified[candidate.id] || addressDraft?.action === "correct"
+        : true;
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState(candidate.display_label);
@@ -684,6 +687,25 @@ export default function ReviewEntities() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!candidates) return;
+    setDecisions((prev) => {
+      const next = { ...prev };
+      for (const candidate of candidates) {
+        if (next[candidate.id]) continue;
+        if (
+          candidate.draft_decision === "approve_new" ||
+          candidate.draft_decision === "link_existing" ||
+          candidate.draft_decision === "skip" ||
+          candidate.draft_decision === "needs_correction"
+        ) {
+          next[candidate.id] = candidate.draft_decision;
+        }
+      }
+      return next;
+    });
+  }, [candidates]);
+
+  useEffect(() => {
     if (!fieldReviews) return;
     setDrafts((prev) => {
       const next = { ...prev };
@@ -858,8 +880,8 @@ export default function ReviewEntities() {
 
   const currentCandidate = candidates[candidateIndex]!;
 
-  const allCandidatesDecided = candidates.every(
-    (c) => decisions[c.id] === "skip" || decisions[c.id] === "approve_new",
+  const allCandidatesDecided = candidates.every((c) =>
+    ["approve_new", "link_existing", "skip", "needs_correction"].includes(decisions[c.id]),
   );
 
   const advanceCandidate = () => {
@@ -935,7 +957,11 @@ export default function ReviewEntities() {
         };
       }
       setDrafts(nextDrafts);
-      setDecisions((prev) => ({ ...prev, [currentCandidate.id]: "approve_new" }));
+      const decision =
+        currentCandidate.draft_decision === "link_existing" && currentCandidate.draft_existing_asset_id
+          ? "link_existing"
+          : "approve_new";
+      setDecisions((prev) => ({ ...prev, [currentCandidate.id]: decision }));
       advanceCandidate();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add candidate");
@@ -973,11 +999,15 @@ export default function ReviewEntities() {
       }
 
       for (const candidate of candidates) {
+        const decision = decisions[candidate.id];
+        const isLink = decision === "link_existing";
         const { error: draftError } = await supabase.rpc("save_candidate_review_draft_v1", {
           p_household_id: household!.id,
           p_candidate_id: candidate.id,
-          p_decision: decisions[candidate.id] === "approve_new" ? "approve_new" : "skip",
-          p_identity_confirmed: decisions[candidate.id] === "approve_new",
+          p_decision: decision ?? "skip",
+          p_identity_confirmed: decision === "approve_new" || isLink,
+          p_existing_asset_id: isLink ? candidate.draft_existing_asset_id : null,
+          p_existing_asset_type: isLink ? candidate.draft_existing_asset_type : null,
         });
         if (draftError) throw draftError;
       }
@@ -1013,7 +1043,11 @@ export default function ReviewEntities() {
                   <Caption>
                     {decision === "approve_new"
                       ? "Will be added to your account"
-                      : "Will not be added"}
+                      : decision === "link_existing"
+                        ? "Will be linked to your existing asset"
+                        : decision === "needs_correction"
+                          ? "Needs correction"
+                          : "Will not be added"}
                   </Caption>
                 </View>
               );

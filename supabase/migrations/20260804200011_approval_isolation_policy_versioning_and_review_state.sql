@@ -62,6 +62,13 @@ revoke all on policy_asset_links from anon;
 grant select on policy_asset_links to authenticated;
 grant select, insert, update, delete on policy_asset_links to service_role;
 
+-- The mobile manual-entry and review screens query these tables directly; RLS alone
+-- is not enough if the authenticated role has no table-level privileges.
+grant select on document_processing_batches to authenticated;
+grant select on document_processing_batch_items to authenticated;
+grant select on asset_candidates to authenticated;
+grant select on policy_documents to authenticated;
+
 drop trigger if exists set_updated_at on policy_asset_links;
 create trigger set_updated_at
   before update on policy_asset_links
