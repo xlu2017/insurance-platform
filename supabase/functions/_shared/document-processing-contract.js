@@ -6,11 +6,12 @@ export function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
-export function parseCaseId(raw) {
-  if (raw === undefined || raw === null) {
+// Distinguishes an omitted case_id property from a present-but-invalid value.
+export function parseCaseId(raw, isPresent) {
+  if (!isPresent) {
     return { kind: "none" };
   }
-  if (typeof raw !== "string") {
+  if (raw === null || typeof raw !== "string") {
     return { kind: "invalid", reason: "Invalid case_id" };
   }
   const trimmed = raw.trim();

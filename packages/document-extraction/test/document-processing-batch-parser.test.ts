@@ -17,32 +17,38 @@ describe("document-processing-batch contract parser", () => {
   });
 
   describe("parseCaseId", () => {
-    it("treats undefined and null as omitted", () => {
-      expect(parseCaseId(undefined)).toEqual({ kind: "none" });
-      expect(parseCaseId(null)).toEqual({ kind: "none" });
+    it("treats an omitted property as none", () => {
+      expect(parseCaseId(undefined, false)).toEqual({ kind: "none" });
+    });
+
+    it("treats a present null as invalid", () => {
+      expect(parseCaseId(null, true)).toEqual({ kind: "invalid", reason: "Invalid case_id" });
     });
 
     it("rejects empty and whitespace strings", () => {
-      expect(parseCaseId("")).toEqual({ kind: "invalid", reason: "Invalid case_id" });
-      expect(parseCaseId("   ")).toEqual({ kind: "invalid", reason: "Invalid case_id" });
+      expect(parseCaseId("", true)).toEqual({ kind: "invalid", reason: "Invalid case_id" });
+      expect(parseCaseId("   ", true)).toEqual({ kind: "invalid", reason: "Invalid case_id" });
     });
 
     it("rejects non-string values", () => {
-      expect(parseCaseId(123)).toEqual({ kind: "invalid", reason: "Invalid case_id" });
-      expect(parseCaseId({})).toEqual({ kind: "invalid", reason: "Invalid case_id" });
-      expect(parseCaseId(["uuid"])).toEqual({ kind: "invalid", reason: "Invalid case_id" });
+      expect(parseCaseId(123, true)).toEqual({ kind: "invalid", reason: "Invalid case_id" });
+      expect(parseCaseId({}, true)).toEqual({ kind: "invalid", reason: "Invalid case_id" });
+      expect(parseCaseId(["uuid"], true)).toEqual({ kind: "invalid", reason: "Invalid case_id" });
     });
 
     it("rejects malformed UUID strings", () => {
-      expect(parseCaseId("not-a-uuid")).toEqual({ kind: "invalid", reason: "Invalid case_id" });
-      expect(parseCaseId("00000000-0000-0000-0000-000000000000-extra")).toEqual({
+      expect(parseCaseId("not-a-uuid", true)).toEqual({
+        kind: "invalid",
+        reason: "Invalid case_id",
+      });
+      expect(parseCaseId("00000000-0000-0000-0000-000000000000-extra", true)).toEqual({
         kind: "invalid",
         reason: "Invalid case_id",
       });
     });
 
     it("trims and returns valid UUIDs", () => {
-      expect(parseCaseId("  a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11  ")).toEqual({
+      expect(parseCaseId("  a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11  ", true)).toEqual({
         kind: "valid",
         value: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
       });

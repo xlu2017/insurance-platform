@@ -5,7 +5,7 @@ export type CaseIdParseResult =
   | { kind: "invalid"; reason: string }
   | { kind: "valid"; value: string };
 
-export function parseCaseId(raw: unknown): CaseIdParseResult;
+export function parseCaseId(raw: unknown, isPresent: boolean): CaseIdParseResult;
 
 export const resumableStatuses: string[];
 export const relevantStatuses: string[];

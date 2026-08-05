@@ -86,12 +86,15 @@ export default function OnboardingDocuments() {
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [resumeChoice, setResumeChoice] = useState<"continue" | "new" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const newReviewRequestId = useRef<string>(createClientRequestId("review"));
 
   const {
     data: latestBatch,
     error: latestBatchError,
     isLoading: latestBatchLoading,
+    isFetching: latestBatchFetching,
     refetch: refetchLatestBatch,
   } = useQuery({
     queryKey: ["latest-document-processing-batch", household?.id],
@@ -106,7 +109,7 @@ export default function OnboardingDocuments() {
       );
   }, [latestBatchError]);
 
-  const isResolving = latestBatchLoading;
+  const isResolving = latestBatchLoading || latestBatchFetching;
   const resolutionError = latestBatchError;
 
   const retryResolution = async () => {
@@ -348,13 +351,31 @@ export default function OnboardingDocuments() {
             />
           ) : null}
           {currentBatch.status === "processing_unavailable" && currentBatch.retryable ? (
-            <SecondaryButton
-              label="Retry processing"
-              onPress={async () =>
-                setBatch(await retryDocumentBatch(household.id, currentBatch.id))
-              }
-              disabled={busy}
-            />
+            <>
+              <SecondaryButton
+                label="Retry processing"
+                onPress={async () => {
+                  setRetrying(true);
+                  setRetryError(null);
+                  try {
+                    const refreshed = await retryDocumentBatch(household.id, currentBatch.id);
+                    setBatch(refreshed);
+                    await queryClient.invalidateQueries({
+                      queryKey: ["document-processing-batches", household.id],
+                    });
+                  } catch (caught) {
+                    setRetryError(
+                      caught instanceof Error ? caught.message : "Retry processing failed",
+                    );
+                  } finally {
+                    setRetrying(false);
+                  }
+                }}
+                loading={retrying}
+                disabled={busy || retrying}
+              />
+              {retryError ? <Caption style={{ color: colors.danger }}>{retryError}</Caption> : null}
+            </>
           ) : null}
           {(currentBatch.status === "manual_review" ||
             (currentBatch.status === "processing_unavailable" && !currentBatch.retryable)) &&

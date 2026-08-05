@@ -224,7 +224,8 @@ Deno.serve(async (req) => {
     action === "latest-for-case" ||
     action === "latest-resumable-for-case"
   ) {
-    const caseParse = parseCaseId(body.case_id);
+    const hasCaseId = Object.prototype.hasOwnProperty.call(body, "case_id");
+    const caseParse = parseCaseId(body.case_id, hasCaseId);
     if (caseParse.kind === "invalid") return jsonError(caseParse.reason ?? "Invalid case_id", 400);
     if (caseParse.kind === "none") return jsonError("case_id is required", 400);
     const caseId = caseParse.value;
@@ -275,9 +276,9 @@ Deno.serve(async (req) => {
   }
 
   if (action === "create") {
-    const caseParse = parseCaseId(body.case_id);
+    const hasCaseId = Object.prototype.hasOwnProperty.call(body, "case_id");
+    const caseParse = parseCaseId(body.case_id, hasCaseId);
     if (caseParse.kind === "invalid") return jsonError(caseParse.reason ?? "Invalid case_id", 400);
-    const hasCaseId = caseParse.kind === "valid";
     const caseId = caseParse.value ?? "";
     const suppliedClientRequestId = String(body.client_request_id ?? "").trim();
     if (!hasCaseId && suppliedClientRequestId.length === 0) {

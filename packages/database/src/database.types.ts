@@ -1188,6 +1188,7 @@ export type Database = {
           duplicate_of_policy_document_id: string | null;
           household_id: string;
           id: string;
+          manual_entry_status: string;
           policy_document_id: string;
           selected_file_name: string;
           status: string;
@@ -1202,6 +1203,7 @@ export type Database = {
           duplicate_of_policy_document_id?: string | null;
           household_id: string;
           id?: string;
+          manual_entry_status?: string;
           policy_document_id: string;
           selected_file_name: string;
           status: string;
@@ -1216,6 +1218,7 @@ export type Database = {
           duplicate_of_policy_document_id?: string | null;
           household_id?: string;
           id?: string;
+          manual_entry_status?: string;
           policy_document_id?: string;
           selected_file_name?: string;
           status?: string;
@@ -2144,6 +2147,54 @@ export type Database = {
           versioned_at?: string | null;
         };
         Relationships: [];
+      };
+      manual_entry_idempotency: {
+        Row: {
+          batch_id: string;
+          client_request_id: string;
+          created_at: string;
+          household_id: string;
+          id: string;
+          operation_type: string;
+          result_id: string | null;
+          result_json: Json;
+        };
+        Insert: {
+          batch_id: string;
+          client_request_id: string;
+          created_at?: string;
+          household_id: string;
+          id?: string;
+          operation_type: string;
+          result_id?: string | null;
+          result_json?: Json;
+        };
+        Update: {
+          batch_id?: string;
+          client_request_id?: string;
+          created_at?: string;
+          household_id?: string;
+          id?: string;
+          operation_type?: string;
+          result_id?: string | null;
+          result_json?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "manual_entry_idempotency_batch_id_fkey";
+            columns: ["batch_id"];
+            isOneToOne: false;
+            referencedRelation: "document_processing_batches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "manual_entry_idempotency_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       manual_policy_reviews: {
         Row: {
@@ -3858,12 +3909,24 @@ export type Database = {
         };
         Returns: boolean;
       };
+      complete_customer_manual_entry_v1: {
+        Args: {
+          p_batch_id: string;
+          p_case_id: string;
+          p_client_request_id: string;
+          p_household_id: string;
+          p_session_id: string;
+          p_skipped_document_ids?: string[];
+        };
+        Returns: Json;
+      };
       complete_manual_review_v1: {
         Args: {
           p_actor_profile_id: string;
           p_batch_id: string;
           p_candidate_ids: string[];
           p_case_id: string;
+          p_client_request_id?: string;
           p_household_id: string;
           p_session_id: string;
         };
@@ -3906,6 +3969,14 @@ export type Database = {
       };
       decline_customer_recommendation: {
         Args: { p_expected_rec_version: number; p_recommendation_id: string };
+        Returns: Json;
+      };
+      delete_manual_entry_candidate_v1: {
+        Args: {
+          p_batch_id: string;
+          p_candidate_id: string;
+          p_household_id: string;
+        };
         Returns: Json;
       };
       disable_dangerous_mode_v1: {
@@ -4099,7 +4170,6 @@ export type Database = {
       };
       save_customer_manual_policy_review_v1: {
         Args: {
-          p_actor_profile_id: string;
           p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
           p_batch_id: string;
           p_case_id: string;
@@ -4109,9 +4179,9 @@ export type Database = {
           p_identity_fingerprint: string;
           p_match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
           p_occupancy?: string;
-          p_provenance_json?: Json;
           p_selected_facts_json?: Json;
           p_session_id: string;
+          p_source_document_ids: string[];
         };
         Returns: Json;
       };
@@ -4150,6 +4220,15 @@ export type Database = {
           p_external_success?: boolean;
           p_provider: string;
           p_quote_request_id: string;
+        };
+        Returns: Json;
+      };
+      set_manual_entry_document_status_v1: {
+        Args: {
+          p_batch_id: string;
+          p_household_id: string;
+          p_policy_document_id: string;
+          p_status: string;
         };
         Returns: Json;
       };

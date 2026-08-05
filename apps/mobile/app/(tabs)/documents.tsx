@@ -113,6 +113,8 @@ export default function Documents() {
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [resumeChoice, setResumeChoice] = useState<"continue" | "new" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeConfirmDoc, setRemoveConfirmDoc] = useState<DocumentRow | null>(null);
@@ -126,6 +128,7 @@ export default function Documents() {
     data: paramBatch,
     error: paramBatchError,
     isLoading: paramBatchLoading,
+    isFetching: paramBatchFetching,
     refetch: refetchParamBatch,
   } = useQuery({
     queryKey: ["document-processing-param-batch", household?.id, caseId, batchId, sessionId],
@@ -177,6 +180,7 @@ export default function Documents() {
     data: latestBatch,
     error: latestBatchError,
     isLoading: latestBatchLoading,
+    isFetching: latestBatchFetching,
     refetch: refetchLatestBatch,
   } = useQuery({
     queryKey: ["document-processing-latest-resumable-batch", household?.id],
@@ -189,7 +193,8 @@ export default function Documents() {
     if (e) setResumeError(e instanceof Error ? e.message : "Could not load batch");
   }, [paramBatchError, latestBatchError]);
 
-  const isResolving = paramBatchLoading || latestBatchLoading;
+  const isResolving =
+    paramBatchLoading || latestBatchLoading || paramBatchFetching || latestBatchFetching;
   const resolutionError = paramBatchError ?? latestBatchError;
 
   const resumableLatestBatch =
@@ -573,13 +578,35 @@ export default function Documents() {
                 <Body muted>All extracted items have been reviewed.</Body>
               ) : null}
               {currentBatch.status === "processing_unavailable" && currentBatch.retryable ? (
-                <SecondaryButton
-                  label="Retry processing"
-                  onPress={async () =>
-                    setBatch(await retryDocumentBatch(household.id, currentBatch.id))
-                  }
-                  disabled={busy}
-                />
+                <>
+                  <SecondaryButton
+                    label="Retry processing"
+                    onPress={async () => {
+                      setRetrying(true);
+                      setRetryError(null);
+                      try {
+                        const refreshed = await retryDocumentBatch(household.id, currentBatch.id);
+                        setBatch(refreshed);
+                        await queryClient.invalidateQueries({
+                          queryKey: ["document-processing-batches", household.id],
+                        });
+                      } catch (caught) {
+                        setRetryError(
+                          caught instanceof Error ? caught.message : "Retry processing failed",
+                        );
+                      } finally {
+                        setRetrying(false);
+                      }
+                    }}
+                    loading={retrying}
+                    disabled={busy || retrying}
+                  />
+                  {retryError ? (
+                    <Body style={{ color: colors.danger, marginTop: spacing.sm }}>
+                      {retryError}
+                    </Body>
+                  ) : null}
+                </>
               ) : null}
               {(currentBatch.status === "manual_review" ||
                 (currentBatch.status === "processing_unavailable" && !currentBatch.retryable)) &&

@@ -7,11 +7,12 @@ export type CaseIdParseResult =
   | { kind: "invalid"; reason: string }
   | { kind: "valid"; value: string };
 
-export function parseCaseId(raw: unknown): CaseIdParseResult {
-  if (raw === undefined || raw === null) {
+// Distinguishes an omitted case_id property from a present-but-invalid value.
+export function parseCaseId(raw: unknown, isPresent: boolean): CaseIdParseResult {
+  if (!isPresent) {
     return { kind: "none" };
   }
-  if (typeof raw !== "string") {
+  if (raw === null || typeof raw !== "string") {
     return { kind: "invalid", reason: "Invalid case_id" };
   }
   const trimmed = raw.trim();

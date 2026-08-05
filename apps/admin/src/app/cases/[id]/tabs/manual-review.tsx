@@ -18,10 +18,11 @@ import {
 } from "@/components/ui";
 import type { CaseDetail } from "../page";
 
-interface PolicyDocumentRow {
+interface BatchDocumentRow {
   id: string;
-  file_name: string;
-  status: string;
+  policy_document_id: string;
+  selected_file_name: string;
+  manual_entry_status: string;
 }
 
 interface ManualCandidateRow {
@@ -44,19 +45,6 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
 
-  const { data: documents, isLoading: docsLoading } = useQuery({
-    queryKey: ["policy-documents", caseRow.household_id],
-    queryFn: async () => {
-      const { data, error } = await supabaseBrowser()
-        .from("policy_documents")
-        .select("id, file_name, status")
-        .eq("household_id", caseRow.household_id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as PolicyDocumentRow[];
-    },
-  });
-
   const { data: batch, isLoading: batchLoading } = useQuery({
     queryKey: ["manual-review-batch", caseRow.id],
     queryFn: async () => {
@@ -70,6 +58,21 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       if (error) throw error;
       return data as ManualReviewBatch | null;
     },
+  });
+
+  const { data: batchDocuments, isLoading: docsLoading } = useQuery({
+    queryKey: ["manual-review-batch-documents", batch?.id],
+    queryFn: async () => {
+      if (!batch) return [];
+      const { data, error } = await supabaseBrowser()
+        .from("document_processing_batch_items")
+        .select("id, policy_document_id, selected_file_name, manual_entry_status")
+        .eq("batch_id", batch.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as BatchDocumentRow[];
+    },
+    enabled: !!batch,
   });
 
   const { data: candidates, isLoading: candidatesLoading } = useQuery<ManualCandidateRow[]>({
@@ -121,7 +124,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
-      if (!selectedDoc) throw new Error("Select a policy document");
+      if (!selectedDoc) throw new Error("Select a policy document from this batch");
       if (!displayLabel) throw new Error("Display label is required");
       if (!batch) throw new Error("No manual review batch found for this case");
 
@@ -151,22 +154,23 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         mandateSuggestions,
       };
 
-      const { data, error } = await supabase.rpc("save_manual_policy_review_v1", {
+      const requestId =
+        typeof globalThis.crypto?.randomUUID === "function"
+          ? globalThis.crypto.randomUUID()
+          : `admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const { data, error } = await supabase.rpc("save_customer_manual_policy_review_v1", {
+        p_batch_id: batch.id,
+        p_session_id: batch.session_id,
+        p_case_id: caseRow.id,
         p_household_id: caseRow.household_id,
-        p_actor_profile_id: user.id,
-        p_client_request_id: `admin-${caseRow.household_id}-${Date.now()}`,
-        p_policy_document_id: selectedDoc,
+        p_client_request_id: requestId,
         p_asset_type: assetType,
         p_identity_fingerprint: fingerprint || `${assetType}-manual`,
         p_display_label: displayLabel,
-        p_session_id: batch.session_id,
+        p_source_document_ids: [selectedDoc],
         p_match_classification: "new",
         p_selected_facts_json: selectedFacts,
-        p_provenance_json: {
-          source: "admin_manual_review",
-          case_id: caseRow.id,
-          batch_id: batch.id,
-        },
       });
       if (error) throw error;
       return data as { candidate_id?: string };
@@ -202,6 +206,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         p_household_id: caseRow.household_id,
         p_actor_profile_id: user.id,
         p_candidate_ids: ids,
+        p_client_request_id: `admin-complete-${batch.id}-${ids.join(":")}`,
       });
       if (error) throw error;
       return data as { success?: boolean; linked_candidates?: number };
@@ -276,9 +281,9 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
             <Label>Policy document</Label>
             <Select value={selectedDoc} onChange={(e) => setSelectedDoc(e.target.value)}>
               <option value="">Select a document</option>
-              {(documents ?? []).map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.file_name}
+              {(batchDocuments ?? []).map((d) => (
+                <option key={d.id} value={d.policy_document_id}>
+                  {d.selected_file_name} {d.manual_entry_status === "assigned" ? "(assigned)" : ""}
                 </option>
               ))}
             </Select>
