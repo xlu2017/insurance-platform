@@ -20,6 +20,8 @@ export function useHousehold() {
         .from("households")
         .select("id, name, province, autopilot_active, onboarding_step")
         .eq("owner_profile_id", userData.user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       return data;

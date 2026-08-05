@@ -64,7 +64,32 @@ This is likely a browser pointer-event configuration issue rather than an app bu
 
 The visible **Add PDF or image files** button in `expo-document-picker` sometimes does not open the OS file picker with mouse clicks. When the dialog is open, you can use the keyboard: type the file name (e.g. `auto-policy.png`) to filter and press `Enter` (or `Alt+O` on some GTK file dialogs) to confirm. If that fails, exercise the upload path via the hidden `<input type="file">` or a test script.
 
-### 3. Console error: "The 'navigation' object hasn't been initialized yet"
+The Expo web picker may only return one file even when `multiple: true` is set. To add multiple files, press `Files` again and select the next file; `documents.tsx` appends each selection to the pending list. After each selection, the primary button updates to `Upload N files`.
+
+### 3. Hosted testing: multiple households for the demo account
+
+On the hosted project, the demo account `customer@example.com` can own more than one household. `apps/mobile/lib/household.ts` `useHousehold()` queries:
+
+```ts
+await supabase
+  .from("households")
+  .select("id, name, province, autopilot_active, onboarding_step")
+  .eq("owner_profile_id", userData.user.id)
+  .maybeSingle();
+```
+
+With multiple rows this returns `PGRST116` and the app shows "Finish setting up" everywhere. This is fixed: `useHousehold()` now orders by `created_at` descending and `limit(1)` so it returns the most recently created household instead of throwing.
+
+### 4. Hosted testing: manual-entry source documents
+
+`apps/mobile/app/onboarding/manual-entry.tsx` directly selects from `document_processing_batch_items`. The hosted migration `20260720000011_dangerous_mode_document_batches.sql` revokes all privileges on that table from `authenticated` without granting `SELECT` back, so the manual-entry screen shows **No documents available** even though the batch has uploads. The RPC layer (`save_customer_manual_policy_review_v1` etc.) still works because it uses `security definer`. Options to unblock the UI:
+
+- Grant `SELECT ON public.document_processing_batch_items TO authenticated;` in a migration.
+- Move the manual-entry source-document query to an Edge Function or RPC.
+
+This is fixed: migration `20260804200008_manual_entry_ui_permissions.sql` grants `SELECT ON public.document_processing_batch_items TO authenticated;`, so the manual-entry screen can load its source documents.
+
+### 5. Console error: "The 'navigation' object hasn't been initialized yet"
 
 `AuthGate`/callback routes may call `router.replace` before the Expo Router navigator mounts. This produces a console error:
 
@@ -101,6 +126,10 @@ Also ensure the gitignored `supabase/functions/.env` contains `DOCUMENT_MODEL_PR
 ### Verify-email public path (FIXED)
 
 `/verify-email` is now included in `PUBLIC_PATHS` in `apps/mobile/lib/auth-gate.ts`, so an unauthenticated user who registers without auto-confirm can reach the verify screen.
+
+### Case-scoped Documents screen and `manual_review` batches
+
+`apps/mobile/app/(tabs)/documents.tsx` previously used `loadDocumentBatchForCase` (`action: latest-resumable-for-case`) when a `caseId` parameter was present, which excluded `manual_review` batches. This is fixed: it now uses `loadRelevantDocumentBatchForCase` (`action: latest-relevant-for-case`) so `manual_review` and `processing_unavailable` batches are displayed with their correct actions.
 
 ### Onboarding membership blocked locally
 

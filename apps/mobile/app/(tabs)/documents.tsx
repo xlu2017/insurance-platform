@@ -9,7 +9,6 @@ import { supabase } from "@/lib/supabase";
 import { useHousehold } from "@/lib/household";
 import { openDocumentUrl } from "@/lib/open-url";
 import {
-  additionalUploadAllowedStatuses,
   batchAllowsAdditionalUploads,
   createClientRequestId,
   createDocumentBatch,
@@ -19,7 +18,7 @@ import {
   loadDangerousModeSetting,
   loadDocumentBatch,
   loadDocumentBatchBySession,
-  loadDocumentBatchForCase,
+  loadRelevantDocumentBatchForCase,
   loadLatestResumableDocumentBatch,
   retryDocumentBatch,
   submitDocumentBatch,
@@ -142,9 +141,6 @@ export default function Documents() {
         if (sessionId && b.session_id !== sessionId) {
           throw new Error("Batch does not match the selected session.");
         }
-        if (!additionalUploadAllowedStatuses.has(b.status)) {
-          throw new Error("This batch is not available for additional uploads.");
-        }
         return b;
       }
       if (sessionId) {
@@ -155,19 +151,13 @@ export default function Documents() {
         if (caseId && b.case_id !== caseId) {
           throw new Error("Batch does not belong to the selected case.");
         }
-        if (!additionalUploadAllowedStatuses.has(b.status)) {
-          throw new Error("This batch is not available for additional uploads.");
-        }
         return b;
       }
       if (caseId) {
-        const b = await loadDocumentBatchForCase(household!.id, caseId);
+        const b = await loadRelevantDocumentBatchForCase(household!.id, caseId);
         if (!b) return null;
         if (sessionId && b.session_id !== sessionId) {
           throw new Error("Session mismatch.");
-        }
-        if (!additionalUploadAllowedStatuses.has(b.status)) {
-          throw new Error("This case does not have an open upload.");
         }
         return b;
       }
