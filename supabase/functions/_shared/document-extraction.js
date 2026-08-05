@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 1c6b7cb03b285f7e80613e004ef61c682c23ea35f91150746f67a8690f100d49
+// source-hash: 67df642e7f16129b45fc6475cd5b75e1ea9c2adc2c543e62cc874d4adc061b74
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -7637,20 +7637,13 @@ var Subscription = z.object({
 // ../schemas/src/document-processing-config.ts
 var DANGEROUS_MODE_DISCLOSURE_VERSION = "dangerous-mode-v1";
 function envValue(name) {
-  try {
-    const g = globalThis;
-    if (g.Deno?.env?.get) {
-      const value = g.Deno.env.get(name);
-      if (value) return value;
-    }
-  } catch {
+  const g = globalThis;
+  if (g.Deno?.env?.get) {
+    const value = g.Deno.env.get(name);
+    if (value) return value;
   }
-  try {
-    const g = globalThis;
-    if (g.process?.env?.[name]) {
-      return g.process.env[name];
-    }
-  } catch {
+  if (g.process?.env?.[name]) {
+    return g.process.env[name];
   }
   return void 0;
 }
@@ -12896,4 +12889,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "1c6b7cb03b285f7e80613e004ef61c682c23ea35f91150746f67a8690f100d49";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "67df642e7f16129b45fc6475cd5b75e1ea9c2adc2c543e62cc874d4adc061b74";

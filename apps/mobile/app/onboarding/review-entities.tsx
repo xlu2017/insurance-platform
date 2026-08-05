@@ -34,12 +34,12 @@ import {
   VEHICLE_REVIEW_FIELDS,
   displayValueForField,
   formatFieldLabel,
-  formatFieldValue,
   getEffectiveDisplay,
   getFieldValue,
   isRecord,
   parseCorrectedValue,
   renderCents,
+  serializeFieldValue,
 } from "@/lib/review-entities-helpers";
 
 interface CandidateDecision {
@@ -374,8 +374,11 @@ function FieldEditStep({
   const [editing, setEditing] = useState(false);
   const [showUnsure, setShowUnsure] = useState(false);
   const [corrected, setCorrected] = useState(() => {
-    if (draft?.action === "correct" && draft.correctedValue) return draft.correctedValue;
-    return isCents ? renderCents(value) : displayValueForField(fieldPath, value);
+    if (draft?.action === "correct" && draft.correctedValue !== undefined)
+      return draft.correctedValue;
+    if (isCents)
+      return typeof value === "number" ? String(value / 100) : String(Number(value ?? 0) / 100);
+    return displayValueForField(fieldPath, value);
   });
 
   const displayValue = isCents ? renderCents(value) : displayValueForField(fieldPath, value);
@@ -409,7 +412,13 @@ function FieldEditStep({
             label="Cancel"
             onPress={() => {
               setEditing(false);
-              setCorrected(isCents ? renderCents(value) : displayValueForField(fieldPath, value));
+              setCorrected(
+                isCents
+                  ? typeof value === "number"
+                    ? String(value / 100)
+                    : String(Number(value ?? 0) / 100)
+                  : displayValueForField(fieldPath, value),
+              );
             }}
           />
         </View>
@@ -715,7 +724,9 @@ export default function ReviewEntities() {
           next[key] = {
             action: r.action,
             correctedValue:
-              r.action === "correct" ? formatFieldValue(r.corrected_value) : undefined,
+              r.action === "correct"
+                ? serializeFieldValue(r.field_path, r.corrected_value)
+                : undefined,
             mandateRule: "",
             mandateAmount: "",
           };
@@ -730,11 +741,10 @@ export default function ReviewEntities() {
     fieldPath: string,
     draft: DraftReview,
   ): Promise<void> => {
-    const value = getFieldValue(candidate, fieldPath);
-    let correctedValue: unknown =
-      draft.action === "correct" ? draft.correctedValue || value : undefined;
-    if (draft.action === "correct" && typeof correctedValue === "string") {
-      correctedValue = parseCorrectedValue(fieldPath, correctedValue);
+    let correctedValue: unknown = undefined;
+    if (draft.action === "correct") {
+      const raw = draft.correctedValue ?? "";
+      correctedValue = parseCorrectedValue(fieldPath, raw);
     }
 
     await saveReview.mutateAsync({
@@ -894,16 +904,7 @@ export default function ReviewEntities() {
   const handleFieldComplete = (action: ReviewAction, correctedValue?: string) => {
     if (!currentCandidate || !editingPath) return;
     const key = `${currentCandidate.id}:${editingPath}`;
-    const value = getFieldValue(currentCandidate, editingPath);
-    const corrected =
-      action === "correct"
-        ? String(
-            parseCorrectedValue(
-              editingPath,
-              correctedValue ?? displayValueForField(editingPath, value),
-            ),
-          )
-        : undefined;
+    const corrected = action === "correct" ? (correctedValue ?? "") : undefined;
 
     setDrafts((prev) => ({
       ...prev,

@@ -644,6 +644,17 @@ begin
     return v_existing_result;
   end if;
 
+  -- A batch may only be completed once by staff; a different client_request_id
+  -- must not trigger a second staff completion.
+  if exists (
+    select 1 from manual_entry_idempotency
+    where household_id = p_household_id
+      and batch_id = p_batch_id
+      and operation_type = 'staff_complete_entry'
+  ) then
+    raise exception 'staff manual review already completed for this batch' using errcode = 'P0001';
+  end if;
+
   select * into v_case
   from optimization_cases
   where id = p_case_id
@@ -680,8 +691,8 @@ begin
     raise exception 'Session does not match case' using errcode = 'P0001';
   end if;
 
-  if v_batch.status <> 'manual_review' then
-    raise exception 'Batch is not in manual_review: %', v_batch.status using errcode = 'P0001';
+  if v_batch.status not in ('manual_review','ready_for_review') then
+    raise exception 'Batch is not in a reviewable state: %', v_batch.status using errcode = 'P0001';
   end if;
 
   if v_case.state not in ('awaiting_documents','extracting_information') then
@@ -1529,5 +1540,353 @@ $function$;
 
 revoke all on function public.approve_candidate_assets_v2(uuid, uuid, text, jsonb, text, jsonb, jsonb, jsonb) from public, anon;
 grant execute on function public.approve_candidate_assets_v2(uuid, uuid, text, jsonb, text, jsonb, jsonb, jsonb) to authenticated, service_role;
+
+commit;
+
+-- Relax save_staff_manual_policy_candidate_v1 so a reviewer can add a candidate
+-- after the customer has completed manual entry (batch status ready_for_review).
+begin;
+
+create or replace function save_staff_manual_policy_candidate_v1(
+  p_batch_id uuid,
+  p_session_id uuid,
+  p_case_id uuid,
+  p_household_id uuid,
+  p_client_request_id text,
+  p_asset_type candidate_asset_type,
+  p_identity_fingerprint text,
+  p_display_label text,
+  p_source_document_ids uuid[],
+  p_selected_facts_json jsonb default '{}'::jsonb,
+  p_occupancy text default null,
+  p_match_classification candidate_match_classification default 'new'
+) returns jsonb
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_actor uuid;
+  v_batch document_processing_batches%rowtype;
+  v_session document_extraction_sessions%rowtype;
+  v_case optimization_cases%rowtype;
+  v_doc_id uuid;
+  v_candidate_id uuid;
+  v_ledger_id uuid;
+  v_result jsonb;
+  v_facts jsonb;
+  v_occupancy text;
+  v_existing_status text;
+  v_draft_decision text;
+  v_draft_existing_id uuid;
+  v_draft_existing_type candidate_asset_type;
+begin
+  v_actor := auth.uid();
+  if v_actor is null then
+    raise exception 'Not authenticated' using errcode = 'P0001';
+  end if;
+
+  if not is_staff() then
+    raise exception 'Staff role required' using errcode = 'P0001';
+  end if;
+
+  if not can_access_household(p_household_id) then
+    raise exception 'Staff cannot access household' using errcode = 'P0001';
+  end if;
+
+  if p_client_request_id is null or length(trim(p_client_request_id)) = 0 then
+    raise exception 'client_request_id is required' using errcode = 'P0001';
+  end if;
+  if length(p_client_request_id) > 240 then
+    raise exception 'Invalid client_request_id' using errcode = 'P0001';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('manual-entry:' || p_household_id::text || ':' || p_batch_id::text || ':staff_save_candidate:' || p_client_request_id, 0));
+
+  select id, result_json into v_ledger_id, v_result
+  from manual_entry_idempotency
+  where household_id = p_household_id
+    and batch_id = p_batch_id
+    and operation_type = 'staff_save_candidate'
+    and client_request_id = p_client_request_id;
+  if found then
+    return v_result;
+  end if;
+
+  select * into v_case
+  from optimization_cases
+  where id = p_case_id
+    and household_id = p_household_id
+  for update;
+  if not found then
+    raise exception 'Case not found' using errcode = 'P0001';
+  end if;
+
+  select * into v_session
+  from document_extraction_sessions
+  where id = p_session_id
+    and household_id = p_household_id
+    and case_id = p_case_id
+  for update;
+  if not found then
+    raise exception 'Session not found or does not match case' using errcode = 'P0001';
+  end if;
+
+  select * into v_batch
+  from document_processing_batches
+  where id = p_batch_id
+    and household_id = p_household_id
+    and session_id = p_session_id
+  for update;
+  if not found then
+    raise exception 'Batch not found or does not match session' using errcode = 'P0001';
+  end if;
+
+  if v_batch.case_id is distinct from p_case_id then
+    raise exception 'Batch does not match case' using errcode = 'P0001';
+  end if;
+  if v_session.case_id is distinct from p_case_id then
+    raise exception 'Session does not match case' using errcode = 'P0001';
+  end if;
+
+  -- Once staff has completed their review for this batch, no new staff candidates
+  -- may be added with a different client_request_id.
+  if exists (
+    select 1 from manual_entry_idempotency
+    where household_id = p_household_id
+      and batch_id = p_batch_id
+      and operation_type = 'staff_complete_entry'
+  ) then
+    raise exception 'staff manual review already completed for this batch' using errcode = 'P0001';
+  end if;
+
+
+  if v_batch.status not in ('manual_review','ready_for_review') then
+    raise exception 'Batch is not in a reviewable state: %', v_batch.status using errcode = 'P0001';
+  end if;
+
+  if p_source_document_ids is null or array_length(p_source_document_ids, 1) is null then
+    raise exception 'At least one source document is required' using errcode = 'P0001';
+  end if;
+
+  foreach v_doc_id in array p_source_document_ids
+  loop
+    select review_status into v_existing_status
+    from document_processing_batch_items
+    where batch_id = p_batch_id
+      and household_id = p_household_id
+      and policy_document_id = v_doc_id;
+    if not found then
+      raise exception 'Source document % does not belong to batch', v_doc_id using errcode = 'P0001';
+    end if;
+    if v_existing_status = 'not_relevant' then
+      raise exception 'Source document % has been marked not relevant and must be unskipped first', v_doc_id using errcode = 'P0001';
+    end if;
+  end loop;
+
+  v_occupancy := nullif(trim(coalesce(p_occupancy, '')), '');
+  v_facts := coalesce(p_selected_facts_json, '{}'::jsonb)
+    || jsonb_build_object('_source', 'staff_manual_entry')
+    || jsonb_build_object('_manual_entry_batch_id', p_batch_id)
+    || jsonb_build_object('_manual_entry_session_id', p_session_id)
+    || jsonb_build_object('_manual_entry_case_id', p_case_id);
+
+  -- Populate first-class draft-decision columns from the facts the UI sends, or
+  -- default to approve_new so staff candidates can be completed without a trigger.
+  v_draft_decision := lower(nullif(coalesce(v_facts->>'_draftDecision', 'approve_new'), ''));
+  if v_draft_decision not in ('approve_new', 'link_existing', 'skip', 'needs_correction') then
+    v_draft_decision := 'approve_new';
+  end if;
+  v_draft_existing_id := nullif(v_facts->>'_draftExistingAssetId', '')::uuid;
+  v_draft_existing_type :=
+    case when lower(nullif(v_facts->>'_draftExistingAssetType', '')) in ('vehicle', 'property')
+      then lower(nullif(v_facts->>'_draftExistingAssetType', ''))::candidate_asset_type
+      else null end;
+
+  -- Approval-readiness is validated at completion/approval time, not at draft save.
+  insert into asset_candidates (
+    session_id,
+    household_id,
+    asset_type,
+    identity_fingerprint,
+    display_label,
+    occupancy,
+    match_classification,
+    decision,
+    draft_decision,
+    draft_existing_asset_id,
+    draft_existing_asset_type,
+    review_status,
+    source_document_ids,
+    selected_facts_json,
+    manual_reviewed_by,
+    manual_reviewed_at
+  ) values (
+    p_session_id,
+    p_household_id,
+    p_asset_type,
+    p_identity_fingerprint,
+    p_display_label,
+    v_occupancy,
+    p_match_classification,
+    'undecided',
+    v_draft_decision,
+    v_draft_existing_id,
+    v_draft_existing_type,
+    'pending',
+    p_source_document_ids,
+    v_facts,
+    v_actor,
+    now()
+  ) returning id into v_candidate_id;
+
+  -- A candidate reference starts review; it does not complete it.
+  update document_processing_batch_items
+  set review_status = 'reviewing'
+  where batch_id = p_batch_id
+    and policy_document_id = any(p_source_document_ids);
+
+  insert into audit_events (
+    actor_profile_id,
+    actor_role,
+    action,
+    entity_type,
+    entity_id,
+    household_id,
+    case_id,
+    after_summary
+  ) values (
+    v_actor,
+    app_role(),
+    'staff_manual_candidate_saved',
+    'asset_candidate',
+    v_candidate_id,
+    p_household_id,
+    p_case_id,
+    jsonb_build_object(
+      'batch_id', p_batch_id,
+      'session_id', p_session_id,
+      'asset_type', p_asset_type,
+      'source_document_ids', p_source_document_ids,
+      'source', 'staff_manual_entry'
+    )
+  );
+
+  v_result := jsonb_build_object('success', true, 'candidate_id', v_candidate_id);
+
+  insert into manual_entry_idempotency (
+    operation_type,
+    client_request_id,
+    household_id,
+    batch_id,
+    result_id,
+    result_json
+  ) values (
+    'staff_save_candidate',
+    p_client_request_id,
+    p_household_id,
+    p_batch_id,
+    v_candidate_id,
+    v_result
+  );
+
+  return v_result;
+end;
+$$;
+
+commit;
+
+
+-- Allow admin/staff to mark uploaded documents as reviewed after customer
+-- manual-entry has moved the batch to ready_for_review.
+begin;
+
+create or replace function set_manual_entry_document_status_v1(
+  p_batch_id uuid,
+  p_policy_document_id uuid,
+  p_household_id uuid,
+  p_status text
+) returns jsonb
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_actor uuid;
+  v_batch document_processing_batches%rowtype;
+  v_referenced boolean;
+begin
+  v_actor := auth.uid();
+  if v_actor is null then
+    raise exception 'Not authenticated' using errcode = 'P0001';
+  end if;
+
+  -- Household members may manage their own documents; staff must be authorized.
+  if not can_access_household(p_household_id) then
+    raise exception 'Household not found or access denied' using errcode = 'P0001';
+  end if;
+
+  if p_status not in ('unreviewed','not_relevant','reviewed') then
+    raise exception 'Invalid review status: %', p_status using errcode = 'P0001';
+  end if;
+
+  select * into v_batch
+  from document_processing_batches
+  where id = p_batch_id
+    and household_id = p_household_id
+  for update;
+  if not found then
+    raise exception 'Batch not found' using errcode = 'P0001';
+  end if;
+
+  if v_batch.mode_snapshot <> 'safe' then
+    raise exception 'Document status changes are only permitted for safe-mode batches' using errcode = 'P0001';
+  end if;
+  if v_batch.status not in ('manual_review','ready_for_review','processing_unavailable') then
+    raise exception 'Batch is not in a reviewable state: %', v_batch.status using errcode = 'P0001';
+  end if;
+  if v_batch.status = 'processing_unavailable' and coalesce(v_batch.retryable, false) then
+    raise exception 'Batch must be resolved before changing document status' using errcode = 'P0001';
+  end if;
+
+  if not exists (
+    select 1 from document_processing_batch_items
+    where batch_id = p_batch_id
+      and household_id = p_household_id
+      and policy_document_id = p_policy_document_id
+  ) then
+    raise exception 'Document not found in batch' using errcode = 'P0001';
+  end if;
+
+  -- Resolve whether the document is referenced by a candidate in this batch session.
+  select exists (
+    select 1
+    from asset_candidates
+    where household_id = p_household_id
+      and session_id = v_batch.session_id
+      and p_policy_document_id = any(source_document_ids)
+  ) into v_referenced;
+
+  -- Reviewed requires an explicit candidate; not_relevant/unreviewed require none.
+  if p_status = 'reviewed' then
+    if not v_referenced then
+      raise exception 'Document has no candidate and cannot be marked reviewed' using errcode = 'P0001';
+    end if;
+  else
+    if v_referenced then
+      raise exception 'Document is referenced by a candidate and cannot be marked %', p_status using errcode = 'P0001';
+    end if;
+  end if;
+
+  update document_processing_batch_items
+  set review_status = p_status
+  where batch_id = p_batch_id
+    and household_id = p_household_id
+    and policy_document_id = p_policy_document_id;
+
+  return jsonb_build_object('success', true, 'policy_document_id', p_policy_document_id, 'status', p_status);
+end;
+$$;
+
+revoke all on function public.set_manual_entry_document_status_v1(uuid, uuid, uuid, text) from public, anon;
+grant execute on function public.set_manual_entry_document_status_v1(uuid, uuid, uuid, text) to authenticated, service_role;
 
 commit;

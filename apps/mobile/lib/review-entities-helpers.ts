@@ -113,6 +113,15 @@ export function parseCorrectedValue(fieldPath: string, raw: string): unknown {
   return raw;
 }
 
+export function serializeFieldValue(fieldPath: string, value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (fieldPath.toLowerCase().includes("cents") || fieldPath.toLowerCase().includes("premium")) {
+    const n = typeof value === "number" ? value : Number(value);
+    if (Number.isFinite(n)) return String(n / 100);
+  }
+  return String(value);
+}
+
 function getFacts(candidate: ExtractionCandidate): Record<string, unknown> {
   return isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
 }
@@ -135,8 +144,8 @@ export function getEffectiveDisplay(
   fieldPath: string,
   draft?: DraftReview | null,
 ): string {
-  if (draft?.action === "correct" && draft.correctedValue) {
-    return draft.correctedValue;
+  if (draft?.action === "correct" && draft.correctedValue !== undefined) {
+    return displayValueForField(fieldPath, parseCorrectedValue(fieldPath, draft.correctedValue));
   }
   return displayValueForField(fieldPath, getFieldValue(candidate, fieldPath));
 }

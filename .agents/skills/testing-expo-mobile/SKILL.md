@@ -137,6 +137,61 @@ Workarounds:
   - `complete_customer_manual_entry_v1` to finish
 - After seeding candidates, refresh `/onboarding/manual-entry` or navigate directly to `/onboarding/review-entities?sessionId=<sessionId>` to test the review UI.
 
+### 8. Review-entities correction persistence on Expo web
+
+The `Edit` flow for a policy field (e.g., Annual premium) opens a `Field` input and calls `handleFieldComplete`/`persistReview` on **Save**. Setting `input.value` and dispatching `input`/`change` events does **not** update React state; the correction must be entered with real keyboard input.
+
+Reliable sequence in the test Chrome environment:
+
+1. Click the field row to open the `Confirm / Edit / Unsure` card.
+2. Click **Edit** to switch to the input.
+3. Focus and select the input from the console, then type:
+   ```javascript
+   const input = document.querySelector('input[aria-label="Annual premium"]');
+   input.focus();
+   input.select();
+   ```
+   Then use the `computer` `type` action to enter the new value.
+4. Click **Save**. The summary should show the updated value.
+5. After pressing **Continue**, verify the persisted correction:
+   ```sql
+   SELECT candidate_id, field_path, action, corrected_value
+   FROM candidate_field_reviews
+   WHERE candidate_id = '<candidate_id>'
+     AND field_path = 'currentPolicy.annualPremiumCents';
+   ```
+   Expect `action = 'correct'` and `corrected_value = 130000` for a C$1,300.00 premium.
+
+If the correction still does not persist, call `save_candidate_review_draft_v1` directly or insert the `candidate_field_reviews` row manually as a last resort.
+
+### 9. Review-entities `Add` and `Continue` buttons may not respond to pointer clicks
+
+In the test Chrome environment the per-candidate **Add** and summary **Continue** buttons often do not respond to `left_click`. Use console fallback:
+
+```javascript
+document.querySelector('button[aria-label="Add"]').click();
+document.querySelector('button[aria-label="Continue"]').click();
+```
+
+### 10. Compare-coverage asset picker is constrained by the first asset type
+
+The compare table chooses its spec list based on the first selected asset. The visible **Select asset** buttons may not respond to pointer clicks in the test Chrome environment; use `localStorage` to pre-populate the selection and reload.
+
+To view vehicle coverage columns, place a vehicle asset first:
+
+```javascript
+const state = {
+  selectedAssetIds: ["<vehicle_id_1>", "<vehicle_id_2>", "<property_id>"],
+  colWidths: [180, 180, 180],
+  hiddenSpecKeys: [],
+  showMode: "all",
+};
+localStorage.setItem("compare-coverage-state-v1", JSON.stringify(state));
+location.reload();
+```
+
+To view property coverage columns, place the property asset first.
+
 ### 6. Hosted testing: target the correct household for golden-path runs
 
 The hosted demo account `customer@example.com` can own multiple households. `useHousehold()` returns the most recently created household, which may not be the intended `Smoke Test Household`. If the `Home` action routes to an unexpected `caseId`, check which household is loaded and navigate directly to `/(tabs)/documents?caseId=<target-case-id>` (or temporarily target `Smoke Test Household` in `apps/mobile/lib/household.ts` and revert after the test).
