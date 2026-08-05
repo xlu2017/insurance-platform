@@ -842,12 +842,14 @@ describe("candidate approval schema compatibility", () => {
       .eq("id", batch.id);
 
     const missingInsurer = {
+      _draftDecision: "approve_new" as const,
       identity: { year: 2020, make: "Honda", model: "Civic" },
       currentPolicy: { annualPremiumCents: 100000, expiryDate: "2026-12-31" },
       currentCoverage: { thirdPartyLiabilityCents: 1000000 },
       mandateSuggestions: {},
     };
     const missingPostal = {
+      _draftDecision: "approve_new" as const,
       identity: { fullAddress: "123 Main St", city: "Calgary", province: "AB" },
       currentPolicy: {
         insurerName: "Home Co",

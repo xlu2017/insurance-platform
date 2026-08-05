@@ -144,6 +144,7 @@ function selectedFactsForProperty(overrides: Record<string, unknown> = {}) {
       baseDeductibleCents: 100000,
     },
     mandateSuggestions: { dwelling: { rule: "minimum", amountCents: 50000000 } },
+    _draftDecision: "approve_new",
     ...overrides,
   };
 }
@@ -168,6 +169,7 @@ function selectedFactsForVehicle(overrides: Record<string, unknown> = {}) {
       comprehensiveDeductibleCents: 50000,
     },
     mandateSuggestions: { thirdPartyLiability: { rule: "minimum", amountCents: 1000000 } },
+    _draftDecision: "approve_new",
     ...overrides,
   };
 }

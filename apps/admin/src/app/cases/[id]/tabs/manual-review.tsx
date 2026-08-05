@@ -179,9 +179,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
     const d = Number(m[3]);
     if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
     const dt = new Date(Date.UTC(y, mo - 1, d));
-    return (
-      dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d
-    );
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
   }
 
   function validate(): boolean {

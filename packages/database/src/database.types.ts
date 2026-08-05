@@ -2455,6 +2455,70 @@ export type Database = {
           },
         ];
       };
+      policy_asset_links: {
+        Row: {
+          asset_id: string;
+          asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          candidate_id: string | null;
+          created_at: string;
+          effective_from: string | null;
+          effective_to: string | null;
+          household_id: string;
+          is_current: boolean;
+          policy_id: string;
+          product_line: Database["public"]["Enums"]["product_line"];
+          updated_at: string;
+        };
+        Insert: {
+          asset_id: string;
+          asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          candidate_id?: string | null;
+          created_at?: string;
+          effective_from?: string | null;
+          effective_to?: string | null;
+          household_id: string;
+          is_current?: boolean;
+          policy_id: string;
+          product_line: Database["public"]["Enums"]["product_line"];
+          updated_at?: string;
+        };
+        Update: {
+          asset_id?: string;
+          asset_type?: Database["public"]["Enums"]["candidate_asset_type"];
+          candidate_id?: string | null;
+          created_at?: string;
+          effective_from?: string | null;
+          effective_to?: string | null;
+          household_id?: string;
+          is_current?: boolean;
+          policy_id?: string;
+          product_line?: Database["public"]["Enums"]["product_line"];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "policy_asset_links_candidate_id_fkey";
+            columns: ["candidate_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_candidates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "policy_asset_links_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "policy_asset_links_policy_id_fkey";
+            columns: ["policy_id"];
+            isOneToOne: true;
+            referencedRelation: "policies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       policy_document_policy_links: {
         Row: {
           candidate_id: string | null;
@@ -4312,6 +4376,14 @@ export type Database = {
         Args: { p_case_id: string };
         Returns: undefined;
       };
+      update_candidate_display_label_v1: {
+        Args: {
+          p_candidate_id: string;
+          p_display_label: string;
+          p_household_id: string;
+        };
+        Returns: Json;
+      };
       update_case_state: {
         Args: {
           p_case_id: string;
@@ -4337,15 +4409,25 @@ export type Database = {
         };
         Returns: Json;
       };
-      update_candidate_display_label_v1: {
-        Args: {
-          p_candidate_id: string;
-          p_display_label: string;
-          p_household_id: string;
-        };
-        Returns: Json;
-      };
       validate_candidate_approval_ready: {
+        Args: {
+          p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          p_selected_facts_json: Json;
+        };
+        Returns: undefined;
+      };
+      validate_candidate_completion_ready: {
+        Args: { p_candidate_id: string; p_household_id: string };
+        Returns: undefined;
+      };
+      validate_candidate_policy_ready: {
+        Args: {
+          p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          p_selected_facts_json: Json;
+        };
+        Returns: undefined;
+      };
+      validate_new_asset_identity_ready: {
         Args: {
           p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
           p_selected_facts_json: Json;
