@@ -64,7 +64,29 @@ grant select, insert, update, delete on policy_asset_links to service_role;
 
 -- The mobile manual-entry and review screens query these tables directly; RLS alone
 -- is not enough if the authenticated role has no table-level privileges.
-grant select on document_processing_batches to authenticated;
+-- Expose only the non-sensitive batch state columns to authenticated users so that
+-- broad selects (e.g. in tests) still fail on provider configuration columns.
+grant select (
+  id,
+  household_id,
+  session_id,
+  case_id,
+  mode_snapshot,
+  status,
+  error_code,
+  retryable,
+  document_count,
+  unique_document_count,
+  deduplicated_count,
+  retry_count,
+  next_retry_at,
+  submitted_at,
+  processing_started_at,
+  completed_at,
+  created_at,
+  updated_at
+) on document_processing_batches to authenticated;
+
 grant select on document_processing_batch_items to authenticated;
 grant select on asset_candidates to authenticated;
 grant select on policy_documents to authenticated;
