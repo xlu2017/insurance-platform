@@ -880,8 +880,10 @@ export default function ReviewEntities() {
 
   const currentCandidate = candidates[candidateIndex]!;
 
-  const allCandidatesDecided = candidates.every((c) =>
-    ["approve_new", "link_existing", "skip", "needs_correction"].includes(decisions[c.id]),
+  const allCandidatesDecided = candidates.every(
+    (c) =>
+      decisions[c.id] &&
+      ["approve_new", "link_existing", "skip", "needs_correction"].includes(decisions[c.id]!),
   );
 
   const advanceCandidate = () => {
@@ -958,7 +960,8 @@ export default function ReviewEntities() {
       }
       setDrafts(nextDrafts);
       const decision =
-        currentCandidate.draft_decision === "link_existing" && currentCandidate.draft_existing_asset_id
+        currentCandidate.draft_decision === "link_existing" &&
+        currentCandidate.draft_existing_asset_id
           ? "link_existing"
           : "approve_new";
       setDecisions((prev) => ({ ...prev, [currentCandidate.id]: decision }));
@@ -1006,8 +1009,12 @@ export default function ReviewEntities() {
           p_candidate_id: candidate.id,
           p_decision: decision ?? "skip",
           p_identity_confirmed: decision === "approve_new" || isLink,
-          p_existing_asset_id: isLink ? candidate.draft_existing_asset_id : null,
-          p_existing_asset_type: isLink ? candidate.draft_existing_asset_type : null,
+          p_existing_asset_id: isLink
+            ? (candidate.draft_existing_asset_id ?? undefined)
+            : undefined,
+          p_existing_asset_type: isLink
+            ? (candidate.draft_existing_asset_type ?? undefined)
+            : undefined,
         });
         if (draftError) throw draftError;
       }
