@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabaseBrowser } from "@/lib/supabase";
 import {
@@ -22,7 +22,7 @@ interface BatchDocumentRow {
   id: string;
   policy_document_id: string;
   selected_file_name: string;
-  manual_entry_status: string;
+  review_status: string;
 }
 
 interface ManualCandidateRow {
@@ -44,6 +44,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
+  const saveRequestIdRef = useRef<string | null>(null);
 
   const { data: batch, isLoading: batchLoading } = useQuery({
     queryKey: ["manual-review-batch", caseRow.id],
@@ -66,7 +67,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       if (!batch) return [];
       const { data, error } = await supabaseBrowser()
         .from("document_processing_batch_items")
-        .select("id, policy_document_id, selected_file_name, manual_entry_status")
+        .select("id, policy_document_id, selected_file_name, review_status")
         .eq("batch_id", batch.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -129,13 +130,17 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       if (!batch) throw new Error("No manual review batch found for this case");
 
       const mandateSuggestions: Record<string, { rule: string; amountCents?: number }> = {};
-      for (const [key, value] of Object.entries(coverage)) {
-        if (!value) continue;
-        const cents = Number(value) * 100;
+      const addMandate = (key: string, targetKey: string) => {
+        const value = coverage[key];
+        if (!value) return;
+        const cents = Math.round(Number(value) * 100);
         if (!Number.isNaN(cents) && cents > 0) {
-          mandateSuggestions[key] = { rule: "minimum", amountCents: Math.round(cents) };
+          mandateSuggestions[targetKey] = { rule: "minimum", amountCents: cents };
         }
-      }
+      };
+      addMandate("dwellingLimitCents", "dwelling");
+      addMandate("personalLiabilityLimitCents", "liability");
+      addMandate("thirdPartyLiabilityCents", "thirdPartyLiability");
 
       const selectedFacts = {
         identity,
@@ -144,7 +149,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
           policyNumber: policy.policyNumber || "",
           annualPremiumCents: policy.annualPremiumDollars
             ? Math.round(Number(policy.annualPremiumDollars) * 100)
-            : 0,
+            : null,
           effectiveDate: policy.effectiveDate || "",
           expiryDate: policy.expiryDate || "",
         },
@@ -154,12 +159,15 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         mandateSuggestions,
       };
 
-      const requestId =
-        typeof globalThis.crypto?.randomUUID === "function"
-          ? globalThis.crypto.randomUUID()
-          : `admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      if (!saveRequestIdRef.current) {
+        saveRequestIdRef.current =
+          typeof globalThis.crypto?.randomUUID === "function"
+            ? globalThis.crypto.randomUUID()
+            : `admin-save-${batch.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
+      const requestId = saveRequestIdRef.current;
 
-      const { data, error } = await supabase.rpc("save_customer_manual_policy_review_v1", {
+      const { data, error } = await supabase.rpc("save_staff_manual_policy_candidate_v1", {
         p_batch_id: batch.id,
         p_session_id: batch.session_id,
         p_case_id: caseRow.id,
@@ -179,6 +187,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       queryClient.invalidateQueries({
         queryKey: ["manual-candidates", batch?.session_id ?? caseRow.household_id],
       });
+      saveRequestIdRef.current = null;
       setMessage("Manual candidate saved.");
       setDisplayLabel("");
       setIdentity({});
@@ -253,6 +262,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
     assetType === "property"
       ? [
           { key: "dwellingLimitCents", label: "Dwelling limit ($)" },
+          { key: "personalLiabilityLimitCents", label: "Personal liability ($)" },
           { key: "baseDeductibleCents", label: "Base deductible ($)" },
         ]
       : [
@@ -283,7 +293,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
               <option value="">Select a document</option>
               {(batchDocuments ?? []).map((d) => (
                 <option key={d.id} value={d.policy_document_id}>
-                  {d.selected_file_name} {d.manual_entry_status === "assigned" ? "(assigned)" : ""}
+                  {d.selected_file_name} {d.review_status === "reviewed" ? "(reviewed)" : ""}
                 </option>
               ))}
             </Select>

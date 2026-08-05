@@ -26,7 +26,7 @@ interface BatchItem {
   policy_document_id: string;
   selected_file_name: string;
   category: string;
-  manual_entry_status: string;
+  review_status: string;
 }
 
 interface Candidate {
@@ -61,6 +61,13 @@ function parseMoney(value: string): number | null {
 
 function formatMoneyError(label: string) {
   return `${label} must be a valid non-negative number`;
+}
+
+function formatCents(value: unknown): string {
+  if (value == null) return "";
+  const n = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(n)) return "";
+  return String(n / 100);
 }
 
 export default function ManualEntry() {
@@ -109,8 +116,10 @@ export default function ManualEntry() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
 
   const draftRequestIdRef = useRef<string | null>(null);
+  const editRequestIdRef = useRef<string | null>(null);
   const completeRequestIdRef = useRef<string | null>(null);
 
   const missingRouteParam = !batchId || !sessionId || !caseId;
@@ -121,7 +130,7 @@ export default function ManualEntry() {
     queryFn: async () => {
       const { data, error: queryError } = await supabase
         .from("document_processing_batch_items")
-        .select("id, policy_document_id, selected_file_name, category, manual_entry_status")
+        .select("id, policy_document_id, selected_file_name, category, review_status")
         .eq("batch_id", batchId)
         .order("created_at", { ascending: false });
       if (queryError) throw queryError;
@@ -148,21 +157,49 @@ export default function ManualEntry() {
     [candidates],
   );
 
-  const unassignedItems = useMemo(
-    () =>
-      (items ?? []).filter(
-        (item) =>
-          item.manual_entry_status !== "skipped" && !assignedDocIds.has(item.policy_document_id),
-      ),
-    [items, assignedDocIds],
+  const selectableItems = useMemo(
+    () => (items ?? []).filter((item) => item.review_status !== "not_relevant"),
+    [items],
   );
 
   const skippedItems = useMemo(
-    () => (items ?? []).filter((item) => item.manual_entry_status === "skipped"),
+    () => (items ?? []).filter((item) => item.review_status === "not_relevant"),
+    [items],
+  );
+
+  const incompleteDocuments = useMemo(
+    () =>
+      (items ?? []).filter(
+        (item) => item.review_status !== "reviewed" && item.review_status !== "not_relevant",
+      ),
     [items],
   );
 
   const currentSelectedFacts = useMemo(() => {
+    const dwellingLimitCents = parseMoney(dwellingLimit);
+    const personalLiabilityLimitCents = parseMoney(propertyLiabilityLimit);
+    const contentsLimitCents = parseMoney(contentsLimit);
+    const baseDeductibleCents = parseMoney(baseDeductible);
+    const thirdPartyLiabilityCents = parseMoney(thirdPartyLiability);
+    const collisionDeductibleCents = parseMoney(collisionDeductible);
+    const comprehensiveDeductibleCents = parseMoney(comprehensiveDeductible);
+
+    const propertyMandate: Record<string, unknown> = {};
+    if (dwellingLimitCents != null) {
+      propertyMandate.dwelling = { rule: "minimum", amountCents: dwellingLimitCents };
+    }
+    if (personalLiabilityLimitCents != null) {
+      propertyMandate.liability = { rule: "minimum", amountCents: personalLiabilityLimitCents };
+    }
+
+    const vehicleMandate: Record<string, unknown> = {};
+    if (thirdPartyLiabilityCents != null) {
+      vehicleMandate.thirdPartyLiability = {
+        rule: "minimum",
+        amountCents: thirdPartyLiabilityCents,
+      };
+    }
+
     const common = {
       identity:
         assetType === "property"
@@ -177,28 +214,17 @@ export default function ManualEntry() {
       currentCoverage:
         assetType === "property"
           ? {
-              dwellingLimitCents: parseMoney(dwellingLimit),
-              contentsLimitCents: parseMoney(contentsLimit),
-              liabilityLimitCents: parseMoney(propertyLiabilityLimit),
-              baseDeductibleCents: parseMoney(baseDeductible),
+              dwellingLimitCents,
+              contentsLimitCents,
+              personalLiabilityLimitCents,
+              baseDeductibleCents,
             }
           : {
-              thirdPartyLiabilityCents: parseMoney(thirdPartyLiability),
-              collisionDeductibleCents: parseMoney(collisionDeductible),
-              comprehensiveDeductibleCents: parseMoney(comprehensiveDeductible),
+              thirdPartyLiabilityCents,
+              collisionDeductibleCents,
+              comprehensiveDeductibleCents,
             },
-      mandateSuggestions:
-        assetType === "property"
-          ? {
-              dwelling: { rule: "minimum", amountCents: parseMoney(dwellingLimit) },
-              liability: { rule: "minimum", amountCents: parseMoney(propertyLiabilityLimit) },
-            }
-          : {
-              thirdPartyLiability: {
-                rule: "minimum",
-                amountCents: parseMoney(thirdPartyLiability),
-              },
-            },
+      mandateSuggestions: assetType === "property" ? propertyMandate : vehicleMandate,
     };
     return common;
   }, [
@@ -270,7 +296,11 @@ export default function ManualEntry() {
         errors.baseDeductible = formatMoneyError("Base deductible");
       }
     } else {
-      if (year.trim() && !/^\d{4}$/.test(year.trim())) errors.year = "Enter a valid 4-digit year";
+      if (!year.trim() || !/^\d{4}$/.test(year.trim())) {
+        errors.year = "Enter a valid 4-digit year";
+      }
+      if (!make.trim()) errors.make = "Make is required";
+      if (!model.trim()) errors.model = "Model is required";
       if (vin.trim() && vin.trim().length !== 17) errors.vin = "VIN must be 17 characters";
       if (parseMoney(thirdPartyLiability) === null && thirdPartyLiability.trim() !== "") {
         errors.thirdPartyLiability = formatMoneyError("Liability limit");
@@ -281,8 +311,8 @@ export default function ManualEntry() {
     }
 
     const premiumCents = parseMoney(annualPremiumDollars);
-    if (premiumCents === null && annualPremiumDollars.trim() !== "") {
-      errors.annualPremium = formatMoneyError("Annual premium");
+    if (premiumCents === null || premiumCents <= 0) {
+      errors.annualPremium = "Annual premium must be a positive amount";
     }
     if (!isValidDate(expiryDate)) errors.expiryDate = "Use YYYY-MM-DD";
 
@@ -316,7 +346,9 @@ export default function ManualEntry() {
     setComprehensiveDeductible("");
     setSelectedDocIds([]);
     setValidationErrors({});
+    setEditingCandidate(null);
     draftRequestIdRef.current = null;
+    editRequestIdRef.current = null;
   };
 
   const toggleDocument = (docId: string) => {
@@ -326,6 +358,7 @@ export default function ManualEntry() {
   };
 
   const markSkipped = async (doc: BatchItem) => {
+    setSelectedDocIds((current) => current.filter((id) => id !== doc.policy_document_id));
     setBusy(true);
     setError(null);
     try {
@@ -333,7 +366,7 @@ export default function ManualEntry() {
         p_batch_id: batchId,
         p_policy_document_id: doc.policy_document_id,
         p_household_id: household.id,
-        p_status: "skipped",
+        p_status: "not_relevant",
       });
       if (rpcError) throw rpcError;
       if ((data as { success?: boolean } | null)?.success !== true) {
@@ -357,7 +390,7 @@ export default function ManualEntry() {
         p_batch_id: batchId,
         p_policy_document_id: doc.policy_document_id,
         p_household_id: household.id,
-        p_status: "unassigned",
+        p_status: "unreviewed",
       });
       if (rpcError) throw rpcError;
       await queryClient.invalidateQueries({
@@ -370,32 +403,106 @@ export default function ManualEntry() {
     }
   };
 
+  const loadCandidateIntoForm = (candidate: Candidate) => {
+    const facts = (candidate.selected_facts_json ?? {}) as Record<string, unknown>;
+    const identity = (facts.identity ?? {}) as Record<string, unknown>;
+    const policy = (facts.currentPolicy ?? {}) as Record<string, unknown>;
+    const coverage = (facts.currentCoverage ?? {}) as Record<string, unknown>;
+
+    setAssetType(candidate.asset_type);
+    setLabel(candidate.display_label);
+    setInsurerName(String(policy.insurerName ?? ""));
+    setPolicyNumber(String(policy.policyNumber ?? ""));
+    setAnnualPremiumDollars(formatCents(policy.annualPremiumCents));
+    setExpiryDate(String(policy.expiryDate ?? ""));
+    setSelectedDocIds(candidate.source_document_ids ?? []);
+
+    if (candidate.asset_type === "property") {
+      setFullAddress(String(identity.fullAddress ?? ""));
+      setCity(String(identity.city ?? ""));
+      setProvince(String(identity.province ?? ""));
+      setPostalCode(String(identity.postalCode ?? ""));
+      setYearBuilt(String(identity.yearBuilt ?? ""));
+      setDwellingLimit(formatCents(coverage.dwellingLimitCents));
+      setContentsLimit(formatCents(coverage.contentsLimitCents));
+      setPropertyLiabilityLimit(
+        formatCents(coverage.personalLiabilityLimitCents ?? coverage.liabilityLimitCents),
+      );
+      setBaseDeductible(formatCents(coverage.baseDeductibleCents));
+      setYear("");
+      setMake("");
+      setModel("");
+      setVin("");
+      setThirdPartyLiability("");
+      setCollisionDeductible("");
+      setComprehensiveDeductible("");
+    } else {
+      setYear(String(identity.year ?? ""));
+      setMake(String(identity.make ?? ""));
+      setModel(String(identity.model ?? ""));
+      setVin(String(identity.vin ?? ""));
+      setThirdPartyLiability(formatCents(coverage.thirdPartyLiabilityCents));
+      setCollisionDeductible(formatCents(coverage.collisionDeductibleCents));
+      setComprehensiveDeductible(formatCents(coverage.comprehensiveDeductibleCents));
+      setFullAddress("");
+      setCity("");
+      setProvince("");
+      setPostalCode("");
+      setYearBuilt("");
+      setDwellingLimit("");
+      setContentsLimit("");
+      setPropertyLiabilityLimit("");
+      setBaseDeductible("");
+    }
+    setValidationErrors({});
+  };
+
+  const startEdit = (candidate: Candidate) => {
+    loadCandidateIntoForm(candidate);
+    setEditingCandidate(candidate);
+    editRequestIdRef.current = generateRequestId("manual-entry-update", batchId);
+  };
+
   const saveDraft = async () => {
     if (!validate()) return;
-
-    if (!draftRequestIdRef.current) {
-      draftRequestIdRef.current = generateRequestId("manual-entry-save", batchId);
-    }
 
     setBusy(true);
     setError(null);
     try {
-      const { data, error: rpcError } = await supabase.rpc(
-        "save_customer_manual_policy_review_v1",
-        {
-          p_batch_id: batchId,
-          p_session_id: sessionId,
-          p_case_id: caseId,
-          p_household_id: household.id,
-          p_client_request_id: draftRequestIdRef.current,
-          p_asset_type: assetType,
-          p_identity_fingerprint: identityFingerprint,
-          p_display_label: label.trim(),
-          p_source_document_ids: selectedDocIds,
-          p_selected_facts_json: currentSelectedFacts,
-          p_match_classification: "new",
-        },
-      );
+      const rpcName: "save_customer_manual_policy_review_v1" | "update_manual_entry_candidate_v1" =
+        editingCandidate
+          ? "update_manual_entry_candidate_v1"
+          : "save_customer_manual_policy_review_v1";
+      let clientRequestId = editingCandidate ? editRequestIdRef.current : draftRequestIdRef.current;
+      const args: Record<string, unknown> = {
+        p_batch_id: batchId,
+        p_session_id: sessionId,
+        p_case_id: caseId,
+        p_household_id: household.id,
+        p_asset_type: assetType,
+        p_identity_fingerprint: identityFingerprint,
+        p_display_label: label.trim(),
+        p_source_document_ids: selectedDocIds,
+        p_selected_facts_json: currentSelectedFacts,
+        p_match_classification: "new",
+      };
+
+      if (editingCandidate && !editRequestIdRef.current) {
+        editRequestIdRef.current = generateRequestId("manual-entry-update", batchId);
+        clientRequestId = editRequestIdRef.current;
+      }
+      if (!editingCandidate && !draftRequestIdRef.current) {
+        draftRequestIdRef.current = generateRequestId("manual-entry-save", batchId);
+        clientRequestId = draftRequestIdRef.current;
+      }
+      if (editingCandidate) {
+        args.p_candidate_id = editingCandidate.id;
+      }
+
+      args.p_client_request_id = clientRequestId;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: rpcError } = await supabase.rpc(rpcName, args as any);
       if (rpcError) throw rpcError;
       const result = data as { success?: boolean; candidate_id?: string } | null;
       if (!result?.success || !result.candidate_id) throw new Error("Failed to save candidate");
@@ -453,7 +560,7 @@ export default function ManualEntry() {
     setError(null);
     try {
       const skippedDocumentIds = (items ?? [])
-        .filter((item) => item.manual_entry_status === "skipped")
+        .filter((item) => item.review_status === "not_relevant")
         .map((item) => item.policy_document_id);
 
       const { data, error: rpcError } = await supabase.rpc("complete_customer_manual_entry_v1", {
@@ -530,12 +637,17 @@ export default function ManualEntry() {
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Field label="Make" value={make} onChangeText={setMake} />
+            <Field label="Make" value={make} onChangeText={setMake} error={validationErrors.make} />
           </View>
         </View>
         <View style={{ flexDirection: "row", gap: spacing.md }}>
           <View style={{ flex: 1 }}>
-            <Field label="Model" value={model} onChangeText={setModel} />
+            <Field
+              label="Model"
+              value={model}
+              onChangeText={setModel}
+              error={validationErrors.model}
+            />
           </View>
           <View style={{ flex: 1 }}>
             <Field label="VIN" value={vin} onChangeText={setVin} error={validationErrors.vin} />
@@ -561,7 +673,7 @@ export default function ManualEntry() {
           keyboardType="numeric"
         />
         <Field
-          label="Liability limit ($)"
+          label="Personal liability limit ($)"
           value={propertyLiabilityLimit}
           onChangeText={setPropertyLiabilityLimit}
           keyboardType="numeric"
@@ -615,7 +727,7 @@ export default function ManualEntry() {
     )[value] ?? value;
 
   const candidateList = candidates ?? [];
-  const canFinish = candidateList.length > 0 && unassignedItems.length === 0;
+  const canFinish = candidateList.length > 0 && incompleteDocuments.length === 0;
 
   return (
     <Screen style={{ paddingVertical: spacing.md }}>
@@ -690,45 +802,52 @@ export default function ManualEntry() {
 
         <Card>
           <Subtitle>Source documents</Subtitle>
-          {unassignedItems.length === 0 && skippedItems.length === 0 ? (
-            <Body muted>No unassigned documents remaining.</Body>
+          {selectableItems.length === 0 && skippedItems.length === 0 ? (
+            <Body muted>No documents available.</Body>
           ) : (
             <View style={{ gap: spacing.sm }}>
-              {unassignedItems.map((item) => (
-                <View
-                  key={item.id}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingVertical: spacing.sm,
-                    borderBottomWidth: 1,
-                    borderBottomColor: colors.border,
-                  }}
-                >
-                  <Pressable
-                    onPress={() => toggleDocument(item.policy_document_id)}
-                    style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+              {selectableItems.map((item) => {
+                const canSkip = !assignedDocIds.has(item.policy_document_id);
+                return (
+                  <View
+                    key={item.id}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingVertical: spacing.sm,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border,
+                    }}
                   >
-                    <Body
-                      style={{
-                        color: selectedDocIds.includes(item.policy_document_id)
-                          ? colors.accent
-                          : colors.ink,
-                      }}
+                    <Pressable
+                      onPress={() => toggleDocument(item.policy_document_id)}
+                      style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
                     >
-                      {selectedDocIds.includes(item.policy_document_id) ? "[x] " : "[ ] "}
-                    </Body>
-                    <View style={{ marginLeft: spacing.sm }}>
-                      <Body numberOfLines={1}>{item.selected_file_name}</Body>
-                      <Caption>{categoryLabel(item.category)}</Caption>
-                    </View>
-                  </Pressable>
-                  <Pressable onPress={() => markSkipped(item)} disabled={busy} hitSlop={8}>
-                    <Body style={{ color: colors.inkMuted }}>Not relevant</Body>
-                  </Pressable>
-                </View>
-              ))}
+                      <Body
+                        style={{
+                          color: selectedDocIds.includes(item.policy_document_id)
+                            ? colors.accent
+                            : colors.ink,
+                        }}
+                      >
+                        {selectedDocIds.includes(item.policy_document_id) ? "[x] " : "[ ] "}
+                      </Body>
+                      <View style={{ marginLeft: spacing.sm }}>
+                        <Body numberOfLines={1}>{item.selected_file_name}</Body>
+                        <Caption>{categoryLabel(item.category)}</Caption>
+                      </View>
+                    </Pressable>
+                    {canSkip ? (
+                      <Pressable onPress={() => markSkipped(item)} disabled={busy} hitSlop={8}>
+                        <Body style={{ color: colors.inkMuted }}>Not relevant</Body>
+                      </Pressable>
+                    ) : (
+                      <Caption>In use</Caption>
+                    )}
+                  </View>
+                );
+              })}
               {skippedItems.map((item) => (
                 <View
                   key={item.id}
@@ -759,12 +878,25 @@ export default function ManualEntry() {
           ) : null}
         </Card>
 
-        <PrimaryButton
-          label="Save this policy"
-          onPress={saveDraft}
-          loading={busy}
-          disabled={busy || missingRouteParam}
-        />
+        {editingCandidate ? (
+          <>
+            <PrimaryButton
+              label="Update this policy"
+              onPress={saveDraft}
+              loading={busy}
+              disabled={busy || missingRouteParam}
+            />
+            <View style={{ height: 8 }} />
+            <SecondaryButton label="Cancel edit" onPress={resetForm} disabled={busy} />
+          </>
+        ) : (
+          <PrimaryButton
+            label="Save this policy"
+            onPress={saveDraft}
+            loading={busy}
+            disabled={busy || missingRouteParam}
+          />
+        )}
         <View style={{ height: 8 }} />
 
         {candidateList.length > 0 ? (
@@ -789,9 +921,18 @@ export default function ManualEntry() {
                       {candidate.asset_type}
                     </Caption>
                   </View>
-                  <Pressable onPress={() => deleteCandidate(candidate)} disabled={busy} hitSlop={8}>
-                    <Body style={{ color: colors.danger }}>Delete</Body>
-                  </Pressable>
+                  <View style={{ flexDirection: "row", gap: spacing.md }}>
+                    <Pressable onPress={() => startEdit(candidate)} disabled={busy} hitSlop={8}>
+                      <Body style={{ color: colors.accent }}>Edit</Body>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => deleteCandidate(candidate)}
+                      disabled={busy}
+                      hitSlop={8}
+                    >
+                      <Body style={{ color: colors.danger }}>Delete</Body>
+                    </Pressable>
+                  </View>
                 </View>
               ))}
             </View>
@@ -805,13 +946,17 @@ export default function ManualEntry() {
           loading={busy}
           disabled={busy || !canFinish || missingRouteParam}
         />
-        {unassignedItems.length > 0 ? (
+        {incompleteDocuments.length > 0 ? (
           <Caption style={{ marginTop: spacing.sm, color: colors.danger }}>
             Assign or mark every uploaded document before finishing.
           </Caption>
         ) : null}
-        <View style={{ height: 8 }} />
-        <SecondaryButton label="Cancel" onPress={() => router.back()} disabled={busy} />
+        {!editingCandidate ? (
+          <>
+            <View style={{ height: 8 }} />
+            <SecondaryButton label="Cancel" onPress={() => router.back()} disabled={busy} />
+          </>
+        ) : null}
       </ScrollView>
     </Screen>
   );

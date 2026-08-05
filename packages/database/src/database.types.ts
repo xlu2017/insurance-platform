@@ -1188,8 +1188,8 @@ export type Database = {
           duplicate_of_policy_document_id: string | null;
           household_id: string;
           id: string;
-          manual_entry_status: string;
           policy_document_id: string;
+          review_status: string;
           selected_file_name: string;
           status: string;
         };
@@ -1203,8 +1203,8 @@ export type Database = {
           duplicate_of_policy_document_id?: string | null;
           household_id: string;
           id?: string;
-          manual_entry_status?: string;
           policy_document_id: string;
+          review_status?: string;
           selected_file_name: string;
           status: string;
         };
@@ -1218,8 +1218,8 @@ export type Database = {
           duplicate_of_policy_document_id?: string | null;
           household_id?: string;
           id?: string;
-          manual_entry_status?: string;
           policy_document_id?: string;
+          review_status?: string;
           selected_file_name?: string;
           status?: string;
         };
@@ -2451,6 +2451,55 @@ export type Database = {
             columns: ["updated_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      policy_document_policy_links: {
+        Row: {
+          candidate_id: string | null;
+          created_at: string;
+          id: string;
+          policy_document_id: string;
+          policy_id: string;
+          relationship_type: string;
+        };
+        Insert: {
+          candidate_id?: string | null;
+          created_at?: string;
+          id?: string;
+          policy_document_id: string;
+          policy_id: string;
+          relationship_type?: string;
+        };
+        Update: {
+          candidate_id?: string | null;
+          created_at?: string;
+          id?: string;
+          policy_document_id?: string;
+          policy_id?: string;
+          relationship_type?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "policy_document_policy_links_candidate_id_fkey";
+            columns: ["candidate_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_candidates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "policy_document_policy_links_policy_document_id_fkey";
+            columns: ["policy_document_id"];
+            isOneToOne: false;
+            referencedRelation: "policy_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "policy_document_policy_links_policy_id_fkey";
+            columns: ["policy_id"];
+            isOneToOne: false;
+            referencedRelation: "policies";
             referencedColumns: ["id"];
           },
         ];
@@ -3929,6 +3978,7 @@ export type Database = {
           p_client_request_id?: string;
           p_household_id: string;
           p_session_id: string;
+          p_skipped_document_ids?: string[];
         };
         Returns: Json;
       };
@@ -4215,6 +4265,23 @@ export type Database = {
         };
         Returns: Json;
       };
+      save_staff_manual_policy_candidate_v1: {
+        Args: {
+          p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          p_batch_id: string;
+          p_case_id: string;
+          p_client_request_id: string;
+          p_display_label: string;
+          p_household_id: string;
+          p_identity_fingerprint: string;
+          p_match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
+          p_occupancy?: string;
+          p_selected_facts_json?: Json;
+          p_session_id: string;
+          p_source_document_ids: string[];
+        };
+        Returns: Json;
+      };
       send_quote_request_email: {
         Args: {
           p_external_success?: boolean;
@@ -4245,6 +4312,24 @@ export type Database = {
         Args: {
           p_case_id: string;
           p_target_state: Database["public"]["Enums"]["case_state"];
+        };
+        Returns: Json;
+      };
+      update_manual_entry_candidate_v1: {
+        Args: {
+          p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          p_batch_id: string;
+          p_candidate_id: string;
+          p_case_id: string;
+          p_client_request_id: string;
+          p_display_label: string;
+          p_household_id: string;
+          p_identity_fingerprint: string;
+          p_match_classification?: Database["public"]["Enums"]["candidate_match_classification"];
+          p_occupancy?: string;
+          p_selected_facts_json?: Json;
+          p_session_id: string;
+          p_source_document_ids: string[];
         };
         Returns: Json;
       };

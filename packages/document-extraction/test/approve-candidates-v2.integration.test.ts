@@ -1,25 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
 import { beforeAll, describe, expect, it } from "vitest";
+import {
+  assertLocalSupabase,
+  LOCAL_SUPABASE_ANON_KEY,
+  LOCAL_SUPABASE_SERVICE_ROLE_KEY,
+  LOCAL_SUPABASE_URL,
+} from "@autopilot/test-fixtures";
 
 const DEMO_HOUSEHOLD_ID = "20000000-0000-0000-0000-000000000001";
 const DEMO_CUSTOMER_ID = "00000000-0000-0000-0000-000000000001";
 const DEMO_ADMIN_ID = "00000000-0000-0000-0000-000000000004";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "http://127.0.0.1:54321";
-
-function assertLocalSupabase() {
-  const host = new URL(SUPABASE_URL).hostname;
-  if (host !== "127.0.0.1" && host !== "localhost") {
-    throw new Error("Destructive integration tests may only run against local Supabase.");
-  }
-}
-
-const SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
-const ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_IU";
+const SUPABASE_URL = process.env.SUPABASE_URL || LOCAL_SUPABASE_URL;
+const SERVICE_ROLE_KEY = LOCAL_SUPABASE_SERVICE_ROLE_KEY;
+const ANON_KEY = LOCAL_SUPABASE_ANON_KEY;
 
 async function getAdminClient() {
   const client = createClient(SUPABASE_URL, ANON_KEY);

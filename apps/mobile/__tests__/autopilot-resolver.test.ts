@@ -126,6 +126,18 @@ describe("resolveCustomerCasePresentation", () => {
     });
   });
 
+  it("returns no manual entry action for dangerous non-retryable processing_unavailable", () => {
+    const result = resolveCustomerCasePresentation({
+      c: caseStub("extracting_information"),
+      batch: batchStub("processing_unavailable", {
+        retryable: false,
+        automatic_processing: true,
+      }),
+    });
+    expect(result.action).toBeUndefined();
+    expect(result.tooltip).toMatch(/contact support/i);
+  });
+
   it("returns manual entry action when processing_unavailable and not retryable", () => {
     const result = resolveCustomerCasePresentation({
       c: caseStub("extracting_information"),

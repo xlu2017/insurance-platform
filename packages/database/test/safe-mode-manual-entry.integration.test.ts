@@ -128,7 +128,7 @@ function selectedFactsForProperty() {
     currentCoverage: {
       dwellingLimitCents: 50000000,
       contentsLimitCents: 10000000,
-      liabilityLimitCents: 2000000,
+      personalLiabilityLimitCents: 2000000,
       baseDeductibleCents: 100000,
     },
     mandateSuggestions: { dwelling: { rule: "minimum", amountCents: 50000000 } },
@@ -262,11 +262,11 @@ describe("safe-mode manual entry and staff completion", () => {
 
     const { data: item } = await admin
       .from("document_processing_batch_items")
-      .select("manual_entry_status")
+      .select("review_status")
       .eq("batch_id", batchId)
       .eq("policy_document_id", docId)
       .single();
-    expect(item?.manual_entry_status).toBe("assigned");
+    expect(item?.review_status).toBe("reviewed");
 
     const { data: audit } = await admin
       .from("audit_events")
@@ -690,7 +690,7 @@ describe("safe-mode manual entry and staff completion", () => {
       p_batch_id: batchId,
       p_policy_document_id: extraDocId,
       p_household_id: householdId,
-      p_status: "skipped",
+      p_status: "not_relevant",
     });
     expect(skipError).toBeNull();
 

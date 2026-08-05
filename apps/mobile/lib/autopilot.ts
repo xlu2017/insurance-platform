@@ -341,45 +341,62 @@ export function resolveCustomerCasePresentation({
           },
         };
       }
+      if (!batch.automatic_processing) {
+        return {
+          statusLabel: documentBatchStatusLabels[batch.status],
+          statusTone: "error",
+          tooltip:
+            "Your documents were stored without AI processing. Enter the policy details to continue.",
+          actor: "you",
+          action: {
+            type: "route",
+            label: "Enter details manually",
+            href: {
+              pathname: "/onboarding/manual-entry",
+              params: {
+                batchId: batch.id,
+                sessionId: batch.session_id,
+                caseId: batch.case_id ?? c.id,
+              },
+            },
+          },
+        };
+      }
       return {
         statusLabel: documentBatchStatusLabels[batch.status],
         statusTone: "error",
-        tooltip:
-          "Processing could not be completed. Enter the policy details manually or contact support.",
+        tooltip: "Processing could not be completed. Please contact support for help.",
         actor: step?.actor ?? "our team",
-        action: {
-          type: "route",
-          label: "Enter details manually",
-          href: {
-            pathname: "/onboarding/manual-entry",
-            params: {
-              batchId: batch.id,
-              sessionId: batch.session_id,
-              caseId: batch.case_id ?? c.id,
-            },
-          },
-        },
       };
     }
 
     if (batch.status === "manual_review") {
+      if (!batch.automatic_processing) {
+        return {
+          statusLabel: documentBatchStatusLabels[batch.status],
+          statusTone: "warning",
+          tooltip:
+            "Your documents were stored without AI processing. Enter the policy details to continue.",
+          actor: "you",
+          action: {
+            type: "route",
+            label: "Enter details manually",
+            href: {
+              pathname: "/onboarding/manual-entry",
+              params: {
+                batchId: batch.id,
+                sessionId: batch.session_id,
+                caseId: batch.case_id ?? c.id,
+              },
+            },
+          },
+        };
+      }
       return {
         statusLabel: documentBatchStatusLabels[batch.status],
         statusTone: "warning",
-        tooltip: "We need you to enter the policy details manually.",
-        actor: "you",
-        action: {
-          type: "route",
-          label: "Enter details manually",
-          href: {
-            pathname: "/onboarding/manual-entry",
-            params: {
-              batchId: batch.id,
-              sessionId: batch.session_id,
-              caseId: batch.case_id ?? c.id,
-            },
-          },
-        },
+        tooltip: "Manual review is required. Please contact support for help.",
+        actor: step?.actor ?? "our team",
       };
     }
 

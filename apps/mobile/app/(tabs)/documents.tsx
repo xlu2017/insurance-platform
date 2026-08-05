@@ -608,8 +608,10 @@ export default function Documents() {
                   ) : null}
                 </>
               ) : null}
-              {(currentBatch.status === "manual_review" ||
-                (currentBatch.status === "processing_unavailable" && !currentBatch.retryable)) &&
+              {((currentBatch.status === "manual_review" && !currentBatch.automatic_processing) ||
+                (currentBatch.status === "processing_unavailable" &&
+                  !currentBatch.retryable &&
+                  !currentBatch.automatic_processing)) &&
               currentBatch.case_id ? (
                 <SecondaryButton
                   label="Enter details manually"
@@ -624,6 +626,13 @@ export default function Documents() {
                     })
                   }
                 />
+              ) : (currentBatch.status === "processing_unavailable" &&
+                  !currentBatch.retryable &&
+                  currentBatch.automatic_processing) ||
+                (currentBatch.status === "manual_review" && currentBatch.automatic_processing) ? (
+                <Body style={{ color: colors.inkMuted, marginTop: spacing.sm }}>
+                  Processing could not be completed. Please contact support for help.
+                </Body>
               ) : null}
             </Card>
           ) : null}
