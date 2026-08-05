@@ -615,6 +615,15 @@ describe("manual-entry approval boundary", () => {
     });
     const candidateId = (saveData as { candidate_id?: string } | null)?.candidate_id;
 
+    // Explicitly mark the candidate's document as reviewed so the only unresolved docs are the others.
+    const { error: reviewedError } = await operations.rpc("set_manual_entry_document_status_v1", {
+      p_batch_id: batchId,
+      p_policy_document_id: doc1,
+      p_household_id: householdId,
+      p_status: "reviewed",
+    });
+    expect(reviewedError).toBeNull();
+
     const { error: completeError } = await completeStaffManualReview(operations, {
       batchId,
       sessionId,
@@ -926,6 +935,16 @@ describe("manual-entry approval boundary", () => {
 
     const propCandidateId = (propSave as { candidate_id?: string } | null)?.candidate_id;
     const vehCandidateId = (vehSave as { candidate_id?: string } | null)?.candidate_id;
+
+    for (const reviewedDocId of [propertyDoc, vehicleDoc]) {
+      const { error: reviewedError } = await customer.rpc("set_manual_entry_document_status_v1", {
+        p_batch_id: batchId,
+        p_policy_document_id: reviewedDocId,
+        p_household_id: householdId,
+        p_status: "reviewed",
+      });
+      expect(reviewedError).toBeNull();
+    }
 
     const { data: completeData, error: completeError } = await completeCustomerManualEntry(
       customer,

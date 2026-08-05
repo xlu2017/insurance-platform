@@ -103,7 +103,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
   }, [candidates]);
 
   const [assetType, setAssetType] = useState<"property" | "vehicle">("property");
-  const [selectedDoc, setSelectedDoc] = useState<string>("");
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [displayLabel, setDisplayLabel] = useState("");
   const [identity, setIdentity] = useState<Record<string, string>>({});
   const [policy, setPolicy] = useState<Record<string, string>>({});
@@ -125,7 +125,8 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
-      if (!selectedDoc) throw new Error("Select a policy document from this batch");
+      if (selectedDocIds.length === 0)
+        throw new Error("Select at least one policy document from this batch");
       if (!displayLabel) throw new Error("Display label is required");
       if (!batch) throw new Error("No manual review batch found for this case");
 
@@ -176,7 +177,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         p_asset_type: assetType,
         p_identity_fingerprint: fingerprint || `${assetType}-manual`,
         p_display_label: displayLabel,
-        p_source_document_ids: [selectedDoc],
+        p_source_document_ids: selectedDocIds,
         p_match_classification: "new",
         p_selected_facts_json: selectedFacts,
       });
@@ -208,6 +209,20 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       const ids = Array.from(selectedCandidateIds);
       if (ids.length === 0) throw new Error("Select at least one candidate to complete the review");
 
+      const skippedDocumentIds =
+        batchDocuments
+          ?.filter((d) => d.review_status === "not_relevant")
+          .map((d) => d.policy_document_id) ?? [];
+
+      const unresolvedCount =
+        batchDocuments?.filter((d) => !["reviewed", "not_relevant"].includes(d.review_status))
+          .length ?? 0;
+      if (unresolvedCount > 0) {
+        throw new Error(
+          `${unresolvedCount} document(s) still need to be reviewed or marked not relevant`,
+        );
+      }
+
       const { data, error } = await supabase.rpc("complete_manual_review_v1", {
         p_batch_id: batch.id,
         p_session_id: batch.session_id,
@@ -216,6 +231,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         p_actor_profile_id: user.id,
         p_candidate_ids: ids,
         p_client_request_id: `admin-complete-${batch.id}-${ids.join(":")}`,
+        p_skipped_document_ids: skippedDocumentIds,
       });
       if (error) throw error;
       return data as { success?: boolean; linked_candidates?: number };
@@ -231,6 +247,50 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
     onError: (e: Error) => setMessage(e.message),
   });
 
+  const setDocStatus = useMutation({
+    mutationFn: async ({
+      policyDocumentId,
+      status,
+    }: {
+      policyDocumentId: string;
+      status: "reviewed" | "not_relevant" | "unreviewed";
+    }) => {
+      if (!batch) throw new Error("No manual review batch found for this case");
+      const { error } = await supabaseBrowser().rpc("set_manual_entry_document_status_v1", {
+        p_batch_id: batch.id,
+        p_policy_document_id: policyDocumentId,
+        p_household_id: caseRow.household_id,
+        p_status: status,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["manual-review-batch-documents", batch?.id] });
+      setMessage("Document status updated.");
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  const deleteCandidate = useMutation({
+    mutationFn: async (candidateId: string) => {
+      if (!batch) throw new Error("No manual review batch found for this case");
+      const { error } = await supabaseBrowser().rpc("delete_manual_entry_candidate_v1", {
+        p_candidate_id: candidateId,
+        p_batch_id: batch.id,
+        p_household_id: caseRow.household_id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["manual-candidates", batch?.session_id ?? caseRow.household_id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["manual-review-batch-documents", batch?.id] });
+      setMessage("Candidate deleted.");
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
   const toggleCandidate = (id: string, checked: boolean) => {
     setSelectedCandidateIds((prev) => {
       const next = new Set(prev);
@@ -238,6 +298,14 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
       else next.delete(id);
       return next;
     });
+  };
+
+  const toggleDoc = (policyDocumentId: string, checked: boolean) => {
+    setSelectedDocIds((prev) =>
+      checked
+        ? [...new Set([...prev, policyDocumentId])]
+        : prev.filter((id) => id !== policyDocumentId),
+    );
   };
 
   if (docsLoading || batchLoading || candidatesLoading) return <Skeleton className="h-48" />;
@@ -288,15 +356,22 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
         </p>
         <div className="space-y-3">
           <div>
-            <Label>Policy document</Label>
-            <Select value={selectedDoc} onChange={(e) => setSelectedDoc(e.target.value)}>
-              <option value="">Select a document</option>
+            <Label>Source documents</Label>
+            <div className="max-h-40 space-y-1 overflow-auto rounded border p-2">
               {(batchDocuments ?? []).map((d) => (
-                <option key={d.id} value={d.policy_document_id}>
-                  {d.selected_file_name} {d.review_status === "reviewed" ? "(reviewed)" : ""}
-                </option>
+                <label key={d.id} className="flex items-center gap-2 text-sm">
+                  <Input
+                    type="checkbox"
+                    checked={selectedDocIds.includes(d.policy_document_id)}
+                    onChange={(e) => toggleDoc(d.policy_document_id, e.target.checked)}
+                  />
+                  <span>
+                    {d.selected_file_name}{" "}
+                    <span className="text-ink-muted">({d.review_status})</span>
+                  </span>
+                </label>
               ))}
-            </Select>
+            </div>
           </div>
           <div>
             <Label>Asset type</Label>
@@ -380,6 +455,89 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
 
       <div className="space-y-3">
         <Card>
+          <CardTitle>Batch documents</CardTitle>
+          {(batchDocuments ?? []).length === 0 ? (
+            <EmptyState
+              title="No documents"
+              hint="Documents will appear when the customer uploads them."
+            />
+          ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Document</Th>
+                  <Th>Status</Th>
+                  <Th>Actions</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {batchDocuments!.map((d) => (
+                  <tr key={d.id}>
+                    <Td>{d.selected_file_name}</Td>
+                    <Td>{d.review_status}</Td>
+                    <Td>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setDocStatus.mutate({
+                              policyDocumentId: d.policy_document_id,
+                              status: "reviewed",
+                            })
+                          }
+                          disabled={setDocStatus.isPending}
+                        >
+                          Reviewed
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setDocStatus.mutate({
+                              policyDocumentId: d.policy_document_id,
+                              status: "not_relevant",
+                            })
+                          }
+                          disabled={setDocStatus.isPending}
+                        >
+                          Not relevant
+                        </Button>
+                        {d.review_status === "not_relevant" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setDocStatus.mutate({
+                                policyDocumentId: d.policy_document_id,
+                                status: "unreviewed",
+                              })
+                            }
+                            disabled={setDocStatus.isPending}
+                          >
+                            Undo
+                          </Button>
+                        )}
+                      </div>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+          {batch && (
+            <p className="mt-2 text-xs text-ink-muted">
+              {
+                (batchDocuments ?? []).filter(
+                  (d) => !["reviewed", "not_relevant"].includes(d.review_status),
+                ).length
+              }{" "}
+              document(s) unresolved
+            </p>
+          )}
+        </Card>
+
+        <Card>
           <CardTitle>Manual candidates</CardTitle>
           {(candidates ?? []).length === 0 ? (
             <EmptyState title="No manual candidates" hint="Record a candidate on the left." />
@@ -392,6 +550,7 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
                   <Th>Label</Th>
                   <Th>Status</Th>
                   <Th>Decision</Th>
+                  <Th>Actions</Th>
                 </tr>
               </thead>
               <tbody>
@@ -408,6 +567,16 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
                     <Td>{c.display_label}</Td>
                     <Td>{c.review_status}</Td>
                     <Td>{c.decision}</Td>
+                    <Td>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteCandidate.mutate(c.id)}
+                        disabled={deleteCandidate.isPending}
+                      >
+                        Delete
+                      </Button>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -415,7 +584,15 @@ export function ManualReviewTab({ caseRow }: { caseRow: CaseDetail }) {
           )}
           {batch && (candidates ?? []).length > 0 && (
             <div className="mt-3">
-              <Button onClick={() => complete.mutate()} disabled={complete.isPending}>
+              <Button
+                onClick={() => complete.mutate()}
+                disabled={
+                  complete.isPending ||
+                  (batchDocuments ?? []).some(
+                    (d) => !["reviewed", "not_relevant"].includes(d.review_status),
+                  )
+                }
+              >
                 Complete manual review
               </Button>
             </div>

@@ -266,7 +266,7 @@ describe("safe-mode manual entry and staff completion", () => {
       .eq("batch_id", batchId)
       .eq("policy_document_id", docId)
       .single();
-    expect(item?.review_status).toBe("reviewed");
+    expect(item?.review_status).toBe("reviewing");
 
     const { data: audit } = await admin
       .from("audit_events")
@@ -674,6 +674,15 @@ describe("safe-mode manual entry and staff completion", () => {
     expect(error).toBeNull();
     expect((data as { candidate_id?: string })?.candidate_id).toBeTruthy();
 
+    // Mark the covered document as reviewed so the only unresolved document is the extra one.
+    const { error: reviewedError } = await customer.rpc("set_manual_entry_document_status_v1", {
+      p_batch_id: batchId,
+      p_policy_document_id: docId,
+      p_household_id: householdId,
+      p_status: "reviewed",
+    });
+    expect(reviewedError).toBeNull();
+
     const completeId = `complete-${randomUUID()}`;
     const { error: completeError } = await customer.rpc("complete_customer_manual_entry_v1", {
       p_batch_id: batchId,
@@ -685,7 +694,7 @@ describe("safe-mode manual entry and staff completion", () => {
     });
     expect(completeError).not.toBeNull();
 
-    // Mark the extra document as skipped and complete successfully.
+    // Mark the extra document as not relevant and complete successfully.
     const { error: skipError } = await customer.rpc("set_manual_entry_document_status_v1", {
       p_batch_id: batchId,
       p_policy_document_id: extraDocId,
@@ -751,6 +760,14 @@ describe("safe-mode manual entry and staff completion", () => {
       selectedFacts: selectedFactsForProperty(),
     });
     expect(saveError).toBeNull();
+
+    const { error: reviewedError } = await customer.rpc("set_manual_entry_document_status_v1", {
+      p_batch_id: batchId,
+      p_policy_document_id: docId,
+      p_household_id: householdId,
+      p_status: "reviewed",
+    });
+    expect(reviewedError).toBeNull();
 
     const completeId = `complete-${randomUUID()}`;
     const first = await customer.rpc("complete_customer_manual_entry_v1", {
@@ -829,6 +846,14 @@ describe("safe-mode manual entry and staff completion", () => {
     });
     expect(saveError).toBeNull();
     const candidateId = (saveData as { candidate_id?: string })?.candidate_id!;
+
+    const { error: reviewedError } = await staff.rpc("set_manual_entry_document_status_v1", {
+      p_batch_id: batchId,
+      p_policy_document_id: docId,
+      p_household_id: householdId,
+      p_status: "reviewed",
+    });
+    expect(reviewedError).toBeNull();
 
     const { error: emptyError } = await staff.rpc("complete_manual_review_v1", {
       p_batch_id: batchId,

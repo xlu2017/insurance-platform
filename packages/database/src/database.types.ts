@@ -4047,6 +4047,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      extract_extracted_value: {
+        Args: { input: Json };
+        Returns: Record<string, unknown>;
+      };
       fail_recommendation_generation_attempt: {
         Args: {
           p_attempt_id: string;
@@ -4332,6 +4336,13 @@ export type Database = {
           p_source_document_ids: string[];
         };
         Returns: Json;
+      };
+      validate_candidate_approval_ready: {
+        Args: {
+          p_asset_type: Database["public"]["Enums"]["candidate_asset_type"];
+          p_selected_facts_json: Json;
+        };
+        Returns: undefined;
       };
       withdraw_document_processing_consent: {
         Args: {
