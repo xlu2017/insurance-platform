@@ -104,7 +104,27 @@ With multiple rows this returns `PGRST116` and the app shows "Finish setting up"
 
 This is fixed: migration `20260804200008_manual_entry_ui_permissions.sql` grants `SELECT ON public.document_processing_batch_items TO authenticated;`, so the manual-entry screen can load its source documents.
 
-### 5. Manual-entry form input on Expo web
+### 5. Manual-entry document review control
+
+`save_customer_manual_policy_review_v1` sets `document_processing_batch_items.review_status = 'reviewing'`, but `complete_customer_manual_entry_v1` requires every document to be `reviewed` or `not_relevant`. The manual-entry screen therefore needs an explicit **Mark reviewed** action for documents that are referenced by a saved candidate. The screen now shows:
+
+- **Mark reviewed** when a document is assigned to at least one candidate and is not yet reviewed.
+- **Not relevant** when a document is not assigned to any candidate.
+- **Reviewed** when the document has been explicitly marked reviewed.
+
+### 6. Hosted Supabase EC256 JWT verification mismatch
+
+On the hosted project `fztxclqboioicvbrenit.supabase.co`, a password-login token returned by `auth/v1/token` may be rejected by `auth/v1/user`, PostgREST, and Edge Functions with `crypto/ecdsa: verification error` or `No suitable key or wrong key type`. This is a project-level JWT/JWKS configuration issue, not an app bug. If this occurs, hosted mobile UI/API testing is blocked until the project signing keys are reissued or resynced. Verify with:
+
+```bash
+curl -sS -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"customer@example.com","password":"DemoCustomer123!"}'
+curl -sS "$SUPABASE_URL/auth/v1/user" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+### 7. Manual-entry form input on Expo web
 
 The manual-entry screen (`/onboarding/manual-entry`) uses React Native `TextInput` components. In the test Chrome environment, setting `input.value` and dispatching `input`/`change` events does **not** update React state, so validation errors persist even though the DOM inputs appear filled. Simulated typing with `Tab` navigation is also unreliable because the tab order does not always match the visual layout.
 
@@ -223,3 +243,5 @@ When `onboarding_step` is `documents` (not `complete`), **Continue setup** route
 - `Rendered fewer hooks than expected` in `Profile` — Rules of Hooks crash on sign-out.
 - `The method or property expo-file-system.uploadAsync is not available on web` — document upload blocked on Expo web (no web branch in `upload.ts`).
 - `Cannot read properties of undefined (reading 'catch')` in `AuthCallback` — `WebBrowser.dismissBrowser()` returned `undefined`.
+- `invalid JWT: unable to parse or verify signature, token signature is invalid: crypto/ecdsa: verification error` from `auth/v1/user` (or `No suitable key or wrong key type` from PostgREST / `UNAUTHORIZED` from Edge Functions) — the hosted Supabase auth server is signing tokens with an EC256 key that the verifying services do not trust. Reissue/restart the project JWT/JWKS configuration before testing authenticated flows.
+- Manual-entry `Finish and review` disabled with caption `Assign or mark every uploaded document before finishing.` — `save_customer_manual_policy_review_v1` sets `document_processing_batch_items.review_status = 'reviewing'`, but `complete_customer_manual_entry_v1` requires `reviewed` or `not_relevant`. The customer UI may not expose a `Reviewed` control; use `set_manual_entry_document_status_v1` to mark documents `reviewed` (or `not_relevant`) before finishing.

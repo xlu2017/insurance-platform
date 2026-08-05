@@ -403,6 +403,30 @@ export default function ManualEntry() {
     }
   };
 
+  const markReviewed = async (doc: BatchItem) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { data, error: rpcError } = await supabase.rpc("set_manual_entry_document_status_v1", {
+        p_batch_id: batchId,
+        p_policy_document_id: doc.policy_document_id,
+        p_household_id: household.id,
+        p_status: "reviewed",
+      });
+      if (rpcError) throw rpcError;
+      if ((data as { success?: boolean } | null)?.success !== true) {
+        throw new Error("Failed to mark document as reviewed");
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["document-processing-batch-items", household.id, batchId],
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update document status");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const loadCandidateIntoForm = (candidate: Candidate) => {
     const facts = (candidate.selected_facts_json ?? {}) as Record<string, unknown>;
     const identity = (facts.identity ?? {}) as Record<string, unknown>;
@@ -807,7 +831,8 @@ export default function ManualEntry() {
           ) : (
             <View style={{ gap: spacing.sm }}>
               {selectableItems.map((item) => {
-                const canSkip = !assignedDocIds.has(item.policy_document_id);
+                const isAssigned = assignedDocIds.has(item.policy_document_id);
+                const isReviewed = item.review_status === "reviewed";
                 return (
                   <View
                     key={item.id}
@@ -838,12 +863,16 @@ export default function ManualEntry() {
                         <Caption>{categoryLabel(item.category)}</Caption>
                       </View>
                     </Pressable>
-                    {canSkip ? (
+                    {isReviewed ? (
+                      <Caption>Reviewed</Caption>
+                    ) : isAssigned ? (
+                      <Pressable onPress={() => markReviewed(item)} disabled={busy} hitSlop={8}>
+                        <Body style={{ color: colors.accent }}>Mark reviewed</Body>
+                      </Pressable>
+                    ) : (
                       <Pressable onPress={() => markSkipped(item)} disabled={busy} hitSlop={8}>
                         <Body style={{ color: colors.inkMuted }}>Not relevant</Body>
                       </Pressable>
-                    ) : (
-                      <Caption>In use</Caption>
                     )}
                   </View>
                 );
