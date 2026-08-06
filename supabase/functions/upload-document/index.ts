@@ -77,6 +77,116 @@ async function updateBatchCounts(admin: any, batchId: string): Promise<void> {
     .eq("id", batchId);
 }
 
+async function handleStagedUpload(
+  admin: any,
+  householdId: string,
+  actorProfileId: string,
+  category: string,
+  mimeType: string,
+  file: File,
+  stagingRequestId: string | undefined,
+): Promise<Response> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const contentSha256 = await sha256Hex(bytes);
+
+  // Idempotency by explicit staging request ID (UUID) first, then by content digest.
+  let documentId: string | undefined;
+  if (stagingRequestId && isUuid(stagingRequestId)) {
+    const { data: existingById } = await admin
+      .from("policy_documents")
+      .select("id, storage_path, file_name, content_sha256, status")
+      .eq("id", stagingRequestId)
+      .eq("household_id", householdId)
+      .maybeSingle();
+    if (existingById) {
+      if (existingById.content_sha256 !== contentSha256) {
+        return jsonError("Staging request ID reused with different content", 409);
+      }
+      return jsonResponse({
+        id: existingById.id,
+        path: existingById.storage_path,
+        content_sha256: existingById.content_sha256,
+        file_name: existingById.file_name,
+        staged: true,
+      });
+    }
+    documentId = stagingRequestId;
+  }
+
+  const { data: existingByDigest } = await admin
+    .from("policy_documents")
+    .select("id, storage_path, file_name, content_sha256")
+    .eq("household_id", householdId)
+    .eq("content_sha256", contentSha256)
+    .maybeSingle();
+  if (existingByDigest) {
+    return jsonResponse({
+      id: existingByDigest.id,
+      path: existingByDigest.storage_path,
+      content_sha256: existingByDigest.content_sha256,
+      file_name: existingByDigest.file_name,
+      staged: true,
+    });
+  }
+
+  const docId = documentId ?? crypto.randomUUID();
+  const storagePath = `${householdId}/${docId}${extensionForMime(mimeType)}`;
+  const { data: documentRow, error: insertError } = await admin
+    .from("policy_documents")
+    .insert({
+      id: docId,
+      household_id: householdId,
+      category,
+      status: "staged",
+      storage_path: storagePath,
+      file_name: file.name,
+      mime_type: mimeType,
+      size_bytes: file.size,
+      uploaded_by: actorProfileId,
+      content_sha256: contentSha256,
+    })
+    .select("id, storage_path, file_name, content_sha256")
+    .single();
+
+  if (insertError || !documentRow) {
+    if (insertError?.code === "23505") {
+      // Another concurrent upload won; return the canonical row for this household/digest.
+      const { data: concurrent } = await admin
+        .from("policy_documents")
+        .select("id, storage_path, file_name, content_sha256")
+        .eq("household_id", householdId)
+        .eq("content_sha256", contentSha256)
+        .maybeSingle();
+      if (concurrent) {
+        return jsonResponse({
+          id: concurrent.id,
+          path: concurrent.storage_path,
+          content_sha256: concurrent.content_sha256,
+          file_name: concurrent.file_name,
+          staged: true,
+        });
+      }
+    }
+    return jsonError("Failed to record staged document", 500);
+  }
+
+  const { error: storageError } = await admin.storage
+    .from("policy-documents")
+    .upload(storagePath, bytes, { contentType: mimeType, upsert: false });
+  if (storageError) {
+    await admin.from("policy_documents").delete().eq("id", docId);
+    return jsonError("Failed to store staged document", 502);
+  }
+
+  return jsonResponse({
+    id: documentRow.id,
+    path: documentRow.storage_path,
+    content_sha256: documentRow.content_sha256,
+    file_name: documentRow.file_name,
+    staged: true,
+  });
+}
+
 async function createLegacyBatch(
   admin: any,
   householdId: string,
@@ -141,11 +251,15 @@ Deno.serve(async (req) => {
     return jsonError("Invalid multipart body", 400);
   }
 
+  const mode = form.get("mode")?.toString() ?? "batch";
   const householdId = form.get("householdId")?.toString();
   const category = form.get("category")?.toString();
   const requestedBatchId = form.get("batchId")?.toString();
+  const stagingRequestId = form.get("stagingRequestId")?.toString();
   const clientItemId = form.get("clientItemId")?.toString() ?? `item-${crypto.randomUUID()}`;
   const file = form.get("file");
+
+  if (mode !== "batch" && mode !== "staged") return jsonError("Invalid mode", 400);
 
   if (!householdId || !isUuid(householdId)) return jsonError("Missing or invalid householdId", 400);
   if (!category || !VALID_CATEGORIES.has(category))
@@ -165,6 +279,18 @@ Deno.serve(async (req) => {
   const mimeType = rawMimeType === "image/jpg" ? "image/jpeg" : rawMimeType;
   if (!ALLOWED_MIME_TYPES.includes(mimeType)) return jsonError("Unsupported file type", 415);
   if (file.size > MAX_FILE_SIZE_BYTES) return jsonError("File exceeds 10 MB limit", 413);
+
+  if (mode === "staged") {
+    return await handleStagedUpload(
+      admin,
+      householdId,
+      user.id,
+      category,
+      mimeType,
+      file,
+      stagingRequestId,
+    );
+  }
 
   let batchId = requestedBatchId;
   try {

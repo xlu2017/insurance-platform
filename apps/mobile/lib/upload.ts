@@ -173,6 +173,117 @@ export function createClientItemId(): string {
   return `item-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
+export function createStagingRequestId(): string {
+  // Version-4 UUID shape suitable for an idempotent staging request handle.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const r = Math.floor(Math.random() * 16);
+    const v = char === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export interface StagedUploadResult {
+  id: string;
+  path: string;
+  content_sha256: string;
+  file_name: string;
+  staged: true;
+}
+
+export async function stagePolicyDocument(
+  householdId: string,
+  category: DocumentCategory,
+  file: PickedFile,
+  stagingRequestId = createStagingRequestId(),
+): Promise<StagedUploadResult> {
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session?.access_token) {
+    throw new Error("You must be signed in to upload documents");
+  }
+  if (!ALLOWED_MIME_TYPES.includes(file.mimeType)) {
+    throw new Error("Only PDF and PNG/JPEG images are allowed");
+  }
+  if (file.size !== undefined && file.size > MAX_FILE_SIZE_BYTES) {
+    throw new Error("File is too large (max 10 MB)");
+  }
+
+  const parameters: Record<string, string> = {
+    mode: "staged",
+    householdId,
+    category,
+    stagingRequestId,
+  };
+
+  let responseStatus: number;
+  let responseBody: string;
+  if (Platform.OS === "web") {
+    const blob = await fetch(file.uri).then((res) => res.blob());
+    const form = new FormData();
+    form.append("file", blob, file.name);
+    for (const [key, value] of Object.entries(parameters)) {
+      form.append(key, value);
+    }
+    const fetchResponse = await fetch(`${getSupabaseUrlString()}/functions/v1/upload-document`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.session.access_token}`,
+        apikey: getSupabaseAnonKeyString(),
+        ...getBypassTunnelHeaders(),
+      },
+      body: form,
+    });
+    responseStatus = fetchResponse.status;
+    responseBody = await fetchResponse.text();
+  } else {
+    const uploadRes = await FileSystem.uploadAsync(
+      `${getSupabaseUrlString()}/functions/v1/upload-document`,
+      file.uri,
+      {
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: file.mimeType,
+        parameters,
+        headers: {
+          Authorization: `Bearer ${session.session.access_token}`,
+          apikey: getSupabaseAnonKeyString(),
+          ...getBypassTunnelHeaders(),
+        },
+      },
+    );
+    responseStatus = uploadRes.status;
+    responseBody = uploadRes.body;
+  }
+
+  const payload = (() => {
+    try {
+      return JSON.parse(responseBody) as {
+        id?: string;
+        path?: string;
+        content_sha256?: string;
+        file_name?: string;
+        staged?: boolean;
+        message?: string;
+      };
+    } catch {
+      return {};
+    }
+  })();
+  if (responseStatus < 200 || responseStatus >= 300) {
+    throw new Error(payload.message ?? `Staging failed (${responseStatus})`);
+  }
+  if (!payload.id || !payload.path || !payload.content_sha256 || payload.staged !== true) {
+    throw new Error("Invalid staged upload response");
+  }
+
+  return {
+    id: payload.id,
+    path: payload.path,
+    content_sha256: payload.content_sha256,
+    file_name: payload.file_name ?? file.name,
+    staged: true,
+  };
+}
+
 export async function deletePolicyDocument(documentId: string): Promise<void> {
   const { data: session } = await supabase.auth.getSession();
   if (!session.session?.access_token) {
