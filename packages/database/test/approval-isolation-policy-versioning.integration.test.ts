@@ -343,6 +343,19 @@ async function persistDocumentAnalysis(
   });
   if (policyDocError) throw policyDocError;
 
+  const resolution = selectedFacts.resolution as
+    | {
+        status?: string;
+        matchedExistingEntityId?: string;
+        matchedPendingCandidateId?: string;
+      }
+    | undefined;
+  const matchedPendingCandidateId = resolution?.matchedPendingCandidateId;
+  const parentCandidateId =
+    matchedPendingCandidateId && matchedPendingCandidateId !== candidateId
+      ? matchedPendingCandidateId
+      : undefined;
+
   const { data, error } = await admin.rpc("persist_document_analysis_v1" as any, {
     p_household_id: householdId,
     p_session_id: sessionId,
@@ -370,6 +383,7 @@ async function persistDocumentAnalysis(
     p_candidates_json: [
       {
         id: candidateId,
+        parent_candidate_id: parentCandidateId,
         asset_type: assetType,
         identity_fingerprint: `${assetType}-match-${randomUUID()}`,
         display_label: assetType === "vehicle" ? "2018 Honda Civic" : "999 Existing Rd",
@@ -383,9 +397,7 @@ async function persistDocumentAnalysis(
             | undefined;
           const existingAsset = selectedFacts.existingAsset as { id?: string } | undefined;
           const hasMatch =
-            resolution?.matchedExistingEntityId ??
-            resolution?.matchedPendingCandidateId ??
-            existingAsset?.id;
+            resolution?.matchedExistingEntityId ?? matchedPendingCandidateId ?? existingAsset?.id;
           if (
             resolution?.status === "matches_existing" ||
             resolution?.status === "matches_pending_candidate"
@@ -1914,6 +1926,7 @@ describe("approval isolation and policy versioning", () => {
     pendingCandidateId: string,
     existingAssetId?: string,
     existingAssetType?: "vehicle" | "property",
+    draftDecision?: "approve_new" | "link_existing" | "needs_correction" | "undecided",
   ) {
     const identity = { year: 2018, make: "Honda", model: "Civic" };
     const facts: Record<string, unknown> = {
@@ -1940,6 +1953,15 @@ describe("approval isolation and policy versioning", () => {
     };
     if (existingAssetId && existingAssetType) {
       facts.existingAsset = buildExistingAsset(existingAssetId, existingAssetType);
+    }
+    if (draftDecision) {
+      facts._draftDecision = draftDecision;
+      if (existingAssetId && existingAssetType) {
+        facts._draftExistingAssetId = existingAssetId;
+        facts._draftExistingAssetType = existingAssetType;
+      }
+      facts._draftIdentityConfirmed =
+        draftDecision === "link_existing" || draftDecision === "approve_new";
     }
     return facts;
   }
@@ -2154,16 +2176,25 @@ describe("approval isolation and policy versioning", () => {
     expect(firstCandidate?.draft_identity_confirmed).toBe(true);
 
     const sessionId2 = await createExtractionSession(householdId);
-    const facts2 = pendingMatchFacts(candidateId, vehicle.id, "vehicle");
-    await persistDocumentAnalysis(admin, householdId, sessionId2, candidateId, "vehicle", facts2);
+    const secondCandidateId = randomUUID();
+    const facts2 = pendingMatchFacts(candidateId, vehicle.id, "vehicle", "link_existing");
+    await persistDocumentAnalysis(
+      admin,
+      householdId,
+      sessionId2,
+      secondCandidateId,
+      "vehicle",
+      facts2,
+    );
 
     const { data: secondCandidate } = await admin
       .from("asset_candidates")
       .select(
-        "draft_decision, draft_existing_asset_id, draft_existing_asset_type, draft_identity_confirmed",
+        "draft_decision, draft_existing_asset_id, draft_existing_asset_type, draft_identity_confirmed, parent_candidate_id",
       )
-      .eq("id", candidateId)
+      .eq("id", secondCandidateId)
       .single();
+    expect(secondCandidate?.parent_candidate_id).toBe(candidateId);
     expect(secondCandidate?.draft_decision).toBe("link_existing");
     expect(secondCandidate?.draft_existing_asset_id).toBe(vehicle.id);
     expect(secondCandidate?.draft_existing_asset_type).toBe("vehicle");
@@ -2175,7 +2206,7 @@ describe("approval isolation and policy versioning", () => {
       p_client_request_id: `pending-veh-${randomUUID()}`,
       p_decisions: [
         {
-          candidate_id: candidateId,
+          candidate_id: secondCandidateId,
           decision: "link_existing",
           existing_asset_id: vehicle.id,
           existing_asset_type: "vehicle",
@@ -2231,16 +2262,25 @@ describe("approval isolation and policy versioning", () => {
     await persistDocumentAnalysis(admin, householdId, sessionId1, candidateId, "property", facts1);
 
     const sessionId2 = await createExtractionSession(householdId);
-    const facts2 = pendingMatchFacts(candidateId, property.id, "property");
-    await persistDocumentAnalysis(admin, householdId, sessionId2, candidateId, "property", facts2);
+    const secondCandidateId = randomUUID();
+    const facts2 = pendingMatchFacts(candidateId, property.id, "property", "link_existing");
+    await persistDocumentAnalysis(
+      admin,
+      householdId,
+      sessionId2,
+      secondCandidateId,
+      "property",
+      facts2,
+    );
 
     const { data: candidate } = await admin
       .from("asset_candidates")
       .select(
-        "draft_decision, draft_existing_asset_id, draft_existing_asset_type, draft_identity_confirmed",
+        "draft_decision, draft_existing_asset_id, draft_existing_asset_type, draft_identity_confirmed, parent_candidate_id",
       )
-      .eq("id", candidateId)
+      .eq("id", secondCandidateId)
       .single();
+    expect(candidate?.parent_candidate_id).toBe(candidateId);
     expect(candidate?.draft_decision).toBe("link_existing");
     expect(candidate?.draft_existing_asset_id).toBe(property.id);
     expect(candidate?.draft_existing_asset_type).toBe("property");
@@ -2252,7 +2292,7 @@ describe("approval isolation and policy versioning", () => {
       p_client_request_id: `pending-prop-${randomUUID()}`,
       p_decisions: [
         {
-          candidate_id: candidateId,
+          candidate_id: secondCandidateId,
           decision: "link_existing",
           existing_asset_id: property.id,
           existing_asset_type: "property",
@@ -2290,26 +2330,17 @@ describe("approval isolation and policy versioning", () => {
       const sessionId1 = await createExtractionSession(householdId);
       const candidateId = randomUUID();
 
-      if (seedDecision === "undecided") {
-        const facts = pendingMatchFacts(candidateId);
-        await persistDocumentAnalysis(
-          admin,
-          householdId,
-          sessionId1,
-          candidateId,
-          "vehicle",
-          facts,
-        );
-      } else if (seedDecision === "approve_new") {
-        const facts = pendingMatchFacts(candidateId);
-        await persistDocumentAnalysis(
-          admin,
-          householdId,
-          sessionId1,
-          candidateId,
-          "vehicle",
-          facts,
-        );
+      const firstFacts = pendingMatchFacts(candidateId, undefined, undefined, seedDecision);
+      await persistDocumentAnalysis(
+        admin,
+        householdId,
+        sessionId1,
+        candidateId,
+        "vehicle",
+        firstFacts,
+      );
+
+      if (seedDecision === "approve_new") {
         const { error: saveError } = await customer.rpc("save_candidate_review_draft_v1" as any, {
           p_household_id: householdId,
           p_candidate_id: candidateId,
@@ -2317,16 +2348,8 @@ describe("approval isolation and policy versioning", () => {
           p_identity_confirmed: true,
         });
         expect(saveError).toBeNull();
-      } else {
-        const facts = pendingMatchFacts(candidateId);
-        await persistDocumentAnalysis(
-          admin,
-          householdId,
-          sessionId1,
-          candidateId,
-          "vehicle",
-          facts,
-        );
+      }
+      if (seedDecision === "needs_correction") {
         const { error: saveError } = await customer.rpc("save_candidate_review_draft_v1" as any, {
           p_household_id: householdId,
           p_candidate_id: candidateId,
@@ -2337,14 +2360,23 @@ describe("approval isolation and policy versioning", () => {
       }
 
       const sessionId2 = await createExtractionSession(householdId);
-      const facts2 = pendingMatchFacts(candidateId);
-      await persistDocumentAnalysis(admin, householdId, sessionId2, candidateId, "vehicle", facts2);
+      const secondCandidateId = randomUUID();
+      const facts2 = pendingMatchFacts(candidateId, undefined, undefined, seedDecision);
+      await persistDocumentAnalysis(
+        admin,
+        householdId,
+        sessionId2,
+        secondCandidateId,
+        "vehicle",
+        facts2,
+      );
 
       const { data: candidate } = await admin
         .from("asset_candidates")
-        .select("draft_decision, draft_identity_confirmed")
-        .eq("id", candidateId)
+        .select("draft_decision, draft_identity_confirmed, parent_candidate_id")
+        .eq("id", secondCandidateId)
         .single();
+      expect(candidate?.parent_candidate_id).toBe(candidateId);
 
       if (seedDecision === "approve_new") {
         expect(candidate?.draft_decision).toBe("approve_new");
@@ -2355,7 +2387,7 @@ describe("approval isolation and policy versioning", () => {
           p_actor_profile_id: CUSTOMER_ID,
           p_client_request_id: `pending-approve-new-${randomUUID()}`,
           p_decisions: [
-            { candidate_id: candidateId, decision: "approve_new", identity_confirmed: true },
+            { candidate_id: secondCandidateId, decision: "approve_new", identity_confirmed: true },
           ],
         });
         expect(error).toBeNull();
@@ -2375,7 +2407,7 @@ describe("approval isolation and policy versioning", () => {
           p_household_id: householdId,
           p_actor_profile_id: CUSTOMER_ID,
           p_client_request_id: `pending-needs-corr-${randomUUID()}`,
-          p_decisions: [{ candidate_id: candidateId, decision: "needs_correction" }],
+          p_decisions: [{ candidate_id: secondCandidateId, decision: "needs_correction" }],
         });
         expect(error).toBeNull();
         expect(data?.needsCorrection?.length).toBe(1);

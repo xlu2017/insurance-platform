@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 3faa1c2d9685479a828900998d9d421e062ded082013f906f63e71f469117fa4
+// source-hash: eb9631bb725cdb59debf92aca1a5c1632f5f96886baf3a8134f135d5cb95795a
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -12866,12 +12866,14 @@ function parsePendingCandidateRecord(row) {
   const selectedFactsJson = unknownToRecord(record.selected_facts_json ?? record.selectedFactsJson);
   const conflictsJson = Array.isArray(record.conflicts_json ?? record.conflictsJson) ? record.conflicts_json ?? record.conflictsJson : [];
   const caseId = unknownToString(record.case_id ?? record.caseId);
+  const householdId = unknownToString(record.household_id ?? record.householdId);
   return {
     id,
     asset_type: assetType,
     identity_fingerprint: identityFingerprint,
     display_label: displayLabel,
     session_id: sessionId,
+    household_id: householdId ?? void 0,
     source_document_ids: sourceDocumentIds,
     draft_decision: draftDecision,
     draft_identity_confirmed: draftIdentityConfirmed,
@@ -13075,6 +13077,64 @@ function buildDraftDecisionPayload(existingById, resolutionStatus, matchedExisti
     _draftIdentityConfirmed: identityStrength === "exact"
   };
 }
+
+// src/candidate-id-selection.ts
+function selectCandidateForPersistence(input) {
+  const {
+    currentSessionId,
+    currentHouseholdId,
+    matchedPendingRecord,
+    sameSessionFingerprintCandidate,
+    existingById,
+    resolutionStatus,
+    matchedExistingAsset,
+    identityStrength,
+    generateId = () => globalThis.crypto.randomUUID()
+  } = input;
+  if (matchedPendingRecord && matchedPendingRecord.household_id !== currentHouseholdId) {
+    throw new Error(
+      "CANDIDATE_HOUSEHOLD_CONFLICT: matched pending candidate belongs to another household"
+    );
+  }
+  if (sameSessionFingerprintCandidate && sameSessionFingerprintCandidate.household_id !== currentHouseholdId) {
+    throw new Error(
+      "CANDIDATE_HOUSEHOLD_CONFLICT: fingerprint candidate belongs to another household"
+    );
+  }
+  let reuseRecord;
+  let parentCandidateId;
+  let action;
+  if (sameSessionFingerprintCandidate) {
+    reuseRecord = sameSessionFingerprintCandidate;
+    action = "reuse";
+  } else if (matchedPendingRecord) {
+    if (matchedPendingRecord.session_id === currentSessionId) {
+      reuseRecord = matchedPendingRecord;
+      action = "reuse";
+    } else {
+      reuseRecord = matchedPendingRecord;
+      parentCandidateId = matchedPendingRecord.id;
+      action = "create-child";
+    }
+  } else {
+    action = "create-new";
+  }
+  const matchedPendingForDraft = reuseRecord ? pendingRecordToEntityCandidate(reuseRecord) : void 0;
+  const draftPayload = buildDraftDecisionPayload(
+    existingById,
+    resolutionStatus,
+    matchedExistingAsset,
+    matchedPendingForDraft,
+    identityStrength
+  );
+  const candidateId = action === "reuse" && reuseRecord ? reuseRecord.id : generateId();
+  return {
+    candidateId,
+    action,
+    parentCandidateId,
+    draftPayload
+  };
+}
 export {
   AnalysisWarningSchema,
   AnalyzedDocumentSchema,
@@ -13172,6 +13232,7 @@ export {
   runInsuranceLlmPipeline,
   runLlmExtraction,
   sanitizeProviderError,
+  selectCandidateForPersistence,
   stripNullValues,
   validateDangerousModeEnablePolicy,
   validateLlmExtractionSemantics
@@ -13179,4 +13240,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "3faa1c2d9685479a828900998d9d421e062ded082013f906f63e71f469117fa4";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "eb9631bb725cdb59debf92aca1a5c1632f5f96886baf3a8134f135d5cb95795a";

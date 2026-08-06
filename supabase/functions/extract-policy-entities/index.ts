@@ -28,7 +28,7 @@ import {
   isExactFingerprint,
   computeCanonicalFingerprint,
   buildExistingAssetReference,
-  buildDraftDecisionPayload,
+  selectCandidateForPersistence,
 } from "../_shared/document-extraction.js";
 import type {
   CandidateComparisonContext,
@@ -47,6 +47,7 @@ interface PendingCandidateRecord {
   identity_fingerprint: string;
   display_label: string;
   session_id: string;
+  household_id?: string;
   source_document_ids: string[];
   draft_decision: string | null;
   draft_identity_confirmed: boolean | null;
@@ -117,6 +118,26 @@ async function isCleanupReadinessReady(): Promise<boolean> {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function rewriteDocumentIds(value: unknown, mapping: Map<string, string>): unknown {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const next: Record<string, unknown> = {};
+    for (const key of Object.keys(record)) {
+      if (key === "documentId" && typeof record[key] === "string") {
+        const mapped = mapping.get(record[key] as string);
+        next[key] = mapped ?? record[key];
+      } else {
+        next[key] = rewriteDocumentIds(record[key], mapping);
+      }
+    }
+    return next;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteDocumentIds(item, mapping));
+  }
+  return value;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -498,77 +519,7 @@ Deno.serve(async (req) => {
     }),
   );
 
-  // If every document is a duplicate, return the existing sessions and candidates.
-  if (newDocIds.length === 0) {
-    let duplicateSessionId = batchIdRaw ? undefined : sessionIdRaw;
-    if (duplicateSessionId) {
-      const { data: session } = await admin
-        .from("document_extraction_sessions")
-        .select("id")
-        .eq("id", duplicateSessionId)
-        .eq("household_id", householdId)
-        .maybeSingle();
-      if (!session) {
-        return jsonError("Session not found", 404);
-      }
-    } else if (sessionIdsForDuplicates.size > 0) {
-      duplicateSessionId = Array.from(sessionIdsForDuplicates)[0];
-    }
-    if (!duplicateSessionId || sessionIdsForDuplicates.size === 0) {
-      return jsonError("No existing session found for duplicate documents", 404);
-    }
-
-    const requestedExtractedIds = new Set<string>();
-    for (const id of duplicatedDocIds) {
-      const digest = digestByDocId[id];
-      for (const extractedId of extractedIdsByDigest.get(digest) ?? []) {
-        requestedExtractedIds.add(extractedId);
-      }
-    }
-
-    const { data: existingCandidates } = await admin
-      .from("asset_candidates")
-      .select(
-        "id, session_id, asset_type, identity_fingerprint, display_label, occupancy, match_classification, decision, review_status, source_document_ids",
-      )
-      .in("session_id", Array.from(sessionIdsForDuplicates))
-      .eq("household_id", householdId);
-
-    const overlappingCandidates = (existingCandidates ?? []).filter((c) => {
-      const sources = Array.isArray(c.source_document_ids)
-        ? (c.source_document_ids as string[])
-        : [];
-      return sources.some((sid) => requestedExtractedIds.has(String(sid)));
-    });
-
-    const reusableSessionId =
-      overlappingCandidates.find((candidate) => candidate.session_id)?.session_id ??
-      (sessionIdsForDuplicates.size === 1 ? duplicateSessionId : null);
-
-    if (batchIdRaw) {
-      await admin
-        .from("document_processing_batches")
-        .update({
-          ...(reusableSessionId ? { session_id: reusableSessionId } : {}),
-          status: "ready_for_review",
-          retryable: false,
-          completed_at: new Date().toISOString(),
-          worker_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", batchIdRaw);
-    }
-    return jsonResponse({
-      batch_id: batchIdRaw ?? null,
-      session_id: reusableSessionId,
-      session_ids: Array.from(sessionIdsForDuplicates),
-      extracted_document_ids: duplicatedDocIds.map(
-        (id) => existingByDigest.get(digestByDocId[id])!.id,
-      ),
-      duplicate: true,
-      candidates: overlappingCandidates,
-    });
-  }
+  const allDocumentsAreDuplicates = newDocIds.length === 0;
 
   const privacyConfig = privacyPreparationConfigFromEnv(Deno.env.get);
   if (batch?.disclosure_version) {
@@ -705,6 +656,246 @@ Deno.serve(async (req) => {
       return jsonError("Session not found", 404);
     }
     currentCaseId = session.case_id ?? null;
+  }
+
+  if (allDocumentsAreDuplicates) {
+    if (!batchIdRaw) {
+      return jsonError("Cannot process duplicate documents outside a batch", 400);
+    }
+
+    const priorExtractedIds = new Set<string>();
+    for (const id of duplicatedDocIds) {
+      const digest = digestByDocId[id];
+      for (const extractedId of extractedIdsByDigest.get(digest) ?? []) {
+        priorExtractedIds.add(extractedId);
+      }
+    }
+
+    const { data: priorExtractedRows } = await admin
+      .from("extracted_documents")
+      .select(
+        "id, file_digest, session_id, policy_document_id, page_count, classification, parser_id, parser_version, pages_json",
+      )
+      .in("id", Array.from(priorExtractedIds))
+      .eq("household_id", householdId);
+
+    const priorRowById = new Map<string, Record<string, unknown>>();
+    for (const row of priorExtractedRows ?? []) {
+      priorRowById.set(String(row.id), row as Record<string, unknown>);
+    }
+
+    const newPolicyIdByOld = new Map<string, string>();
+    const newExtractedIdByOld = new Map<string, string>();
+    const documentsJson: unknown[] = [];
+    for (const id of duplicatedDocIds) {
+      const digest = digestByDocId[id];
+      const priorRef = existingByDigest.get(digest);
+      if (!priorRef) continue;
+      const priorRow = priorRowById.get(priorRef.id);
+      if (!priorRow) continue;
+      const newExtractedId = crypto.randomUUID();
+      newExtractedIdByOld.set(priorRef.id, newExtractedId);
+      const oldPolicyDocId = String(priorRow.policy_document_id);
+      newPolicyIdByOld.set(oldPolicyDocId, id);
+      documentsJson.push({
+        id: newExtractedId,
+        policy_document_id: id,
+        file_digest: digest,
+        page_count: Number(priorRow.page_count ?? 0),
+        classification: priorRow.classification,
+        parser_id: priorRow.parser_id,
+        parser_version: priorRow.parser_version,
+        pages_json: priorRow.pages_json ?? [],
+      });
+    }
+
+    const requestedOldExtractedIds = new Set(newExtractedIdByOld.keys());
+    const { data: priorCandidates } = await admin
+      .from("asset_candidates")
+      .select(
+        "id, session_id, asset_type, identity_fingerprint, display_label, occupancy, match_classification, decision, review_status, draft_decision, draft_identity_confirmed, draft_existing_asset_id, draft_existing_asset_type, source_document_ids, selected_facts_json, conflicts_json",
+      )
+      .in("session_id", Array.from(sessionIdsForDuplicates))
+      .eq("household_id", householdId);
+
+    const overlappingCandidates = (priorCandidates ?? []).filter((c: any) => {
+      const sources = Array.isArray(c.source_document_ids)
+        ? (c.source_document_ids as string[])
+        : [];
+      return sources.some((sid) => requestedOldExtractedIds.has(String(sid)));
+    });
+
+    const candidatesForReview: {
+      id: string;
+      asset_type: "vehicle" | "property";
+      selected_facts_json: Record<string, unknown>;
+      conflicts_json?: unknown[];
+    }[] = [];
+    const candidatesJson: unknown[] = [];
+    for (const prior of overlappingCandidates) {
+      const priorSourceIds = Array.isArray(prior.source_document_ids)
+        ? (prior.source_document_ids as string[])
+        : [];
+      const newSourceIds = priorSourceIds
+        .map((oldId) => newExtractedIdByOld.get(String(oldId)))
+        .filter((id): id is string => id !== undefined);
+      if (newSourceIds.length === 0) continue;
+
+      const childId = crypto.randomUUID();
+      const childFacts = rewriteDocumentIds(
+        prior.selected_facts_json ?? {},
+        newPolicyIdByOld,
+      ) as Record<string, unknown>;
+      childFacts.sourceDocuments = newSourceIds;
+      childFacts.canonicalFingerprint = prior.identity_fingerprint;
+      const childConflicts = rewriteDocumentIds(
+        prior.conflicts_json ?? [],
+        newPolicyIdByOld,
+      ) as unknown[];
+
+      const childCandidate = {
+        id: childId,
+        parent_candidate_id: String(prior.id),
+        asset_type: prior.asset_type,
+        identity_fingerprint: String(prior.identity_fingerprint),
+        display_label: String(prior.display_label),
+        occupancy: prior.occupancy,
+        match_classification: String(prior.match_classification),
+        decision: "undecided",
+        review_status: "pending",
+        draft_decision: prior.draft_decision,
+        draft_identity_confirmed: prior.draft_identity_confirmed,
+        draft_existing_asset_id: prior.draft_existing_asset_id,
+        draft_existing_asset_type: prior.draft_existing_asset_type,
+        source_document_ids: newSourceIds,
+        selected_facts_json: childFacts,
+        conflicts_json: childConflicts,
+      };
+      candidatesJson.push(childCandidate);
+      candidatesForReview.push({
+        id: childId,
+        asset_type: childCandidate.asset_type as "vehicle" | "property",
+        selected_facts_json: childFacts,
+        conflicts_json: childConflicts,
+      });
+    }
+
+    const reviewSeeds = buildMandateReviewSeeds(candidatesForReview);
+    const reviewsJson = reviewSeeds.map((seed) => ({
+      candidate_id: seed.candidateId,
+      field_path: seed.fieldPath,
+      action: "pending",
+      value_state: seed.valueState,
+      specification_title: seed.specificationTitle,
+      mandate_path: seed.mandatePath,
+      original_extracted_value: seed.originalExtractedValue,
+      document_implied_value: seed.documentImpliedValue,
+      document_implied_mandate_value: seed.documentImpliedMandateValue,
+      source_document_id: seed.sourceDocumentId ?? null,
+      source_page_number: seed.sourcePageNumber ?? null,
+      source_section: seed.sourceSection ?? null,
+      confidence: seed.confidence ?? null,
+      conflict_values_json: seed.conflictValues.map((value: unknown) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+        const sourceDocumentId = (value as Record<string, unknown>).sourceDocumentId;
+        return {
+          ...value,
+          sourceFileName:
+            typeof sourceDocumentId === "string" ? filenameByDocId[sourceDocumentId] : undefined,
+        };
+      }),
+      material_conflict: seed.materialConflict,
+    }));
+
+    const analysisJson = {
+      modelProvider: "duplicate_snapshot",
+      modelId: "duplicate_snapshot",
+      promptVersion: "1.0.0",
+      outputSchemaVersion: "1.0.0",
+      attemptCount: 1,
+      rawResponse: {},
+      validatedOutput: {},
+      warnings: [],
+      providerMetadata: {},
+    };
+
+    const { data: persistResult, error: persistErr } = await admin.rpc(
+      "persist_document_batch_analysis_v1",
+      {
+        p_batch_id: batchIdRaw,
+        p_household_id: householdId,
+        p_session_id: sessionId,
+        p_client_request_id: analysisRunId,
+        p_analysis_run_id: analysisRunId,
+        p_analysis_json: analysisJson,
+        p_documents_json: documentsJson,
+        p_candidates_json: candidatesJson,
+        p_reviews_json: reviewsJson,
+        p_authorization_id: authorization.id,
+        p_consent_id: consent?.id,
+      },
+    );
+    if (persistErr || !persistResult) {
+      await authorizationStore.updateAuthorization(authorization.id, {
+        authorizationResult: "processing_failed",
+      });
+      await admin
+        .from("document_processing_batches")
+        .update({
+          status: "processing_unavailable",
+          retryable: false,
+          next_retry_at: null,
+          error_code: "DOCUMENT_PERSISTENCE_FAILED",
+          completed_at: new Date().toISOString(),
+          worker_lease_expires_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", batchIdRaw);
+      return jsonError("Failed to persist duplicate document snapshot", 500);
+    }
+
+    const customerBatchStatus =
+      candidatesJson.length > 0 ? "ready_for_review" : "additional_information_required";
+    await Promise.all([
+      admin
+        .from("document_processing_batches")
+        .update({
+          status: customerBatchStatus,
+          retryable: false,
+          error_code: null,
+          completed_at: new Date().toISOString(),
+          worker_lease_expires_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", batchIdRaw),
+      admin.from("policy_documents").update({ status: "extracted" }).in("id", policyDocumentIds),
+      admin
+        .from("document_extraction_sessions")
+        .update({ status: "submitted", updated_at: new Date().toISOString() })
+        .eq("id", sessionId),
+    ]);
+
+    await authorizationStore.updateAuthorization(authorization.id, {
+      authorizationResult: "analysis_persisted",
+    });
+
+    return jsonResponse({
+      batch_id: batchIdRaw,
+      session_id: sessionId,
+      duplicate: true,
+      extracted_document_ids: documentsJson.map((d: any) => d.id),
+      candidates: candidatesJson.map((c: any) => ({
+        id: c.id,
+        parent_candidate_id: c.parent_candidate_id,
+        asset_type: c.asset_type,
+        identity_fingerprint: c.identity_fingerprint,
+        display_label: c.display_label,
+        source_document_ids: c.source_document_ids,
+      })),
+      analysis: {
+        analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
+      },
+    });
   }
 
   const [existingAssets, pendingCandidates] = await Promise.all([
@@ -929,19 +1120,20 @@ Deno.serve(async (req) => {
     }
 
     // Prepare household-wide lookup tables for canonical identity resolution.
-    // Candidates are scoped to their optimization case; a later session in a different
-    // case must create a new case-local candidate even if the canonical identity matches.
+    // A candidate row is owned by exactly one extraction session. Reuse is allowed only
+    // within the same session; later sessions create child candidates with explicit
+    // parent lineage.
     const allPendingRecords = await loadPendingCandidateRecords(admin, householdId);
     const existingById = new Map<string, ExistingHouseholdAsset>();
     for (const asset of existingAssets) {
       existingById.set(asset.id, asset);
     }
     const pendingById = new Map<string, PendingCandidateRecord>();
-    const candidateByCaseFingerprint = new Map<string, PendingCandidateRecord>();
+    const candidateBySessionFingerprint = new Map<string, PendingCandidateRecord>();
     for (const record of allPendingRecords) {
       pendingById.set(record.id, record);
-      const caseKey = `${record.case_id ?? "null"}:${record.identity_fingerprint}`;
-      candidateByCaseFingerprint.set(caseKey, record);
+      const sessionKey = `${record.session_id}:${record.identity_fingerprint}`;
+      candidateBySessionFingerprint.set(sessionKey, record);
     }
     const pendingCandidateById = new Map<string, PendingEntityCandidate>();
     for (const candidate of pendingCandidates) {
@@ -1087,24 +1279,11 @@ Deno.serve(async (req) => {
           ? group.resolution.matchedPendingCandidateId
           : undefined;
 
-      const matchedPendingRecord = matchedPendingId
-        ? pendingCandidateById.get(matchedPendingId)
-        : undefined;
+      const matchedPendingRecord = matchedPendingId ? pendingById.get(matchedPendingId) : undefined;
 
-      // A candidate may only be reused within the same optimization case. If the matched
-      // pending candidate belongs to a different case we preserve its lineage in the
-      // draft payload but create a new case-local row.
-      const sameCaseMatchedPending =
-        matchedPendingId && pendingById.get(matchedPendingId)?.case_id === currentCaseId
-          ? pendingById.get(matchedPendingId)
-          : undefined;
-      const sameCaseFingerprintCandidate = candidateByCaseFingerprint.get(
-        `${currentCaseId ?? "null"}:${group.fingerprint}`,
+      const sameSessionFingerprintCandidate = candidateBySessionFingerprint.get(
+        `${sessionId}:${group.fingerprint}`,
       );
-      const existingCandidate = sameCaseMatchedPending ?? sameCaseFingerprintCandidate ?? undefined;
-
-      const mergedSourceDocIds = new Set<string>(existingCandidate?.source_document_ids ?? []);
-      for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
 
       const matchedExistingAsset =
         group.resolution.matchedExistingEntityId &&
@@ -1113,13 +1292,32 @@ Deno.serve(async (req) => {
           : undefined;
 
       const identityStrength = representative.candidateIdentity?.identityStrength;
-      const draftPayload = buildDraftDecisionPayload(
-        existingById,
-        group.resolution.status,
-        matchedExistingAsset,
+      const selection = selectCandidateForPersistence({
+        currentSessionId: sessionId,
+        currentCaseId,
+        currentHouseholdId: householdId,
+        fingerprint: group.fingerprint,
         matchedPendingRecord,
+        sameSessionFingerprintCandidate,
+        existingById,
+        resolutionStatus: group.resolution.status,
+        matchedExistingAsset,
         identityStrength,
-      );
+      });
+
+      const draftPayload = selection.draftPayload;
+
+      const reuseRecord =
+        selection.action === "reuse"
+          ? (sameSessionFingerprintCandidate ?? matchedPendingRecord)
+          : selection.action === "create-child"
+            ? matchedPendingRecord
+            : undefined;
+      const mergedSourceDocIds = new Set<string>();
+      if (selection.action === "reuse" && reuseRecord) {
+        for (const id of reuseRecord.source_document_ids) mergedSourceDocIds.add(id);
+      }
+      for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
 
       const selectedFacts = {
         canonicalFingerprint: group.fingerprint,
@@ -1134,9 +1332,10 @@ Deno.serve(async (req) => {
         mandateSuggestions: representative.mandateSuggestions,
       };
 
-      const candidateId = existingCandidate ? existingCandidate.id : crypto.randomUUID();
+      const candidateId = selection.candidateId;
       candidatesJson.push({
         id: candidateId,
+        parent_candidate_id: selection.parentCandidateId ?? null,
         asset_type: group.entityType,
         identity_fingerprint: group.fingerprint,
         display_label: displayLabel,
@@ -1157,13 +1356,17 @@ Deno.serve(async (req) => {
         conflicts_json: group.conflicts,
       });
 
-      if (existingCandidate) {
-        const caseKey = `${currentCaseId ?? "null"}:${group.fingerprint}`;
-        candidateByCaseFingerprint.set(caseKey, {
-          ...existingCandidate,
+      if (selection.action !== "create-new" && reuseRecord) {
+        const reuseEntry: PendingCandidateRecord = {
+          ...reuseRecord,
+          id: candidateId,
+          session_id: sessionId as string,
           source_document_ids: Array.from(mergedSourceDocIds),
           selected_facts_json: selectedFacts,
-        });
+          conflicts_json: group.conflicts,
+          household_id: householdId,
+        };
+        candidateBySessionFingerprint.set(`${sessionId}:${group.fingerprint}`, reuseEntry);
       }
     }
 

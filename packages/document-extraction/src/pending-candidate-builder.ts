@@ -31,6 +31,7 @@ export interface PendingCandidateRecord {
   identity_fingerprint: string;
   display_label: string;
   session_id: string;
+  household_id?: string;
   source_document_ids: string[];
   draft_decision: string | null;
   draft_identity_confirmed: boolean | null;
@@ -120,6 +121,7 @@ export function parsePendingCandidateRecord(row: unknown): PendingCandidateRecor
       : []
   ) as unknown[];
   const caseId = unknownToString(record.case_id ?? record.caseId);
+  const householdId = unknownToString(record.household_id ?? record.householdId);
 
   return {
     id,
@@ -127,6 +129,7 @@ export function parsePendingCandidateRecord(row: unknown): PendingCandidateRecor
     identity_fingerprint: identityFingerprint,
     display_label: displayLabel,
     session_id: sessionId,
+    household_id: householdId ?? undefined,
     source_document_ids: sourceDocumentIds,
     draft_decision: draftDecision,
     draft_identity_confirmed: draftIdentityConfirmed,

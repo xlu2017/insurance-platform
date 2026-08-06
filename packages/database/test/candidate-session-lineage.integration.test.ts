@@ -83,12 +83,17 @@ async function persistBatchAnalysis(
   candidateId: string,
   assetType: "vehicle" | "property",
   selectedFacts: Record<string, unknown>,
+  parentCandidateId?: string,
+  fileDigest?: string,
+  extractedDocId?: string,
+  policyDocId?: string,
 ) {
-  const extractedDocId = randomUUID();
-  const policyDocId = randomUUID();
+  const actualExtractedDocId = extractedDocId ?? randomUUID();
+  const actualPolicyDocId = policyDocId ?? randomUUID();
+  const actualFileDigest = fileDigest ?? uniqueDigest();
 
   const { error: policyDocError } = await admin.from("policy_documents").insert({
-    id: policyDocId,
+    id: actualPolicyDocId,
     household_id: householdId,
     file_name: `lineage-${randomUUID()}.pdf`,
     mime_type: "application/pdf",
@@ -128,9 +133,9 @@ async function persistBatchAnalysis(
     },
     p_documents_json: [
       {
-        id: extractedDocId,
-        policy_document_id: policyDocId,
-        file_digest: uniqueDigest(),
+        id: actualExtractedDocId,
+        policy_document_id: actualPolicyDocId,
+        file_digest: actualFileDigest,
         page_count: 1,
         classification: "supported",
         parser_id: "test",
@@ -141,20 +146,25 @@ async function persistBatchAnalysis(
     p_candidates_json: [
       {
         id: candidateId,
+        parent_candidate_id: parentCandidateId ?? null,
         asset_type: assetType,
         identity_fingerprint: `${assetType}-lineage-${randomUUID()}`,
         display_label: assetType === "vehicle" ? "2018 Honda Civic" : "999 Existing Rd",
         match_classification: matchClassification,
         decision: "undecided",
         review_status: "pending",
-        source_document_ids: [extractedDocId],
+        source_document_ids: [actualExtractedDocId],
         selected_facts_json: selectedFacts,
         conflicts_json: [],
       },
     ],
   });
   if (error) throw error;
-  return data as Record<string, unknown>;
+  return {
+    data: data as Record<string, unknown>,
+    extractedDocId: actualExtractedDocId,
+    policyDocId: actualPolicyDocId,
+  };
 }
 
 function buildExistingAsset(existingId: string, assetType: "vehicle" | "property") {
@@ -350,6 +360,81 @@ describe("candidate session lineage and persistence conflicts", () => {
       .eq("session_id", sessionId)
       .in("review_status", ["pending", "reviewing"])
       .in("decision", ["undecided", "not_sure"]);
+  }
+
+  async function createOptimizationCase(householdId: string, state = "awaiting_documents") {
+    const admin = serviceRoleClient();
+    const caseId = `c0000000-0000-0000-0000-${randomUUID().slice(-12)}`;
+    const { error } = await admin.from("optimization_cases").insert({
+      id: caseId,
+      household_id: householdId,
+      state,
+      created_by: CUSTOMER_ID,
+    });
+    if (error) throw error;
+    return caseId;
+  }
+
+  async function createDangerousBatchForCase(caseId: string) {
+    const admin = serviceRoleClient();
+    const { data, error } = await admin.rpc("create_document_processing_batch", {
+      p_case_id: caseId,
+      p_client_request_id: `lineage-case-${randomUUID()}`,
+      p_actor_id: CUSTOMER_ID,
+    });
+    if (error) throw error;
+    const typed = data as {
+      batch: { id: string; case_id: string; session_id: string } & Record<string, unknown>;
+      session_id: string;
+    };
+    const { error: updateError } = await admin
+      .from("document_processing_batches")
+      .update({ mode_snapshot: "dangerous" })
+      .eq("id", typed.batch.id);
+    if (updateError) throw updateError;
+    return { batch: typed.batch, session_id: typed.session_id };
+  }
+
+  async function getCandidateFieldReviews(admin: SupabaseClient, sessionId: string) {
+    const { data: candidates } = await admin
+      .from("asset_candidates")
+      .select("id")
+      .eq("session_id", sessionId);
+    const candidateIds = (candidates ?? []).map((c) => c.id);
+    return admin
+      .from("candidate_field_reviews")
+      .select("id, batch_id, candidate_id")
+      .in("candidate_id", candidateIds);
+  }
+
+  async function createCandidateReview(
+    admin: SupabaseClient,
+    householdId: string,
+    batchId: string,
+    candidateId: string,
+    sourceDocumentId: string,
+  ) {
+    const { error } = await admin.from("candidate_field_reviews").insert({
+      id: randomUUID(),
+      candidate_id: candidateId,
+      household_id: householdId,
+      batch_id: batchId,
+      field_path: "currentCoverage.thirdPartyLiabilityCents",
+      action: "confirm",
+      value_state: "known",
+      mandate_path: "thirdPartyLiability",
+      original_extracted_value: 1000000,
+      document_implied_value: 1000000,
+      document_implied_mandate_value: 1000000,
+      source_document_id: sourceDocumentId,
+      source_page_number: 1,
+      source_section: "coverage",
+      confidence: 0.99,
+      conflict_values_json: [],
+      material_conflict: false,
+      is_complete: false,
+    });
+    if (error) throw error;
   }
 
   it("rejects a candidate id that belongs to another household", async () => {
@@ -807,5 +892,394 @@ describe("candidate session lineage and persistence conflicts", () => {
     expect(new Set(links?.map((l) => l.policy_id))).toEqual(
       new Set([aData?.policies?.[0], bData?.policies?.[0]]),
     );
+  });
+
+  it("rejects a same-household candidate id submitted from a different session and rolls back", async () => {
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const { batch: batchA, session_id: sessionA } = await createDangerousBatch(householdId);
+    const vehicleId = await createVehicle(admin, householdId);
+    const candidateA = randomUUID();
+    await persistBatchAnalysis(
+      admin,
+      householdId,
+      sessionA,
+      batchA.id,
+      candidateA,
+      "vehicle",
+      matchesExistingFacts(vehicleId, "vehicle"),
+    );
+
+    const { batch: batchB, session_id: sessionB } = await createDangerousBatch(householdId);
+    const policyDocId = randomUUID();
+    const extractedDocId = randomUUID();
+    await admin.from("policy_documents").insert({
+      id: policyDocId,
+      household_id: householdId,
+      file_name: `conflict-${randomUUID()}.pdf`,
+      mime_type: "application/pdf",
+      size_bytes: 1024,
+      storage_path: `conflict/${randomUUID()}.pdf`,
+      uploaded_by: CUSTOMER_ID,
+      category: "other",
+    });
+
+    const { error } = await admin.rpc("persist_document_batch_analysis_v1" as any, {
+      p_batch_id: batchB.id,
+      p_household_id: householdId,
+      p_session_id: sessionB,
+      p_client_request_id: `session-conflict-${randomUUID()}`,
+      p_analysis_json: {
+        modelProvider: "test",
+        modelId: "test-model",
+        promptVersion: "1.0.0",
+        outputSchemaVersion: "1.0.0",
+        rawResponse: {},
+        validatedOutput: {},
+      },
+      p_documents_json: [
+        {
+          id: extractedDocId,
+          policy_document_id: policyDocId,
+          file_digest: uniqueDigest(),
+          page_count: 1,
+          classification: "supported",
+          parser_id: "test",
+          parser_version: "1.0.0",
+          pages_json: [],
+        },
+      ],
+      p_candidates_json: [
+        {
+          id: candidateA,
+          asset_type: "vehicle",
+          identity_fingerprint: `vehicle-conflict-${randomUUID()}`,
+          display_label: "Conflict vehicle",
+          match_classification: "exact_existing_match",
+          decision: "undecided",
+          review_status: "pending",
+          source_document_ids: [extractedDocId],
+          selected_facts_json: matchesExistingFacts(vehicleId, "vehicle"),
+          conflicts_json: [],
+        },
+      ],
+    });
+
+    expect(error?.message).toMatch(/CANDIDATE_SESSION_CONFLICT/i);
+
+    const { count: runCount } = await admin
+      .from("document_analysis_runs")
+      .select("*", { count: "exact", head: true })
+      .eq("session_id", sessionB);
+    expect(runCount).toBe(0);
+
+    const { count: docCount } = await admin
+      .from("extracted_documents")
+      .select("*", { count: "exact", head: true })
+      .eq("session_id", sessionB);
+    expect(docCount).toBe(0);
+  });
+
+  it("isolates same-case multi-session candidates and their mandate review rows", async () => {
+    const admin = serviceRoleClient();
+    const customer = await getCustomerClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const vehicleId = await createVehicle(admin, householdId);
+    const caseId = await createOptimizationCase(householdId);
+    const { batch: batchA, session_id: sessionA } = await createDangerousBatchForCase(caseId);
+    const candidateA = randomUUID();
+    const { policyDocId: policyDocA } = await persistBatchAnalysis(
+      admin,
+      householdId,
+      sessionA,
+      batchA.id,
+      candidateA,
+      "vehicle",
+      matchesExistingFacts(vehicleId, "vehicle"),
+    );
+    await createCandidateReview(admin, householdId, batchA.id, candidateA, policyDocA);
+    await markBatchReadyForReview(admin, batchA.id);
+
+    const { data: reviewsA } = await getCandidateFieldReviews(admin, sessionA);
+    expect(reviewsA?.length).toBeGreaterThan(0);
+    if (!reviewsA || reviewsA.length === 0) throw new Error("review not found");
+    const reviewA = reviewsA[0]!;
+
+    const { error: correctionError } = await customer.rpc("save_mandate_review_item_v1" as any, {
+      p_household_id: householdId,
+      p_review_id: reviewA.id,
+      p_action: "correct",
+      p_current_mandate_value: 1000000,
+      p_corrected_value: 1200000,
+      p_correction_reason: "other",
+      p_is_complete: true,
+    });
+    expect(correctionError).toBeNull();
+
+    const { batch: batchB, session_id: sessionB } = await createDangerousBatchForCase(caseId);
+    const candidateB = randomUUID();
+    const { policyDocId: policyDocB } = await persistBatchAnalysis(
+      admin,
+      householdId,
+      sessionB,
+      batchB.id,
+      candidateB,
+      "vehicle",
+      matchesPendingFacts(candidateA, vehicleId, "vehicle", "link_existing"),
+      candidateA,
+    );
+    await createCandidateReview(admin, householdId, batchB.id, candidateB, policyDocB);
+
+    const { data: sessionAResult } = await sessionCandidateIds(admin, sessionA);
+    expect(sessionAResult?.length).toBe(1);
+    expect(sessionAResult?.[0]?.id).toBe(candidateA);
+
+    const { data: sessionBResult } = await sessionCandidateIds(admin, sessionB);
+    expect(sessionBResult?.length).toBe(1);
+    expect(sessionBResult?.[0]?.id).toBe(candidateB);
+
+    const { data: reviewsAAfter } = await getCandidateFieldReviews(admin, sessionA);
+    expect(reviewsAAfter?.length).toBeGreaterThan(0);
+    expect(reviewsAAfter?.[0]?.batch_id).toBe(batchA.id);
+
+    const { data: reviewsB } = await getCandidateFieldReviews(admin, sessionB);
+    expect(reviewsB?.length).toBeGreaterThan(0);
+    expect(reviewsB?.some((r) => r.candidate_id === candidateB)).toBe(true);
+    expect(reviewsB?.every((r) => r.batch_id === batchB.id)).toBe(true);
+
+    const { data: corrected } = await admin
+      .from("candidate_field_reviews")
+      .select("corrected_value, batch_id, candidate_id")
+      .eq("id", reviewA.id)
+      .single();
+    expect(corrected?.corrected_value).toBe(1200000);
+    expect(corrected?.batch_id).toBe(batchA.id);
+    expect(corrected?.candidate_id).toBe(candidateA);
+
+    const { error: approveAError } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `same-case-approve-a-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateA,
+          decision: "link_existing",
+          existing_asset_id: vehicleId,
+          existing_asset_type: "vehicle",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(approveAError).toBeNull();
+
+    const { error: approveBError } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `same-case-approve-b-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateB,
+          decision: "link_existing",
+          existing_asset_id: vehicleId,
+          existing_asset_type: "vehicle",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(approveBError).toBeNull();
+
+    const { count: vehicleCount } = await admin
+      .from("vehicles")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(vehicleCount).toBe(1);
+  });
+
+  it("creates session-local child candidates for cross-case duplicate documents", async () => {
+    const admin = serviceRoleClient();
+    const customer = await getCustomerClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const vehicleId = await createVehicle(admin, householdId);
+    const caseA = await createOptimizationCase(householdId);
+    const { batch: batchA, session_id: sessionA } = await createDangerousBatchForCase(caseA);
+    const candidateA = randomUUID();
+    const digest = uniqueDigest();
+    const { policyDocId: policyDocA } = await persistBatchAnalysis(
+      admin,
+      householdId,
+      sessionA,
+      batchA.id,
+      candidateA,
+      "vehicle",
+      matchesExistingFacts(vehicleId, "vehicle"),
+      undefined,
+      digest,
+    );
+    await createCandidateReview(admin, householdId, batchA.id, candidateA, policyDocA);
+    await markBatchReadyForReview(admin, batchA.id);
+
+    const { data: beforeA } = await admin
+      .from("asset_candidates")
+      .select("id, session_id")
+      .eq("id", candidateA)
+      .single();
+    expect(beforeA?.session_id).toBe(sessionA);
+
+    const caseB = await createOptimizationCase(householdId);
+    const { batch: batchB, session_id: sessionB } = await createDangerousBatchForCase(caseB);
+    const candidateB = randomUUID();
+    const policyDocB = randomUUID();
+    const extractedDocB = randomUUID();
+    await admin.from("policy_documents").insert({
+      id: policyDocB,
+      household_id: householdId,
+      file_name: `duplicate-${randomUUID()}.pdf`,
+      mime_type: "application/pdf",
+      size_bytes: 1024,
+      storage_path: `duplicate/${randomUUID()}.pdf`,
+      uploaded_by: CUSTOMER_ID,
+      category: "other",
+    });
+
+    const { data: resultB, error: persistError } = await admin.rpc(
+      "persist_document_batch_analysis_v1" as any,
+      {
+        p_batch_id: batchB.id,
+        p_household_id: householdId,
+        p_session_id: sessionB,
+        p_client_request_id: `duplicate-snapshot-${randomUUID()}`,
+        p_analysis_json: {
+          modelProvider: "duplicate_snapshot",
+          modelId: "duplicate_snapshot",
+          promptVersion: "1.0.0",
+          outputSchemaVersion: "1.0.0",
+          rawResponse: {},
+          validatedOutput: {},
+        },
+        p_documents_json: [
+          {
+            id: extractedDocB,
+            policy_document_id: policyDocB,
+            file_digest: digest,
+            page_count: 1,
+            classification: "supported",
+            parser_id: "test",
+            parser_version: "1.0.0",
+            pages_json: [],
+          },
+        ],
+        p_candidates_json: [
+          {
+            id: candidateB,
+            parent_candidate_id: candidateA,
+            asset_type: "vehicle",
+            identity_fingerprint: `vehicle-duplicate-${randomUUID()}`,
+            display_label: "2018 Honda Civic",
+            match_classification: "exact_existing_match",
+            decision: "undecided",
+            review_status: "pending",
+            source_document_ids: [extractedDocB],
+            selected_facts_json: matchesPendingFacts(
+              candidateA,
+              vehicleId,
+              "vehicle",
+              "link_existing",
+            ),
+            conflicts_json: [],
+          },
+        ],
+      },
+    );
+    expect(persistError).toBeNull();
+
+    await createCandidateReview(admin, householdId, batchB.id, candidateB, policyDocB);
+
+    const { data: batchBAfter } = await admin
+      .from("document_processing_batches")
+      .select("session_id, case_id")
+      .eq("id", batchB.id)
+      .single();
+    expect(batchBAfter?.session_id).toBe(sessionB);
+    expect(batchBAfter?.case_id).toBe(caseB);
+
+    const { data: sessionBRow } = await admin
+      .from("document_extraction_sessions")
+      .select("case_id")
+      .eq("id", sessionB)
+      .single();
+    expect(sessionBRow?.case_id).toBe(caseB);
+
+    const { data: afterA } = await admin
+      .from("asset_candidates")
+      .select("id, session_id")
+      .eq("id", candidateA)
+      .single();
+    expect(afterA?.session_id).toBe(sessionA);
+
+    const { data: child } = await admin
+      .from("asset_candidates")
+      .select("id, session_id, parent_candidate_id, source_document_ids")
+      .eq("id", candidateB)
+      .single();
+    expect(child?.session_id).toBe(sessionB);
+    expect(child?.parent_candidate_id).toBe(candidateA);
+    expect(child?.source_document_ids).toEqual([extractedDocB]);
+
+    const { count: providerFileCount } = await admin
+      .from("document_analysis_provider_files")
+      .select("*", { count: "exact", head: true })
+      .eq("analysis_request_id", (resultB as any)?.analysis_run_id);
+    expect(providerFileCount).toBe(0);
+
+    const { data: reviewsA } = await getCandidateFieldReviews(admin, sessionA);
+    const { data: reviewsB } = await getCandidateFieldReviews(admin, sessionB);
+    expect(reviewsA?.every((r) => r.batch_id === batchA.id)).toBe(true);
+    expect(reviewsB?.every((r) => r.batch_id === batchB.id)).toBe(true);
+    expect(reviewsA?.map((r) => r.candidate_id)).not.toContain(candidateB);
+    expect(reviewsB?.map((r) => r.candidate_id)).not.toContain(candidateA);
+
+    const { error: approveAError } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `cross-case-approve-a-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateA,
+          decision: "link_existing",
+          existing_asset_id: vehicleId,
+          existing_asset_type: "vehicle",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(approveAError).toBeNull();
+
+    const { error: approveBError } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `cross-case-approve-b-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateB,
+          decision: "link_existing",
+          existing_asset_id: vehicleId,
+          existing_asset_type: "vehicle",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(approveBError).toBeNull();
+
+    const { count: vehicleCount } = await admin
+      .from("vehicles")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(vehicleCount).toBe(1);
   });
 });
