@@ -1,31 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never;
-    };
-    Views: {
-      [_ in never]: never;
-    };
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json;
-          operationName?: string;
-          query?: string;
-          variables?: Json;
-        };
-        Returns: Json;
-      };
-    };
-    Enums: {
-      [_ in never]: never;
-    };
-    CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
   public: {
     Tables: {
       asset_candidates: {
@@ -4942,7 +4917,7 @@ export type Database = {
         | "cancellation_confirmation"
         | "other"
         | "auto_detect";
-      document_status: "uploaded" | "in_review" | "extracted" | "rejected";
+      document_status: "uploaded" | "in_review" | "extracted" | "rejected" | "staged";
       financial_rating: "A_plus" | "A" | "A_minus" | "B_plus" | "B_or_lower" | "any";
       financing_status: "owned" | "financed" | "leased";
       limit_rule: "minimum" | "maximum" | "exact" | "match_current_or_better" | "any";
@@ -5131,9 +5106,6 @@ export type CompositeTypes<
     : never;
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       assertion_authority: [
@@ -5236,7 +5208,7 @@ export const Constants = {
         "other",
         "auto_detect",
       ],
-      document_status: ["uploaded", "in_review", "extracted", "rejected"],
+      document_status: ["uploaded", "in_review", "extracted", "rejected", "staged"],
       financial_rating: ["A_plus", "A", "A_minus", "B_plus", "B_or_lower", "any"],
       financing_status: ["owned", "financed", "leased"],
       limit_rule: ["minimum", "maximum", "exact", "match_current_or_better", "any"],
