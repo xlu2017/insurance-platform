@@ -15,6 +15,7 @@ interface UploadPlanModalProps {
   loading: boolean;
   onRestart: () => void;
   onWait: () => void;
+  onUseExisting: () => void;
   onCancel: () => void;
 }
 
@@ -81,11 +82,15 @@ export function UploadPlanModal({
   loading,
   onRestart,
   onWait,
+  onUseExisting,
   onCancel,
 }: UploadPlanModalProps) {
   if (!plan) return null;
 
-  const allDuplicates = plan.newUploadCount === 0 && plan.exactDuplicateDocuments.length > 0;
+  const allDuplicates =
+    plan.newUploadCount > 0 &&
+    plan.newNormalizationCount === 0 &&
+    plan.exactDuplicateDocuments.length === plan.newUploadCount;
   const activeStatusLabel = plan.activeStatus
     ? documentBatchStatusLabels[plan.activeStatus]
     : "being processed";
@@ -156,7 +161,7 @@ export function UploadPlanModal({
               {allDuplicates ? (
                 <PrimaryButton
                   label="Use existing information"
-                  onPress={onCancel}
+                  onPress={onUseExisting}
                   loading={loading}
                   disabled={loading}
                   testID="use-existing-button"

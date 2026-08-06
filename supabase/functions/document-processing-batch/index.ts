@@ -377,14 +377,28 @@ Deno.serve(async (req) => {
       : [];
     const continuationRequestId = String(body.continuation_request_id ?? crypto.randomUUID());
 
-    const { data: batchMeta, error: batchMetaError } = await admin
-      .from("document_processing_batches")
-      .select("processing_generation")
-      .eq("id", batchId)
-      .eq("household_id", householdId)
-      .maybeSingle();
-    if (batchMetaError || !batchMeta) {
-      return jsonError("Batch not found", 404);
+    let expectedGeneration: number | undefined;
+    const providedGeneration = body.expected_processing_generation;
+    if (
+      providedGeneration !== undefined &&
+      providedGeneration !== null &&
+      providedGeneration !== ""
+    ) {
+      expectedGeneration = Number(providedGeneration);
+      if (!Number.isInteger(expectedGeneration) || expectedGeneration < 1) {
+        return jsonError("Invalid expected_processing_generation", 400);
+      }
+    } else {
+      const { data: batchMeta, error: batchMetaError } = await admin
+        .from("document_processing_batches")
+        .select("processing_generation")
+        .eq("id", batchId)
+        .eq("household_id", householdId)
+        .maybeSingle();
+      if (batchMetaError || !batchMeta) {
+        return jsonError("Batch not found", 404);
+      }
+      expectedGeneration = Number(batchMeta.processing_generation ?? 1);
     }
 
     const rpcName =
@@ -394,7 +408,7 @@ Deno.serve(async (req) => {
     const rpcArgs: Record<string, unknown> = {
       p_household_id: householdId,
       p_new_policy_document_ids: newDocIds,
-      p_expected_generation: Number(batchMeta.processing_generation ?? 1),
+      p_expected_generation: expectedGeneration,
       p_continuation_request_id: continuationRequestId,
       p_actor_id: user.id,
     };

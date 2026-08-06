@@ -36,6 +36,7 @@ describe("UploadPlanModal", () => {
         loading={false}
         onRestart={jest.fn()}
         onWait={jest.fn()}
+        onUseExisting={jest.fn()}
         onCancel={jest.fn()}
       />,
     );
@@ -58,6 +59,7 @@ describe("UploadPlanModal", () => {
         loading={false}
         onRestart={onRestart}
         onWait={jest.fn()}
+        onUseExisting={jest.fn()}
         onCancel={jest.fn()}
       />,
     );
@@ -75,6 +77,7 @@ describe("UploadPlanModal", () => {
         loading={false}
         onRestart={jest.fn()}
         onWait={onWait}
+        onUseExisting={jest.fn()}
         onCancel={jest.fn()}
       />,
     );
@@ -92,6 +95,7 @@ describe("UploadPlanModal", () => {
         loading={false}
         onRestart={jest.fn()}
         onWait={jest.fn()}
+        onUseExisting={jest.fn()}
         onCancel={onCancel}
       />,
     );
@@ -102,7 +106,9 @@ describe("UploadPlanModal", () => {
 
   it("shows exact-duplicate warning and use-existing action", () => {
     const plan = basePlan({
-      newUploadCount: 0,
+      newUploadCount: 1,
+      reusableNormalizationCount: 1,
+      newNormalizationCount: 0,
       exactDuplicateDocuments: [
         {
           policyDocumentId: "doc-1",
@@ -118,6 +124,7 @@ describe("UploadPlanModal", () => {
         },
       ],
     });
+    const onUseExisting = jest.fn();
     const onCancel = jest.fn();
     render(
       <UploadPlanModal
@@ -126,6 +133,7 @@ describe("UploadPlanModal", () => {
         loading={false}
         onRestart={jest.fn()}
         onWait={jest.fn()}
+        onUseExisting={onUseExisting}
         onCancel={onCancel}
       />,
     );
@@ -138,7 +146,8 @@ describe("UploadPlanModal", () => {
     expect(screen.getByText(/2023 Toyota Camry/)).toBeTruthy();
 
     fireEvent.press(screen.getByTestId("use-existing-button"));
-    expect(onCancel).toHaveBeenCalled();
+    expect(onUseExisting).toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
   it("disables action buttons while loading", () => {
@@ -150,6 +159,7 @@ describe("UploadPlanModal", () => {
         loading
         onRestart={jest.fn()}
         onWait={jest.fn()}
+        onUseExisting={jest.fn()}
         onCancel={jest.fn()}
       />,
     );
