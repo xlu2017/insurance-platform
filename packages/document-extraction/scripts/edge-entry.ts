@@ -39,3 +39,8 @@ export {
 export { MemoryFileBytesLoader } from "../src/document-loaders/memory-bytes.ts";
 export * from "../src/pending-candidate-builder.ts";
 export * from "../src/candidate-id-selection.ts";
+export * from "../src/normalization-reuse.ts";
+export * from "../src/normalization-projection.ts";
+export * from "../src/document-overlap-classifier.ts";
+export * from "../src/document-overlap-edge-adapter.ts";
+export { combineAnalysisWithProjectedNormalizations } from "../src/normalization-projection.ts";

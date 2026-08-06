@@ -34,3 +34,6 @@ export {
 export { FileSystemFileBytesLoader } from "./document-loaders/node-bytes.ts";
 export * from "./pending-candidate-builder.ts";
 export * from "./candidate-id-selection.ts";
+export * from "./normalization-reuse.ts";
+export * from "./normalization-projection.ts";
+export * from "./document-overlap-classifier.ts";

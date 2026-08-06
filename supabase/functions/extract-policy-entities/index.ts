@@ -29,6 +29,14 @@ import {
   computeCanonicalFingerprint,
   buildExistingAssetReference,
   selectCandidateForPersistence,
+  selectCompatibleNormalization,
+  partitionDocumentsByNormalization,
+  buildNormalizationPersistencePayload,
+  projectNormalizationForCandidateDerivation,
+  combineAnalysisWithProjectedNormalizations,
+  classifyDocumentAssetOverlap,
+  entityResolutionFromOverlap,
+  recordDocumentAssetOverlapArgs,
 } from "../_shared/document-extraction.js";
 import type {
   CandidateComparisonContext,
@@ -267,6 +275,39 @@ async function loadPendingCandidates(
   return records.map((r) => pendingRecordToEntityCandidate(r) as PendingEntityCandidate);
 }
 
+async function loadExistingPolicies(admin: any, householdId: string): Promise<any[]> {
+  const { data: rows, error } = await admin
+    .from("policy_asset_links")
+    .select(
+      "asset_type, asset_id, product_line, effective_from, effective_to, policies!inner(id, insurer_name, policy_number, annual_premium_cents, liability_limit_cents, dwelling_limit_cents, renewal_date, is_current)",
+    )
+    .eq("household_id", householdId);
+  if (error) throw new Error(error.message);
+
+  return (rows ?? []).map((r: any) => ({
+    id: String(r.policies.id),
+    assetType: String(r.asset_type),
+    assetId: String(r.asset_id),
+    productLine: String(r.product_line),
+    insurerName: String(r.policies.insurer_name),
+    policyNumber: r.policies.policy_number ? String(r.policies.policy_number) : null,
+    effectiveDate: r.effective_from ? String(r.effective_from) : null,
+    expiryDate: r.effective_to
+      ? String(r.effective_to)
+      : r.policies.renewal_date
+        ? String(r.policies.renewal_date)
+        : null,
+    annualPremiumCents: Number(r.policies.annual_premium_cents ?? 0),
+    liabilityLimitCents: r.policies.liability_limit_cents
+      ? Number(r.policies.liability_limit_cents)
+      : null,
+    dwellingLimitCents: r.policies.dwelling_limit_cents
+      ? Number(r.policies.dwelling_limit_cents)
+      : null,
+    isCurrent: Boolean(r.policies.is_current),
+  }));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -351,6 +392,9 @@ Deno.serve(async (req) => {
 
   let batch: Record<string, any> | null = null;
   let currentCaseId: string | null = null;
+  let processingGeneration: number | undefined;
+  let batchItemByDocId: Record<string, string> = {};
+  let batchDocDigests: Record<string, string> = {};
   if (batchIdRaw) {
     const { data: batchRow, error: batchError } = await admin
       .from("document_processing_batches")
@@ -375,20 +419,24 @@ Deno.serve(async (req) => {
 
     const { data: batchItems, error: itemError } = await admin
       .from("document_processing_batch_items")
-      .select("policy_document_id")
+      .select("id, policy_document_id, content_sha256")
       .eq("batch_id", batchIdRaw);
     if (itemError) return jsonError("Failed to load document batch", 500);
-    policyDocumentIds = Array.from(
-      new Set(
-        (batchItems ?? []).map((item: { policy_document_id: string }) =>
-          String(item.policy_document_id),
-        ),
-      ),
-    );
-    if (policyDocumentIds.length === 0) return jsonError("Document batch is empty", 400);
+    if (!batchItems || batchItems.length === 0) return jsonError("Document batch is empty", 400);
+
+    policyDocumentIds = [];
+    for (const item of batchItems) {
+      const docId = String(item.policy_document_id);
+      if (!docId) return jsonError("Batch item is missing a policy_document_id", 500);
+      batchItemByDocId[docId] = String(item.id);
+      batchDocDigests[docId] = String(item.content_sha256);
+      policyDocumentIds.push(docId);
+    }
+    policyDocumentIds = Array.from(new Set(policyDocumentIds));
     sessionIdRaw = String(batchRow.session_id);
     currentCaseId = batchRow.case_id ?? null;
     batch = batchRow as Record<string, any>;
+    processingGeneration = Number(batchRow.processing_generation ?? 1);
 
     const { data: claimed, error: claimError } = await admin.rpc(
       "claim_document_processing_batch_v1",
@@ -459,67 +507,126 @@ Deno.serve(async (req) => {
     return jsonError("One or more policy documents not found", 404);
   }
 
-  // Download PDF bytes and compute digests for all requested documents.
   const bytesByReference: Record<string, Uint8Array> = {};
   const digestByDocId: Record<string, string> = {};
   const filenameByDocId: Record<string, string> = {};
   const mimeTypeByDocId: Record<string, string> = {};
   const sizeByDocId: Record<string, number> = {};
   for (const docRow of docRows) {
-    const { data: fileData, error: downloadErr } = await admin.storage
-      .from("policy-documents")
-      .download(docRow.storage_path);
-    if (downloadErr || !fileData) {
-      return jsonError("Failed to download document", 502);
-    }
-    const bytes = new Uint8Array(await fileData.arrayBuffer());
-    const digest = await sha256Hex(bytes);
-    if (docRow.content_sha256 !== digest) {
-      return jsonError("Document integrity verification failed", 409);
-    }
-    bytesByReference[docRow.id] = bytes;
-    digestByDocId[docRow.id] = digest;
-    filenameByDocId[docRow.id] = docRow.file_name ?? docRow.id;
-    mimeTypeByDocId[docRow.id] = docRow.mime_type ?? "application/octet-stream";
+    digestByDocId[docRow.id] = String(docRow.content_sha256 ?? "");
+    filenameByDocId[docRow.id] = String(docRow.file_name ?? docRow.id);
+    mimeTypeByDocId[docRow.id] = String(docRow.mime_type ?? "application/octet-stream");
     sizeByDocId[docRow.id] = Number(docRow.size_bytes ?? 0);
   }
 
-  // Check for existing extracted documents by digest to avoid re-parsing duplicates.
-  const { data: existingExtractedDocs } = await admin
-    .from("extracted_documents")
-    .select("id, file_digest, session_id, policy_document_id")
-    .eq("household_id", householdId)
-    .in("file_digest", Object.values(digestByDocId));
+  // Reuse completed normalizations for batch processing; direct legacy calls always
+  // submit the full document set to the provider.
+  const SCHEMA_VERSION = "1.0.0";
+  const ANALYZER_VERSION = "default-v1";
+  let completedNormalizations: any[] = [];
+  let reuseItems: { policyDocumentId: string; contentSha256: string; batchItemId?: string }[] = [];
+  let providerItems: { policyDocumentId: string; contentSha256: string; batchItemId?: string }[] =
+    [];
+  if (batchIdRaw) {
+    const digests = Object.values(digestByDocId).filter(Boolean);
+    const { data: normRows, error: normErr } = await admin
+      .from("document_normalizations")
+      .select(
+        "id, policy_document_id, content_sha256, normalization_schema_version, analyzer_version, status, model_provider, model_id, prompt_version, classification, normalized_output_json, normalized_entities_json, conflicts_json, evidence_json",
+      )
+      .eq("household_id", householdId)
+      .in("content_sha256", digests)
+      .eq("normalization_schema_version", SCHEMA_VERSION)
+      .eq("analyzer_version", ANALYZER_VERSION)
+      .eq("status", "complete");
+    if (normErr) return jsonError("Failed to load document normalizations", 500);
 
-  const existingByDigest = new Map<string, { id: string; session_id: string }>();
-  const extractedIdsByDigest = new Map<string, Set<string>>();
-  const sessionIdsForDuplicates = new Set<string>();
-  for (const row of existingExtractedDocs ?? []) {
-    const digest = String(row.file_digest);
-    const extractedId = String(row.id);
-    const sessionId = String(row.session_id);
-    sessionIdsForDuplicates.add(sessionId);
-    const ids = extractedIdsByDigest.get(digest) ?? new Set<string>();
-    ids.add(extractedId);
-    extractedIdsByDigest.set(digest, ids);
-    if (!existingByDigest.has(digest)) {
-      existingByDigest.set(digest, { id: extractedId, session_id: sessionId });
+    completedNormalizations = (normRows ?? []).map((r: any) => ({
+      id: String(r.id),
+      policy_document_id: String(r.policy_document_id),
+      content_sha256: String(r.content_sha256),
+      normalization_schema_version: String(r.normalization_schema_version),
+      analyzer_version: String(r.analyzer_version),
+      status: String(r.status),
+      model_provider: r.model_provider ? String(r.model_provider) : null,
+      model_id: r.model_id ? String(r.model_id) : null,
+      prompt_version: r.prompt_version ? String(r.prompt_version) : null,
+      classification: r.classification ? String(r.classification) : null,
+      normalized_output_json: r.normalized_output_json ?? {},
+      normalized_entities_json: r.normalized_entities_json ?? [],
+      conflicts_json: r.conflicts_json ?? [],
+      evidence_json: r.evidence_json ?? [],
+    }));
+
+    const reuseInput = policyDocumentIds.map((id) => {
+      const batchItemId = batchItemByDocId[id];
+      const contentSha256 = digestByDocId[id];
+      if (!batchItemId) {
+        throw new Error(`Batch item not found for policy document ${id}`);
+      }
+      if (!contentSha256) {
+        throw new Error(`Content digest not found for policy document ${id}`);
+      }
+      return {
+        policyDocumentId: id,
+        contentSha256,
+        batchItemId,
+      };
+    });
+    const partitioned = partitionDocumentsByNormalization(
+      reuseInput,
+      completedNormalizations,
+      SCHEMA_VERSION,
+      ANALYZER_VERSION,
+    );
+    reuseItems = partitioned.reusable.map((m) => m.item);
+    providerItems = partitioned.providerRequired.map((item) => ({
+      ...item,
+      batchItemId: batchItemByDocId[item.policyDocumentId],
+    }));
+
+    for (const item of providerItems) {
+      const docRow = docRows.find((d: any) => d.id === item.policyDocumentId);
+      if (!docRow) return jsonError("Provider-required document not found", 404);
+      const { data: fileData, error: downloadErr } = await admin.storage
+        .from("policy-documents")
+        .download(docRow.storage_path);
+      if (downloadErr || !fileData) return jsonError("Failed to download document", 502);
+      const bytes = new Uint8Array(await fileData.arrayBuffer());
+      const digest = await sha256Hex(bytes);
+      if (docRow.content_sha256 !== digest)
+        return jsonError("Document integrity verification failed", 409);
+      bytesByReference[item.policyDocumentId] = bytes;
     }
+  } else {
+    // Legacy direct path: download and integrity-check every document.
+    for (const docRow of docRows) {
+      const { data: fileData, error: downloadErr } = await admin.storage
+        .from("policy-documents")
+        .download(docRow.storage_path);
+      if (downloadErr || !fileData) return jsonError("Failed to download document", 502);
+      const bytes = new Uint8Array(await fileData.arrayBuffer());
+      const digest = await sha256Hex(bytes);
+      if (docRow.content_sha256 !== digest)
+        return jsonError("Document integrity verification failed", 409);
+      bytesByReference[docRow.id] = bytes;
+    }
+    providerItems = policyDocumentIds.map((id) => ({
+      policyDocumentId: id,
+      contentSha256: digestByDocId[id],
+    }));
   }
 
-  const { duplicateDocumentIds: duplicatedDocIds, newDocumentIds: newDocIds } =
-    partitionDocumentDigests(policyDocumentIds, digestByDocId, new Set(existingByDigest.keys()));
-
-  const uploadedDocuments: InsuranceDocumentAnalysisInput["uploadedDocuments"] = newDocIds.map(
-    (id) => ({
-      documentId: id,
-      filename: filenameByDocId[id],
-      mimeType: mimeTypeByDocId[id],
-      fileReference: id,
+  const uploadedDocuments: InsuranceDocumentAnalysisInput["uploadedDocuments"] = providerItems.map(
+    (item) => ({
+      documentId: item.policyDocumentId,
+      filename: filenameByDocId[item.policyDocumentId],
+      mimeType: mimeTypeByDocId[item.policyDocumentId],
+      fileReference: item.policyDocumentId,
     }),
   );
 
-  const allDocumentsAreDuplicates = newDocIds.length === 0;
+  const allDocumentsAreDuplicates = batchIdRaw ? providerItems.length === 0 : false;
 
   const privacyConfig = privacyPreparationConfigFromEnv(Deno.env.get);
   if (batch?.disclosure_version) {
@@ -577,7 +684,8 @@ Deno.serve(async (req) => {
   const prep = new ConfigAndConsentPrivacyPreparation(
     {
       ...privacyConfig,
-      cleanupReadinessCheck: isGemini ? undefined : async () => isCleanupReadinessReady(),
+      cleanupReadinessCheck:
+        isGemini || allDocumentsAreDuplicates ? undefined : async () => isCleanupReadinessReady(),
     },
     consent,
   );
@@ -658,422 +766,481 @@ Deno.serve(async (req) => {
     currentCaseId = session.case_id ?? null;
   }
 
-  if (allDocumentsAreDuplicates) {
-    if (!batchIdRaw) {
-      return jsonError("Cannot process duplicate documents outside a batch", 400);
-    }
-
-    const priorExtractedIds = new Set<string>();
-    for (const id of duplicatedDocIds) {
-      const digest = digestByDocId[id];
-      for (const extractedId of extractedIdsByDigest.get(digest) ?? []) {
-        priorExtractedIds.add(extractedId);
-      }
-    }
-
-    const { data: priorExtractedRows } = await admin
-      .from("extracted_documents")
-      .select(
-        "id, file_digest, session_id, policy_document_id, page_count, classification, parser_id, parser_version, pages_json",
-      )
-      .in("id", Array.from(priorExtractedIds))
-      .eq("household_id", householdId);
-
-    const priorRowById = new Map<string, Record<string, unknown>>();
-    for (const row of priorExtractedRows ?? []) {
-      priorRowById.set(String(row.id), row as Record<string, unknown>);
-    }
-
-    const newPolicyIdByOld = new Map<string, string>();
-    const newExtractedIdByOld = new Map<string, string>();
-    const documentsJson: unknown[] = [];
-    for (const id of duplicatedDocIds) {
-      const digest = digestByDocId[id];
-      const priorRef = existingByDigest.get(digest);
-      if (!priorRef) continue;
-      const priorRow = priorRowById.get(priorRef.id);
-      if (!priorRow) continue;
-      const newExtractedId = crypto.randomUUID();
-      newExtractedIdByOld.set(priorRef.id, newExtractedId);
-      const oldPolicyDocId = String(priorRow.policy_document_id);
-      newPolicyIdByOld.set(oldPolicyDocId, id);
-      documentsJson.push({
-        id: newExtractedId,
-        policy_document_id: id,
-        file_digest: digest,
-        page_count: Number(priorRow.page_count ?? 0),
-        classification: priorRow.classification,
-        parser_id: priorRow.parser_id,
-        parser_version: priorRow.parser_version,
-        pages_json: priorRow.pages_json ?? [],
-      });
-    }
-
-    const requestedOldExtractedIds = new Set(newExtractedIdByOld.keys());
-    const { data: priorCandidates } = await admin
-      .from("asset_candidates")
-      .select(
-        "id, session_id, asset_type, identity_fingerprint, display_label, occupancy, match_classification, decision, review_status, draft_decision, draft_identity_confirmed, draft_existing_asset_id, draft_existing_asset_type, source_document_ids, selected_facts_json, conflicts_json",
-      )
-      .in("session_id", Array.from(sessionIdsForDuplicates))
-      .eq("household_id", householdId);
-
-    const overlappingCandidates = (priorCandidates ?? []).filter((c: any) => {
-      const sources = Array.isArray(c.source_document_ids)
-        ? (c.source_document_ids as string[])
-        : [];
-      return sources.some((sid) => requestedOldExtractedIds.has(String(sid)));
-    });
-
-    const candidatesForReview: {
-      id: string;
-      asset_type: "vehicle" | "property";
-      selected_facts_json: Record<string, unknown>;
-      conflicts_json?: unknown[];
-    }[] = [];
-    const candidatesJson: unknown[] = [];
-    for (const prior of overlappingCandidates) {
-      const priorSourceIds = Array.isArray(prior.source_document_ids)
-        ? (prior.source_document_ids as string[])
-        : [];
-      const newSourceIds = priorSourceIds
-        .map((oldId) => newExtractedIdByOld.get(String(oldId)))
-        .filter((id): id is string => id !== undefined);
-      if (newSourceIds.length === 0) continue;
-
-      const childId = crypto.randomUUID();
-      const childFacts = rewriteDocumentIds(
-        prior.selected_facts_json ?? {},
-        newPolicyIdByOld,
-      ) as Record<string, unknown>;
-      childFacts.sourceDocuments = newSourceIds;
-      childFacts.canonicalFingerprint = prior.identity_fingerprint;
-      const childConflicts = rewriteDocumentIds(
-        prior.conflicts_json ?? [],
-        newPolicyIdByOld,
-      ) as unknown[];
-
-      const childCandidate = {
-        id: childId,
-        parent_candidate_id: String(prior.id),
-        asset_type: prior.asset_type,
-        identity_fingerprint: String(prior.identity_fingerprint),
-        display_label: String(prior.display_label),
-        occupancy: prior.occupancy,
-        match_classification: String(prior.match_classification),
-        decision: "undecided",
-        review_status: "pending",
-        draft_decision: prior.draft_decision,
-        draft_identity_confirmed: prior.draft_identity_confirmed,
-        draft_existing_asset_id: prior.draft_existing_asset_id,
-        draft_existing_asset_type: prior.draft_existing_asset_type,
-        source_document_ids: newSourceIds,
-        selected_facts_json: childFacts,
-        conflicts_json: childConflicts,
-      };
-      candidatesJson.push(childCandidate);
-      candidatesForReview.push({
-        id: childId,
-        asset_type: childCandidate.asset_type as "vehicle" | "property",
-        selected_facts_json: childFacts,
-        conflicts_json: childConflicts,
-      });
-    }
-
-    const reviewSeeds = buildMandateReviewSeeds(candidatesForReview);
-    const reviewsJson = reviewSeeds.map((seed) => ({
-      candidate_id: seed.candidateId,
-      field_path: seed.fieldPath,
-      action: "pending",
-      value_state: seed.valueState,
-      specification_title: seed.specificationTitle,
-      mandate_path: seed.mandatePath,
-      original_extracted_value: seed.originalExtractedValue,
-      document_implied_value: seed.documentImpliedValue,
-      document_implied_mandate_value: seed.documentImpliedMandateValue,
-      source_document_id: seed.sourceDocumentId ?? null,
-      source_page_number: seed.sourcePageNumber ?? null,
-      source_section: seed.sourceSection ?? null,
-      confidence: seed.confidence ?? null,
-      conflict_values_json: seed.conflictValues.map((value: unknown) => {
-        if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-        const sourceDocumentId = (value as Record<string, unknown>).sourceDocumentId;
-        return {
-          ...value,
-          sourceFileName:
-            typeof sourceDocumentId === "string" ? filenameByDocId[sourceDocumentId] : undefined,
-        };
-      }),
-      material_conflict: seed.materialConflict,
-    }));
-
-    const analysisJson = {
-      modelProvider: "duplicate_snapshot",
-      modelId: "duplicate_snapshot",
-      promptVersion: "1.0.0",
-      outputSchemaVersion: "1.0.0",
-      attemptCount: 1,
-      rawResponse: {},
-      validatedOutput: {},
-      warnings: [],
-      providerMetadata: {},
-    };
-
-    const { data: persistResult, error: persistErr } = await admin.rpc(
-      "persist_document_batch_analysis_v1",
-      {
-        p_batch_id: batchIdRaw,
-        p_household_id: householdId,
-        p_session_id: sessionId,
-        p_client_request_id: analysisRunId,
-        p_analysis_run_id: analysisRunId,
-        p_analysis_json: analysisJson,
-        p_documents_json: documentsJson,
-        p_candidates_json: candidatesJson,
-        p_reviews_json: reviewsJson,
-        p_authorization_id: authorization.id,
-        p_consent_id: consent?.id,
-      },
-    );
-    if (persistErr || !persistResult) {
-      await authorizationStore.updateAuthorization(authorization.id, {
-        authorizationResult: "processing_failed",
-      });
-      await admin
-        .from("document_processing_batches")
-        .update({
-          status: "processing_unavailable",
-          retryable: false,
-          next_retry_at: null,
-          error_code: "DOCUMENT_PERSISTENCE_FAILED",
-          completed_at: new Date().toISOString(),
-          worker_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", batchIdRaw);
-      return jsonError("Failed to persist duplicate document snapshot", 500);
-    }
-
-    const customerBatchStatus =
-      candidatesJson.length > 0 ? "ready_for_review" : "additional_information_required";
-    await Promise.all([
-      admin
-        .from("document_processing_batches")
-        .update({
-          status: customerBatchStatus,
-          retryable: false,
-          error_code: null,
-          completed_at: new Date().toISOString(),
-          worker_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", batchIdRaw),
-      admin.from("policy_documents").update({ status: "extracted" }).in("id", policyDocumentIds),
-      admin
-        .from("document_extraction_sessions")
-        .update({ status: "submitted", updated_at: new Date().toISOString() })
-        .eq("id", sessionId),
-    ]);
-
-    await authorizationStore.updateAuthorization(authorization.id, {
-      authorizationResult: "analysis_persisted",
-    });
-
-    return jsonResponse({
-      batch_id: batchIdRaw,
-      session_id: sessionId,
-      duplicate: true,
-      extracted_document_ids: documentsJson.map((d: any) => d.id),
-      candidates: candidatesJson.map((c: any) => ({
-        id: c.id,
-        parent_candidate_id: c.parent_candidate_id,
-        asset_type: c.asset_type,
-        identity_fingerprint: c.identity_fingerprint,
-        display_label: c.display_label,
-        source_document_ids: c.source_document_ids,
-      })),
-      analysis: {
-        analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
-      },
-    });
-  }
-
   const [existingAssets, pendingCandidates] = await Promise.all([
     loadExistingAssets(admin, householdId),
     loadPendingCandidates(admin, householdId, sessionId),
   ]);
 
   const fileLifecycleStore = new SupabaseFileLifecycleStore(admin);
-  let provider: InstanceType<typeof KimiK3Provider> | InstanceType<typeof GeminiFlashLiteProvider>;
+  let provider:
+    | InstanceType<typeof KimiK3Provider>
+    | InstanceType<typeof GeminiFlashLiteProvider>
+    | undefined;
+  let analyzer: ReturnType<typeof createNativeDocumentAnalyzer> | undefined;
 
-  if (isGemini) {
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!geminiApiKey || !configuredModelId) {
-      await authorizationStore.updateAuthorization(authorization.id, {
-        authorizationResult: "authorized_no_transmission",
-      });
-      if (batchIdRaw) {
-        await admin
-          .from("document_processing_batches")
-          .update({
-            status: "processing_unavailable",
-            retryable: false,
-            error_code: "DOCUMENT_MODEL_UNAVAILABLE",
-            completed_at: new Date().toISOString(),
-            worker_lease_expires_at: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", batchIdRaw);
+  if (!allDocumentsAreDuplicates) {
+    if (isGemini) {
+      const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+      if (!geminiApiKey || !configuredModelId) {
+        await authorizationStore.updateAuthorization(authorization.id, {
+          authorizationResult: "authorized_no_transmission",
+        });
+        if (batchIdRaw) {
+          await admin
+            .from("document_processing_batches")
+            .update({
+              status: "processing_unavailable",
+              retryable: false,
+              error_code: "DOCUMENT_MODEL_UNAVAILABLE",
+              completed_at: new Date().toISOString(),
+              worker_lease_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", batchIdRaw);
+        }
+        return jsonError(
+          sanitizeProviderError(
+            new Error("Gemini document analysis service is not configured"),
+          ) as PublicDocumentError,
+          503,
+        );
       }
-      return jsonError(
-        sanitizeProviderError(
-          new Error("Gemini document analysis service is not configured"),
-        ) as PublicDocumentError,
-        503,
-      );
-    }
-    provider = new GeminiFlashLiteProvider({
-      apiKey: geminiApiKey,
-      baseUrl: Deno.env.get("GEMINI_API_BASE_URL") ?? undefined,
-      requestedModel: configuredModelId,
-    });
-  } else {
-    const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
-    if (!kimiApiKey || !configuredModelId || !configuredModelId.toLowerCase().includes("kimi-k3")) {
-      await authorizationStore.updateAuthorization(authorization.id, {
-        authorizationResult: "authorized_no_transmission",
+      provider = new GeminiFlashLiteProvider({
+        apiKey: geminiApiKey,
+        baseUrl: Deno.env.get("GEMINI_API_BASE_URL") ?? undefined,
+        requestedModel: configuredModelId,
       });
-      if (batchIdRaw) {
-        await admin
-          .from("document_processing_batches")
-          .update({
-            status: "processing_unavailable",
-            retryable: false,
-            error_code: "DOCUMENT_MODEL_UNAVAILABLE",
-            completed_at: new Date().toISOString(),
-            worker_lease_expires_at: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", batchIdRaw);
+    } else {
+      const kimiApiKey = Deno.env.get("KIMI_K3_API_KEY");
+      if (
+        !kimiApiKey ||
+        !configuredModelId ||
+        !configuredModelId.toLowerCase().includes("kimi-k3")
+      ) {
+        await authorizationStore.updateAuthorization(authorization.id, {
+          authorizationResult: "authorized_no_transmission",
+        });
+        if (batchIdRaw) {
+          await admin
+            .from("document_processing_batches")
+            .update({
+              status: "processing_unavailable",
+              retryable: false,
+              error_code: "DOCUMENT_MODEL_UNAVAILABLE",
+              completed_at: new Date().toISOString(),
+              worker_lease_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", batchIdRaw);
+        }
+        return jsonError(
+          sanitizeProviderError(
+            new Error("Document analysis service is not configured"),
+          ) as PublicDocumentError,
+          503,
+        );
       }
-      return jsonError(
-        sanitizeProviderError(
-          new Error("Document analysis service is not configured"),
-        ) as PublicDocumentError,
-        503,
-      );
+      provider = new KimiK3Provider({
+        apiKey: kimiApiKey,
+        baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
+        requestedModel: configuredModelId,
+      });
     }
-    provider = new KimiK3Provider({
-      apiKey: kimiApiKey,
-      baseUrl: Deno.env.get("KIMI_API_BASE_URL") ?? undefined,
-      requestedModel: configuredModelId,
+    analyzer = createNativeDocumentAnalyzer({
+      provider,
+      bytesLoader: new MemoryFileBytesLoader(bytesByReference),
+      requireNativeInput: Deno.env.get("DOCUMENT_ANALYSIS_REQUIRE_NATIVE_INPUT") !== "false",
+      authorization,
+      fileLifecycleStore,
+      analysisRequestId: analysisRunId,
+      preTransmissionCheck: async () => {
+        if (batchIdRaw) {
+          const { data: asserted, error: assertErr } = await admin.rpc(
+            "assert_document_batch_generation_v1",
+            {
+              p_batch_id: batchIdRaw,
+              p_household_id: householdId,
+              p_session_id: sessionId,
+              p_processing_generation: processingGeneration,
+            },
+          );
+          if (assertErr || asserted !== true) {
+            const stale = new Error(
+              "DOCUMENT_BATCH_GENERATION_MISMATCH: batch is not current or not in an actionable state",
+            );
+            (stale as any).code = "DOCUMENT_BATCH_GENERATION_MISMATCH";
+            throw stale;
+          }
+        }
+        const [{ data: liveSetting }, { data: liveConsent }, { data: liveAuthorization }] =
+          await Promise.all([
+            admin
+              .from("household_document_processing_settings")
+              .select("dangerous_mode_enabled")
+              .eq("household_id", householdId)
+              .maybeSingle(),
+            admin
+              .from("document_processing_consent")
+              .select(
+                "id, status, withdrawn_at, privacy_notice_version, processor_contract_version, foreign_processing_acknowledged, automated_processing_acknowledged, raw_processing_approved",
+              )
+              .eq("id", consent?.id ?? "00000000-0000-0000-0000-000000000000")
+              .eq("household_id", householdId)
+              .maybeSingle(),
+            admin
+              .from("document_processing_authorizations")
+              .select("id, authorization_result, consent_id, household_id")
+              .eq("id", authorization.id)
+              .eq("household_id", householdId)
+              .maybeSingle(),
+          ]);
+        const consentIsCurrent =
+          liveConsent !== null &&
+          ["active", "superseded"].includes(String(liveConsent?.status ?? "")) &&
+          !liveConsent.withdrawn_at &&
+          liveConsent.privacy_notice_version === consent?.privacyNoticeVersion &&
+          liveConsent.processor_contract_version === consent?.processorContractVersion &&
+          liveConsent.foreign_processing_acknowledged === true &&
+          liveConsent.automated_processing_acknowledged === true &&
+          liveConsent.raw_processing_approved === true;
+        const authorizationIsCurrent =
+          liveAuthorization?.consent_id === consent?.id &&
+          ["authorized", "processing_started"].includes(
+            String(liveAuthorization?.authorization_result ?? ""),
+          );
+        if (
+          liveSetting?.dangerous_mode_enabled !== true ||
+          !consentIsCurrent ||
+          !authorizationIsCurrent
+        ) {
+          throw new Error("Document processing authorization is no longer valid");
+        }
+      },
     });
   }
-  const analyzer = createNativeDocumentAnalyzer({
-    provider,
-    bytesLoader: new MemoryFileBytesLoader(bytesByReference),
-    requireNativeInput: Deno.env.get("DOCUMENT_ANALYSIS_REQUIRE_NATIVE_INPUT") !== "false",
-    authorization,
-    fileLifecycleStore,
-    analysisRequestId: analysisRunId,
-    preTransmissionCheck: async () => {
-      const [{ data: liveSetting }, { data: liveConsent }, { data: liveAuthorization }] =
-        await Promise.all([
-          admin
-            .from("household_document_processing_settings")
-            .select("dangerous_mode_enabled")
-            .eq("household_id", householdId)
-            .maybeSingle(),
-          admin
-            .from("document_processing_consent")
-            .select(
-              "id, status, withdrawn_at, privacy_notice_version, processor_contract_version, foreign_processing_acknowledged, automated_processing_acknowledged, raw_processing_approved",
-            )
-            .eq("id", consent?.id ?? "00000000-0000-0000-0000-000000000000")
-            .eq("household_id", householdId)
-            .maybeSingle(),
-          admin
-            .from("document_processing_authorizations")
-            .select("id, authorization_result, consent_id, household_id")
-            .eq("id", authorization.id)
-            .eq("household_id", householdId)
-            .maybeSingle(),
-        ]);
-      const consentIsCurrent =
-        liveConsent !== null &&
-        ["active", "superseded"].includes(String(liveConsent?.status ?? "")) &&
-        !liveConsent.withdrawn_at &&
-        liveConsent.privacy_notice_version === consent?.privacyNoticeVersion &&
-        liveConsent.processor_contract_version === consent?.processorContractVersion &&
-        liveConsent.foreign_processing_acknowledged === true &&
-        liveConsent.automated_processing_acknowledged === true &&
-        liveConsent.raw_processing_approved === true;
-      const authorizationIsCurrent =
-        liveAuthorization?.consent_id === consent?.id &&
-        ["authorized", "processing_started"].includes(
-          String(liveAuthorization?.authorization_result ?? ""),
-        );
-      if (
-        liveSetting?.dangerous_mode_enabled !== true ||
-        !consentIsCurrent ||
-        !authorizationIsCurrent
-      ) {
-        throw new Error("Document processing authorization is no longer valid");
-      }
-    },
-  });
 
   const work = async (): Promise<Response> => {
     let analysis: any;
-    try {
+    let providerAnalysis: any;
+
+    if (batchIdRaw) {
+      const { data: asserted, error: assertErr } = await admin.rpc(
+        "assert_document_batch_generation_v1",
+        {
+          p_batch_id: batchIdRaw,
+          p_household_id: householdId,
+          p_session_id: sessionId,
+          p_processing_generation: processingGeneration,
+        },
+      );
+      if (assertErr || asserted !== true) {
+        return jsonError("Document batch generation is no longer current", 409);
+      }
+    }
+
+    if (uploadedDocuments.length > 0) {
       if (batchIdRaw) {
-        await admin
+        const { data: comparingRows, error: comparingUpdateErr } = await admin
           .from("document_processing_batches")
           .update({ status: "comparing_policies", updated_at: new Date().toISOString() })
-          .eq("id", batchIdRaw);
+          .eq("id", batchIdRaw)
+          .eq("processing_generation", processingGeneration)
+          .select("id");
+        if (comparingUpdateErr || !comparingRows || comparingRows.length === 0) {
+          console.error("EXTRACT-BATCH-GENERATION-STALE", comparingUpdateErr);
+          return jsonResponse({ batch_id: batchIdRaw, status: "superseded" }, 202);
+        }
       }
-      analysis = (await analyzer.analyze({
-        householdId,
-        uploadedDocuments,
-        existingAssets,
-        pendingCandidates,
-        priorDocumentSummaries: [],
-        jurisdiction: "AB",
-      })) as any;
-    } catch (err) {
-      console.error("EXTRACT-ANALYZE-ERROR", err);
-      const sanitized = sanitizeProviderError(err) as PublicDocumentError;
-      const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";
-      await authorizationStore.updateAuthorization(authorization.id, {
-        authorizationResult: isUnsupported ? "blocked_no_transmission" : "processing_failed",
-      });
+      try {
+        providerAnalysis = await analyzer!.analyze({
+          householdId,
+          uploadedDocuments,
+          existingAssets,
+          pendingCandidates,
+          priorDocumentSummaries: [],
+          jurisdiction: "AB",
+        });
+      } catch (err) {
+        console.error("EXTRACT-ANALYZE-ERROR", err);
+        const sanitized = sanitizeProviderError(err) as PublicDocumentError;
+        if (
+          (err as { code?: string })?.code === "DOCUMENT_BATCH_GENERATION_MISMATCH" &&
+          batchIdRaw
+        ) {
+          await authorizationStore.updateAuthorization(authorization.id, {
+            authorizationResult: "authorized_no_transmission",
+          });
+          return jsonResponse({ batch_id: batchIdRaw, status: "superseded" }, 202);
+        }
+        const isUnsupported = sanitized.code === "DOCUMENT_FILE_UNSUPPORTED";
+        await authorizationStore.updateAuthorization(authorization.id, {
+          authorizationResult: isUnsupported ? "blocked_no_transmission" : "processing_failed",
+        });
+        if (batchIdRaw) {
+          const { count: transmissionClaims } = await admin
+            .from("document_analysis_provider_files")
+            .select("id", { count: "exact", head: true })
+            .eq("analysis_request_id", analysisRunId);
+          const retryable = Number(transmissionClaims ?? 0) === 0;
+          await admin
+            .from("document_processing_batches")
+            .update({
+              status: "processing_unavailable",
+              retryable,
+              next_retry_at: retryable ? new Date(Date.now() + 5 * 60 * 1000).toISOString() : null,
+              error_code: sanitized.code,
+              completed_at: new Date().toISOString(),
+              worker_lease_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", batchIdRaw)
+            .eq("processing_generation", processingGeneration);
+        }
+        return jsonError(sanitized, 502);
+      }
       if (batchIdRaw) {
-        const { count: transmissionClaims } = await admin
-          .from("document_analysis_provider_files")
-          .select("id", { count: "exact", head: true })
-          .eq("analysis_request_id", analysisRunId);
-        const retryable = Number(transmissionClaims ?? 0) === 0;
-        await admin
+        const { data: validatingRows, error: validatingUpdateErr } = await admin
           .from("document_processing_batches")
-          .update({
-            status: "processing_unavailable",
-            retryable,
-            next_retry_at: retryable ? new Date(Date.now() + 5 * 60 * 1000).toISOString() : null,
-            error_code: sanitized.code,
-            completed_at: new Date().toISOString(),
-            worker_lease_expires_at: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", batchIdRaw);
+          .update({ status: "validating_extracted_details", updated_at: new Date().toISOString() })
+          .eq("id", batchIdRaw)
+          .eq("processing_generation", processingGeneration)
+          .select("id");
+        if (validatingUpdateErr || !validatingRows || validatingRows.length === 0) {
+          console.error("EXTRACT-BATCH-GENERATION-STALE-VALIDATING", validatingUpdateErr);
+          return jsonResponse({ batch_id: batchIdRaw, status: "superseded" }, 202);
+        }
       }
-      return jsonError(sanitized, 502);
+    } else if (!batchIdRaw) {
+      return jsonError("No documents to process", 400);
     }
 
     if (batchIdRaw) {
-      await admin
-        .from("document_processing_batches")
-        .update({ status: "validating_extracted_details", updated_at: new Date().toISOString() })
-        .eq("id", batchIdRaw);
+      const allPersistedNormalizations: any[] = [];
+      const normalizationIdByDocId = new Map<string, string>();
+      const compatibleNormalizationByDocId = new Map<
+        string,
+        {
+          normalizationId: string;
+          contentDigest: string;
+          normalizationSchemaVersion: string;
+          analyzerVersion: string;
+          status: string;
+        }
+      >();
+
+      for (const item of reuseItems) {
+        if (!item.batchItemId || !item.contentSha256 || !item.policyDocumentId) {
+          console.error("EXTRACT-REUSE-VALIDATION-ERROR", item);
+          return jsonError(
+            "Batch item, content digest and policy document are required for normalization reuse",
+            500,
+          );
+        }
+        const norm = selectCompatibleNormalization(
+          item,
+          completedNormalizations,
+          SCHEMA_VERSION,
+          ANALYZER_VERSION,
+        );
+        if (!norm) continue;
+        compatibleNormalizationByDocId.set(item.policyDocumentId, {
+          normalizationId: String(norm.id),
+          contentDigest: String(norm.content_sha256),
+          normalizationSchemaVersion: String(norm.normalization_schema_version),
+          analyzerVersion: String(norm.analyzer_version),
+          status: String(norm.status),
+        });
+        const { data: persistResult, error: persistErr } = await admin.rpc(
+          "persist_document_normalization_for_batch_v1",
+          {
+            p_batch_id: batchIdRaw,
+            p_batch_item_id: item.batchItemId,
+            p_household_id: householdId,
+            p_policy_document_id: item.policyDocumentId,
+            p_content_sha256: norm.content_sha256,
+            p_normalization_schema_version: SCHEMA_VERSION,
+            p_analyzer_version: ANALYZER_VERSION,
+            p_model_provider: norm.model_provider ?? "normalization_projection",
+            p_model_id: norm.model_id ?? "reused",
+            p_prompt_version: norm.prompt_version ?? "1.0.0",
+            p_classification: norm.classification ?? "unknown",
+            p_normalized_output_json: norm.normalized_output_json,
+            p_normalized_entities_json: norm.normalized_entities_json,
+            p_conflicts_json: norm.conflicts_json,
+            p_evidence_json: norm.evidence_json,
+            p_processing_generation: processingGeneration,
+          },
+        );
+        if (persistErr) {
+          console.error("EXTRACT-REUSE-NORMALIZE-ERROR", persistErr);
+          await authorizationStore.updateAuthorization(authorization.id, {
+            authorizationResult: "processing_failed",
+          });
+          await admin
+            .from("document_processing_batches")
+            .update({
+              status: "processing_unavailable",
+              retryable: false,
+              error_code: "DOCUMENT_PERSISTENCE_FAILED",
+              completed_at: new Date().toISOString(),
+              worker_lease_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", batchIdRaw)
+            .eq("processing_generation", processingGeneration);
+          return jsonError("Failed to persist reused normalization", 500);
+        }
+        if (persistResult?.candidate_derivation_allowed === false) {
+          return jsonResponse({ batch_id: batchIdRaw, status: "superseded" }, 202);
+        }
+        normalizationIdByDocId.set(item.policyDocumentId, persistResult.normalization_id);
+        allPersistedNormalizations.push({
+          ...norm,
+          id: persistResult.normalization_id,
+          policy_document_id: item.policyDocumentId,
+          policyDocumentId: item.policyDocumentId,
+          batchItemId: item.batchItemId,
+        });
+      }
+
+      if (providerAnalysis) {
+        for (const item of providerItems) {
+          const payload = buildNormalizationPersistencePayload(providerAnalysis, item, {
+            modelProvider: providerAnalysis.modelProvider ?? "unknown",
+            modelId: providerAnalysis.modelId ?? "unknown",
+            promptVersion: providerAnalysis.promptVersion ?? "1.0.0",
+            schemaVersion: SCHEMA_VERSION,
+            analyzerVersion: ANALYZER_VERSION,
+          });
+          const { data: persistResult, error: persistErr } = await admin.rpc(
+            "persist_document_normalization_for_batch_v1",
+            {
+              p_batch_id: batchIdRaw,
+              p_batch_item_id: item.batchItemId,
+              p_household_id: householdId,
+              p_policy_document_id: item.policyDocumentId,
+              p_content_sha256: payload.contentSha256,
+              p_normalization_schema_version: payload.normalizationSchemaVersion,
+              p_analyzer_version: payload.analyzerVersion,
+              p_model_provider: payload.modelProvider,
+              p_model_id: payload.modelId,
+              p_prompt_version: payload.promptVersion,
+              p_classification: payload.classification,
+              p_normalized_output_json: payload.normalizedOutputJson,
+              p_normalized_entities_json: payload.normalizedEntitiesJson,
+              p_conflicts_json: payload.conflictsJson,
+              p_evidence_json: payload.evidenceJson,
+              p_processing_generation: processingGeneration,
+            },
+          );
+          if (persistErr) {
+            console.error("EXTRACT-NEW-NORMALIZE-ERROR", persistErr);
+            await authorizationStore.updateAuthorization(authorization.id, {
+              authorizationResult: "processing_failed",
+            });
+            await admin
+              .from("document_processing_batches")
+              .update({
+                status: "processing_unavailable",
+                retryable: false,
+                error_code: "DOCUMENT_PERSISTENCE_FAILED",
+                completed_at: new Date().toISOString(),
+                worker_lease_expires_at: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", batchIdRaw)
+              .eq("processing_generation", processingGeneration);
+            return jsonError("Failed to persist document normalization", 500);
+          }
+          if (persistResult?.candidate_derivation_allowed === false) {
+            return jsonResponse({ batch_id: batchIdRaw, status: "superseded" }, 202);
+          }
+          normalizationIdByDocId.set(item.policyDocumentId, persistResult.normalization_id);
+          allPersistedNormalizations.push({
+            ...payload,
+            id: persistResult.normalization_id,
+            policy_document_id: item.policyDocumentId,
+            policyDocumentId: item.policyDocumentId,
+            batchItemId: item.batchItemId,
+          });
+        }
+      }
+
+      let projectedAnalysis: any = projectNormalizationForCandidateDerivation(
+        allPersistedNormalizations.map((n) => ({
+          ...n,
+          policyDocumentId: n.policy_document_id,
+          batchItemId: n.batchItemId,
+        })),
+      );
+
+      const existingPolicies = await loadExistingPolicies(admin, householdId);
+      const skipCandidateEntityTemporaryIds = new Set<string>();
+      const overlapEntityKeys = new Map<string, string>();
+      for (const entity of projectedAnalysis.detectedEntities ?? []) {
+        const documentType = projectedAnalysis.documents.find((d: any) =>
+          entity.evidence?.some((ref: any) => ref.documentId === d.documentId),
+        )?.classification;
+        const overlap = classifyDocumentAssetOverlap(entity, {
+          existingAssets,
+          existingPolicies,
+          pendingCandidates,
+          priorNormalizations: completedNormalizations,
+          documentType,
+          digestByDocId,
+          compatibleNormalizationByDocId,
+        });
+        if (!overlap) continue;
+
+        const firstEvidence = entity.evidence?.[0];
+        if (firstEvidence?.documentId) {
+          const normalizationId = normalizationIdByDocId.get(firstEvidence.documentId);
+          if (normalizationId && batchIdRaw) {
+            const overlapArgs = recordDocumentAssetOverlapArgs(overlap, {
+              batchId: batchIdRaw,
+              normalizationId,
+            });
+            const { error: overlapErr } = await admin.rpc(
+              "record_document_asset_overlap_v1",
+              overlapArgs,
+            );
+            if (overlapErr) {
+              console.error("EXTRACT-OVERLAP-PERSISTENCE-ERROR", overlapErr);
+              return jsonError("Failed to record document asset overlap", 500);
+            }
+          }
+        }
+
+        if (overlap.skipCandidateDerivation) {
+          skipCandidateEntityTemporaryIds.add(entity.temporaryId);
+          continue;
+        }
+
+        const resolution = entityResolutionFromOverlap(overlap);
+        if (resolution) {
+          entity.resolution = resolution;
+          overlapEntityKeys.set(entity.temporaryId, overlap.normalizedEntityKeyForPersistence);
+        }
+      }
+
+      if (skipCandidateEntityTemporaryIds.size > 0) {
+        projectedAnalysis = {
+          ...projectedAnalysis,
+          detectedEntities: projectedAnalysis.detectedEntities.filter(
+            (e: any) => !skipCandidateEntityTemporaryIds.has(e.temporaryId),
+          ),
+        };
+      }
+
+      if (providerAnalysis) {
+        projectedAnalysis = combineAnalysisWithProjectedNormalizations(
+          providerAnalysis,
+          projectedAnalysis,
+        );
+      }
+      analysis = projectedAnalysis;
+    } else {
+      analysis = providerAnalysis;
     }
 
     // Build the analysis-run payload. A single RPC call will persist the run,
@@ -1427,6 +1594,7 @@ Deno.serve(async (req) => {
           ...persistenceArgs,
           p_batch_id: batchIdRaw,
           p_reviews_json: reviewsJson,
+          p_processing_generation: processingGeneration,
         })
       : await admin.rpc("persist_document_analysis_v1", persistenceArgs);
     if (persistErr || !persistResult) {
@@ -1454,10 +1622,13 @@ Deno.serve(async (req) => {
       authorizationResult: "analysis_persisted",
     });
 
-    const customerBatchStatus =
-      candidatesJson.length > 0 ? "ready_for_review" : "additional_information_required";
+    const customerBatchStatus = allDocumentsAreDuplicates
+      ? "ready_for_review"
+      : candidatesJson.length > 0
+        ? "ready_for_review"
+        : "additional_information_required";
     if (batchIdRaw) {
-      await Promise.all([
+      const [batchUpdate, policyDocsUpdate, sessionUpdate] = await Promise.all([
         admin
           .from("document_processing_batches")
           .update({
@@ -1468,13 +1639,39 @@ Deno.serve(async (req) => {
             worker_lease_expires_at: null,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", batchIdRaw),
-        admin.from("policy_documents").update({ status: "extracted" }).in("id", policyDocumentIds),
+          .eq("id", batchIdRaw)
+          .eq("processing_generation", processingGeneration)
+          .select("id"),
+        admin
+          .from("policy_documents")
+          .update({ status: "extracted" })
+          .in("id", policyDocumentIds)
+          .select("id"),
         admin
           .from("document_extraction_sessions")
           .update({ status: "submitted", updated_at: new Date().toISOString() })
-          .eq("id", sessionId),
+          .eq("id", sessionId)
+          .eq("household_id", householdId)
+          .select("id"),
       ]);
+      if (
+        batchUpdate.error ||
+        !batchUpdate.data ||
+        batchUpdate.data.length === 0 ||
+        policyDocsUpdate.error ||
+        !policyDocsUpdate.data ||
+        policyDocsUpdate.data.length !== policyDocumentIds.length ||
+        sessionUpdate.error ||
+        !sessionUpdate.data ||
+        sessionUpdate.data.length === 0
+      ) {
+        console.error("EXTRACT-FINAL-PERSISTENCE-ERROR", {
+          batchUpdate,
+          policyDocsUpdate,
+          sessionUpdate,
+        });
+        return jsonError("Failed to finalize extraction status", 500);
+      }
     }
 
     return jsonResponse({

@@ -22,6 +22,27 @@ function jsonError(message: string, status: number, code = "DOCUMENT_PROCESSING_
   });
 }
 
+function parsePolicyDocumentIds(
+  body: Record<string, unknown>,
+  field = "new_policy_document_ids",
+): { kind: "valid"; value: string[] } | { kind: "invalid"; reason: string } {
+  const raw = body[field];
+  if (raw === undefined || raw === null) {
+    return { kind: "valid", value: [] };
+  }
+  if (!Array.isArray(raw)) {
+    return { kind: "invalid", reason: `${field} must be an array` };
+  }
+  const result: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string" || !isUuid(item)) {
+      return { kind: "invalid", reason: `${field} contains an invalid or non-UUID value` };
+    }
+    result.push(item);
+  }
+  return { kind: "valid", value: result };
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -277,11 +298,11 @@ Deno.serve(async (req) => {
   }
 
   if (action === "plan") {
-    const newDocIds = Array.isArray(body.new_policy_document_ids)
-      ? body.new_policy_document_ids
-          .filter((id): id is string => typeof id === "string" && isUuid(id))
-          .map((id) => String(id))
-      : [];
+    const newDocIdsParse = parsePolicyDocumentIds(body, "new_policy_document_ids");
+    if (newDocIdsParse.kind === "invalid") {
+      return jsonError(newDocIdsParse.reason, 400);
+    }
+    const newDocIds = newDocIdsParse.value;
     const hasCaseId = Object.prototype.hasOwnProperty.call(body, "case_id");
     const caseParse = parseCaseId(body.case_id, hasCaseId);
     if (caseParse.kind === "invalid") return jsonError(caseParse.reason ?? "Invalid case_id", 400);
@@ -367,14 +388,129 @@ Deno.serve(async (req) => {
     return jsonResponse(publicBatch(batch as Record<string, unknown>), 201);
   }
 
+  if (action === "create-from-staged") {
+    const hasCaseId = Object.prototype.hasOwnProperty.call(body, "case_id");
+    const caseParse = parseCaseId(body.case_id, hasCaseId);
+    if (caseParse.kind === "invalid") return jsonError(caseParse.reason ?? "Invalid case_id", 400);
+
+    const clientRequestId = String(body.client_request_id ?? "").trim();
+    if (clientRequestId.length === 0 || clientRequestId.length > 240) {
+      return jsonError("client_request_id is required", 400);
+    }
+
+    const newDocIdsParse = parsePolicyDocumentIds(body, "new_policy_document_ids");
+    if (newDocIdsParse.kind === "invalid") {
+      return jsonError(newDocIdsParse.reason, 400);
+    }
+    const newPolicyDocumentIds = newDocIdsParse.value;
+    if (newPolicyDocumentIds.length === 0) {
+      return jsonError("new_policy_document_ids is required", 400);
+    }
+
+    const { data: createResult, error: createError } = await admin.rpc(
+      "create_document_batch_from_staged_v1",
+      {
+        p_household_id: householdId,
+        p_policy_document_ids: newPolicyDocumentIds,
+        p_client_request_id: clientRequestId,
+        p_case_id: caseParse.kind === "valid" ? caseParse.value : null,
+        p_actor_id: user.id,
+      },
+    );
+
+    if (createError) {
+      const message = createError.message ?? "Failed to create batch from staged documents";
+      if (/CONTINUATION_PAYLOAD_MISMATCH/.test(message)) {
+        return jsonError(message, 409, "CONTINUATION_PAYLOAD_MISMATCH");
+      }
+      if (/FOREIGN|HOUSEHOLD|MEMBER|AUTHENTICATED/.test(message)) return jsonError(message, 403);
+      if (
+        /NULL_POLICY_DOCUMENT_ID|DUPLICATE_POLICY_DOCUMENT_ID|MISSING_OR_FOREIGN|NOT_STAGED/.test(
+          message,
+        )
+      ) {
+        return jsonError(message, 400);
+      }
+      return jsonError(message, 400);
+    }
+
+    const createData = createResult as { batch?: unknown } | null;
+    const batch = createData?.batch;
+    if (!batch || typeof batch !== "object") {
+      return jsonError("Failed to create batch from staged documents", 500);
+    }
+    const batchRecord = batch as Record<string, unknown>;
+    const batchId = String(batchRecord.id);
+
+    const { data: items } = await admin
+      .from("document_processing_batch_items")
+      .select("policy_document_id")
+      .eq("batch_id", batchId);
+    const documentIds = Array.from(
+      new Set((items ?? []).map((item: { policy_document_id: string }) => item.policy_document_id)),
+    );
+
+    const batchCaseId = await ensureBatchCase(admin, batchRecord);
+
+    const processingRoute = documentProcessingRoute(
+      batchRecord.mode_snapshot === "dangerous" ? "dangerous" : "safe",
+    );
+
+    if (!processingRoute.dispatchExternalProcessing) {
+      await Promise.all([
+        admin
+          .from("document_processing_batches")
+          .update({
+            status: "manual_review",
+            case_id: batchCaseId,
+            manual_case_id: batchCaseId,
+            retryable: false,
+            submitted_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", batchId),
+        admin.from("policy_documents").update({ status: "in_review" }).in("id", documentIds),
+      ]);
+      const { data: updated } = await admin
+        .from("document_processing_batches")
+        .select("*")
+        .eq("id", batchId)
+        .single();
+      return jsonResponse(publicBatch(updated ?? batchRecord), 201);
+    }
+
+    const runtime = (
+      globalThis as unknown as { EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void } }
+    ).EdgeRuntime;
+    if (!runtime?.waitUntil) {
+      await admin
+        .from("document_processing_batches")
+        .update({
+          status: "processing_unavailable",
+          retryable: true,
+          error_code: "WORKER_UNAVAILABLE",
+        })
+        .eq("id", batchId);
+      return jsonError(
+        "Document processing is temporarily unavailable",
+        503,
+        "DOCUMENT_ANALYSIS_UNAVAILABLE",
+      );
+    }
+    const work = dispatchExtraction(admin, authHeader, householdId, batchId);
+    runtime.waitUntil(work);
+    return jsonResponse(publicBatch(batchRecord), 202);
+  }
+
   if (action === "supersede" || action === "queue-successor") {
     const batchId = String(body.batch_id ?? "");
     if (!isUuid(batchId)) return jsonError("Invalid batch_id", 400);
-    const newDocIds = Array.isArray(body.new_policy_document_ids)
-      ? body.new_policy_document_ids
-          .filter((id): id is string => typeof id === "string" && isUuid(id))
-          .map((id) => String(id))
-      : [];
+    const newDocIdsParse = parsePolicyDocumentIds(body, "new_policy_document_ids");
+    if (newDocIdsParse.kind === "invalid") {
+      return jsonError(newDocIdsParse.reason, 400);
+    }
+    const newDocIds = newDocIdsParse.value;
     const continuationRequestId = String(body.continuation_request_id ?? crypto.randomUUID());
 
     let expectedGeneration: number | undefined;

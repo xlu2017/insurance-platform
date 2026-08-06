@@ -329,6 +329,63 @@ describe("NativeDocumentAnalyzer", () => {
     expect(provider.uploadCalls).toBe(4);
   });
 
+  it("aborts with zero provider transmissions when the batch generation check fails", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["application/pdf"] = {
+      mimeType: "application/pdf",
+      mode: "provider_extracted_text",
+      supported: true,
+    };
+    const analyzer = await authorizedAnalyzer(provider, {
+      preTransmissionCheck: async () => {
+        throw new Error("DOCUMENT_BATCH_GENERATION_MISMATCH: stale generation");
+      },
+    });
+
+    await expect(analyzer.analyze(baseInput("application/pdf"))).rejects.toThrow(
+      /DOCUMENT_BATCH_GENERATION_MISMATCH/,
+    );
+    expect(provider.uploadCalls).toBe(0);
+    expect(provider.analyzeCalls).toBe(0);
+  });
+
+  it("stops further provider transmissions when the generation check fails mid-batch", async () => {
+    const provider = new FakeNativeProvider();
+    provider.modes["application/pdf"] = {
+      mimeType: "application/pdf",
+      mode: "provider_extracted_text",
+      supported: true,
+    };
+    let checks = 0;
+    const analyzer = await authorizedAnalyzer(provider, {
+      preTransmissionCheck: async () => {
+        checks += 1;
+        if (checks === 3) {
+          throw new Error("DOCUMENT_BATCH_GENERATION_MISMATCH: generation changed");
+        }
+      },
+    });
+    const input = baseInput("application/pdf");
+    input.uploadedDocuments = [
+      {
+        documentId: "doc-a",
+        filename: "policy-a.pdf",
+        mimeType: "application/pdf",
+        fileReference: "doc-a",
+      },
+      {
+        documentId: "doc-b",
+        filename: "policy-b.pdf",
+        mimeType: "application/pdf",
+        fileReference: "doc-b",
+      },
+    ];
+
+    await expect(analyzer.analyze(input)).rejects.toThrow(/DOCUMENT_BATCH_GENERATION_MISMATCH/);
+    expect(provider.uploadCalls).toBe(1);
+    expect(provider.analyzeCalls).toBe(0);
+  });
+
   it("verifies temporary file deletion is attempted and recorded", async () => {
     const provider = new FakeNativeProvider();
     provider.deletionResult = { deleted: true, attempts: 1, statusCode: 200 };

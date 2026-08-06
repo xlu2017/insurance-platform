@@ -173,6 +173,27 @@ export async function createDocumentBatch(input: {
   return data;
 }
 
+export async function createDocumentBatchFromStaged(input: {
+  householdId: string;
+  caseId?: string;
+  clientRequestId: string;
+  policyDocumentIds: string[];
+}): Promise<DocumentBatchSummary> {
+  const { data, error } = await invokeEdgeFunction<DocumentBatchSummary>(
+    "document-processing-batch",
+    {
+      action: "create-from-staged",
+      household_id: input.householdId,
+      case_id: input.caseId,
+      client_request_id: input.clientRequestId,
+      new_policy_document_ids: input.policyDocumentIds,
+    },
+  );
+  if (error) throw new Error(error.message);
+  if (!data?.id) throw new Error("Failed to create document batch from staged");
+  return data;
+}
+
 export async function submitDocumentBatch(
   householdId: string,
   batchId: string,
@@ -305,6 +326,7 @@ export async function planDocumentUpload(input: {
 export async function supersedeDocumentBatch(input: {
   householdId: string;
   activeBatchId: string;
+  activeBatchGeneration: number;
   continuationRequestId: string;
   newPolicyDocumentIds?: string[];
 }): Promise<{ new_batch_id: string; new_session_id: string; superseded_batch_id: string }> {
@@ -316,6 +338,7 @@ export async function supersedeDocumentBatch(input: {
     action: "supersede",
     household_id: input.householdId,
     batch_id: input.activeBatchId,
+    expected_processing_generation: input.activeBatchGeneration,
     continuation_request_id: input.continuationRequestId,
     new_policy_document_ids: input.newPolicyDocumentIds ?? [],
   });
@@ -327,6 +350,7 @@ export async function supersedeDocumentBatch(input: {
 export async function queueSuccessorDocumentBatch(input: {
   householdId: string;
   predecessorBatchId: string;
+  activeBatchGeneration: number;
   continuationRequestId: string;
   newPolicyDocumentIds?: string[];
 }): Promise<{ new_batch_id: string; new_session_id: string; predecessor_batch_id: string }> {
@@ -338,6 +362,7 @@ export async function queueSuccessorDocumentBatch(input: {
     action: "queue-successor",
     household_id: input.householdId,
     batch_id: input.predecessorBatchId,
+    expected_processing_generation: input.activeBatchGeneration,
     continuation_request_id: input.continuationRequestId,
     new_policy_document_ids: input.newPolicyDocumentIds ?? [],
   });

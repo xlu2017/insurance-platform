@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 737289abaa3947232975dd7abe16e2f647695bc43412d48d5fdc4c8ef44ff80d
+// source-hash: 158ac19365be39eb7923c359fad4aefd6bb421d57fe596f3b3f12410c93d6d29
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -7744,6 +7744,17 @@ var terminalStatuses = [
   "processing_unavailable",
   "superseded"
 ];
+var activeStatuses = [
+  "reading_policy_documents",
+  "comparing_policies",
+  "validating_extracted_details"
+];
+var waitingStatuses = ["queued", "waiting_for_predecessor"];
+var reviewableStatuses = [
+  "ready_for_review",
+  "additional_information_required",
+  "manual_review"
+];
 function resolveLatestActionStatuses(action) {
   if (action === "latest" || action === "latest-for-case" || action === "latest-resumable" || action === "latest-resumable-for-case") {
     return resumableStatuses;
@@ -13205,6 +13216,924 @@ function selectCandidateForPersistence(input) {
     draftPayload
   };
 }
+
+// src/normalization-reuse.ts
+function selectCompatibleNormalization(item, normalizations, schemaVersion, analyzerVersion) {
+  return normalizations.find(
+    (n) => n.content_sha256 === item.contentSha256 && n.normalization_schema_version === schemaVersion && n.analyzer_version === analyzerVersion && n.status === "complete"
+  );
+}
+function partitionDocumentsByNormalization(items, normalizations, schemaVersion, analyzerVersion) {
+  const reusable = [];
+  const providerRequired = [];
+  for (const item of items) {
+    const match = selectCompatibleNormalization(
+      item,
+      normalizations,
+      schemaVersion,
+      analyzerVersion
+    );
+    if (match) {
+      reusable.push({ item, normalization: match });
+    } else {
+      providerRequired.push(item);
+    }
+  }
+  return { reusable, providerRequired };
+}
+
+// src/normalization-projection.ts
+var DEFAULT_NORMALIZATION_SCHEMA_VERSION = "1.0.0";
+var DEFAULT_ANALYZER_VERSION = "default-v1";
+function documentEvidenceForEntity(entity, policyDocumentId) {
+  const out = [];
+  for (const ref of entity.evidence ?? []) {
+    if (ref.documentId === policyDocumentId) {
+      out.push(ref);
+    }
+  }
+  for (const coverage of Object.values(entity.currentCoverage ?? {})) {
+    if (!coverage || typeof coverage !== "object") continue;
+    const coverageRecord = coverage;
+    const evidence = coverageRecord.evidence;
+    if (Array.isArray(evidence)) {
+      for (const ref of evidence) {
+        if (ref && ref.documentId === policyDocumentId) {
+          out.push(ref);
+        }
+      }
+    }
+  }
+  return out;
+}
+function perDocumentEntities(analysis, policyDocumentId) {
+  return analysis.detectedEntities.filter(
+    (entity) => entity.evidence.some((ref) => ref.documentId === policyDocumentId)
+  );
+}
+function perDocumentConflicts(analysis, entityTemporaryIds) {
+  return analysis.unresolvedConflicts.filter(
+    (conflict) => entityTemporaryIds.has(conflict.entityRef)
+  );
+}
+function buildNormalizationPersistencePayload(analysis, item, options) {
+  const analyzedDoc = analysis.documents.find((d) => d.documentId === item.policyDocumentId);
+  const classification = analyzedDoc?.classification ?? "unknown";
+  const entities = perDocumentEntities(analysis, item.policyDocumentId);
+  const entityTemporaryIds = new Set(entities.map((e) => e.temporaryId));
+  const conflicts = perDocumentConflicts(analysis, entityTemporaryIds);
+  const evidence = [];
+  for (const entity of entities) {
+    for (const ref of documentEvidenceForEntity(entity, item.policyDocumentId)) {
+      evidence.push(ref);
+    }
+  }
+  const firstPolicy = entities[0]?.currentPolicy;
+  const identifiedAssets = entities.map((e) => e.displayLabel).filter((label) => typeof label === "string" && label.length > 0);
+  const normalizedOutputJson = {
+    documentId: item.policyDocumentId,
+    fileDigest: item.contentSha256,
+    classification,
+    pageCount: analyzedDoc?.pageCount ?? 0,
+    parserId: analyzedDoc?.parserId ?? options.modelProvider,
+    parserVersion: analyzedDoc?.parserVersion ?? options.analyzerVersion ?? DEFAULT_ANALYZER_VERSION,
+    policy: {
+      insurer: firstPolicy?.insurer ?? null,
+      policyNumber: firstPolicy?.policyNumber ?? null,
+      effectiveDate: firstPolicy?.effectiveDate ?? null,
+      expiryDate: firstPolicy?.expiryDate ?? null
+    },
+    identifiedAssets,
+    processingVersion: `${options.modelProvider}/${options.modelId}/${options.schemaVersion ?? DEFAULT_NORMALIZATION_SCHEMA_VERSION}/${options.promptVersion}`
+  };
+  return {
+    policyDocumentId: item.policyDocumentId,
+    batchItemId: item.batchItemId ?? "",
+    contentSha256: item.contentSha256,
+    classification,
+    modelProvider: options.modelProvider,
+    modelId: options.modelId,
+    promptVersion: options.promptVersion,
+    normalizationSchemaVersion: options.schemaVersion ?? DEFAULT_NORMALIZATION_SCHEMA_VERSION,
+    analyzerVersion: options.analyzerVersion ?? DEFAULT_ANALYZER_VERSION,
+    normalizedOutputJson,
+    normalizedEntitiesJson: entities,
+    conflictsJson: conflicts,
+    evidenceJson: evidence
+  };
+}
+function projectNormalizationForCandidateDerivation(normalizations, options = {}) {
+  const prefix = options.idPrefix ?? "n";
+  let counter = 0;
+  const temporaryIdMap = /* @__PURE__ */ new Map();
+  function nextTemporaryId(oldId) {
+    if (!temporaryIdMap.has(oldId)) {
+      temporaryIdMap.set(oldId, `${prefix}:${counter++}:${oldId}`);
+    }
+    return temporaryIdMap.get(oldId);
+  }
+  const documents = [];
+  const detectedEntities = [];
+  const unresolvedConflicts = [];
+  for (const n of normalizations) {
+    const policyDocumentId = n.policy_document_id;
+    const doc = {
+      documentId: policyDocumentId,
+      fileDigest: n.content_sha256,
+      classification: n.classification,
+      parserId: typeof n.normalized_output_json.parserId === "string" ? n.normalized_output_json.parserId : n.model_provider ?? "unknown",
+      parserVersion: typeof n.normalized_output_json.parserVersion === "string" ? n.normalized_output_json.parserVersion : n.analyzer_version ?? "unknown",
+      pageCount: typeof n.normalized_output_json.pageCount === "number" ? n.normalized_output_json.pageCount : 0,
+      extractedEntityCount: Array.isArray(n.normalized_entities_json) ? n.normalized_entities_json.length : 0
+    };
+    documents.push(doc);
+    const entities = Array.isArray(n.normalized_entities_json) ? n.normalized_entities_json : [];
+    for (const entity of entities) {
+      const newId = nextTemporaryId(entity.temporaryId);
+      const newEntity = {
+        ...entity,
+        temporaryId: newId,
+        evidence: entity.evidence.map((ref) => ({ ...ref, documentId: policyDocumentId }))
+      };
+      detectedEntities.push(newEntity);
+    }
+    const conflicts = Array.isArray(n.conflicts_json) ? n.conflicts_json : [];
+    for (const conflict of conflicts) {
+      const newEntityRef = temporaryIdMap.get(conflict.entityRef) ?? conflict.entityRef;
+      unresolvedConflicts.push({ ...conflict, entityRef: newEntityRef });
+    }
+  }
+  return {
+    analysisVersion: "1",
+    modelProvider: "normalization_projection",
+    modelId: "normalization_projection",
+    documents,
+    detectedEntities,
+    unresolvedConflicts,
+    warnings: [],
+    promptVersion: "1.0.0",
+    outputSchemaVersion: "1.0.0",
+    attemptCount: 1,
+    providerMetadata: {}
+  };
+}
+function combineAnalysisWithProjectedNormalizations(providerAnalysis, projectedNormalizations) {
+  const merged = {
+    analysisVersion: providerAnalysis.analysisVersion,
+    modelProvider: providerAnalysis.modelProvider,
+    modelId: providerAnalysis.modelId,
+    documents: [...projectedNormalizations.documents],
+    detectedEntities: [...projectedNormalizations.detectedEntities],
+    unresolvedConflicts: [...projectedNormalizations.unresolvedConflicts],
+    warnings: [...providerAnalysis.warnings ?? [], ...projectedNormalizations.warnings ?? []],
+    promptVersion: providerAnalysis.promptVersion ?? "1.0.0",
+    outputSchemaVersion: providerAnalysis.outputSchemaVersion ?? "1.0.0",
+    attemptCount: providerAnalysis.attemptCount ?? 1,
+    providerMetadata: providerAnalysis.providerMetadata ?? {}
+  };
+  for (const doc of providerAnalysis.documents) {
+    if (!merged.documents.some((d) => d.documentId === doc.documentId)) {
+      merged.documents.push(doc);
+    }
+  }
+  for (const entity of providerAnalysis.detectedEntities) {
+    if (!merged.detectedEntities.some((e) => e.temporaryId === entity.temporaryId)) {
+      merged.detectedEntities.push(entity);
+    }
+  }
+  for (const conflict of providerAnalysis.unresolvedConflicts) {
+    if (!merged.unresolvedConflicts.some(
+      (c) => c.fieldPath === conflict.fieldPath && c.entityRef === conflict.entityRef
+    )) {
+      merged.unresolvedConflicts.push(conflict);
+    }
+  }
+  return merged;
+}
+
+// src/document-overlap-classifier.ts
+var OVERLAP_CLASSIFICATIONS = [
+  "exact_file_duplicate",
+  "same_asset_same_policy_term",
+  "same_asset_newer_policy_term",
+  "same_asset_supporting_document",
+  "same_asset_conflicting_information",
+  "possible_asset_match",
+  "new_asset"
+];
+var OVERLAP_DISPOSITIONS = [
+  "reuse_existing_normalization",
+  "attach_supporting_evidence",
+  "create_renewal_candidate",
+  "create_conflict_review",
+  "require_asset_match_confirmation",
+  "create_new_asset_candidate"
+];
+var SUPPORTING_DOCUMENT_TYPES = /* @__PURE__ */ new Set([
+  "active_endorsement",
+  "endorsement",
+  "invoice",
+  "notice",
+  "informational_notice",
+  "proof_of_insurance",
+  "signed_authorization",
+  "cancellation_confirmation"
+]);
+function isSupportingDocumentType(documentType) {
+  return Boolean(documentType && SUPPORTING_DOCUMENT_TYPES.has(documentType));
+}
+function normalizeText(input) {
+  if (!input) return null;
+  const normalized = input.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, " ").replace(/\s+/g, " ").trim();
+  return normalized || null;
+}
+function normalizePolicyNumber(input) {
+  if (!input) return null;
+  const normalized = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return normalized || null;
+}
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function parseIsoDate(input) {
+  if (!input) return null;
+  const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  if (parsed.getUTCFullYear() !== Number(year) || parsed.getUTCMonth() !== Number(month) - 1 || parsed.getUTCDate() !== Number(day)) {
+    return null;
+  }
+  return input;
+}
+function toNormalizedFact(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const obj = value;
+    const status = obj.status;
+    if (status === "known" || status === "unknown" || status === "not_included" || status === "not_applicable" || status === "conflicting") {
+      const rawValue = obj.value;
+      if (status === "known") {
+        if (typeof rawValue === "string" || typeof rawValue === "number" || typeof rawValue === "boolean") {
+          return { status: "known", value: rawValue };
+        }
+        return { status: "conflicting", value: rawValue };
+      }
+      if (status === "conflicting") {
+        return { status: "conflicting", value: rawValue };
+      }
+      return { status, value: null };
+    }
+    if (obj.value !== void 0) {
+      return toNormalizedFact(obj.value);
+    }
+  }
+  if (value === null || value === void 0) {
+    return { status: "unknown", value: null };
+  }
+  if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
+    return { status: "known", value };
+  }
+  return { status: "conflicting", value };
+}
+function factValueForCompare(fact) {
+  if (fact.status !== "known") return null;
+  const value = fact.value;
+  if (typeof value === "string") return normalizeText(value);
+  if (typeof value === "number") return value;
+  if (typeof value === "boolean") return value;
+  return value;
+}
+function factValuesAreEqual(left, right) {
+  if (left.status !== "known" || right.status !== "known") return false;
+  const l = factValueForCompare(left);
+  const r = factValueForCompare(right);
+  if (typeof l === "number" && typeof r === "string") {
+    const parsed = Number(r);
+    if (!Number.isNaN(parsed)) return l === parsed;
+  }
+  if (typeof l === "string" && typeof r === "number") {
+    const parsed = Number(l);
+    if (!Number.isNaN(parsed)) return parsed === r;
+  }
+  return l === r;
+}
+function factsConflict(candidate, existing) {
+  if (candidate.status === "conflicting" || existing.status === "conflicting") {
+    return { conflict: true, reason: "conflicting state requires review" };
+  }
+  if (candidate.status === "known" && existing.status === "known") {
+    return factValuesAreEqual(candidate, existing) ? { conflict: false } : { conflict: true, reason: "known values differ" };
+  }
+  if (candidate.status === "known" && existing.status === "not_included" || candidate.status === "not_included" && existing.status === "known") {
+    return { conflict: true, reason: "known versus not_included" };
+  }
+  return { conflict: false };
+}
+function canonicalCoverageKey(key) {
+  if (key.includes(".")) return key;
+  if (key === "annual_premium_cents") return "policy.annualPremiumCents";
+  return key;
+}
+function buildExistingFacts(policy) {
+  const facts = /* @__PURE__ */ new Map();
+  for (const [key, value] of Object.entries(policy.coverageFacts ?? {})) {
+    facts.set(canonicalCoverageKey(key), toNormalizedFact(value));
+  }
+  if (policy.annualPremiumCents != null) {
+    facts.set("policy.annualPremiumCents", {
+      status: "known",
+      value: policy.annualPremiumCents
+    });
+  }
+  return facts;
+}
+function buildCandidateFacts(candidate) {
+  const facts = /* @__PURE__ */ new Map();
+  for (const [key, value] of Object.entries(candidate.coverageFacts ?? {})) {
+    facts.set(canonicalCoverageKey(key), toNormalizedFact(value));
+  }
+  return facts;
+}
+function materialConflict(candidate, policy) {
+  const candidateFacts = buildCandidateFacts(candidate);
+  const existingFacts = buildExistingFacts(policy);
+  const details = {};
+  const facts = {};
+  for (const key of /* @__PURE__ */ new Set([...candidateFacts.keys(), ...existingFacts.keys()])) {
+    const candidateFact = candidateFacts.get(key) ?? { status: "unknown", value: null };
+    const existingFact = existingFacts.get(key) ?? { status: "unknown", value: null };
+    const result2 = factsConflict(candidateFact, existingFact);
+    facts[key] = { candidate: candidateFact, existing: existingFact };
+    if (result2.conflict) {
+      details[key] = {
+        candidate: candidateFact,
+        existing: existingFact,
+        reason: result2.reason
+      };
+    }
+  }
+  return { conflict: Object.keys(details).length > 0, details, facts };
+}
+function findAssetIdentityMatch(assets, candidate) {
+  for (const asset of assets) {
+    if (candidate.assetType && candidate.assetType !== asset.assetType) continue;
+    if (candidate.canonicalFingerprint && asset.canonicalFingerprint && candidate.canonicalFingerprint === asset.canonicalFingerprint) {
+      return {
+        asset,
+        matchKind: "canonical",
+        matchedFingerprint: asset.canonicalFingerprint
+      };
+    }
+  }
+  for (const asset of assets) {
+    if (candidate.assetType && candidate.assetType !== asset.assetType) continue;
+    if (candidate.provisionalFingerprint && asset.provisionalFingerprint && candidate.provisionalFingerprint === asset.provisionalFingerprint) {
+      return {
+        asset,
+        matchKind: "provisional",
+        matchedFingerprint: asset.provisionalFingerprint
+      };
+    }
+  }
+  return void 0;
+}
+function buildEntityKey(candidate) {
+  if (candidate.canonicalFingerprint) return candidate.canonicalFingerprint;
+  if (candidate.provisionalFingerprint) return candidate.provisionalFingerprint;
+  return `unknown:${candidate.contentDigest}`;
+}
+function isValidTerm(candidate) {
+  const effective = parseIsoDate(candidate.effectiveDate);
+  const expiry = parseIsoDate(candidate.expiryDate);
+  return Boolean(effective && expiry && expiry > effective);
+}
+function policyIdentityMatch(candidate, policy) {
+  const candidateInsurer = normalizeText(candidate.insurer);
+  const policyInsurer = normalizeText(policy.insurerName);
+  const candidateNumber = normalizePolicyNumber(candidate.policyNumber);
+  const policyNumber = normalizePolicyNumber(policy.policyNumber);
+  const insurerMatch = Boolean(
+    candidateInsurer && policyInsurer && candidateInsurer === policyInsurer
+  );
+  const policyNumberMatch = Boolean(
+    candidateNumber && policyNumber && candidateNumber === policyNumber
+  );
+  return {
+    insurerMatch,
+    policyNumberMatch,
+    identityMatch: insurerMatch && policyNumberMatch
+  };
+}
+function policyTermMatch(candidate, policy) {
+  const { identityMatch } = policyIdentityMatch(candidate, policy);
+  const candidateEffective = parseIsoDate(candidate.effectiveDate);
+  const candidateExpiry = parseIsoDate(candidate.expiryDate);
+  const policyEffective = parseIsoDate(policy.effectiveDate);
+  const policyExpiry = parseIsoDate(policy.expiryDate);
+  const effectiveMatch = Boolean(
+    candidateEffective && policyEffective && candidateEffective === policyEffective
+  );
+  const expiryMatch = Boolean(candidateExpiry && policyExpiry && candidateExpiry === policyExpiry);
+  return {
+    termMatch: identityMatch && effectiveMatch && expiryMatch,
+    effectiveMatch,
+    expiryMatch
+  };
+}
+function isLaterValidTerm(candidate, policy) {
+  if (!isValidTerm(candidate)) return false;
+  const candidateEffective = parseIsoDate(candidate.effectiveDate);
+  const candidateExpiry = parseIsoDate(candidate.expiryDate);
+  const policyEffective = parseIsoDate(policy.effectiveDate);
+  const policyExpiry = parseIsoDate(policy.expiryDate);
+  if (!policyEffective || !policyExpiry) return true;
+  return candidateExpiry > policyExpiry || candidateEffective > policyEffective;
+}
+function selectBestPolicy(candidate, policies) {
+  return policies.slice().sort((a, b) => {
+    const aTerm = policyTermMatch(candidate, a).termMatch;
+    const bTerm = policyTermMatch(candidate, b).termMatch;
+    const aCurrent = a.isCurrent === true;
+    const bCurrent = b.isCurrent === true;
+    const aSameType = candidate.assetType && a.assetType === candidate.assetType;
+    const bSameType = candidate.assetType && b.assetType === candidate.assetType;
+    if (aTerm && aCurrent && !(bTerm && bCurrent)) return -1;
+    if (bTerm && bCurrent && !(aTerm && aCurrent)) return 1;
+    if (aTerm && !bTerm) return -1;
+    if (bTerm && !aTerm) return 1;
+    if (aSameType && !bSameType) return -1;
+    if (bSameType && !aSameType) return 1;
+    if (aCurrent && !bCurrent) return -1;
+    if (bCurrent && !aCurrent) return 1;
+    const aExpiry = parseIsoDate(a.expiryDate) ?? "0000-01-01";
+    const bExpiry = parseIsoDate(b.expiryDate) ?? "0000-01-01";
+    if (aExpiry > bExpiry) return -1;
+    if (aExpiry < bExpiry) return 1;
+    const aEffective = parseIsoDate(a.effectiveDate) ?? "0000-01-01";
+    const bEffective = parseIsoDate(b.effectiveDate) ?? "0000-01-01";
+    if (aEffective > bEffective) return -1;
+    if (aEffective < bEffective) return 1;
+    return a.id.localeCompare(b.id);
+  }).shift();
+}
+function policyIdentityComparedFields(candidate, policy) {
+  return {
+    candidateInsurer: normalizeText(candidate.insurer),
+    candidatePolicyNumber: normalizePolicyNumber(candidate.policyNumber),
+    candidateEffectiveDate: parseIsoDate(candidate.effectiveDate),
+    candidateExpiryDate: parseIsoDate(candidate.expiryDate),
+    existingInsurer: normalizeText(policy.insurerName),
+    existingPolicyNumber: normalizePolicyNumber(policy.policyNumber),
+    existingEffectiveDate: parseIsoDate(policy.effectiveDate),
+    existingExpiryDate: parseIsoDate(policy.expiryDate),
+    existingIsCurrent: policy.isCurrent
+  };
+}
+function classificationDisposition(classification) {
+  switch (classification) {
+    case "exact_file_duplicate":
+      return "reuse_existing_normalization";
+    case "same_asset_same_policy_term":
+    case "same_asset_supporting_document":
+      return "attach_supporting_evidence";
+    case "same_asset_newer_policy_term":
+      return "create_renewal_candidate";
+    case "same_asset_conflicting_information":
+      return "create_conflict_review";
+    case "possible_asset_match":
+      return "require_asset_match_confirmation";
+    case "new_asset":
+      return "create_new_asset_candidate";
+  }
+}
+function resultFor(classification, confidence, opts) {
+  return {
+    classification,
+    disposition: classificationDisposition(classification),
+    confidence,
+    assetId: opts.assetId,
+    assetType: opts.assetType,
+    existingPolicyId: opts.existingPolicyId,
+    normalizedEntityKey: opts.normalizedEntityKey,
+    reasons: opts.reasons,
+    comparedFields: opts.comparedFields,
+    requiresCustomerDecision: opts.requiresCustomerDecision ?? false
+  };
+}
+function exactFileDuplicateResult(input, normalizedEntityKey) {
+  const { candidate, existingAssets, compatibleNormalization } = input;
+  const identityMatch = findAssetIdentityMatch(existingAssets ?? [], candidate);
+  const matchedAsset = identityMatch?.asset;
+  const normalizationId = compatibleNormalization?.normalizationId;
+  return resultFor("exact_file_duplicate", 1, {
+    assetId: matchedAsset?.id,
+    assetType: matchedAsset?.assetType ?? candidate.assetType ?? void 0,
+    normalizedEntityKey,
+    reasons: [
+      "content digest, normalization schema version, and analyzer version match a complete prior normalization"
+    ],
+    comparedFields: {
+      contentDigest: candidate.contentDigest,
+      normalizationId,
+      normalizationSchemaVersion: compatibleNormalization?.normalizationSchemaVersion,
+      analyzerVersion: compatibleNormalization?.analyzerVersion,
+      status: compatibleNormalization?.status
+    }
+  });
+}
+function compatibleNormalizationSelected(input) {
+  if (input.compatibleNormalizationAlreadySelected === true) return true;
+  const candidate = input.candidate;
+  if (!isNonEmptyString(candidate.contentDigest) || !isNonEmptyString(candidate.normalizationSchemaVersion) || !isNonEmptyString(candidate.analyzerVersion)) {
+    return false;
+  }
+  const cn = input.compatibleNormalization;
+  if (!cn) return false;
+  if (cn.status !== "complete") return false;
+  if (cn.contentDigest !== candidate.contentDigest) return false;
+  if (cn.normalizationSchemaVersion !== candidate.normalizationSchemaVersion) return false;
+  if (cn.analyzerVersion !== candidate.analyzerVersion) return false;
+  return true;
+}
+function classifyExactAsset(input, asset) {
+  const { candidate } = input;
+  const normalizedEntityKey = asset.canonicalFingerprint ?? buildEntityKey(candidate);
+  const assetPolicies = (input.existingPolicies ?? []).filter((p) => p.assetId === asset.id);
+  if (assetPolicies.length === 0) {
+    if (isSupportingDocumentType(candidate.documentType)) {
+      return resultFor("same_asset_supporting_document", 0.85, {
+        assetId: asset.id,
+        assetType: asset.assetType,
+        normalizedEntityKey,
+        reasons: ["exact canonical asset match with supporting document type and no prior policy"],
+        comparedFields: { assetId: asset.id, documentType: candidate.documentType }
+      });
+    }
+    if (isValidTerm(candidate)) {
+      return resultFor("same_asset_newer_policy_term", 0.9, {
+        assetId: asset.id,
+        assetType: asset.assetType,
+        normalizedEntityKey,
+        reasons: [
+          "exact canonical asset match with a valid first policy term and no prior policy to compare; treated as a renewal candidate"
+        ],
+        comparedFields: {
+          candidateEffectiveDate: parseIsoDate(candidate.effectiveDate),
+          candidateExpiryDate: parseIsoDate(candidate.expiryDate)
+        }
+      });
+    }
+    return resultFor("same_asset_conflicting_information", 0.8, {
+      assetId: asset.id,
+      assetType: asset.assetType,
+      normalizedEntityKey,
+      reasons: [
+        "exact canonical asset match but principal policy document has missing or invalid term dates"
+      ],
+      comparedFields: {
+        candidateEffectiveDate: parseIsoDate(candidate.effectiveDate),
+        candidateExpiryDate: parseIsoDate(candidate.expiryDate)
+      },
+      requiresCustomerDecision: true
+    });
+  }
+  const bestPolicy = selectBestPolicy(candidate, assetPolicies);
+  if (!bestPolicy) {
+    return resultFor("same_asset_conflicting_information", 0.8, {
+      assetId: asset.id,
+      assetType: asset.assetType,
+      normalizedEntityKey,
+      reasons: ["exact canonical asset match but no usable existing policy could be selected"],
+      comparedFields: {},
+      requiresCustomerDecision: true
+    });
+  }
+  const { termMatch, effectiveMatch, expiryMatch } = policyTermMatch(candidate, bestPolicy);
+  const { identityMatch, insurerMatch, policyNumberMatch } = policyIdentityMatch(
+    candidate,
+    bestPolicy
+  );
+  const conflict = materialConflict(candidate, bestPolicy);
+  if (termMatch) {
+    if (conflict.conflict) {
+      return resultFor("same_asset_conflicting_information", 0.8, {
+        assetId: asset.id,
+        assetType: asset.assetType,
+        existingPolicyId: bestPolicy.id,
+        normalizedEntityKey,
+        reasons: ["same asset and policy term with materially different coverage or premium facts"],
+        comparedFields: {
+          ...policyIdentityComparedFields(candidate, bestPolicy),
+          conflicts: conflict.details,
+          facts: conflict.facts
+        },
+        requiresCustomerDecision: true
+      });
+    }
+    if (isSupportingDocumentType(candidate.documentType)) {
+      return resultFor("same_asset_supporting_document", 0.85, {
+        assetId: asset.id,
+        assetType: asset.assetType,
+        existingPolicyId: bestPolicy.id,
+        normalizedEntityKey,
+        reasons: ["same asset, policy term, and distinct supporting document type adds evidence"],
+        comparedFields: policyIdentityComparedFields(candidate, bestPolicy)
+      });
+    }
+    return resultFor("same_asset_same_policy_term", 0.95, {
+      assetId: asset.id,
+      assetType: asset.assetType,
+      existingPolicyId: bestPolicy.id,
+      normalizedEntityKey,
+      reasons: ["same canonical asset and materially equivalent policy term"],
+      comparedFields: policyIdentityComparedFields(candidate, bestPolicy)
+    });
+  }
+  if (identityMatch) {
+    if (isLaterValidTerm(candidate, bestPolicy)) {
+      return resultFor("same_asset_newer_policy_term", 0.9, {
+        assetId: asset.id,
+        assetType: asset.assetType,
+        existingPolicyId: bestPolicy.id,
+        normalizedEntityKey,
+        reasons: ["same canonical asset with a later policy term or expiry date"],
+        comparedFields: policyIdentityComparedFields(candidate, bestPolicy)
+      });
+    }
+    if (isSupportingDocumentType(candidate.documentType)) {
+      return resultFor("same_asset_supporting_document", 0.85, {
+        assetId: asset.id,
+        assetType: asset.assetType,
+        existingPolicyId: bestPolicy.id,
+        normalizedEntityKey,
+        reasons: ["same asset and policy identity with supporting document type"],
+        comparedFields: policyIdentityComparedFields(candidate, bestPolicy)
+      });
+    }
+    if (effectiveMatch || expiryMatch) {
+      return resultFor("same_asset_conflicting_information", 0.8, {
+        assetId: asset.id,
+        assetType: asset.assetType,
+        existingPolicyId: bestPolicy.id,
+        normalizedEntityKey,
+        reasons: ["same asset and policy identity but term dates differ from the existing policy"],
+        comparedFields: policyIdentityComparedFields(candidate, bestPolicy),
+        requiresCustomerDecision: true
+      });
+    }
+    return resultFor("same_asset_conflicting_information", 0.8, {
+      assetId: asset.id,
+      assetType: asset.assetType,
+      existingPolicyId: bestPolicy.id,
+      normalizedEntityKey,
+      reasons: ["same asset and policy identity but term dates are missing or invalid"],
+      comparedFields: policyIdentityComparedFields(candidate, bestPolicy),
+      requiresCustomerDecision: true
+    });
+  }
+  if (isSupportingDocumentType(candidate.documentType)) {
+    return resultFor("same_asset_supporting_document", 0.85, {
+      assetId: asset.id,
+      assetType: asset.assetType,
+      normalizedEntityKey,
+      reasons: ["same canonical asset with supporting document type; no matching policy term"],
+      comparedFields: {
+        ...policyIdentityComparedFields(candidate, bestPolicy),
+        insurerMatch,
+        policyNumberMatch
+      }
+    });
+  }
+  return resultFor("same_asset_conflicting_information", 0.8, {
+    assetId: asset.id,
+    assetType: asset.assetType,
+    existingPolicyId: bestPolicy.id,
+    normalizedEntityKey,
+    reasons: ["same canonical asset but policy identity is inconsistent with the existing policy"],
+    comparedFields: {
+      ...policyIdentityComparedFields(candidate, bestPolicy),
+      insurerMatch,
+      policyNumberMatch
+    },
+    requiresCustomerDecision: true
+  });
+}
+function classifyDocumentOverlap(input) {
+  const { candidate, existingAssets, existingPolicies } = input;
+  if (compatibleNormalizationSelected(input)) {
+    return exactFileDuplicateResult(input, buildEntityKey(candidate));
+  }
+  const identityMatch = findAssetIdentityMatch(existingAssets ?? [], candidate);
+  if (identityMatch?.matchKind === "canonical") {
+    return classifyExactAsset(input, identityMatch.asset);
+  }
+  if (identityMatch?.matchKind === "provisional") {
+    const provisionalAsset = identityMatch.asset;
+    const normalizedEntityKey = candidate.provisionalFingerprint ?? identityMatch.matchedFingerprint;
+    const assetPolicies = (existingPolicies ?? []).filter((p) => p.assetId === provisionalAsset.id);
+    const matchedPolicy = candidate.policyNumber ? selectBestPolicy(candidate, assetPolicies) : void 0;
+    return resultFor("possible_asset_match", 0.5, {
+      assetId: provisionalAsset.id,
+      assetType: provisionalAsset.assetType,
+      existingPolicyId: matchedPolicy?.id,
+      normalizedEntityKey,
+      reasons: ["only a provisional or partial identity match is available"],
+      comparedFields: {
+        candidateProvisionalFingerprint: candidate.provisionalFingerprint,
+        existingProvisionalFingerprint: provisionalAsset.provisionalFingerprint
+      },
+      requiresCustomerDecision: true
+    });
+  }
+  if (candidate.policyNumber) {
+    const candidateNumber = normalizePolicyNumber(candidate.policyNumber);
+    const matchingPolicies = (existingPolicies ?? []).filter((p) => {
+      const policyNumber = normalizePolicyNumber(p.policyNumber);
+      return Boolean(policyNumber && policyNumber === candidateNumber);
+    });
+    if (matchingPolicies.length > 0) {
+      const bestPolicy = selectBestPolicy(candidate, matchingPolicies);
+      return resultFor("possible_asset_match", 0.5, {
+        assetType: candidate.assetType ?? bestPolicy?.assetType,
+        existingPolicyId: bestPolicy?.id,
+        normalizedEntityKey: buildEntityKey(candidate),
+        reasons: ["policy number matches an existing policy on a different or unresolved asset"],
+        comparedFields: {
+          candidatePolicyNumber: candidateNumber,
+          existingPolicyId: bestPolicy?.id,
+          existingAssetId: bestPolicy?.assetId,
+          existingIsCurrent: bestPolicy?.isCurrent
+        },
+        requiresCustomerDecision: true
+      });
+    }
+  }
+  return resultFor("new_asset", 0.95, {
+    assetType: candidate.assetType ?? void 0,
+    normalizedEntityKey: buildEntityKey(candidate),
+    reasons: ["no credible canonical or provisional asset match"],
+    comparedFields: {
+      candidateCanonicalFingerprint: candidate.canonicalFingerprint,
+      candidateProvisionalFingerprint: candidate.provisionalFingerprint
+    }
+  });
+}
+function adaptNormalizedEntityToOverlapCandidate(contentDigest, payload) {
+  const currentPolicy = payload.currentPolicy ?? {};
+  const candidateIdentity = payload.candidateIdentity ?? {};
+  const coverage = {};
+  for (const [key, value] of Object.entries(payload.currentCoverage ?? {})) {
+    coverage[key] = value;
+  }
+  if (currentPolicy.annualPremiumCents != null && coverage["policy.annualPremiumCents"] == null) {
+    coverage["policy.annualPremiumCents"] = {
+      status: "known",
+      value: currentPolicy.annualPremiumCents
+    };
+  }
+  const canonicalFingerprint = payload.canonicalFingerprint ?? (typeof candidateIdentity.exactIdentityFingerprint === "string" ? candidateIdentity.exactIdentityFingerprint : null);
+  const provisionalFingerprint = typeof candidateIdentity.provisionalCandidateKey === "string" ? candidateIdentity.provisionalCandidateKey : null;
+  return {
+    contentDigest,
+    assetType: payload.entityType ?? null,
+    canonicalFingerprint,
+    provisionalFingerprint,
+    insurer: currentPolicy.insurer ?? null,
+    policyNumber: currentPolicy.policyNumber ?? null,
+    effectiveDate: currentPolicy.effectiveDate ?? null,
+    expiryDate: currentPolicy.expiryDate ?? null,
+    documentType: payload.documentCategory ?? "other",
+    coverageFacts: coverage
+  };
+}
+function adaptPolicyRowToExistingPolicy(row) {
+  const coverageFacts = {};
+  for (const [key, value] of Object.entries(row.coverage_details ?? {})) {
+    coverageFacts[key] = value;
+  }
+  if (row.annual_premium_cents != null && coverageFacts["policy.annualPremiumCents"] == null) {
+    coverageFacts["policy.annualPremiumCents"] = {
+      status: "known",
+      value: row.annual_premium_cents
+    };
+  }
+  return {
+    id: row.id,
+    assetId: row.asset_id,
+    assetType: row.asset_type,
+    insurerName: row.insurer_name,
+    policyNumber: row.policy_number,
+    effectiveDate: row.effective_from ?? null,
+    expiryDate: row.effective_to ?? null,
+    isCurrent: row.is_current,
+    annualPremiumCents: row.annual_premium_cents,
+    coverageFacts
+  };
+}
+function toRecordDocumentAssetOverlapArgs(result2, context) {
+  return {
+    p_batch_id: context.batchId,
+    p_normalization_id: context.normalizationId,
+    p_normalized_entity_key: result2.normalizedEntityKey,
+    p_asset_id: result2.assetId ?? null,
+    p_asset_type: result2.assetType ?? null,
+    p_existing_policy_id: result2.existingPolicyId ?? null,
+    p_classification: result2.classification,
+    p_confidence: result2.confidence,
+    p_details_json: result2.comparedFields
+  };
+}
+
+// src/document-overlap-edge-adapter.ts
+function normalizeEntityForAdapter(entity) {
+  return entity;
+}
+function toExistingAsset(asset) {
+  const candidateIdentity = typeof asset.candidateIdentity === "object" && asset.candidateIdentity !== null ? asset.candidateIdentity : {};
+  const canonicalFingerprint = typeof candidateIdentity.exactIdentityFingerprint === "string" ? candidateIdentity.exactIdentityFingerprint : isExactFingerprint2(asset.identityFingerprint) ? asset.identityFingerprint : null;
+  const provisionalFingerprint = typeof candidateIdentity.provisionalCandidateKey === "string" ? candidateIdentity.provisionalCandidateKey : !isExactFingerprint2(asset.identityFingerprint) ? asset.identityFingerprint : null;
+  return {
+    id: asset.id,
+    assetType: asset.assetType,
+    canonicalFingerprint,
+    provisionalFingerprint
+  };
+}
+function classifyDocumentAssetOverlap(entity, context) {
+  const entityPayload = normalizeEntityForAdapter(entity);
+  const firstEvidence = Array.isArray(entityPayload.evidence) ? entityPayload.evidence[0] : void 0;
+  const docId = (typeof firstEvidence?.documentId === "string" ? firstEvidence.documentId : entityPayload.temporaryId) ?? "";
+  const contentDigest = context.digestByDocId[docId] ?? "";
+  const payload = {
+    ...entityPayload,
+    documentCategory: context.documentType
+  };
+  const candidate = adaptNormalizedEntityToOverlapCandidate(contentDigest, payload);
+  const compatibleNormalization = context.compatibleNormalizationByDocId?.get(docId);
+  const compatibleNormalizationAlreadySelected = !!compatibleNormalization;
+  const result2 = classifyDocumentOverlap({
+    candidate,
+    existingAssets: context.existingAssets.map(toExistingAsset),
+    existingPolicies: context.existingPolicies,
+    compatibleNormalizationAlreadySelected,
+    compatibleNormalization
+  });
+  const skip = result2.disposition === "reuse_existing_normalization" || result2.disposition === "attach_supporting_evidence";
+  return {
+    classification: result2.classification,
+    disposition: result2.disposition,
+    confidence: result2.confidence,
+    assetId: result2.assetId,
+    assetType: result2.assetType,
+    existingPolicyId: result2.existingPolicyId,
+    normalizedEntityKey: result2.normalizedEntityKey,
+    reasons: result2.reasons,
+    comparedFields: result2.comparedFields,
+    requiresCustomerDecision: result2.requiresCustomerDecision,
+    skipCandidateDerivation: skip,
+    normalizedEntityKeyForPersistence: result2.normalizedEntityKey,
+    details: {
+      disposition: result2.disposition,
+      ...result2.comparedFields
+    }
+  };
+}
+function entityResolutionFromOverlap(overlap) {
+  if (overlap.skipCandidateDerivation) return null;
+  const base = {
+    confidence: overlap.confidence,
+    reasoning: overlap.reasons[0] ?? "overlap classification derived",
+    matchedExistingEntityId: overlap.assetId ?? null,
+    matchedPendingCandidateId: null
+  };
+  switch (overlap.disposition) {
+    case "create_new_asset_candidate":
+      return { ...base, status: "new", matchedExistingEntityId: null };
+    case "create_renewal_candidate":
+      return { ...base, status: "matches_existing" };
+    case "create_conflict_review":
+      return { ...base, status: "possible_match_requires_confirmation" };
+    case "require_asset_match_confirmation":
+      return { ...base, status: "possible_match_requires_confirmation" };
+    default:
+      return { ...base, status: "new", matchedExistingEntityId: null };
+  }
+}
+function recordDocumentAssetOverlapArgs(overlap, context) {
+  const syntheticResult = {
+    classification: overlap.classification,
+    disposition: overlap.disposition,
+    confidence: overlap.confidence,
+    assetId: overlap.assetId,
+    assetType: overlap.assetType,
+    existingPolicyId: overlap.existingPolicyId,
+    normalizedEntityKey: overlap.normalizedEntityKeyForPersistence,
+    reasons: overlap.reasons,
+    comparedFields: overlap.comparedFields,
+    requiresCustomerDecision: overlap.requiresCustomerDecision
+  };
+  return toRecordDocumentAssetOverlapArgs(syntheticResult, context);
+}
 export {
   AnalysisWarningSchema,
   AnalyzedDocumentSchema,
@@ -13212,6 +14141,8 @@ export {
   ConfigAndConsentPrivacyPreparation,
   CurrentPolicySchema,
   DANGEROUS_MODE_DISCLOSURE_VERSION,
+  DEFAULT_ANALYZER_VERSION,
+  DEFAULT_NORMALIZATION_SCHEMA_VERSION,
   DetectedConflictSchema,
   DetectedEntityIdentitySchema,
   DetectedInsuranceEntitySchema,
@@ -13254,12 +14185,17 @@ export {
   MANDATE_FIELD_DEFINITIONS,
   MandateRuleSchema,
   MemoryFileBytesLoader,
+  OVERLAP_CLASSIFICATIONS,
+  OVERLAP_DISPOSITIONS,
   OpenAiGpt5MiniProvider,
   PendingEntityCandidateSchema,
   PriorDocumentSummarySchema,
   SupabaseAuthorizationStore,
   SupabaseFileLifecycleStore,
   UploadedDocumentSchema,
+  activeStatuses,
+  adaptNormalizedEntityToOverlapCandidate,
+  adaptPolicyRowToExistingPolicy,
   assertLlmExtractionSemantics,
   buildCandidateContext,
   buildCandidateIdentity,
@@ -13269,10 +14205,14 @@ export {
   buildInsuranceAnalysisSystemPrompt,
   buildInsuranceExtractionSystemPrompt,
   buildMandateReviewSeeds,
+  buildNormalizationPersistencePayload,
   buildPropertyIdentity,
   buildVehicleIdentity,
   canAutoMergeIdentity,
   candidateDisplayLabel,
+  classifyDocumentAssetOverlap,
+  classifyDocumentOverlap,
+  combineAnalysisWithProjectedNormalizations,
   computeCanonicalFingerprint,
   createEmptyIncrementalOnboardingSession,
   createKimiK3Analyzer,
@@ -13280,11 +14220,13 @@ export {
   createNativeDocumentAnalyzer,
   documentBatchStatuses,
   documentProcessingRoute,
+  entityResolutionFromOverlap,
   generateSupportReference,
   getPrivacyNoticeUrl,
   getPrivacyNoticeVersion,
   getProcessorContractVersion,
   isExactFingerprint2 as isExactFingerprint,
+  isSupportingDocumentType,
   isUuid,
   mapResolutionStatus,
   mergeIncrementalOnboardingUpload,
@@ -13293,28 +14235,37 @@ export {
   occupancyForEntity,
   parseCaseId,
   parseDocument,
+  parseIsoDate,
   parseLlmExtractionResult,
   parsePendingCandidateRecord,
   partitionDocumentDigests,
+  partitionDocumentsByNormalization,
   pendingRecordToEntityCandidate,
   planDocumentIntake,
   privacyPreparationConfigFromEnv,
   projectLlmRunToParsedDocument,
+  projectNormalizationForCandidateDerivation,
   publicErrorResponse,
+  recordDocumentAssetOverlapArgs,
   relevantStatuses,
   resolveLatestActionStatuses,
   resolveLlmAssetIdentity,
   resumableStatuses,
+  reviewableStatuses,
   runInsuranceLlmPipeline,
   runLlmExtraction,
   sanitizeProviderError,
   selectCandidateForPersistence,
+  selectCompatibleNormalization,
   stripNullValues,
   terminalStatuses,
+  toNormalizedFact,
+  toRecordDocumentAssetOverlapArgs,
   validateDangerousModeEnablePolicy,
-  validateLlmExtractionSemantics
+  validateLlmExtractionSemantics,
+  waitingStatuses
 };
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "737289abaa3947232975dd7abe16e2f647695bc43412d48d5fdc4c8ef44ff80d";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "158ac19365be39eb7923c359fad4aefd6bb421d57fe596f3b3f12410c93d6d29";

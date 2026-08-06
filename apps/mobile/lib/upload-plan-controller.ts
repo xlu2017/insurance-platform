@@ -72,6 +72,7 @@ function isStaleError(error: unknown): boolean {
     message.includes("DOCUMENT_BATCH_GENERATION_MISMATCH") ||
     message.includes("CONTINUATION_CONFLICT") ||
     message.includes("CONTINUATION_TYPE_CONFLICT") ||
+    message.includes("CONTINUATION_PAYLOAD_MISMATCH") ||
     message.includes("already chosen") ||
     message.includes("already superseded or cancelled")
   );
