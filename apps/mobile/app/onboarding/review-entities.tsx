@@ -497,7 +497,7 @@ function DecisionButton({
   );
 }
 
-function CandidateSummary({
+export function CandidateSummary({
   candidate,
   drafts,
   addressVerified,
@@ -538,6 +538,13 @@ function CandidateSummary({
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState(candidate.display_label);
   const [savingName, setSavingName] = useState(false);
+
+  useEffect(() => {
+    setSelectedDecision(getInitialDecision(candidate));
+    setIsEditingName(false);
+    setName(candidate.display_label);
+    setSavingName(false);
+  }, [candidate.id]);
 
   useEffect(() => {
     if (!isEditingName) setName(candidate.display_label);
@@ -1170,6 +1177,7 @@ export default function ReviewEntities() {
         </Title>
         {error ? <Body muted>{error}</Body> : null}
         <CandidateSummary
+          key={currentCandidate.id}
           candidate={currentCandidate}
           drafts={drafts}
           addressVerified={addressVerified}

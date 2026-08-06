@@ -170,6 +170,125 @@ function candidateDisplayLabel(entity: DetectedInsuranceEntity): string {
   return label;
 }
 
+function buildExistingAssetReference(
+  existingById: Map<string, ExistingHouseholdAsset>,
+  record?: {
+    draftExistingAssetId?: string | null;
+    draftExistingAssetType?: string | null;
+    displayLabel?: string;
+    assetType?: string;
+  },
+): { id: string; asset_type: "vehicle" | "property"; display_label: string } | undefined {
+  if (!record?.draftExistingAssetId) return undefined;
+  const asset = existingById.get(record.draftExistingAssetId);
+  return {
+    id: record.draftExistingAssetId,
+    asset_type:
+      (record.draftExistingAssetType as "vehicle" | "property") ??
+      (record.assetType as "vehicle" | "property") ??
+      "vehicle",
+    display_label: asset?.displayLabel ?? record.displayLabel ?? "Existing asset",
+  };
+}
+
+interface DraftDecisionPayload {
+  _draftDecision?: string;
+  _draftExistingAssetId?: string;
+  _draftExistingAssetType?: string;
+  _draftIdentityConfirmed?: boolean;
+  existingAsset?: { id: string; asset_type: "vehicle" | "property"; display_label: string };
+}
+
+function buildDraftDecisionPayload(
+  existingById: Map<string, ExistingHouseholdAsset>,
+  resolutionStatus: string,
+  matchedExistingAsset: ExistingHouseholdAsset | undefined,
+  matchedPendingRecord: PendingEntityCandidate | undefined,
+  identityStrength: "exact" | "partial" | "unknown" | "redacted" | undefined,
+): DraftDecisionPayload {
+  const pendingExisting = matchedPendingRecord
+    ? buildExistingAssetReference(existingById, matchedPendingRecord)
+    : undefined;
+  const pendingDecision = matchedPendingRecord?.draftDecision;
+
+  if (resolutionStatus === "matches_existing" && matchedExistingAsset) {
+    return {
+      _draftDecision: "link_existing",
+      _draftExistingAssetId: matchedExistingAsset.id,
+      _draftExistingAssetType: matchedExistingAsset.assetType,
+      _draftIdentityConfirmed: true,
+      existingAsset: {
+        id: matchedExistingAsset.id,
+        asset_type: matchedExistingAsset.assetType,
+        display_label: matchedExistingAsset.displayLabel ?? "Existing asset",
+      },
+    };
+  }
+
+  if (resolutionStatus === "matches_pending_candidate") {
+    if (pendingExisting) {
+      return {
+        _draftDecision: "link_existing",
+        _draftExistingAssetId: pendingExisting.id,
+        _draftExistingAssetType: pendingExisting.asset_type,
+        _draftIdentityConfirmed: true,
+        existingAsset: pendingExisting,
+      };
+    }
+    if (pendingDecision && pendingDecision !== "undecided") {
+      return {
+        _draftDecision: pendingDecision,
+        _draftIdentityConfirmed: pendingDecision !== "needs_correction",
+      };
+    }
+    // Do not silently convert an undecided pending match into approve_new.
+    return {
+      _draftDecision: "undecided",
+      _draftIdentityConfirmed: false,
+    };
+  }
+
+  if (resolutionStatus === "possible_match_requires_confirmation") {
+    if (matchedExistingAsset) {
+      return {
+        _draftDecision: "link_existing",
+        _draftExistingAssetId: matchedExistingAsset.id,
+        _draftExistingAssetType: matchedExistingAsset.assetType,
+        _draftIdentityConfirmed: false,
+        existingAsset: {
+          id: matchedExistingAsset.id,
+          asset_type: matchedExistingAsset.assetType,
+          display_label: matchedExistingAsset.displayLabel ?? "Existing asset",
+        },
+      };
+    }
+    if (pendingExisting) {
+      return {
+        _draftDecision: "link_existing",
+        _draftExistingAssetId: pendingExisting.id,
+        _draftExistingAssetType: pendingExisting.asset_type,
+        _draftIdentityConfirmed: false,
+        existingAsset: pendingExisting,
+      };
+    }
+    if (pendingDecision) {
+      return {
+        _draftDecision: pendingDecision,
+        _draftIdentityConfirmed: false,
+      };
+    }
+    return {
+      _draftDecision: "needs_correction",
+      _draftIdentityConfirmed: false,
+    };
+  }
+
+  return {
+    _draftDecision: "approve_new",
+    _draftIdentityConfirmed: identityStrength === "exact",
+  };
+}
+
 async function loadExistingAssets(
   admin: any,
   householdId: string,
@@ -268,6 +387,17 @@ async function loadPendingCandidates(
         : undefined,
       identity: identity as any,
       currentPolicy: currentPolicy as any,
+      draftDecision: c.draft_decision,
+      draftIdentityConfirmed: c.draft_identity_confirmed,
+      draftExistingAssetId: c.draft_existing_asset_id,
+      draftExistingAssetType: c.draft_existing_asset_type as
+        | "vehicle"
+        | "property"
+        | null
+        | undefined,
+      approvedAssetId: c.approved_asset_id,
+      approvedAssetType: c.approved_asset_type as "vehicle" | "property" | null | undefined,
+      selectedFactsJson: c.selected_facts_json,
     };
   });
 }
@@ -284,6 +414,12 @@ async function loadPendingCandidateRecords(
     display_label: string;
     session_id: string;
     source_document_ids: string[];
+    draft_decision: string | null;
+    draft_identity_confirmed: boolean | null;
+    draft_existing_asset_id: string | null;
+    draft_existing_asset_type: "vehicle" | "property" | null;
+    approved_asset_id: string | null;
+    approved_asset_type: "vehicle" | "property" | null;
     selected_facts_json: Record<string, unknown>;
     conflicts_json: unknown[];
   }[]
@@ -291,7 +427,7 @@ async function loadPendingCandidateRecords(
   const query = admin
     .from("asset_candidates")
     .select(
-      "id, asset_type, identity_fingerprint, display_label, session_id, source_document_ids, selected_facts_json, conflicts_json",
+      "id, asset_type, identity_fingerprint, display_label, session_id, source_document_ids, draft_decision, draft_identity_confirmed, draft_existing_asset_id, draft_existing_asset_type, approved_asset_id, approved_asset_type, selected_facts_json, conflicts_json",
     )
     .eq("household_id", householdId)
     .in("review_status", ["pending", "reviewing"])
@@ -1006,6 +1142,10 @@ Deno.serve(async (req) => {
       pendingById.set(record.id, record);
       candidateByFingerprint.set(record.identity_fingerprint, record);
     }
+    const pendingCandidateById = new Map<string, PendingEntityCandidate>();
+    for (const candidate of pendingCandidates) {
+      pendingCandidateById.set(candidate.id, candidate);
+    }
 
     // Group detected entities by canonical identity fingerprint and merge source documents.
     const canonicalGroups = new Map<
@@ -1154,6 +1294,11 @@ Deno.serve(async (req) => {
       const existingCandidate =
         (matchedPendingId ? pendingById.get(matchedPendingId) : undefined) ??
         candidateByFingerprint.get(group.fingerprint);
+      const matchedPendingRecord = matchedPendingId
+        ? pendingCandidateById.get(matchedPendingId)
+        : existingCandidate
+          ? pendingCandidateById.get(existingCandidate.id)
+          : undefined;
 
       const mergedSourceDocIds = new Set<string>(existingCandidate?.source_document_ids ?? []);
       for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
@@ -1164,6 +1309,15 @@ Deno.serve(async (req) => {
           ? existingById.get(group.resolution.matchedExistingEntityId)
           : undefined;
 
+      const identityStrength = representative.candidateIdentity?.identityStrength;
+      const draftPayload = buildDraftDecisionPayload(
+        existingById,
+        group.resolution.status,
+        matchedExistingAsset,
+        matchedPendingRecord,
+        identityStrength,
+      );
+
       const selectedFacts = {
         canonicalFingerprint: group.fingerprint,
         entities: group.entities.map((e) => e.temporaryId),
@@ -1171,13 +1325,7 @@ Deno.serve(async (req) => {
         resolution: group.resolution,
         identity: representative.identity,
         candidateIdentity: representative.candidateIdentity,
-        existingAsset: matchedExistingAsset
-          ? {
-              id: matchedExistingAsset.id,
-              asset_type: matchedExistingAsset.assetType,
-              display_label: matchedExistingAsset.displayLabel ?? "Existing asset",
-            }
-          : undefined,
+        ...draftPayload,
         currentPolicy: representative.currentPolicy,
         currentCoverage: representative.currentCoverage,
         mandateSuggestions: representative.mandateSuggestions,
@@ -1196,6 +1344,11 @@ Deno.serve(async (req) => {
         } as DetectedInsuranceEntity),
         decision: "undecided",
         review_status: "pending",
+        draft_decision: draftPayload._draftDecision ?? "approve_new",
+        draft_identity_confirmed:
+          draftPayload._draftIdentityConfirmed ?? identityStrength === "exact",
+        draft_existing_asset_id: draftPayload._draftExistingAssetId || null,
+        draft_existing_asset_type: draftPayload._draftExistingAssetType || null,
         source_document_ids: Array.from(mergedSourceDocIds),
         selected_facts_json: selectedFacts,
         conflicts_json: group.conflicts,

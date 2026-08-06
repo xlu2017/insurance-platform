@@ -102,7 +102,10 @@ export default function MandateReconciliationReview() {
     try {
       const candidateMandates = buildCandidateMandateValues(items);
       const decisions: ApproveCandidateDecision[] = candidates.map((candidate) => {
-        const decision = candidate.draft_decision ?? "needs_correction";
+        const decision =
+          candidate.draft_decision === "undecided" || !candidate.draft_decision
+            ? "needs_correction"
+            : candidate.draft_decision;
         return {
           candidate_id: candidate.id,
           decision,

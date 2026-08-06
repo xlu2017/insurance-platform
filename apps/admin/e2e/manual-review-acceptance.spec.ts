@@ -34,12 +34,13 @@ test("admin logs in, completes a manual review, and returns after logout", async
   await signIn(page, "admin@example.com", "DemoAdmin123!");
   await expect(page.getByText("Cases requiring action")).toBeVisible();
 
-  // 2. Open the case queue and select the browser-acceptance household.
+  // 2. Open the case queue and select the active browser-acceptance household.
   await page.goto("/cases");
   await expect(page.getByText("Case queue")).toBeVisible();
   await page
+    .locator("tr")
+    .filter({ hasText: /Awaiting Documents/ })
     .getByRole("link", { name: /Miller Household/ })
-    .first()
     .click();
   await expect(page.getByRole("heading", { name: /Miller Household/ })).toBeVisible();
   const caseUrl = page.url();
@@ -49,11 +50,9 @@ test("admin logs in, completes a manual review, and returns after logout", async
   await expect(page.getByText("Record manual candidate")).toBeVisible();
 
   // 4. Fill in a source document, identity, policy and coverage, then save the candidate.
-  await expect(page.locator("label", { hasText: /browser-test-document/ })).toBeVisible();
-  await page
-    .locator("label", { hasText: /browser-test-document/ })
-    .locator("input")
-    .check();
+  const sourceDocLabel = page.locator("label", { hasText: /browser-test-document/ });
+  await expect(sourceDocLabel).toBeVisible({ timeout: 30_000 });
+  await sourceDocLabel.locator("input").check();
 
   await selectByLabel(page, "Asset type").selectOption("vehicle");
   await inputByLabel(page, "Display label").fill(vehicleLabel);

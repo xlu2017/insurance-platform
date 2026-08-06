@@ -1091,6 +1091,7 @@ describe("approval isolation and policy versioning", () => {
               expiryDate: `${year}-12-31`,
             },
             currentCoverage: {
+              annualPremiumCents: extractedValue(premium),
               thirdPartyLiabilityCents: extractedValue(1000000),
               collisionDeductibleCents: extractedValue(50000),
               comprehensiveDeductibleCents: extractedValue(50000),
@@ -1139,6 +1140,23 @@ describe("approval isolation and policy versioning", () => {
       .eq("is_current", true)
       .single();
     expect(currentLink?.policy_id).toBe(secondPolicyId);
+
+    const { data: firstPolicy } = await admin
+      .from("policies")
+      .select("is_current")
+      .eq("id", firstPolicyId)
+      .single();
+    const { data: secondPolicy } = await admin
+      .from("policies")
+      .select("is_current")
+      .eq("id", secondPolicyId)
+      .single();
+    expect(firstPolicy?.is_current).toBe(false);
+    expect(secondPolicy?.is_current).toBe(true);
+
+    const compareAssets = await loadCompareAssets(admin, householdId);
+    const compareVehicle = compareAssets.find((a) => a.id === vehicle.id);
+    expect(compareVehicle?.coverageDetails.annualPremiumCents).toBe(110000);
   });
 
   it("sequential property renewals keep one current policy and retain history", async () => {
@@ -1190,6 +1208,7 @@ describe("approval isolation and policy versioning", () => {
               expiryDate: `${year}-12-31`,
             },
             currentCoverage: {
+              annualPremiumCents: extractedValue(premium),
               dwellingLimitCents: extractedValue(50000000),
               contentsLimitCents: extractedValue(10000000),
               personalLiabilityLimitCents: extractedValue(2000000),
@@ -1239,6 +1258,23 @@ describe("approval isolation and policy versioning", () => {
       .eq("is_current", true)
       .single();
     expect(currentLink?.policy_id).toBe(secondPolicyId);
+
+    const { data: firstPolicy } = await admin
+      .from("policies")
+      .select("is_current")
+      .eq("id", firstPolicyId)
+      .single();
+    const { data: secondPolicy } = await admin
+      .from("policies")
+      .select("is_current")
+      .eq("id", secondPolicyId)
+      .single();
+    expect(firstPolicy?.is_current).toBe(false);
+    expect(secondPolicy?.is_current).toBe(true);
+
+    const compareAssets = await loadCompareAssets(admin, householdId);
+    const compareProperty = compareAssets.find((a) => a.id === property!.id);
+    expect(compareProperty?.coverageDetails.annualPremiumCents).toBe(130000);
   });
 
   it("automatic vehicle match persists draft link decision and links to the seeded vehicle", async () => {
@@ -1770,5 +1806,835 @@ describe("approval isolation and policy versioning", () => {
       },
     );
     expect(candidateUpdateError?.message).toMatch(/manual review is complete/i);
+  });
+
+  async function persistBatchAnalysis(
+    admin: SupabaseClient,
+    householdId: string,
+    sessionId: string,
+    batchId: string,
+    candidateId: string,
+    assetType: "vehicle" | "property",
+    selectedFacts: Record<string, unknown>,
+  ) {
+    const extractedDocId = randomUUID();
+    const policyDocId = randomUUID();
+
+    const { error: policyDocError } = await admin.from("policy_documents").insert({
+      id: policyDocId,
+      household_id: householdId,
+      file_name: `batch-test-${randomUUID()}.pdf`,
+      mime_type: "application/pdf",
+      size_bytes: 1024,
+      storage_path: `batch/${randomUUID()}.pdf`,
+      uploaded_by: CUSTOMER_ID,
+      category: "other",
+    });
+    if (policyDocError) throw policyDocError;
+
+    const resolution = (selectedFacts.resolution as Record<string, unknown>) ?? {};
+    const hasMatch =
+      (resolution as { matchedExistingEntityId?: string })?.matchedExistingEntityId ??
+      (resolution as { matchedPendingCandidateId?: string })?.matchedPendingCandidateId ??
+      (selectedFacts.existingAsset as { id?: string } | undefined)?.id;
+    const matchClassification =
+      resolution.status === "matches_existing" || resolution.status === "matches_pending_candidate"
+        ? "exact_existing_match"
+        : resolution.status === "possible_match_requires_confirmation"
+          ? hasMatch
+            ? "possible_existing_match"
+            : "new_identity_confirmation_required"
+          : "new";
+
+    const { data, error } = await admin.rpc("persist_document_batch_analysis_v1" as any, {
+      p_batch_id: batchId,
+      p_household_id: householdId,
+      p_session_id: sessionId,
+      p_client_request_id: `batch-${randomUUID()}`,
+      p_analysis_json: {
+        modelProvider: "test",
+        modelId: "test-model",
+        promptVersion: "1.0.0",
+        outputSchemaVersion: "1.0.0",
+        rawResponse: {},
+        validatedOutput: {},
+      },
+      p_documents_json: [
+        {
+          id: extractedDocId,
+          policy_document_id: policyDocId,
+          file_digest: uniqueDigest(),
+          page_count: 1,
+          classification: "supported",
+          parser_id: "test",
+          parser_version: "1.0.0",
+          pages_json: [],
+        },
+      ],
+      p_candidates_json: [
+        {
+          id: candidateId,
+          asset_type: assetType,
+          identity_fingerprint: `${assetType}-batch-${randomUUID()}`,
+          display_label: assetType === "vehicle" ? "2018 Honda Civic" : "999 Existing Rd",
+          match_classification: matchClassification,
+          decision: "undecided",
+          review_status: "pending",
+          source_document_ids: [extractedDocId],
+          selected_facts_json: selectedFacts,
+          conflicts_json: [],
+        },
+      ],
+    });
+    if (error) throw error;
+    return data as Record<string, unknown>;
+  }
+
+  async function createDangerousBatch(householdId: string) {
+    const admin = serviceRoleClient();
+    const { data, error } = await admin.rpc("create_document_processing_batch", {
+      p_household_id: householdId,
+      p_client_request_id: `batch-danger-${randomUUID()}`,
+      p_actor_id: CUSTOMER_ID,
+    });
+    if (error) throw error;
+    const typed = data as {
+      batch: { id: string; case_id: string; session_id: string } & Record<string, unknown>;
+      session_id: string;
+    };
+    const { error: updateError } = await admin
+      .from("document_processing_batches")
+      .update({ mode_snapshot: "dangerous" })
+      .eq("id", typed.batch.id);
+    if (updateError) throw updateError;
+    return { batch: typed.batch, session_id: typed.session_id };
+  }
+
+  function pendingMatchFacts(
+    pendingCandidateId: string,
+    existingAssetId?: string,
+    existingAssetType?: "vehicle" | "property",
+  ) {
+    const identity = { year: 2018, make: "Honda", model: "Civic" };
+    const facts: Record<string, unknown> = {
+      identity,
+      currentPolicy: {
+        insurerName: "Pending Match Insurer",
+        policyNumber: "POL-PENDING",
+        annualPremiumCents: 140000,
+        expiryDate: "2027-12-31",
+      },
+      currentCoverage: {
+        thirdPartyLiabilityCents: extractedValue(1000000),
+        collisionDeductibleCents: extractedValue(50000),
+        comprehensiveDeductibleCents: extractedValue(50000),
+      },
+      mandateSuggestions: { thirdPartyLiability: { rule: "minimum", amountCents: 1000000 } },
+      resolution: {
+        status: "matches_pending_candidate",
+        matchedPendingCandidateId: pendingCandidateId,
+        confidence: 0.99,
+        reasoning: "Matches a pending candidate.",
+      },
+      candidateIdentity: { identityStrength: "exact" },
+    };
+    if (existingAssetId && existingAssetType) {
+      facts.existingAsset = buildExistingAsset(existingAssetId, existingAssetType);
+    }
+    return facts;
+  }
+
+  it("batch persistence preserves automatic match draft columns and links to the seeded vehicle", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const { batch, session_id: sessionId } = await createDangerousBatch(householdId);
+
+    const { data: vehicle } = await admin
+      .from("vehicles")
+      .insert({
+        household_id: householdId,
+        year: 2018,
+        make: "Honda",
+        model: "Civic",
+        vin: "2HGFC2F59JH511112",
+        primary_use: "commute",
+        vehicle_use_class: "personal",
+        financing_status: "owned",
+        is_classic: false,
+        is_modified: false,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!vehicle) throw new Error("vehicle not created");
+
+    const candidateId = randomUUID();
+    const facts = buildAnalyzerCandidate(vehicle.id, "vehicle", "matches_existing");
+    await persistBatchAnalysis(
+      admin,
+      householdId,
+      sessionId,
+      batch.id,
+      candidateId,
+      "vehicle",
+      facts,
+    );
+
+    const { data: candidate } = await admin
+      .from("asset_candidates")
+      .select(
+        "draft_decision, draft_identity_confirmed, draft_existing_asset_id, draft_existing_asset_type",
+      )
+      .eq("id", candidateId)
+      .single();
+    expect(candidate?.draft_decision).toBe("link_existing");
+    expect(candidate?.draft_identity_confirmed).toBe(true);
+    expect(candidate?.draft_existing_asset_id).toBe(vehicle.id);
+    expect(candidate?.draft_existing_asset_type).toBe("vehicle");
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `batch-auto-veh-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateId,
+          decision: "link_existing",
+          existing_asset_id: vehicle.id,
+          existing_asset_type: "vehicle",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(error).toBeNull();
+
+    const { count: vehicleCount } = await admin
+      .from("vehicles")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(vehicleCount).toBe(1);
+
+    const { data: link } = await admin
+      .from("policy_asset_links")
+      .select("asset_id, policy_id, is_current")
+      .eq("asset_id", vehicle.id)
+      .eq("is_current", true)
+      .single();
+    expect(link?.asset_id).toBe(vehicle.id);
+    expect(link?.policy_id).toBe(data?.policies?.[0]);
+  });
+
+  it("batch persistence preserves automatic match draft columns and links to the seeded property", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const { batch, session_id: sessionId } = await createDangerousBatch(householdId);
+
+    const { data: property } = await admin
+      .from("properties")
+      .insert({
+        household_id: householdId,
+        address_line1: "999 Existing Rd",
+        city: "Calgary",
+        province: "AB",
+        postal_code: "T9Z9Z9",
+        property_type: "homeowner",
+        dwelling_type: "detached",
+        owner_occupied: true,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!property) throw new Error("property not created");
+
+    const candidateId = randomUUID();
+    const facts = buildAnalyzerCandidate(property.id, "property", "matches_existing");
+    await persistBatchAnalysis(
+      admin,
+      householdId,
+      sessionId,
+      batch.id,
+      candidateId,
+      "property",
+      facts,
+    );
+
+    const { data: candidate } = await admin
+      .from("asset_candidates")
+      .select(
+        "draft_decision, draft_identity_confirmed, draft_existing_asset_id, draft_existing_asset_type",
+      )
+      .eq("id", candidateId)
+      .single();
+    expect(candidate?.draft_decision).toBe("link_existing");
+    expect(candidate?.draft_identity_confirmed).toBe(true);
+    expect(candidate?.draft_existing_asset_id).toBe(property.id);
+    expect(candidate?.draft_existing_asset_type).toBe("property");
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `batch-auto-prop-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateId,
+          decision: "link_existing",
+          existing_asset_id: property.id,
+          existing_asset_type: "property",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(error).toBeNull();
+
+    const { count: propertyCount } = await admin
+      .from("properties")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(propertyCount).toBe(1);
+
+    const { data: link } = await admin
+      .from("policy_asset_links")
+      .select("asset_id, policy_id, is_current")
+      .eq("asset_id", property.id)
+      .eq("is_current", true)
+      .single();
+    expect(link?.asset_id).toBe(property.id);
+    expect(link?.policy_id).toBe(data?.policies?.[0]);
+  });
+
+  it("preserves link_existing lineage when a second session matches the pending candidate (vehicle)", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const sessionId1 = await createExtractionSession(householdId);
+    const { data: vehicle } = await admin
+      .from("vehicles")
+      .insert({
+        household_id: householdId,
+        year: 2018,
+        make: "Honda",
+        model: "Civic",
+        vin: "2HGFC2F59JH511113",
+        primary_use: "commute",
+        vehicle_use_class: "personal",
+        financing_status: "owned",
+        is_classic: false,
+        is_modified: false,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!vehicle) throw new Error("vehicle not created");
+
+    const candidateId = randomUUID();
+    const facts1 = buildAnalyzerCandidate(vehicle.id, "vehicle", "matches_existing");
+    await persistDocumentAnalysis(admin, householdId, sessionId1, candidateId, "vehicle", facts1);
+
+    const { data: firstCandidate } = await admin
+      .from("asset_candidates")
+      .select(
+        "draft_decision, draft_existing_asset_id, draft_existing_asset_type, draft_identity_confirmed",
+      )
+      .eq("id", candidateId)
+      .single();
+    expect(firstCandidate?.draft_decision).toBe("link_existing");
+    expect(firstCandidate?.draft_existing_asset_id).toBe(vehicle.id);
+    expect(firstCandidate?.draft_existing_asset_type).toBe("vehicle");
+    expect(firstCandidate?.draft_identity_confirmed).toBe(true);
+
+    const sessionId2 = await createExtractionSession(householdId);
+    const facts2 = pendingMatchFacts(candidateId, vehicle.id, "vehicle");
+    await persistDocumentAnalysis(admin, householdId, sessionId2, candidateId, "vehicle", facts2);
+
+    const { data: secondCandidate } = await admin
+      .from("asset_candidates")
+      .select(
+        "draft_decision, draft_existing_asset_id, draft_existing_asset_type, draft_identity_confirmed",
+      )
+      .eq("id", candidateId)
+      .single();
+    expect(secondCandidate?.draft_decision).toBe("link_existing");
+    expect(secondCandidate?.draft_existing_asset_id).toBe(vehicle.id);
+    expect(secondCandidate?.draft_existing_asset_type).toBe("vehicle");
+    expect(secondCandidate?.draft_identity_confirmed).toBe(true);
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `pending-veh-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateId,
+          decision: "link_existing",
+          existing_asset_id: vehicle.id,
+          existing_asset_type: "vehicle",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(error).toBeNull();
+
+    const { count: vehicleCount } = await admin
+      .from("vehicles")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(vehicleCount).toBe(1);
+
+    const { data: link } = await admin
+      .from("policy_asset_links")
+      .select("asset_id, policy_id, is_current")
+      .eq("asset_id", vehicle.id)
+      .eq("is_current", true)
+      .single();
+    expect(link?.asset_id).toBe(vehicle.id);
+    expect(link?.policy_id).toBe(data?.policies?.[0]);
+  });
+
+  it("preserves link_existing lineage when a second session matches the pending candidate (property)", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    const sessionId1 = await createExtractionSession(householdId);
+    const { data: property } = await admin
+      .from("properties")
+      .insert({
+        household_id: householdId,
+        address_line1: "999 Existing Rd",
+        city: "Calgary",
+        province: "AB",
+        postal_code: "T9Z9Z9",
+        property_type: "homeowner",
+        dwelling_type: "detached",
+        owner_occupied: true,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!property) throw new Error("property not created");
+
+    const candidateId = randomUUID();
+    const facts1 = buildAnalyzerCandidate(property.id, "property", "matches_existing");
+    await persistDocumentAnalysis(admin, householdId, sessionId1, candidateId, "property", facts1);
+
+    const sessionId2 = await createExtractionSession(householdId);
+    const facts2 = pendingMatchFacts(candidateId, property.id, "property");
+    await persistDocumentAnalysis(admin, householdId, sessionId2, candidateId, "property", facts2);
+
+    const { data: candidate } = await admin
+      .from("asset_candidates")
+      .select(
+        "draft_decision, draft_existing_asset_id, draft_existing_asset_type, draft_identity_confirmed",
+      )
+      .eq("id", candidateId)
+      .single();
+    expect(candidate?.draft_decision).toBe("link_existing");
+    expect(candidate?.draft_existing_asset_id).toBe(property.id);
+    expect(candidate?.draft_existing_asset_type).toBe("property");
+    expect(candidate?.draft_identity_confirmed).toBe(true);
+
+    const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+      p_household_id: householdId,
+      p_actor_profile_id: CUSTOMER_ID,
+      p_client_request_id: `pending-prop-${randomUUID()}`,
+      p_decisions: [
+        {
+          candidate_id: candidateId,
+          decision: "link_existing",
+          existing_asset_id: property.id,
+          existing_asset_type: "property",
+          identity_confirmed: true,
+        },
+      ],
+    });
+    expect(error).toBeNull();
+
+    const { count: propertyCount } = await admin
+      .from("properties")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", householdId);
+    expect(propertyCount).toBe(1);
+
+    const { data: link } = await admin
+      .from("policy_asset_links")
+      .select("asset_id, policy_id, is_current")
+      .eq("asset_id", property.id)
+      .eq("is_current", true)
+      .single();
+    expect(link?.asset_id).toBe(property.id);
+    expect(link?.policy_id).toBe(data?.policies?.[0]);
+  });
+
+  it("preserves approve_new, needs_correction, and undecided pending candidate decisions across sessions", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId);
+
+    async function seedPendingDecision(
+      seedDecision: "approve_new" | "needs_correction" | "undecided",
+    ) {
+      const sessionId1 = await createExtractionSession(householdId);
+      const candidateId = randomUUID();
+
+      if (seedDecision === "undecided") {
+        const facts = pendingMatchFacts(candidateId);
+        await persistDocumentAnalysis(
+          admin,
+          householdId,
+          sessionId1,
+          candidateId,
+          "vehicle",
+          facts,
+        );
+      } else if (seedDecision === "approve_new") {
+        const facts = pendingMatchFacts(candidateId);
+        await persistDocumentAnalysis(
+          admin,
+          householdId,
+          sessionId1,
+          candidateId,
+          "vehicle",
+          facts,
+        );
+        const { error: saveError } = await customer.rpc("save_candidate_review_draft_v1" as any, {
+          p_household_id: householdId,
+          p_candidate_id: candidateId,
+          p_decision: "approve_new",
+          p_identity_confirmed: true,
+        });
+        expect(saveError).toBeNull();
+      } else {
+        const facts = pendingMatchFacts(candidateId);
+        await persistDocumentAnalysis(
+          admin,
+          householdId,
+          sessionId1,
+          candidateId,
+          "vehicle",
+          facts,
+        );
+        const { error: saveError } = await customer.rpc("save_candidate_review_draft_v1" as any, {
+          p_household_id: householdId,
+          p_candidate_id: candidateId,
+          p_decision: "needs_correction",
+          p_identity_confirmed: false,
+        });
+        expect(saveError).toBeNull();
+      }
+
+      const sessionId2 = await createExtractionSession(householdId);
+      const facts2 = pendingMatchFacts(candidateId);
+      await persistDocumentAnalysis(admin, householdId, sessionId2, candidateId, "vehicle", facts2);
+
+      const { data: candidate } = await admin
+        .from("asset_candidates")
+        .select("draft_decision, draft_identity_confirmed")
+        .eq("id", candidateId)
+        .single();
+
+      if (seedDecision === "approve_new") {
+        expect(candidate?.draft_decision).toBe("approve_new");
+        expect(candidate?.draft_identity_confirmed).toBe(true);
+
+        const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+          p_household_id: householdId,
+          p_actor_profile_id: CUSTOMER_ID,
+          p_client_request_id: `pending-approve-new-${randomUUID()}`,
+          p_decisions: [
+            { candidate_id: candidateId, decision: "approve_new", identity_confirmed: true },
+          ],
+        });
+        expect(error).toBeNull();
+        const { count: vehicleCount } = await admin
+          .from("vehicles")
+          .select("*", { count: "exact", head: true })
+          .eq("household_id", householdId);
+        expect(vehicleCount).toBe(1);
+        return data?.policies?.[0] as string;
+      }
+
+      if (seedDecision === "needs_correction") {
+        expect(candidate?.draft_decision).toBe("needs_correction");
+        expect(candidate?.draft_identity_confirmed).toBe(false);
+
+        const { data, error } = await customer.rpc("approve_candidate_assets_v2" as any, {
+          p_household_id: householdId,
+          p_actor_profile_id: CUSTOMER_ID,
+          p_client_request_id: `pending-needs-corr-${randomUUID()}`,
+          p_decisions: [{ candidate_id: candidateId, decision: "needs_correction" }],
+        });
+        expect(error).toBeNull();
+        expect(data?.needsCorrection?.length).toBe(1);
+        return undefined;
+      }
+
+      expect(candidate?.draft_decision).toBe("undecided");
+      expect(candidate?.draft_identity_confirmed).toBe(false);
+      return undefined;
+    }
+
+    await seedPendingDecision("approve_new");
+    await seedPendingDecision("needs_correction");
+    await seedPendingDecision("undecided");
+  });
+
+  it("rejects inconsistent policy_asset_links writes at the service-role boundary", async () => {
+    const customer = await getCustomerClient();
+    const admin = serviceRoleClient();
+    const householdId = await createIsolatedHousehold();
+    const otherHouseholdId = await createIsolatedHousehold();
+    createdHouseholdIds.push(householdId, otherHouseholdId);
+
+    const { data: otherVehicle } = await admin
+      .from("vehicles")
+      .insert({
+        household_id: otherHouseholdId,
+        year: 2018,
+        make: "Honda",
+        model: "Civic",
+        vin: "2HGFC2F59JH999999",
+        primary_use: "commute",
+        vehicle_use_class: "personal",
+        financing_status: "owned",
+        is_classic: false,
+        is_modified: false,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!otherVehicle) throw new Error("other vehicle not created");
+
+    const sessionId = await createExtractionSession(householdId);
+    const { data: vehicle } = await admin
+      .from("vehicles")
+      .insert({
+        household_id: householdId,
+        year: 2018,
+        make: "Honda",
+        model: "Civic",
+        vin: "2HGFC2F59JH511114",
+        primary_use: "commute",
+        vehicle_use_class: "personal",
+        financing_status: "owned",
+        is_classic: false,
+        is_modified: false,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!vehicle) throw new Error("vehicle not created");
+
+    const { data: secondVehicle } = await admin
+      .from("vehicles")
+      .insert({
+        household_id: householdId,
+        year: 2019,
+        make: "Honda",
+        model: "Accord",
+        vin: "2HGFC2F59JH511115",
+        primary_use: "commute",
+        vehicle_use_class: "personal",
+        financing_status: "owned",
+        is_classic: false,
+        is_modified: false,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!secondVehicle) throw new Error("second vehicle not created");
+
+    const { data: property } = await admin
+      .from("properties")
+      .insert({
+        household_id: householdId,
+        address_line1: "123 Integrity St",
+        city: "Calgary",
+        province: "AB",
+        postal_code: "T9Z9Z9",
+        property_type: "homeowner",
+        dwelling_type: "detached",
+        owner_occupied: true,
+        created_by: CUSTOMER_ID,
+        updated_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    if (!property) throw new Error("property not created");
+
+    const candidateId = randomUUID();
+    const facts = buildAnalyzerCandidate(vehicle.id, "vehicle", "matches_existing");
+    await persistDocumentAnalysis(admin, householdId, sessionId, candidateId, "vehicle", facts);
+
+    const { data: approvalData, error: approvalError } = await customer.rpc(
+      "approve_candidate_assets_v2" as any,
+      {
+        p_household_id: householdId,
+        p_actor_profile_id: CUSTOMER_ID,
+        p_client_request_id: `integrity-${randomUUID()}`,
+        p_decisions: [
+          {
+            candidate_id: candidateId,
+            decision: "link_existing",
+            existing_asset_id: vehicle.id,
+            existing_asset_type: "vehicle",
+            identity_confirmed: true,
+          },
+        ],
+      },
+    );
+    expect(approvalError).toBeNull();
+
+    const policyId = approvalData?.policies?.[0] as string;
+    const { data: link } = await admin
+      .from("policy_asset_links")
+      .select("*")
+      .eq("policy_id", policyId)
+      .single();
+    if (!link) throw new Error("link not found");
+
+    // Cross-household asset.
+    const crossHouseholdAssetLink = { ...link, asset_id: otherVehicle.id };
+    delete (crossHouseholdAssetLink as { id?: string }).id;
+    const { error: crossAssetError } = await admin
+      .from("policy_asset_links")
+      .insert(crossHouseholdAssetLink);
+    expect(crossAssetError?.message).toMatch(/asset .* does not exist in household/i);
+
+    // Unapproved candidate.
+    const unapprovedCandidateId = randomUUID();
+    await persistDocumentAnalysis(
+      admin,
+      householdId,
+      sessionId,
+      unapprovedCandidateId,
+      "vehicle",
+      facts,
+    );
+    const unapprovedLink = { ...link, candidate_id: unapprovedCandidateId };
+    delete (unapprovedLink as { id?: string }).id;
+    const { error: unapprovedError } = await admin
+      .from("policy_asset_links")
+      .insert(unapprovedLink);
+    expect(unapprovedError?.message).toMatch(/candidate is not approved/i);
+
+    // Wrong approved asset (same type, different asset in the same household).
+    const wrongAssetLink = { ...link, asset_id: secondVehicle.id };
+    delete (wrongAssetLink as { id?: string }).id;
+    const { error: wrongAssetError } = await admin
+      .from("policy_asset_links")
+      .insert(wrongAssetLink);
+    expect(wrongAssetError?.message).toMatch(/candidate approved asset does not match link asset/i);
+
+    // Wrong approved asset type (candidate approved vehicle, link property).
+    const { data: propertyPolicy } = await admin
+      .from("policies")
+      .insert({
+        household_id: householdId,
+        insurer_name: "Property Policy",
+        product_line: "property",
+        policy_number: "POL-PROPERTY",
+        annual_premium_cents: 100000,
+        is_current: true,
+        created_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    const wrongAssetTypeLink = {
+      ...link,
+      policy_id: propertyPolicy?.id as string,
+      asset_id: property.id,
+      asset_type: "property",
+      product_line: "property",
+    };
+    delete (wrongAssetTypeLink as { id?: string }).id;
+    const { error: wrongAssetTypeError } = await admin
+      .from("policy_asset_links")
+      .insert(wrongAssetTypeLink);
+    expect(wrongAssetTypeError?.message).toMatch(
+      /candidate approved asset does not match link asset/i,
+    );
+
+    // Wrong approved policy.
+    const { data: wrongPolicy } = await admin
+      .from("policies")
+      .insert({
+        household_id: householdId,
+        insurer_name: "Other Policy",
+        product_line: "auto",
+        policy_number: "POL-OTHER",
+        annual_premium_cents: 100000,
+        is_current: true,
+        created_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    const wrongPolicyLink = { ...link, policy_id: wrongPolicy?.id as string };
+    delete (wrongPolicyLink as { id?: string }).id;
+    const { error: wrongPolicyError } = await admin
+      .from("policy_asset_links")
+      .insert(wrongPolicyLink);
+    expect(wrongPolicyError?.message).toMatch(
+      /candidate approved policy does not match link policy/i,
+    );
+
+    // Cross-household policy.
+    const { data: otherPolicy } = await admin
+      .from("policies")
+      .insert({
+        household_id: otherHouseholdId,
+        insurer_name: "Other Household Policy",
+        product_line: "auto",
+        policy_number: "POL-OTHER-HH",
+        annual_premium_cents: 100000,
+        is_current: true,
+        created_by: CUSTOMER_ID,
+      })
+      .select("id")
+      .single();
+    const crossHouseholdPolicyLink = {
+      ...link,
+      policy_id: otherPolicy?.id as string,
+      candidate_id: null,
+    };
+    delete (crossHouseholdPolicyLink as { id?: string }).id;
+    const { error: crossPolicyError } = await admin
+      .from("policy_asset_links")
+      .insert(crossHouseholdPolicyLink);
+    expect(crossPolicyError?.message).toMatch(/policy household does not match link household/i);
+
+    // Product-line mismatch: vehicle with property product line.
+    const vehiclePropertyLineLink = { ...link, product_line: "property" };
+    delete (vehiclePropertyLineLink as { id?: string }).id;
+    const { error: productLineError } = await admin
+      .from("policy_asset_links")
+      .insert(vehiclePropertyLineLink);
+    expect(productLineError?.message).toMatch(
+      /vehicle links must use product_line auto|policy product line does not match link product line/i,
+    );
+
+    // Policy/link current-state mismatch.
+    const mismatchedCurrentLink = { ...link, is_current: false };
+    delete (mismatchedCurrentLink as { id?: string }).id;
+    const { error: currentMismatchError } = await admin
+      .from("policy_asset_links")
+      .insert(mismatchedCurrentLink);
+    expect(currentMismatchError?.message).toMatch(/policy is_current must match link is_current/i);
   });
 });

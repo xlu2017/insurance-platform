@@ -19,7 +19,13 @@ export interface ExtractionCandidate {
   review_status: string;
   approved_asset_id?: string | null;
   approved_asset_type?: "vehicle" | "property" | null;
-  draft_decision?: "approve_new" | "link_existing" | "skip" | "needs_correction" | null;
+  draft_decision?:
+    | "approve_new"
+    | "link_existing"
+    | "skip"
+    | "needs_correction"
+    | "undecided"
+    | null;
   draft_identity_confirmed?: boolean;
   draft_existing_asset_id?: string | null;
   draft_existing_asset_type?: "vehicle" | "property" | null;

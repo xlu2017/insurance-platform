@@ -124,7 +124,8 @@ insert into switch_events (id, case_id, state, replacement_confirmed_at, incumbe
 -- =============================== active case (bundle-loss scenario) ===============================
 
 insert into optimization_cases (id, household_id, state, renewal_date, notes) values
-  ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'licensed_review', '2026-09-01', 'Renewal cycle 2026. Bundle-loss test case.');
+  ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'licensed_review', '2026-09-01', 'Renewal cycle 2026. Bundle-loss test case.'),
+  ('30000000-0000-0000-0000-000000000010', '20000000-0000-0000-0000-000000000001', 'awaiting_documents', '2027-09-01', 'Manual review browser acceptance case.');
 
 insert into case_assignments (case_id, assignee_profile_id, assignment_role) values
   ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'operations');
@@ -240,3 +241,44 @@ insert into notifications (profile_id, channel, title, body, action_url) values
 delete from vault.secrets where name in ('cleanup_service_url', 'cleanup_service_role_key');
 select vault.create_secret('http://supabase_kong_insurance-autopilot:8000', 'cleanup_service_url');
 select vault.create_secret('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU', 'cleanup_service_role_key');
+
+-- Browser acceptance fixture: an existing manual-review batch with one source document
+-- for the Miller Household active case so the admin manual-review flow can be exercised.
+DO $$
+DECLARE
+  v_session_id uuid := gen_random_uuid();
+  v_batch_id uuid := gen_random_uuid();
+  v_doc_id uuid := gen_random_uuid();
+  v_sha256 text := encode(digest('browser-test-document', 'sha256'), 'hex');
+BEGIN
+  insert into document_extraction_sessions (id, household_id, status, created_by, case_id)
+  values (v_session_id, '20000000-0000-0000-0000-000000000001', 'open', '00000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000010');
+
+  insert into document_processing_batches (
+    id, household_id, created_by, client_request_id, session_id, mode_snapshot, settings_version,
+    document_count, unique_document_count, deduplicated_count, status, case_id
+  )
+  values (
+    v_batch_id, '20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001',
+    'seed-browser-acceptance', v_session_id, 'safe', 1, 1, 1, 0, 'manual_review',
+    '30000000-0000-0000-0000-000000000010'
+  );
+
+  insert into policy_documents (
+    id, household_id, category, status, storage_path, file_name, mime_type, size_bytes, uploaded_by
+  )
+  values (
+    v_doc_id, '20000000-0000-0000-0000-000000000001', 'other', 'uploaded',
+    'browser-acceptance/test.pdf', 'browser-test-document.pdf', 'application/pdf', 1234,
+    '00000000-0000-0000-0000-000000000001'
+  );
+
+  insert into document_processing_batch_items (
+    id, batch_id, household_id, client_item_id, policy_document_id, selected_file_name,
+    category, content_sha256, deduplicated, status, review_status
+  )
+  values (
+    gen_random_uuid(), v_batch_id, '20000000-0000-0000-0000-000000000001', 'browser-test-item',
+    v_doc_id, 'browser-test-document.pdf', 'other', v_sha256, false, 'uploaded', 'unreviewed'
+  );
+END $$;

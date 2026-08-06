@@ -189,6 +189,10 @@ export function getInitialDecision(candidate: ExtractionCandidate): CandidateDec
     return persisted;
   }
 
+  if (persisted === "undecided") {
+    return null;
+  }
+
   if (candidate.match_classification === "exact_existing_match") {
     return "link_existing";
   }
