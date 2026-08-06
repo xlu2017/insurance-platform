@@ -923,6 +923,23 @@ Deno.serve(async (req) => {
     let analysis: any;
     let providerAnalysis: any;
 
+    const markProcessingUnavailable = async (errorCode: string) => {
+      if (batchIdRaw && typeof processingGeneration === "number") {
+        await admin
+          .from("document_processing_batches")
+          .update({
+            status: "processing_unavailable",
+            retryable: false,
+            error_code: errorCode,
+            completed_at: new Date().toISOString(),
+            worker_lease_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", batchIdRaw)
+          .eq("processing_generation", processingGeneration);
+      }
+    };
+
     if (batchIdRaw) {
       const { data: asserted, error: assertErr } = await admin.rpc(
         "assert_document_batch_generation_v1",
@@ -1177,25 +1194,89 @@ Deno.serve(async (req) => {
       const existingPolicies = await loadExistingPolicies(admin, householdId);
       const skipCandidateEntityTemporaryIds = new Set<string>();
       const overlapEntityKeys = new Map<string, string>();
-      for (const entity of projectedAnalysis.detectedEntities ?? []) {
-        const documentType = projectedAnalysis.documents.find((d: any) =>
-          entity.evidence?.some((ref: any) => ref.documentId === d.documentId),
-        )?.classification;
-        const overlap = classifyDocumentAssetOverlap(entity, {
-          existingAssets,
-          existingPolicies,
-          pendingCandidates,
-          priorNormalizations: completedNormalizations,
-          documentType,
-          digestByDocId,
-          compatibleNormalizationByDocId,
-        });
-        if (!overlap) continue;
 
-        const firstEvidence = entity.evidence?.[0];
-        if (firstEvidence?.documentId) {
-          const normalizationId = normalizationIdByDocId.get(firstEvidence.documentId);
-          if (normalizationId && batchIdRaw) {
+      const documentTypeByDocId = new Map<string, string>();
+      for (const doc of projectedAnalysis.documents ?? []) {
+        if (doc?.documentId && typeof doc.classification === "string") {
+          documentTypeByDocId.set(doc.documentId, doc.classification);
+        }
+      }
+
+      for (const entity of projectedAnalysis.detectedEntities ?? []) {
+        const supportingDocIds = new Set<string>();
+        const addEvidenceRef = (ref: any) => {
+          if (ref && typeof ref.documentId === "string" && ref.documentId) {
+            supportingDocIds.add(ref.documentId);
+          }
+        };
+
+        for (const ref of entity.evidence ?? []) addEvidenceRef(ref);
+
+        if (entity.currentPolicy && typeof entity.currentPolicy === "object") {
+          for (const value of Object.values(entity.currentPolicy)) {
+            if (value && typeof value === "object" && Array.isArray((value as any).evidence)) {
+              for (const ref of (value as any).evidence) addEvidenceRef(ref);
+            }
+          }
+        }
+
+        if (entity.currentCoverage && typeof entity.currentCoverage === "object") {
+          for (const value of Object.values(entity.currentCoverage)) {
+            if (value && typeof value === "object" && Array.isArray((value as any).evidence)) {
+              for (const ref of (value as any).evidence) addEvidenceRef(ref);
+            }
+          }
+        }
+
+        for (const conflict of projectedAnalysis.unresolvedConflicts ?? []) {
+          if (conflict?.entityRef === entity.temporaryId && Array.isArray(conflict?.evidence)) {
+            for (const ref of conflict.evidence) addEvidenceRef(ref);
+          }
+        }
+
+        if (supportingDocIds.size === 0) {
+          console.error("EXTRACT-ENTITY-NO-EVIDENCE", { temporaryId: entity.temporaryId });
+          await markProcessingUnavailable("ENTITY_NO_EVIDENCE");
+          return jsonError("Entity has no supporting policy-document evidence", 500);
+        }
+
+        const overlaps: any[] = [];
+        const persistedNormalizationIds = new Set<string>();
+
+        for (const docId of supportingDocIds) {
+          const normalizationId = normalizationIdByDocId.get(docId);
+          if (!normalizationId) {
+            console.error("EXTRACT-ENTITY-EVIDENCE-NORMALIZATION-MISSING", {
+              temporaryId: entity.temporaryId,
+              documentId: docId,
+            });
+            await markProcessingUnavailable("EVIDENCE_NORMALIZATION_MISSING");
+            return jsonError(
+              "Evidence policy document has no batch normalization association",
+              500,
+            );
+          }
+          if (persistedNormalizationIds.has(normalizationId)) continue;
+          persistedNormalizationIds.add(normalizationId);
+
+          const documentType = documentTypeByDocId.get(docId) ?? "unknown";
+          const entityView = {
+            ...entity,
+            evidence: [{ documentId: docId, pageNumber: 1, evidenceSummary: "supporting" }],
+          };
+
+          const overlap = classifyDocumentAssetOverlap(entityView, {
+            existingAssets,
+            existingPolicies,
+            pendingCandidates,
+            priorNormalizations: completedNormalizations,
+            documentType,
+            digestByDocId,
+            compatibleNormalizationByDocId,
+          });
+          if (!overlap) continue;
+
+          if (batchIdRaw) {
             const overlapArgs = recordDocumentAssetOverlapArgs(overlap, {
               batchId: batchIdRaw,
               normalizationId,
@@ -1206,20 +1287,33 @@ Deno.serve(async (req) => {
             );
             if (overlapErr) {
               console.error("EXTRACT-OVERLAP-PERSISTENCE-ERROR", overlapErr);
+              await markProcessingUnavailable("OVERLAP_PERSISTENCE_FAILED");
               return jsonError("Failed to record document asset overlap", 500);
             }
           }
+
+          overlaps.push(overlap);
         }
 
-        if (overlap.skipCandidateDerivation) {
+        if (overlaps.length === 0) {
+          console.error("EXTRACT-ENTITY-NO-OVERLAP-PERSISTED", {
+            temporaryId: entity.temporaryId,
+          });
+          await markProcessingUnavailable("NO_OVERLAP_PERSISTED");
+          return jsonError("No overlap assessment persisted for entity", 500);
+        }
+
+        overlaps.sort((a, b) => b.confidence - a.confidence);
+        const actionable = overlaps.find((o) => !o.skipCandidateDerivation);
+        if (!actionable) {
           skipCandidateEntityTemporaryIds.add(entity.temporaryId);
           continue;
         }
 
-        const resolution = entityResolutionFromOverlap(overlap);
+        const resolution = entityResolutionFromOverlap(actionable);
         if (resolution) {
           entity.resolution = resolution;
-          overlapEntityKeys.set(entity.temporaryId, overlap.normalizedEntityKeyForPersistence);
+          overlapEntityKeys.set(entity.temporaryId, actionable.normalizedEntityKeyForPersistence);
         }
       }
 
