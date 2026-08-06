@@ -17,6 +17,7 @@ const ANON_KEY = LOCAL_SUPABASE_ANON_KEY;
 const CUSTOMER_ID = "00000000-0000-0000-0000-000000000001";
 const CUSTOMER_EMAIL = "customer@example.com";
 const CUSTOMER_PASSWORD = "DemoCustomer123!";
+const SHARED_MOCK_VIN = "1HGCM82633A123456";
 
 async function getCustomerAccessToken(): Promise<string> {
   const client = createClient(SUPABASE_URL, ANON_KEY);
@@ -85,7 +86,10 @@ async function extractPolicyEntities(
   accessToken: string,
   householdId: string,
   batchId: string,
+  mockAnalysisResponse?: Record<string, unknown>,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
+  const payload: Record<string, unknown> = { household_id: householdId, batch_id: batchId };
+  if (mockAnalysisResponse) payload.mock_analysis_response = mockAnalysisResponse;
   const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-policy-entities`, {
     method: "POST",
     headers: {
@@ -93,7 +97,7 @@ async function extractPolicyEntities(
       apikey: ANON_KEY,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ household_id: householdId, batch_id: batchId }),
+    body: JSON.stringify(payload),
   });
   const text = await res.text();
   let body: Record<string, unknown> = {};
@@ -105,13 +109,18 @@ async function extractPolicyEntities(
   return { status: res.status, body };
 }
 
-async function enableDangerousMode(client: AdminClient, householdId: string) {
+async function enableDangerousMode(
+  client: AdminClient,
+  householdId: string,
+  provider = "gemini",
+  modelId = "gemini-2.5-flash",
+) {
   const { error } = await client.rpc("enable_dangerous_mode_v1", {
     p_household_id: householdId,
     p_disclosure_version: "dangerous-mode-v1",
     p_processor_contract_version: "processor-contract-v1",
-    p_configured_provider: "gemini",
-    p_configured_model_id: "gemini-2.5-flash",
+    p_configured_provider: provider,
+    p_configured_model_id: modelId,
     p_explicit_confirmation: true,
     p_foreign_processing_acknowledged: true,
     p_automated_processing_acknowledged: true,
@@ -154,10 +163,11 @@ async function waitForBatchReady(
   admin: AdminClient,
   householdId: string,
   batchId: string,
+  mockAnalysisResponse?: Record<string, unknown>,
 ): Promise<string> {
   let status = await pollBatchStatus(admin, batchId, 4000);
   if (!status) {
-    await extractPolicyEntities(accessToken, householdId, batchId);
+    await extractPolicyEntities(accessToken, householdId, batchId, mockAnalysisResponse);
     status = await pollBatchStatus(admin, batchId, 20000);
   }
   if (!status) throw new Error("Batch did not reach terminal status");
@@ -182,6 +192,42 @@ async function createBatchFromStagedRPC(
   return {
     batchId: result.batch.id,
     sessionId: result.batch.session_id ?? result.session_id,
+  };
+}
+
+async function setBatchProviderMock(admin: AdminClient, batchId: string) {
+  const { error } = await admin
+    .from("document_processing_batches")
+    .update({ configured_provider: "mock", configured_model_id: "mock" })
+    .eq("id", batchId);
+  if (error) throw error;
+}
+
+function buildMockAnalysisResponse(providerDocumentId: string, vin: string) {
+  return {
+    detectedEntities: [
+      {
+        temporaryId: "mock-entity-1",
+        entityType: "vehicle",
+        displayLabel: "2020 Honda Civic",
+        identity: { vin, year: 2020, make: "Honda", model: "Civic" },
+        currentPolicy: {
+          insurer: "Mock Insurer",
+          policyNumber: "POL-MOCK",
+          effectiveDate: "2026-01-01",
+          expiryDate: "2027-01-01",
+          annualPremiumCents: 100000,
+        },
+        currentCoverage: {},
+        mandateSuggestions: {},
+        evidence: [
+          { documentId: providerDocumentId, pageNumber: 1, evidenceSummary: "provider doc" },
+        ],
+        requiredConfirmations: [],
+      },
+    ],
+    unresolvedConflicts: [],
+    warnings: [],
   };
 }
 
@@ -1043,6 +1089,294 @@ describe("overlap persistence for multi-normalization entities", () => {
         .select("*", { count: "exact", head: true })
         .eq("household_id", householdId);
       expect(candidateCount).toBe(0);
+    },
+  );
+
+  describe("selectActionableOverlap disposition precedence and contradiction detection", () => {
+    type TestOverlapItem = {
+      normalizationId: string;
+      overlap: any;
+    };
+
+    const TEST_DISPOSITION_PRIORITY: Record<string, number> = {
+      create_conflict_review: 5,
+      require_asset_match_confirmation: 4,
+      create_renewal_candidate: 3,
+      create_new_asset_candidate: 2,
+      attach_supporting_evidence: 1,
+      reuse_existing_normalization: 0,
+    };
+
+    function selectActionableOverlap(
+      overlapsWithId: TestOverlapItem[],
+    ): TestOverlapItem | undefined {
+      const priorityFor = (disposition: string) =>
+        TEST_DISPOSITION_PRIORITY[disposition] ?? Number.MIN_SAFE_INTEGER;
+
+      const sorted = [...overlapsWithId].sort((a, b) => {
+        const pa = priorityFor(a.overlap.disposition);
+        const pb = priorityFor(b.overlap.disposition);
+        if (pa !== pb) return pb - pa;
+        if (a.overlap.confidence !== b.overlap.confidence) {
+          return b.overlap.confidence - a.overlap.confidence;
+        }
+        const keyA = String(a.overlap.normalizedEntityKeyForPersistence ?? "");
+        const keyB = String(b.overlap.normalizedEntityKeyForPersistence ?? "");
+        if (keyA !== keyB) return keyA.localeCompare(keyB);
+        return a.normalizationId.localeCompare(b.normalizationId);
+      });
+
+      const actionables = sorted.filter((item) => !item.overlap.skipCandidateDerivation);
+      if (actionables.length === 0) return undefined;
+
+      const reference = {
+        assetId: actionables[0].overlap.assetId,
+        assetType: actionables[0].overlap.assetType,
+        existingPolicyId: actionables[0].overlap.existingPolicyId,
+        normalizedEntityKey: actionables[0].overlap.normalizedEntityKeyForPersistence,
+      };
+
+      let contradiction = false;
+      for (let i = 1; i < actionables.length; i++) {
+        const o = actionables[i].overlap;
+        if (
+          o.assetId !== reference.assetId ||
+          o.assetType !== reference.assetType ||
+          o.existingPolicyId !== reference.existingPolicyId ||
+          o.normalizedEntityKeyForPersistence !== reference.normalizedEntityKey
+        ) {
+          contradiction = true;
+          break;
+        }
+      }
+
+      if (!contradiction) return actionables[0];
+
+      const forced = actionables.find(
+        (item) =>
+          item.overlap.disposition === "create_conflict_review" ||
+          item.overlap.disposition === "require_asset_match_confirmation",
+      );
+      if (forced) return forced;
+
+      const base = actionables[0].overlap;
+      const syntheticOverlap = {
+        ...base,
+        disposition: "create_conflict_review",
+        classification: "conflict_review",
+        confidence: 1,
+        reasons: ["Contradictory overlap assessments for the same entity"],
+        requiresCustomerDecision: true,
+        skipCandidateDerivation: false,
+      };
+      return { normalizationId: actionables[0].normalizationId, overlap: syntheticOverlap };
+    }
+
+    function makeOverlap(
+      id: string,
+      disposition: string,
+      confidence: number,
+      normalizedEntityKey: string,
+      overrides: {
+        assetId?: string;
+        assetType?: string;
+        existingPolicyId?: string;
+        skipCandidateDerivation?: boolean;
+      } = {},
+    ): TestOverlapItem {
+      return {
+        normalizationId: id,
+        overlap: {
+          disposition,
+          confidence,
+          normalizedEntityKeyForPersistence: normalizedEntityKey,
+          assetId: overrides.assetId ?? "asset-1",
+          assetType: overrides.assetType ?? "vehicle",
+          existingPolicyId: overrides.existingPolicyId ?? null,
+          skipCandidateDerivation: overrides.skipCandidateDerivation,
+        },
+      };
+    }
+
+    it("higher-confidence renewal loses to lower-confidence conflict", () => {
+      const overlaps = [
+        makeOverlap("n-1", "create_renewal_candidate", 0.99, "key-1"),
+        makeOverlap("n-2", "create_conflict_review", 0.6, "key-1"),
+      ];
+      const selected = selectActionableOverlap(overlaps);
+      expect(selected?.overlap.disposition).toBe("create_conflict_review");
+      expect(selected?.normalizationId).toBe("n-2");
+    });
+
+    it("higher-confidence new candidate loses to lower-confidence identity confirmation", () => {
+      const overlaps = [
+        makeOverlap("n-1", "create_new_asset_candidate", 0.99, "key-1"),
+        makeOverlap("n-2", "require_asset_match_confirmation", 0.55, "key-1"),
+      ];
+      const selected = selectActionableOverlap(overlaps);
+      expect(selected?.overlap.disposition).toBe("require_asset_match_confirmation");
+      expect(selected?.normalizationId).toBe("n-2");
+    });
+
+    it("equal-confidence reversed order picks same disposition and key", () => {
+      const key = "vehicle:vin:shared";
+      const overlapsA = [
+        makeOverlap("n-a", "create_new_asset_candidate", 0.95, key),
+        makeOverlap("n-b", "create_new_asset_candidate", 0.95, key),
+      ];
+      const overlapsB = [...overlapsA].reverse();
+      const selectedA = selectActionableOverlap(overlapsA);
+      const selectedB = selectActionableOverlap(overlapsB);
+      expect(selectedA?.overlap.disposition).toBe("create_new_asset_candidate");
+      expect(selectedB?.overlap.disposition).toBe("create_new_asset_candidate");
+      expect(selectedA?.overlap.normalizedEntityKeyForPersistence).toBe(key);
+      expect(selectedB?.overlap.normalizedEntityKeyForPersistence).toBe(key);
+      expect(selectedA?.normalizationId).toBe(selectedB?.normalizationId);
+    });
+
+    it("incompatible asset IDs synthesize conflict review", () => {
+      const overlaps = [
+        makeOverlap("n-1", "create_renewal_candidate", 0.99, "key-1", { assetId: "asset-a" }),
+        makeOverlap("n-2", "create_renewal_candidate", 0.95, "key-1", { assetId: "asset-b" }),
+      ];
+      const selected = selectActionableOverlap(overlaps);
+      expect(selected?.overlap.disposition).toBe("create_conflict_review");
+      expect(selected?.overlap.normalizedEntityKeyForPersistence).toBe("key-1");
+    });
+
+    it("exact duplicate plus actionable renewal selects renewal", () => {
+      const overlaps = [
+        makeOverlap("n-1", "reuse_existing_normalization", 1, "key-1", {
+          skipCandidateDerivation: true,
+        }),
+        makeOverlap("n-2", "create_renewal_candidate", 0.9, "key-1"),
+      ];
+      const selected = selectActionableOverlap(overlaps);
+      expect(selected?.overlap.disposition).toBe("create_renewal_candidate");
+      expect(selected?.normalizationId).toBe("n-2");
+    });
+
+    it("supporting evidence plus conflict selects conflict", () => {
+      const overlaps = [
+        makeOverlap("n-1", "attach_supporting_evidence", 0.95, "key-1", {
+          skipCandidateDerivation: true,
+        }),
+        makeOverlap("n-2", "create_conflict_review", 0.8, "key-1"),
+      ];
+      const selected = selectActionableOverlap(overlaps);
+      expect(selected?.overlap.disposition).toBe("create_conflict_review");
+      expect(selected?.normalizationId).toBe("n-2");
+    });
+  });
+
+  it(
+    "mocked-provider mixed reused and new document sends one transmission and creates one candidate",
+    { timeout: 60000 },
+    async () => {
+      const admin = serviceRoleClient();
+      const householdId = await setupHousehold(admin);
+      const client = await getAuthenticatedSupabaseClient();
+      await enableDangerousMode(client, householdId);
+
+      const docs = await stageAndPrepare(householdId, [
+        { name: "reused-mock.png", salt: "reused-mock" },
+        { name: "provider-mock.png", salt: "provider-mock" },
+      ]);
+      const [reusedDoc, providerDoc] = docs;
+      const sharedKey = `vehicle:vin:${SHARED_MOCK_VIN}`;
+
+      await insertCompletedNormalization(
+        admin,
+        householdId,
+        reusedDoc.policyDocumentId,
+        reusedDoc.contentSha256,
+        {
+          canonicalFingerprint: sharedKey,
+          identity: { vin: SHARED_MOCK_VIN, year: 2020, make: "Honda", model: "Civic" },
+          candidateIdentity: {
+            exactIdentityFingerprint: sharedKey,
+            provisionalCandidateKey: null,
+            identityStrength: "exact",
+          },
+          evidence: [
+            {
+              documentId: reusedDoc.policyDocumentId,
+              pageNumber: 1,
+              quotedLabel: "policy",
+              evidenceSummary: "doc",
+            },
+          ],
+        } as Record<string, unknown>,
+      );
+
+      const { batchId } = await createBatchFromStagedRPC(
+        admin,
+        householdId,
+        [reusedDoc.policyDocumentId, providerDoc.policyDocumentId],
+        `mock-mixed-${randomUUID()}`,
+      );
+      await setBatchProviderMock(admin, batchId);
+
+      const mockResponse = buildMockAnalysisResponse(providerDoc.policyDocumentId, SHARED_MOCK_VIN);
+      const { status, body } = await extractPolicyEntities(
+        accessToken,
+        householdId,
+        batchId,
+        mockResponse,
+      );
+
+      if (status === 200) {
+        const analysis = body.analysis as Record<string, unknown>;
+        const metrics = analysis?.providerMetrics as Record<string, unknown> | undefined;
+        if (metrics) {
+          expect(metrics.uploadCount).toBe(1);
+          expect(metrics.analyzeCount).toBe(1);
+          const uploadedIds = metrics.uploadedDocumentIds as string[];
+          expect(uploadedIds).toEqual([providerDoc.policyDocumentId]);
+        }
+      }
+
+      const finalStatus = await pollBatchStatus(admin, batchId, 20000);
+      expect(finalStatus).toBe("ready_for_review");
+
+      const { data: batchNorms } = await admin
+        .from("document_processing_batch_normalizations")
+        .select(
+          "use_status, normalization_id, normalization:document_normalizations(id, content_sha256)",
+        )
+        .eq("batch_id", batchId);
+      expect(batchNorms).toHaveLength(2);
+      const createdNorms = batchNorms?.filter((n) => n.use_status === "created") ?? [];
+      const reusedNorms = batchNorms?.filter((n) => n.use_status === "reused") ?? [];
+      expect(createdNorms).toHaveLength(1);
+      expect(reusedNorms).toHaveLength(1);
+
+      const { data: providerFiles } = await admin
+        .from("document_analysis_provider_files")
+        .select("policy_document_id")
+        .in("policy_document_id", [reusedDoc.policyDocumentId, providerDoc.policyDocumentId]);
+      expect(providerFiles).toHaveLength(1);
+      expect(providerFiles?.[0].policy_document_id).toBe(providerDoc.policyDocumentId);
+
+      const { data: overlaps } = await admin
+        .from("document_asset_overlap_assessments")
+        .select("*")
+        .eq("batch_id", batchId);
+      expect(overlaps).toHaveLength(2);
+      const classifications = overlaps?.map((o) => o.classification as string).sort();
+      expect(classifications).toEqual(["exact_file_duplicate", "new_asset"]);
+
+      const { count: candidateCount } = await admin
+        .from("asset_candidates")
+        .select("*", { count: "exact", head: true })
+        .eq("household_id", householdId);
+      expect(candidateCount).toBe(1);
+
+      const { count: reviewCount } = await admin
+        .from("candidate_field_reviews")
+        .select("*", { count: "exact", head: true })
+        .eq("household_id", householdId);
+      expect(reviewCount).toBe(0);
     },
   );
 });

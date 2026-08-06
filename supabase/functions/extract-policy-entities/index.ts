@@ -68,6 +68,79 @@ interface PendingCandidateRecord {
   case_id: string | null;
 }
 
+const DISPOSITION_PRIORITY: Record<string, number> = {
+  create_conflict_review: 5,
+  require_asset_match_confirmation: 4,
+  create_renewal_candidate: 3,
+  create_new_asset_candidate: 2,
+  attach_supporting_evidence: 1,
+  reuse_existing_normalization: 0,
+};
+
+function selectActionableOverlap(
+  overlapsWithId: { normalizationId: string; overlap: any }[],
+): { normalizationId: string; overlap: any } | undefined {
+  const priorityFor = (disposition: string) =>
+    DISPOSITION_PRIORITY[disposition] ?? Number.MIN_SAFE_INTEGER;
+
+  const sorted = [...overlapsWithId].sort((a, b) => {
+    const pa = priorityFor(a.overlap.disposition);
+    const pb = priorityFor(b.overlap.disposition);
+    if (pa !== pb) return pb - pa;
+    if (a.overlap.confidence !== b.overlap.confidence)
+      return b.overlap.confidence - a.overlap.confidence;
+    const keyA = String(a.overlap.normalizedEntityKeyForPersistence ?? "");
+    const keyB = String(b.overlap.normalizedEntityKeyForPersistence ?? "");
+    if (keyA !== keyB) return keyA.localeCompare(keyB);
+    return a.normalizationId.localeCompare(b.normalizationId);
+  });
+
+  const actionables = sorted.filter((item) => !item.overlap.skipCandidateDerivation);
+  if (actionables.length === 0) return undefined;
+
+  const reference = {
+    assetId: actionables[0].overlap.assetId,
+    assetType: actionables[0].overlap.assetType,
+    existingPolicyId: actionables[0].overlap.existingPolicyId,
+    normalizedEntityKey: actionables[0].overlap.normalizedEntityKeyForPersistence,
+  };
+
+  let contradiction = false;
+  for (let i = 1; i < actionables.length; i++) {
+    const o = actionables[i].overlap;
+    if (
+      o.assetId !== reference.assetId ||
+      o.assetType !== reference.assetType ||
+      o.existingPolicyId !== reference.existingPolicyId ||
+      o.normalizedEntityKeyForPersistence !== reference.normalizedEntityKey
+    ) {
+      contradiction = true;
+      break;
+    }
+  }
+
+  if (!contradiction) return actionables[0];
+
+  const forced = actionables.find(
+    (item) =>
+      item.overlap.disposition === "create_conflict_review" ||
+      item.overlap.disposition === "require_asset_match_confirmation",
+  );
+  if (forced) return forced;
+
+  const base = actionables[0].overlap;
+  const syntheticOverlap = {
+    ...base,
+    disposition: "create_conflict_review",
+    classification: "conflict_review",
+    confidence: 1,
+    reasons: ["Contradictory overlap assessments for the same entity"],
+    requiresCustomerDecision: true,
+    skipCandidateDerivation: false,
+  };
+  return { normalizationId: actionables[0].normalizationId, overlap: syntheticOverlap };
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -308,6 +381,67 @@ async function loadExistingPolicies(admin: any, householdId: string): Promise<an
   }));
 }
 
+class MockNativeProvider {
+  providerId = "mock";
+  baseUrl = "";
+  uploadCount = 0;
+  analyzeCount = 0;
+  uploadedDocumentIds: string[] = [];
+
+  constructor(private mockResponse: unknown) {}
+
+  async resolveModel(): Promise<any> {
+    return {
+      modelId: "mock",
+      provider: "mock",
+      supportsImageInput: true,
+      supportsVideoInput: false,
+      supportsGenericFileInput: true,
+      supportedReferenceSchemes: ["mock"],
+      providerMetadata: {},
+    };
+  }
+
+  async resolveInputMode(_input: any): Promise<any> {
+    return {
+      mimeType: "application/pdf",
+      mode: "provider_extracted_text" as const,
+      supported: true,
+    };
+  }
+
+  async assertBatchFits(_inputs: any[]): Promise<void> {}
+
+  async uploadOriginalFile(input: any, callbacks?: any): Promise<any> {
+    this.uploadCount++;
+    this.uploadedDocumentIds.push(input.documentId);
+    const handle = {
+      providerFileId: crypto.randomUUID(),
+      documentId: input.documentId,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      bytes: input.bytes.length,
+      mode: "provider_extracted_text" as const,
+      reference: `mock://${input.documentId}`,
+      status: "ready",
+      providerMetadata: {},
+    };
+    if (callbacks?.onHandleCreated) {
+      await callbacks.onHandleCreated(handle);
+    }
+    return { status: "ready", handle };
+  }
+
+  async analyze(_request: any): Promise<unknown> {
+    this.analyzeCount++;
+    return this.mockResponse;
+  }
+
+  async deleteFile(_handle: any): Promise<any> {
+    return { deleted: true, attempts: 1 };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -337,6 +471,7 @@ Deno.serve(async (req) => {
     return jsonError("Invalid JSON body", 400);
   }
 
+  const mockAnalysisResponse = body.mock_analysis_response as Record<string, unknown> | undefined;
   const householdId = body.household_id as string | undefined;
   const batchIdRaw = body.batch_id as string | undefined;
   let sessionIdRaw = body.session_id as string | undefined;
@@ -494,6 +629,7 @@ Deno.serve(async (req) => {
     configuredProvider.includes("google") ||
     configuredModelId.toLowerCase().includes("gemini") ||
     configuredModelId.toLowerCase().includes("flash");
+  const isMock = configuredProvider === "mock";
 
   const { data: docRows, error: docsErr } = await supabase
     .from("policy_documents")
@@ -685,7 +821,9 @@ Deno.serve(async (req) => {
     {
       ...privacyConfig,
       cleanupReadinessCheck:
-        isGemini || allDocumentsAreDuplicates ? undefined : async () => isCleanupReadinessReady(),
+        isGemini || isMock || allDocumentsAreDuplicates
+          ? undefined
+          : async () => isCleanupReadinessReady(),
     },
     consent,
   );
@@ -772,14 +910,20 @@ Deno.serve(async (req) => {
   ]);
 
   const fileLifecycleStore = new SupabaseFileLifecycleStore(admin);
-  let provider:
-    | InstanceType<typeof KimiK3Provider>
-    | InstanceType<typeof GeminiFlashLiteProvider>
-    | undefined;
+  let provider: any;
   let analyzer: ReturnType<typeof createNativeDocumentAnalyzer> | undefined;
 
   if (!allDocumentsAreDuplicates) {
-    if (isGemini) {
+    if (configuredProvider === "mock") {
+      provider = new MockNativeProvider(
+        mockAnalysisResponse ?? {
+          detectedEntities: [],
+          documents: [],
+          unresolvedConflicts: [],
+          warnings: [],
+        },
+      );
+    } else if (isGemini) {
       const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
       if (!geminiApiKey || !configuredModelId) {
         await authorizationStore.updateAuthorization(authorization.id, {
@@ -924,8 +1068,9 @@ Deno.serve(async (req) => {
     let providerAnalysis: any;
 
     const markProcessingUnavailable = async (errorCode: string) => {
-      if (batchIdRaw && typeof processingGeneration === "number") {
-        await admin
+      if (!batchIdRaw || typeof processingGeneration !== "number") return;
+      try {
+        const { data, error: updateErr } = await admin
           .from("document_processing_batches")
           .update({
             status: "processing_unavailable",
@@ -936,7 +1081,32 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", batchIdRaw)
-          .eq("processing_generation", processingGeneration);
+          .eq("processing_generation", processingGeneration)
+          .select("id");
+        if (updateErr) {
+          console.error("EXTRACT-STATUS-UPDATE-FAILED", {
+            batchId: batchIdRaw,
+            processingGeneration,
+            error: updateErr,
+          });
+        } else if (!data || data.length === 0) {
+          console.error("EXTRACT-STATUS-UPDATE-STALE", {
+            batchId: batchIdRaw,
+            processingGeneration,
+          });
+        } else {
+          console.log("EXTRACT-STATUS-UPDATED", {
+            batchId: batchIdRaw,
+            processingGeneration,
+            rows: data.length,
+          });
+        }
+      } catch (err) {
+        console.error("EXTRACT-STATUS-UPDATE-EXCEPTION", {
+          batchId: batchIdRaw,
+          processingGeneration,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     };
 
@@ -1179,6 +1349,16 @@ Deno.serve(async (req) => {
             policy_document_id: item.policyDocumentId,
             policyDocumentId: item.policyDocumentId,
             batchItemId: item.batchItemId,
+            content_sha256: payload.contentSha256,
+            normalization_schema_version: payload.normalizationSchemaVersion,
+            analyzer_version: payload.analyzerVersion,
+            model_provider: payload.modelProvider,
+            model_id: payload.modelId,
+            prompt_version: payload.promptVersion,
+            normalized_output_json: payload.normalizedOutputJson,
+            normalized_entities_json: payload.normalizedEntitiesJson,
+            conflicts_json: payload.conflictsJson,
+            evidence_json: payload.evidenceJson,
           });
         }
       }
@@ -1240,7 +1420,7 @@ Deno.serve(async (req) => {
           return jsonError("Entity has no supporting policy-document evidence", 500);
         }
 
-        const overlaps: any[] = [];
+        const overlapsWithId: { normalizationId: string; overlap: any }[] = [];
         const persistedNormalizationIds = new Set<string>();
 
         for (const docId of supportingDocIds) {
@@ -1292,10 +1472,10 @@ Deno.serve(async (req) => {
             }
           }
 
-          overlaps.push(overlap);
+          overlapsWithId.push({ normalizationId, overlap });
         }
 
-        if (overlaps.length === 0) {
+        if (overlapsWithId.length === 0) {
           console.error("EXTRACT-ENTITY-NO-OVERLAP-PERSISTED", {
             temporaryId: entity.temporaryId,
           });
@@ -1303,17 +1483,19 @@ Deno.serve(async (req) => {
           return jsonError("No overlap assessment persisted for entity", 500);
         }
 
-        overlaps.sort((a, b) => b.confidence - a.confidence);
-        const actionable = overlaps.find((o) => !o.skipCandidateDerivation);
-        if (!actionable) {
+        const selected = selectActionableOverlap(overlapsWithId);
+        if (!selected) {
           skipCandidateEntityTemporaryIds.add(entity.temporaryId);
           continue;
         }
 
-        const resolution = entityResolutionFromOverlap(actionable);
+        const resolution = entityResolutionFromOverlap(selected.overlap);
         if (resolution) {
           entity.resolution = resolution;
-          overlapEntityKeys.set(entity.temporaryId, actionable.normalizedEntityKeyForPersistence);
+          overlapEntityKeys.set(
+            entity.temporaryId,
+            selected.overlap.normalizedEntityKeyForPersistence,
+          );
         }
       }
 
@@ -1779,6 +1961,15 @@ Deno.serve(async (req) => {
         analysisRunId: persistResult.analysis_run_id ?? analysisRunId,
         warnings: analysis.warnings,
         unresolvedConflicts: analysis.unresolvedConflicts,
+        ...(configuredProvider === "mock" && provider
+          ? {
+              providerMetrics: {
+                uploadCount: provider.uploadCount ?? 0,
+                analyzeCount: provider.analyzeCount ?? 0,
+                uploadedDocumentIds: provider.uploadedDocumentIds ?? [],
+              },
+            }
+          : {}),
       },
     });
   };
