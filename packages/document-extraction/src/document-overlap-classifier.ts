@@ -58,6 +58,18 @@ export interface ExistingAsset {
   provisionalFingerprint: string | null;
 }
 
+export type AssetIdentityMatch =
+  | {
+      asset: ExistingAsset;
+      matchKind: "canonical";
+      matchedFingerprint: string;
+    }
+  | {
+      asset: ExistingAsset;
+      matchKind: "provisional";
+      matchedFingerprint: string;
+    };
+
 export interface ExistingPolicy {
   id: string;
   assetId: string;
@@ -129,6 +141,10 @@ function normalizePolicyNumber(input: string | null | undefined): string | null 
   return normalized || null;
 }
 
+function isNonEmptyString(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
 export function parseIsoDate(input: string | null | undefined): string | null {
   if (!input) return null;
   const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -165,7 +181,12 @@ export function toNormalizedFact(value: unknown): NormalizedFact {
         ) {
           return { status: "known", value: rawValue };
         }
-        return { status: "known", value: String(rawValue) };
+        // Malformed known value (object, array, or null) becomes a conflicting state
+        // so the malformed value is preserved for review instead of coerced to a string.
+        return { status: "conflicting", value: rawValue };
+      }
+      if (status === "conflicting") {
+        return { status: "conflicting", value: rawValue };
       }
       return { status, value: null } as NormalizedFact;
     }
@@ -290,10 +311,10 @@ function materialConflict(
   return { conflict: Object.keys(details).length > 0, details, facts };
 }
 
-function findAssetByKey(
+function findAssetIdentityMatch(
   assets: ExistingAsset[],
   candidate: OverlapCandidate,
-): ExistingAsset | undefined {
+): AssetIdentityMatch | undefined {
   for (const asset of assets) {
     if (candidate.assetType && candidate.assetType !== asset.assetType) continue;
     if (
@@ -301,9 +322,14 @@ function findAssetByKey(
       asset.canonicalFingerprint &&
       candidate.canonicalFingerprint === asset.canonicalFingerprint
     ) {
-      return asset;
+      return {
+        asset,
+        matchKind: "canonical",
+        matchedFingerprint: asset.canonicalFingerprint,
+      };
     }
   }
+
   for (const asset of assets) {
     if (candidate.assetType && candidate.assetType !== asset.assetType) continue;
     if (
@@ -311,9 +337,15 @@ function findAssetByKey(
       asset.provisionalFingerprint &&
       candidate.provisionalFingerprint === asset.provisionalFingerprint
     ) {
-      return asset;
+      // A canonical fingerprint on the asset does not upgrade a provisional match.
+      return {
+        asset,
+        matchKind: "provisional",
+        matchedFingerprint: asset.provisionalFingerprint,
+      };
     }
   }
+
   return undefined;
 }
 
@@ -391,12 +423,16 @@ function selectBestPolicy(
       const bTerm = policyTermMatch(candidate, b).termMatch;
       const aCurrent = a.isCurrent === true;
       const bCurrent = b.isCurrent === true;
+      const aSameType = candidate.assetType && a.assetType === candidate.assetType;
+      const bSameType = candidate.assetType && b.assetType === candidate.assetType;
 
       // 1. exact current policy term; 2. other exact term; 3. current policy; 4. latest historical policy.
       if (aTerm && aCurrent && !(bTerm && bCurrent)) return -1;
       if (bTerm && bCurrent && !(aTerm && aCurrent)) return 1;
       if (aTerm && !bTerm) return -1;
       if (bTerm && !aTerm) return 1;
+      if (aSameType && !bSameType) return -1;
+      if (bSameType && !aSameType) return 1;
       if (aCurrent && !bCurrent) return -1;
       if (bCurrent && !aCurrent) return 1;
 
@@ -482,7 +518,8 @@ function exactFileDuplicateResult(
   normalizedEntityKey: string,
 ): OverlapResult {
   const { candidate, existingAssets, compatibleNormalization } = input;
-  const matchedAsset = findAssetByKey(existingAssets ?? [], candidate);
+  const identityMatch = findAssetIdentityMatch(existingAssets ?? [], candidate);
+  const matchedAsset = identityMatch?.asset;
   const normalizationId = compatibleNormalization?.normalizationId;
   return resultFor("exact_file_duplicate", 1, {
     assetId: matchedAsset?.id,
@@ -502,23 +539,23 @@ function exactFileDuplicateResult(
 }
 
 function compatibleNormalizationSelected(input: ClassifyDocumentOverlapInput): boolean {
-  if (input.compatibleNormalizationAlreadySelected) return true;
+  if (input.compatibleNormalizationAlreadySelected === true) return true;
+
+  const candidate = input.candidate;
+  if (
+    !isNonEmptyString(candidate.contentDigest) ||
+    !isNonEmptyString(candidate.normalizationSchemaVersion) ||
+    !isNonEmptyString(candidate.analyzerVersion)
+  ) {
+    return false;
+  }
+
   const cn = input.compatibleNormalization;
   if (!cn) return false;
   if (cn.status !== "complete") return false;
-  if (cn.contentDigest !== input.candidate.contentDigest) return false;
-  if (
-    input.candidate.normalizationSchemaVersion != null &&
-    cn.normalizationSchemaVersion !== input.candidate.normalizationSchemaVersion
-  ) {
-    return false;
-  }
-  if (
-    input.candidate.analyzerVersion != null &&
-    cn.analyzerVersion !== input.candidate.analyzerVersion
-  ) {
-    return false;
-  }
+  if (cn.contentDigest !== candidate.contentDigest) return false;
+  if (cn.normalizationSchemaVersion !== candidate.normalizationSchemaVersion) return false;
+  if (cn.analyzerVersion !== candidate.analyzerVersion) return false;
   return true;
 }
 
@@ -541,11 +578,15 @@ function classifyExactAsset(
       });
     }
     if (isValidTerm(candidate)) {
+      // There is no prior policy to compare terms against, so "newer" is used here for
+      // the existing-asset policy creation disposition, not a literal comparison.
       return resultFor("same_asset_newer_policy_term", 0.9, {
         assetId: asset.id,
         assetType: asset.assetType,
         normalizedEntityKey,
-        reasons: ["exact canonical asset match with a valid later policy term and no prior policy"],
+        reasons: [
+          "exact canonical asset match with a valid first policy term and no prior policy to compare; treated as a renewal candidate",
+        ],
         comparedFields: {
           candidateEffectiveDate: parseIsoDate(candidate.effectiveDate),
           candidateExpiryDate: parseIsoDate(candidate.expiryDate),
@@ -707,17 +748,16 @@ export function classifyDocumentOverlap(input: ClassifyDocumentOverlapInput): Ov
     return exactFileDuplicateResult(input, buildEntityKey(candidate));
   }
 
-  const exactAsset = findAssetByKey(existingAssets ?? [], candidate);
-  if (exactAsset?.canonicalFingerprint) {
-    return classifyExactAsset(input, exactAsset);
+  const identityMatch = findAssetIdentityMatch(existingAssets ?? [], candidate);
+
+  if (identityMatch?.matchKind === "canonical") {
+    return classifyExactAsset(input, identityMatch.asset);
   }
 
-  const provisionalAsset = findAssetByKey(
-    (existingAssets ?? []).filter((a) => a.provisionalFingerprint),
-    candidate,
-  );
-  if (provisionalAsset?.provisionalFingerprint && candidate.provisionalFingerprint) {
-    const normalizedEntityKey = candidate.provisionalFingerprint;
+  if (identityMatch?.matchKind === "provisional") {
+    const provisionalAsset = identityMatch.asset;
+    const normalizedEntityKey =
+      candidate.provisionalFingerprint ?? identityMatch.matchedFingerprint;
     const assetPolicies = (existingPolicies ?? []).filter((p) => p.assetId === provisionalAsset.id);
     const matchedPolicy = candidate.policyNumber
       ? selectBestPolicy(candidate, assetPolicies)
@@ -738,19 +778,22 @@ export function classifyDocumentOverlap(input: ClassifyDocumentOverlapInput): Ov
 
   if (candidate.policyNumber) {
     const candidateNumber = normalizePolicyNumber(candidate.policyNumber);
-    const matchedPolicy = (existingPolicies ?? []).find((p) => {
+    const matchingPolicies = (existingPolicies ?? []).filter((p) => {
       const policyNumber = normalizePolicyNumber(p.policyNumber);
       return Boolean(policyNumber && policyNumber === candidateNumber);
     });
-    if (matchedPolicy) {
+    if (matchingPolicies.length > 0) {
+      const bestPolicy = selectBestPolicy(candidate, matchingPolicies);
       return resultFor("possible_asset_match", 0.5, {
-        assetType: candidate.assetType ?? matchedPolicy.assetType,
-        existingPolicyId: matchedPolicy.id,
+        assetType: candidate.assetType ?? bestPolicy?.assetType,
+        existingPolicyId: bestPolicy?.id,
         normalizedEntityKey: buildEntityKey(candidate),
-        reasons: ["policy number matches an existing policy on a different asset"],
+        reasons: ["policy number matches an existing policy on a different or unresolved asset"],
         comparedFields: {
           candidatePolicyNumber: candidateNumber,
-          existingPolicyId: matchedPolicy.id,
+          existingPolicyId: bestPolicy?.id,
+          existingAssetId: bestPolicy?.assetId,
+          existingIsCurrent: bestPolicy?.isCurrent,
         },
         requiresCustomerDecision: true,
       });
@@ -808,6 +851,7 @@ export function adaptNormalizedEntityToOverlapCandidate(
   payload: NormalizedEntityPayload,
 ): OverlapCandidate {
   const currentPolicy = payload.currentPolicy ?? {};
+  const candidateIdentity = payload.candidateIdentity ?? {};
   const coverage: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(payload.currentCoverage ?? {})) {
     coverage[key] = value;
@@ -819,11 +863,21 @@ export function adaptNormalizedEntityToOverlapCandidate(
     };
   }
 
+  const canonicalFingerprint =
+    payload.canonicalFingerprint ??
+    (typeof candidateIdentity.exactIdentityFingerprint === "string"
+      ? candidateIdentity.exactIdentityFingerprint
+      : null);
+  const provisionalFingerprint =
+    typeof candidateIdentity.provisionalCandidateKey === "string"
+      ? candidateIdentity.provisionalCandidateKey
+      : null;
+
   return {
     contentDigest,
     assetType: payload.entityType ?? null,
-    canonicalFingerprint: payload.canonicalFingerprint ?? null,
-    provisionalFingerprint: null,
+    canonicalFingerprint,
+    provisionalFingerprint,
     insurer: currentPolicy.insurer ?? null,
     policyNumber: currentPolicy.policyNumber ?? null,
     effectiveDate: currentPolicy.effectiveDate ?? null,

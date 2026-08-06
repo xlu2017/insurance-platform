@@ -181,6 +181,64 @@ describe("classifyDocumentOverlap", () => {
       });
       expect(result.classification).toBe("same_asset_same_policy_term");
     });
+
+    it("does not classify as exact file duplicate when candidate schema version is missing", () => {
+      const result = classify(makeCandidate({ normalizationSchemaVersion: "" }), {
+        compatibleNormalization: {
+          normalizationId: "norm-001",
+          contentDigest: "digest-candidate",
+          normalizationSchemaVersion: "1",
+          analyzerVersion: "1",
+          status: "complete",
+        },
+      });
+      expect(result.classification).not.toBe("exact_file_duplicate");
+      expect(result.assetId).toBe(VEHICLE_ASSET_ID);
+    });
+
+    it("does not classify as exact file duplicate when candidate analyzer version is missing", () => {
+      const result = classify(makeCandidate({ analyzerVersion: undefined as unknown as string }), {
+        existingPolicies: [],
+        compatibleNormalization: {
+          normalizationId: "norm-001",
+          contentDigest: "digest-candidate",
+          normalizationSchemaVersion: "1",
+          analyzerVersion: "1",
+          status: "complete",
+        },
+      });
+      expect(result.classification).not.toBe("exact_file_duplicate");
+    });
+
+    it("does not classify as exact file duplicate when digest mismatches", () => {
+      const result = classify(makeCandidate({ contentDigest: "different-digest" }), {
+        existingPolicies: [],
+        compatibleNormalization: {
+          normalizationId: "norm-001",
+          contentDigest: "digest-candidate",
+          normalizationSchemaVersion: "1",
+          analyzerVersion: "1",
+          status: "complete",
+        },
+      });
+      expect(result.classification).not.toBe("exact_file_duplicate");
+    });
+
+    it("classifies as exact file duplicate when the reuse engine selection is trusted", () => {
+      const result = classify(
+        makeCandidate({
+          normalizationSchemaVersion: "",
+          analyzerVersion: "",
+          contentDigest: "digest-candidate",
+        }),
+        {
+          existingPolicies: [],
+          compatibleNormalizationAlreadySelected: true,
+        },
+      );
+      expect(result.classification).toBe("exact_file_duplicate");
+      expect(result.disposition).toBe("reuse_existing_normalization");
+    });
   });
 
   describe("same asset, same policy term", () => {
@@ -299,6 +357,17 @@ describe("classifyDocumentOverlap", () => {
       expect(result.disposition).toBe("create_renewal_candidate");
       expect(result.assetId).toBe(PROPERTY_ASSET_ID);
       expect(result.existingPolicyId).toBe(PROPERTY_POLICY_ID);
+    });
+
+    it("treats a valid first policy term on an exact asset as a renewal candidate", () => {
+      const result = classify(makeCandidate(), {
+        existingPolicies: [],
+      });
+      expect(result.classification).toBe("same_asset_newer_policy_term");
+      expect(result.disposition).toBe("create_renewal_candidate");
+      expect(result.assetId).toBe(VEHICLE_ASSET_ID);
+      expect(result.existingPolicyId).toBeUndefined();
+      expect(result.reasons.some((r) => r.includes("no prior policy"))).toBe(true);
     });
   });
 
@@ -565,6 +634,63 @@ describe("classifyDocumentOverlap", () => {
       expect(result.classification).toBe("same_asset_conflicting_information");
       expect(result.requiresCustomerDecision).toBe(true);
     });
+
+    it("preserves conflicting alternative values in comparedFields", () => {
+      const alternatives = ["200000000", "500000000"];
+      const result = classify(
+        makeCandidate({
+          coverageFacts: {
+            "policy.annualPremiumCents": known(120000),
+            "vehicle.thirdPartyLiabilityLimitCents": {
+              status: "conflicting",
+              value: alternatives,
+            },
+          },
+        }),
+        {
+          existingPolicies: [
+            makePolicy({
+              coverageFacts: {
+                "policy.annualPremiumCents": known(120000),
+                "vehicle.thirdPartyLiabilityLimitCents": known(200000000),
+              },
+            }),
+          ],
+        },
+      );
+      expect(result.classification).toBe("same_asset_conflicting_information");
+      const compared = result.comparedFields as {
+        facts: Record<string, { candidate: { value: unknown } }>;
+      };
+      expect(compared.facts["vehicle.thirdPartyLiabilityLimitCents"].candidate.value).toEqual(
+        alternatives,
+      );
+      expect(JSON.stringify(result.comparedFields)).not.toContain("[object Object]");
+    });
+
+    it("forces conflict review for malformed known values", () => {
+      const malformed = { extracted: "value" };
+      const result = classify(
+        makeCandidate({
+          coverageFacts: {
+            "policy.annualPremiumCents": known(120000),
+            "vehicle.comprehensiveIncluded": {
+              status: "known",
+              value: malformed,
+            },
+          },
+        }),
+        {
+          existingPolicies: [makePolicy()],
+        },
+      );
+      expect(result.classification).toBe("same_asset_conflicting_information");
+      const compared = result.comparedFields as {
+        facts: Record<string, { candidate: { status: string; value: unknown } }>;
+      };
+      expect(compared.facts["vehicle.comprehensiveIncluded"].candidate.status).toBe("conflicting");
+      expect(compared.facts["vehicle.comprehensiveIncluded"].candidate.value).toEqual(malformed);
+    });
   });
 
   describe("possible asset match and new asset", () => {
@@ -583,6 +709,23 @@ describe("classifyDocumentOverlap", () => {
       expect(result.existingPolicyId).toBe(VEHICLE_POLICY_ID);
       expect(result.normalizedEntityKey).toBe(VEHICLE_PROVISIONAL);
       expect(result.requiresCustomerDecision).toBe(true);
+    });
+
+    it("does not upgrade a provisional match when the asset also has a canonical fingerprint", () => {
+      const result = classify(
+        makeCandidate({ canonicalFingerprint: null, provisionalFingerprint: VEHICLE_PROVISIONAL }),
+        {
+          existingAssets: [
+            makeAsset({
+              canonicalFingerprint: VEHICLE_FINGERPRINT,
+              provisionalFingerprint: VEHICLE_PROVISIONAL,
+            }),
+          ],
+        },
+      );
+      expect(result.classification).toBe("possible_asset_match");
+      expect(result.assetId).toBe(VEHICLE_ASSET_ID);
+      expect(result.normalizedEntityKey).toBe(VEHICLE_PROVISIONAL);
     });
 
     it("classifies a new asset with no credible match", () => {
@@ -614,6 +757,39 @@ describe("classifyDocumentOverlap", () => {
       expect(result.disposition).toBe("require_asset_match_confirmation");
       expect(result.existingPolicyId).toBe(VEHICLE_POLICY_ID);
       expect(result.assetId).toBeUndefined();
+    });
+
+    it("ranks policy number matches deterministically regardless of input order", () => {
+      const historical = makePolicy({
+        id: VEHICLE_HISTORICAL_POLICY_ID,
+        effectiveDate: "2024-01-01",
+        expiryDate: "2025-01-01",
+        isCurrent: false,
+      });
+      const current = makePolicy({
+        id: VEHICLE_POLICY_ID,
+        effectiveDate: "2025-01-01",
+        expiryDate: "2026-01-01",
+        isCurrent: true,
+      });
+      const candidate = makeCandidate({
+        canonicalFingerprint: VEHICLE2_FINGERPRINT,
+        policyNumber: POLICY_NUMBER,
+      });
+
+      const resultA = classify(candidate, {
+        existingAssets: [makeAsset()],
+        existingPolicies: [historical, current],
+      });
+      const resultB = classify(candidate, {
+        existingAssets: [makeAsset()],
+        existingPolicies: [current, historical],
+      });
+
+      expect(resultA.existingPolicyId).toBe(VEHICLE_POLICY_ID);
+      expect(resultB.existingPolicyId).toBe(VEHICLE_POLICY_ID);
+      expect(resultA.classification).toBe("possible_asset_match");
+      expect(resultB.classification).toBe("possible_asset_match");
     });
   });
 
@@ -794,6 +970,44 @@ describe("classifyDocumentOverlap", () => {
       expect(candidate.documentType).toBe("current_property_policy");
       expect(candidate.coverageFacts!["property.dwellingLimitCents"]).toEqual(known(45000000));
       expect(candidate.coverageFacts!["policy.annualPremiumCents"]).toEqual(known(90000));
+    });
+
+    it("adapts a provisional-only payload and classifies it as a possible match", () => {
+      const payload: NormalizedEntityPayload = {
+        canonicalFingerprint: null,
+        candidateIdentity: {
+          provisionalCandidateKey: VEHICLE_PROVISIONAL,
+        },
+        currentPolicy: {
+          insurer: INSURER,
+          policyNumber: POLICY_NUMBER,
+          effectiveDate: EFFECTIVE_DATE,
+          expiryDate: EXPIRY_DATE,
+          annualPremiumCents: 120000,
+        },
+        currentCoverage: {
+          "vehicle.thirdPartyLiabilityLimitCents": known(200000000),
+        },
+        entityType: "vehicle",
+        documentCategory: "current_auto_policy",
+      };
+
+      const candidate = adaptNormalizedEntityToOverlapCandidate("digest-provisional", payload);
+      expect(candidate.canonicalFingerprint).toBeNull();
+      expect(candidate.provisionalFingerprint).toBe(VEHICLE_PROVISIONAL);
+
+      const result = classifyDocumentOverlap({
+        candidate,
+        existingAssets: [
+          makeAsset({ canonicalFingerprint: null, provisionalFingerprint: VEHICLE_PROVISIONAL }),
+        ],
+        existingPolicies: [makePolicy()],
+      });
+
+      expect(result.classification).toBe("possible_asset_match");
+      expect(result.disposition).toBe("require_asset_match_confirmation");
+      expect(result.assetId).toBe(VEHICLE_ASSET_ID);
+      expect(result.normalizedEntityKey).toBe(VEHICLE_PROVISIONAL);
     });
 
     it("adapts current and historical policy rows into ExistingPolicy", () => {
