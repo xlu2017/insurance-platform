@@ -6,6 +6,7 @@ import {
   parseCaseId,
   relevantStatuses,
   resumableStatuses,
+  terminalStatuses,
 } from "../_shared/document-processing-contract.js";
 
 const corsHeaders = {
@@ -40,7 +41,7 @@ function publicBatch(batch: Record<string, unknown>) {
     unique_document_count: Number(batch.unique_document_count ?? 0),
     deduplicated_count: Number(batch.deduplicated_count ?? 0),
     retryable: Boolean(batch.retryable),
-    is_terminal: status === "ready_for_review" || status === "manual_review",
+    is_terminal: terminalStatuses.includes(status),
     created_at: String(batch.created_at),
     processing_started_at: batch.processing_started_at ? String(batch.processing_started_at) : null,
   };
@@ -374,14 +375,28 @@ Deno.serve(async (req) => {
           .filter((id): id is string => typeof id === "string" && isUuid(id))
           .map((id) => String(id))
       : [];
+    const continuationRequestId = String(body.continuation_request_id ?? crypto.randomUUID());
+
+    const { data: batchMeta, error: batchMetaError } = await admin
+      .from("document_processing_batches")
+      .select("processing_generation")
+      .eq("id", batchId)
+      .eq("household_id", householdId)
+      .maybeSingle();
+    if (batchMetaError || !batchMeta) {
+      return jsonError("Batch not found", 404);
+    }
+
     const rpcName =
       action === "supersede"
         ? "supersede_processing_batch_v1"
         : "create_successor_document_batch_v1";
     const rpcArgs: Record<string, unknown> = {
       p_household_id: householdId,
-      p_actor_id: user.id,
       p_new_policy_document_ids: newDocIds,
+      p_expected_generation: Number(batchMeta.processing_generation ?? 1),
+      p_continuation_request_id: continuationRequestId,
+      p_actor_id: user.id,
     };
     if (action === "supersede") {
       rpcArgs.p_active_batch_id = batchId;

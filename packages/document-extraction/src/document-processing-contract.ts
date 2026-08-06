@@ -25,21 +25,69 @@ export function parseCaseId(raw: unknown, isPresent: boolean): CaseIdParseResult
   return { kind: "valid", value: trimmed };
 }
 
-// Legacy actions look for batches that accept additional uploads.
-export const resumableStatuses = ["uploading_files", "additional_information_required"];
-
-// Expanded recovery actions show the latest batch the customer must see,
-// including processing and review states.
-export const relevantStatuses = [
+export const documentBatchStatuses = [
   "uploading_files",
   "checking_duplicates",
   "queued",
+  "cancellation_requested",
+  "waiting_for_predecessor",
   "reading_policy_documents",
   "comparing_policies",
   "validating_extracted_details",
   "ready_for_review",
   "additional_information_required",
   "processing_unavailable",
+  "manual_review",
+  "superseded",
+] as const;
+
+export type DocumentBatchStatus = (typeof documentBatchStatuses)[number];
+
+// Batches that can accept additional uploads or retries.
+export const resumableStatuses: DocumentBatchStatus[] = [
+  "uploading_files",
+  "additional_information_required",
+];
+
+// Batches the customer may need to see while they are active or in review.
+export const relevantStatuses: DocumentBatchStatus[] = [
+  "uploading_files",
+  "checking_duplicates",
+  "queued",
+  "cancellation_requested",
+  "waiting_for_predecessor",
+  "reading_policy_documents",
+  "comparing_policies",
+  "validating_extracted_details",
+  "ready_for_review",
+  "additional_information_required",
+  "processing_unavailable",
+  "manual_review",
+];
+
+// Batches that have reached a final state.
+export const terminalStatuses: DocumentBatchStatus[] = [
+  "ready_for_review",
+  "additional_information_required",
+  "manual_review",
+  "processing_unavailable",
+  "superseded",
+];
+
+// Batches currently being processed by a worker.
+export const activeStatuses: DocumentBatchStatus[] = [
+  "reading_policy_documents",
+  "comparing_policies",
+  "validating_extracted_details",
+];
+
+// Batches blocked waiting for another batch or the queue.
+export const waitingStatuses: DocumentBatchStatus[] = ["queued", "waiting_for_predecessor"];
+
+// Batches the customer can review or act on.
+export const reviewableStatuses: DocumentBatchStatus[] = [
+  "ready_for_review",
+  "additional_information_required",
   "manual_review",
 ];
 

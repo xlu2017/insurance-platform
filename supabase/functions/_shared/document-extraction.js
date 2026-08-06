@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: eb9631bb725cdb59debf92aca1a5c1632f5f96886baf3a8134f135d5cb95795a
+// source-hash: 737289abaa3947232975dd7abe16e2f647695bc43412d48d5fdc4c8ef44ff80d
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -7684,6 +7684,76 @@ function partitionDocumentDigests(documentIds, digestByDocumentId, previouslyPro
   return { duplicateDocumentIds, newDocumentIds };
 }
 
+// src/document-processing-contract.ts
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+function parseCaseId(raw, isPresent) {
+  if (!isPresent) {
+    return { kind: "none" };
+  }
+  if (raw === null || typeof raw !== "string") {
+    return { kind: "invalid", reason: "Invalid case_id" };
+  }
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return { kind: "invalid", reason: "Invalid case_id" };
+  }
+  if (!isUuid(trimmed)) {
+    return { kind: "invalid", reason: "Invalid case_id" };
+  }
+  return { kind: "valid", value: trimmed };
+}
+var documentBatchStatuses = [
+  "uploading_files",
+  "checking_duplicates",
+  "queued",
+  "cancellation_requested",
+  "waiting_for_predecessor",
+  "reading_policy_documents",
+  "comparing_policies",
+  "validating_extracted_details",
+  "ready_for_review",
+  "additional_information_required",
+  "processing_unavailable",
+  "manual_review",
+  "superseded"
+];
+var resumableStatuses = [
+  "uploading_files",
+  "additional_information_required"
+];
+var relevantStatuses = [
+  "uploading_files",
+  "checking_duplicates",
+  "queued",
+  "cancellation_requested",
+  "waiting_for_predecessor",
+  "reading_policy_documents",
+  "comparing_policies",
+  "validating_extracted_details",
+  "ready_for_review",
+  "additional_information_required",
+  "processing_unavailable",
+  "manual_review"
+];
+var terminalStatuses = [
+  "ready_for_review",
+  "additional_information_required",
+  "manual_review",
+  "processing_unavailable",
+  "superseded"
+];
+function resolveLatestActionStatuses(action) {
+  if (action === "latest" || action === "latest-for-case" || action === "latest-resumable" || action === "latest-resumable-for-case") {
+    return resumableStatuses;
+  }
+  if (action === "latest-relevant" || action === "latest-relevant-for-case") {
+    return relevantStatuses;
+  }
+  return null;
+}
+
 // src/llm-contract.ts
 var LLM_EXTRACTION_SCHEMA_VERSION = 1;
 var LLM_EXTRACTION_PROMPT_VERSION = "insurance-document-v1";
@@ -13208,17 +13278,20 @@ export {
   createKimiK3Analyzer,
   createLlmFirstAnalyzer,
   createNativeDocumentAnalyzer,
+  documentBatchStatuses,
   documentProcessingRoute,
   generateSupportReference,
   getPrivacyNoticeUrl,
   getPrivacyNoticeVersion,
   getProcessorContractVersion,
   isExactFingerprint2 as isExactFingerprint,
+  isUuid,
   mapResolutionStatus,
   mergeIncrementalOnboardingUpload,
   normalizeDocumentValueState,
   normalizeLlmAnalysisResult,
   occupancyForEntity,
+  parseCaseId,
   parseDocument,
   parseLlmExtractionResult,
   parsePendingCandidateRecord,
@@ -13228,16 +13301,20 @@ export {
   privacyPreparationConfigFromEnv,
   projectLlmRunToParsedDocument,
   publicErrorResponse,
+  relevantStatuses,
+  resolveLatestActionStatuses,
   resolveLlmAssetIdentity,
+  resumableStatuses,
   runInsuranceLlmPipeline,
   runLlmExtraction,
   sanitizeProviderError,
   selectCandidateForPersistence,
   stripNullValues,
+  terminalStatuses,
   validateDangerousModeEnablePolicy,
   validateLlmExtractionSemantics
 };
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "eb9631bb725cdb59debf92aca1a5c1632f5f96886baf3a8134f135d5cb95795a";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "737289abaa3947232975dd7abe16e2f647695bc43412d48d5fdc4c8ef44ff80d";
