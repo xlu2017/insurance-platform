@@ -73,6 +73,23 @@ export const additionalUploadAllowedStatuses: Set<DocumentBatchStatus> = new Set
   "additional_information_required",
 ]);
 
+// Batches currently being processed by a worker.
+export const activeStatuses: DocumentBatchStatus[] = [
+  "reading_policy_documents",
+  "comparing_policies",
+  "validating_extracted_details",
+];
+
+// Batches blocked waiting for another batch or the queue.
+export const waitingStatuses: DocumentBatchStatus[] = ["queued", "waiting_for_predecessor"];
+
+// Batches the customer can review or act on.
+export const reviewableStatuses: DocumentBatchStatus[] = [
+  "ready_for_review",
+  "additional_information_required",
+  "manual_review",
+];
+
 export function batchAllowsAdditionalUploads(
   batch: DocumentBatchSummary | null | undefined,
 ): boolean {
@@ -236,6 +253,13 @@ export interface ExactDuplicateDocument {
   policyDocumentId: string;
   normalizationId: string;
   originalFilename: string | null;
+  metadata?: {
+    insurer?: string | null;
+    policyNumber?: string | null;
+    effectiveDate?: string | null;
+    expiryDate?: string | null;
+    identifiedAssets?: string[];
+  };
 }
 
 export interface UploadPlan {
