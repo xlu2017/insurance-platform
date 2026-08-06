@@ -28,6 +28,7 @@ import {
   Title,
 } from "@/components/ui";
 import {
+  type CandidateDecision,
   type DraftReview,
   OCCUPANCY_LABELS,
   PROPERTY_REVIEW_FIELDS,
@@ -35,17 +36,14 @@ import {
   displayValueForField,
   formatFieldLabel,
   getEffectiveDisplay,
+  getExistingAssetDisplay,
   getFieldValue,
+  getInitialDecision,
   isRecord,
   parseCorrectedValue,
   renderCents,
   serializeFieldValue,
 } from "@/lib/review-entities-helpers";
-
-interface CandidateDecision {
-  candidateId: string;
-  decision: "approve_new" | "link_existing" | "skip" | "needs_correction";
-}
 
 type ReviewAction = CandidateFieldReview["action"];
 
@@ -481,13 +479,30 @@ function FieldRow({
   );
 }
 
+function DecisionButton({
+  label,
+  selected,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return selected ? (
+    <PrimaryButton label={label} onPress={onPress} disabled={disabled} />
+  ) : (
+    <SecondaryButton label={label} onPress={onPress} disabled={disabled} />
+  );
+}
+
 function CandidateSummary({
   candidate,
   drafts,
   addressVerified,
   onEdit,
-  onAdd,
-  onSkip,
+  onDecision,
   onAddressVerified,
   onEditDisplayName,
   busy,
@@ -496,8 +511,7 @@ function CandidateSummary({
   drafts: Record<string, DraftReview>;
   addressVerified: Record<string, boolean>;
   onEdit: (fieldPath: string) => void;
-  onAdd: () => void;
-  onSkip: () => void;
+  onDecision: (decision: CandidateDecision) => void;
   onAddressVerified: (displayName: string) => void;
   onEditDisplayName: (newName: string) => Promise<void>;
   busy: boolean;
@@ -511,13 +525,16 @@ function CandidateSummary({
   const policyPaths = allPaths.filter((p) => p.startsWith("currentPolicy."));
   const typeLabel = candidate.asset_type === "vehicle" ? "Vehicle" : "Property";
   const isProperty = candidate.asset_type === "property";
-  const canAdd =
-    candidate.draft_decision === "link_existing"
-      ? true
-      : isProperty
-        ? addressVerified[candidate.id] || addressDraft?.action === "correct"
-        : true;
 
+  const existingAsset = getExistingAssetDisplay(candidate);
+  const linkAvailable =
+    existingAsset !== null &&
+    (candidate.match_classification === "exact_existing_match" ||
+      candidate.match_classification === "possible_existing_match");
+
+  const [selectedDecision, setSelectedDecision] = useState<CandidateDecision | null>(() =>
+    getInitialDecision(candidate),
+  );
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState(candidate.display_label);
   const [savingName, setSavingName] = useState(false);
@@ -525,6 +542,14 @@ function CandidateSummary({
   useEffect(() => {
     if (!isEditingName) setName(candidate.display_label);
   }, [candidate.display_label, isEditingName]);
+
+  const addressReady =
+    !isProperty || addressVerified[candidate.id] || addressDraft?.action === "correct";
+
+  const canConfirm =
+    selectedDecision !== null &&
+    !(selectedDecision === "link_existing" && !linkAvailable) &&
+    !(selectedDecision === "approve_new" && isProperty && !addressReady);
 
   const handleSaveName = async () => {
     const trimmed = name.trim();
@@ -545,6 +570,17 @@ function CandidateSummary({
     setName(candidate.display_label);
     setIsEditingName(false);
   };
+
+  const decisionLabels: Record<CandidateDecision, string> = {
+    approve_new: "Add as new asset",
+    link_existing: "Link to existing asset",
+    needs_correction: "Needs correction",
+    skip: "Skip",
+  };
+
+  const options: CandidateDecision[] = linkAvailable
+    ? ["approve_new", "link_existing", "needs_correction", "skip"]
+    : ["approve_new", "needs_correction", "skip"];
 
   return (
     <Card style={{ flex: 1, justifyContent: "center" }}>
@@ -626,16 +662,45 @@ function CandidateSummary({
         </Section>
       ) : null}
 
-      {!canAdd ? (
-        <Caption style={{ color: "#B45309", marginTop: 16 }}>
-          Please verify or enter the full address before adding this property.
-        </Caption>
-      ) : null}
+      <Section title="What would you like to do with this item?">
+        {linkAvailable && existingAsset ? (
+          <View style={{ marginBottom: 12 }}>
+            <Caption>Existing {candidate.asset_type} found:</Caption>
+            <Body>{existingAsset.display_label}</Body>
+          </View>
+        ) : null}
 
-      <View style={{ gap: 12, marginTop: 24 }}>
-        <PrimaryButton label="Add" onPress={onAdd} disabled={busy || !canAdd} />
-        <SecondaryButton label="Skip" onPress={onSkip} disabled={busy} />
-      </View>
+        <View style={{ gap: 12 }}>
+          {options.map((option) => (
+            <DecisionButton
+              key={option}
+              label={decisionLabels[option]}
+              selected={selectedDecision === option}
+              onPress={() => setSelectedDecision(option)}
+              disabled={busy}
+            />
+          ))}
+        </View>
+
+        {selectedDecision === "approve_new" && isProperty && !addressReady ? (
+          <Caption style={{ color: "#B45309", marginTop: 16 }}>
+            Please verify or enter the full address before adding this property.
+          </Caption>
+        ) : selectedDecision === "link_existing" && !linkAvailable ? (
+          <Caption style={{ color: "#B45309", marginTop: 16 }}>
+            No existing asset is available to link.
+          </Caption>
+        ) : null}
+
+        <View style={{ marginTop: 24 }}>
+          <PrimaryButton
+            label="Continue"
+            onPress={() => selectedDecision && onDecision(selectedDecision)}
+            disabled={busy || !canConfirm}
+            loading={busy}
+          />
+        </View>
+      </Section>
     </Card>
   );
 }
@@ -687,7 +752,7 @@ export default function ReviewEntities() {
   const saveReview = useSaveCandidateFieldReview();
   const queryClient = useQueryClient();
 
-  const [decisions, setDecisions] = useState<Record<string, CandidateDecision["decision"]>>({});
+  const [decisions, setDecisions] = useState<Record<string, CandidateDecision>>({});
   const [drafts, setDrafts] = useState<Record<string, DraftReview>>({});
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [editingPath, setEditingPath] = useState<string | null>(null);
@@ -701,14 +766,8 @@ export default function ReviewEntities() {
       const next = { ...prev };
       for (const candidate of candidates) {
         if (next[candidate.id]) continue;
-        if (
-          candidate.draft_decision === "approve_new" ||
-          candidate.draft_decision === "link_existing" ||
-          candidate.draft_decision === "skip" ||
-          candidate.draft_decision === "needs_correction"
-        ) {
-          next[candidate.id] = candidate.draft_decision;
-        }
+        const initial = getInitialDecision(candidate);
+        if (initial) next[candidate.id] = initial;
       }
       return next;
     });
@@ -942,41 +1001,26 @@ export default function ReviewEntities() {
     });
   };
 
-  const handleAdd = async () => {
-    if (!currentCandidate || !household) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const paths = fieldPathsForCandidate(currentCandidate);
-      const nextDrafts = { ...drafts };
-      for (const path of paths) {
-        const key = `${currentCandidate.id}:${path}`;
-        if (nextDrafts[key]) continue;
-        nextDrafts[key] = {
-          action: "confirm",
-          correctedValue: undefined,
-          mandateRule: "",
-          mandateAmount: "",
-        };
-      }
-      setDrafts(nextDrafts);
-      const decision =
-        currentCandidate.draft_decision === "link_existing" &&
-        currentCandidate.draft_existing_asset_id
-          ? "link_existing"
-          : "approve_new";
-      setDecisions((prev) => ({ ...prev, [currentCandidate.id]: decision }));
-      advanceCandidate();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add candidate");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleSkip = () => {
+  const handleDecision = (decision: CandidateDecision) => {
     if (!currentCandidate) return;
-    setDecisions((prev) => ({ ...prev, [currentCandidate.id]: "skip" }));
+    if (decision === "approve_new" || decision === "link_existing") {
+      const paths = fieldPathsForCandidate(currentCandidate);
+      setDrafts((prev) => {
+        const next = { ...prev };
+        for (const path of paths) {
+          const key = `${currentCandidate.id}:${path}`;
+          if (next[key]) continue;
+          next[key] = {
+            action: "confirm",
+            correctedValue: undefined,
+            mandateRule: "",
+            mandateAmount: "",
+          };
+        }
+        return next;
+      });
+    }
+    setDecisions((prev) => ({ ...prev, [currentCandidate.id]: decision }));
     advanceCandidate();
   };
 
@@ -1005,14 +1049,16 @@ export default function ReviewEntities() {
       for (const candidate of candidates) {
         const decision = decisions[candidate.id];
         const isLink = decision === "link_existing";
+        const existingAsset = getExistingAssetDisplay(candidate);
+        const existingAssetId = isLink
+          ? (existingAsset?.id ?? candidate.draft_existing_asset_id ?? undefined)
+          : undefined;
         const { error: draftError } = await supabase.rpc("save_candidate_review_draft_v1", {
           p_household_id: household!.id,
           p_candidate_id: candidate.id,
           p_decision: decision ?? "skip",
           p_identity_confirmed: decision === "approve_new" || isLink,
-          p_existing_asset_id: isLink
-            ? (candidate.draft_existing_asset_id ?? undefined)
-            : undefined,
+          p_existing_asset_id: existingAssetId,
           p_existing_asset_type: isLink
             ? (candidate.draft_existing_asset_type ?? undefined)
             : undefined,
@@ -1045,18 +1091,26 @@ export default function ReviewEntities() {
           <View style={{ gap: 12, marginVertical: 16 }}>
             {candidates.map((candidate) => {
               const decision = decisions[candidate.id];
+              const existingAsset =
+                decision === "link_existing" ? getExistingAssetDisplay(candidate) : null;
+              const decisionCaption =
+                decision === "approve_new"
+                  ? "Add as new asset"
+                  : decision === "link_existing"
+                    ? "Link to existing asset"
+                    : decision === "needs_correction"
+                      ? "Needs correction"
+                      : "Skip";
               return (
                 <View key={candidate.id}>
                   <Body>{candidate.display_label}</Body>
-                  <Caption>
-                    {decision === "approve_new"
-                      ? "Will be added to your account"
-                      : decision === "link_existing"
-                        ? "Will be linked to your existing asset"
-                        : decision === "needs_correction"
-                          ? "Needs correction"
-                          : "Will not be added"}
-                  </Caption>
+                  <Caption>{decisionCaption}</Caption>
+                  {existingAsset ? (
+                    <Caption style={{ color: colors.inkMuted }}>
+                      {candidate.asset_type === "vehicle" ? "Vehicle" : "Property"}:{" "}
+                      {existingAsset.display_label}
+                    </Caption>
+                  ) : null}
                 </View>
               );
             })}
@@ -1120,8 +1174,7 @@ export default function ReviewEntities() {
           drafts={drafts}
           addressVerified={addressVerified}
           onEdit={setEditingPath}
-          onAdd={handleAdd}
-          onSkip={handleSkip}
+          onDecision={handleDecision}
           onAddressVerified={handleAddressVerified}
           onEditDisplayName={handleDisplayNameChange}
           busy={busy}

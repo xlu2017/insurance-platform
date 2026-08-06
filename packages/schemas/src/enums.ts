@@ -158,6 +158,13 @@ export const coveragePreferences = ["required", "preferred", "indifferent", "pro
 export const CoveragePreference = z.enum(coveragePreferences);
 export type CoveragePreference = z.infer<typeof CoveragePreference>;
 
+export const coveragePreferenceOptions: { value: CoveragePreference; label: string }[] = [
+  { value: "required", label: "Required" },
+  { value: "preferred", label: "Preferred" },
+  { value: "indifferent", label: "Indifferent" },
+  { value: "prohibited", label: "Prohibited" },
+];
+
 export const coveragePresences = ["yes", "no", "unknown", "not_applicable"] as const;
 export const CoveragePresence = z.enum(coveragePresences);
 export type CoveragePresence = z.infer<typeof CoveragePresence>;
@@ -172,9 +179,24 @@ export const limitRules = [
 export const LimitRule = z.enum(limitRules);
 export type LimitRule = z.infer<typeof LimitRule>;
 
+export const limitRuleOptions: { value: LimitRule; label: string }[] = [
+  { value: "minimum", label: "At least" },
+  { value: "maximum", label: "At most" },
+  { value: "exact", label: "Exactly" },
+  { value: "match_current_or_better", label: "Match current or better" },
+  { value: "any", label: "Any" },
+];
+
 export const deductibleRules = ["maximum", "exact", "match_current_or_better", "any"] as const;
 export const DeductibleRule = z.enum(deductibleRules);
 export type DeductibleRule = z.infer<typeof DeductibleRule>;
+
+export const deductibleRuleOptions: { value: DeductibleRule; label: string }[] = [
+  { value: "maximum", label: "At most" },
+  { value: "exact", label: "Exactly" },
+  { value: "match_current_or_better", label: "Match current or better" },
+  { value: "any", label: "Any" },
+];
 
 export const autoCoverageForms = [
   "unknown",
@@ -218,6 +240,31 @@ export const propertySettlements = [
 ] as const;
 export const PropertySettlement = z.enum(propertySettlements);
 export type PropertySettlement = z.infer<typeof PropertySettlement>;
+
+export const propertySettlementOptions: { value: PropertySettlement; label: string }[] = [
+  { value: "unknown", label: "Unknown" },
+  { value: "replacement_cost", label: "Replacement cost" },
+  { value: "guaranteed_replacement_cost", label: "Guaranteed replacement cost" },
+  { value: "extended_replacement_cost", label: "Extended replacement cost" },
+  { value: "actual_cash_value", label: "Actual cash value" },
+];
+
+export const autoCoverageFormOptions: { value: AutoCoverageForm; label: string }[] = [
+  { value: "unknown", label: "Unknown" },
+  { value: "liability_only", label: "Liability only" },
+  { value: "collision", label: "Collision" },
+  { value: "comprehensive", label: "Comprehensive" },
+  { value: "specified_perils", label: "Specified perils" },
+  { value: "all_perils", label: "All perils" },
+];
+
+export const propertyCoverageFormOptions: { value: PropertyCoverageForm; label: string }[] = [
+  { value: "unknown", label: "Unknown" },
+  { value: "comprehensive", label: "Comprehensive" },
+  { value: "broad", label: "Broad" },
+  { value: "named_perils", label: "Named perils" },
+  { value: "basic", label: "Basic" },
+];
 
 export const vehicleUseClasses = [
   "personal",

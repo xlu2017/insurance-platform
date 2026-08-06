@@ -3,7 +3,9 @@ import {
   formatFieldLabel,
   formatFieldValue,
   getEffectiveDisplay,
+  getExistingAssetDisplay,
   getFieldValue,
+  getInitialDecision,
   parseCorrectedValue,
   renderCents,
 } from "@/lib/review-entities-helpers";
@@ -113,5 +115,61 @@ describe("review-entities display helpers", () => {
         mandateAmount: "",
       }),
     ).toBe("Rental");
+  });
+
+  it("defaults exact existing matches to link_existing and preserves a persisted decision", () => {
+    const candidate = {
+      ...propertyCandidate("principal_residence"),
+      match_classification: "exact_existing_match",
+      draft_decision: "link_existing" as const,
+      draft_existing_asset_id: "existing-1",
+      draft_existing_asset_type: "property" as const,
+    };
+    expect(getInitialDecision(candidate)).toBe("link_existing");
+  });
+
+  it("requires explicit confirmation for possible existing matches", () => {
+    const candidate = {
+      ...propertyCandidate("principal_residence"),
+      match_classification: "possible_existing_match",
+      draft_decision: "link_existing" as const,
+      draft_existing_asset_id: "existing-1",
+      draft_existing_asset_type: "property" as const,
+    };
+    expect(getInitialDecision(candidate)).toBeNull();
+  });
+
+  it("does not overwrite a persisted needs_correction decision", () => {
+    const candidate = {
+      ...propertyCandidate("principal_residence"),
+      match_classification: "new_identity_confirmation_required" as const,
+      draft_decision: "needs_correction" as const,
+    };
+    expect(getInitialDecision(candidate)).toBe("needs_correction");
+  });
+
+  it("falls back to approve_new for new candidates", () => {
+    const candidate = {
+      ...propertyCandidate("principal_residence"),
+      match_classification: "new" as const,
+      draft_decision: null,
+    };
+    expect(getInitialDecision(candidate)).toBe("approve_new");
+  });
+
+  it("extracts existing asset display from selected_facts_json", () => {
+    const candidate = {
+      ...propertyCandidate("principal_residence"),
+      selected_facts_json: {
+        existingAsset: {
+          id: "existing-1",
+          asset_type: "property",
+          display_label: "123 Main St",
+        },
+      },
+    };
+    const existingAsset = getExistingAssetDisplay(candidate as unknown as ExtractionCandidate);
+    expect(existingAsset?.id).toBe("existing-1");
+    expect(existingAsset?.display_label).toBe("123 Main St");
   });
 });

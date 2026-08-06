@@ -149,3 +149,52 @@ export function getEffectiveDisplay(
   }
   return displayValueForField(fieldPath, getFieldValue(candidate, fieldPath));
 }
+
+export type CandidateDecision = "approve_new" | "link_existing" | "skip" | "needs_correction";
+
+export function getExistingAssetDisplay(
+  candidate: ExtractionCandidate,
+): { id: string; asset_type: "vehicle" | "property"; display_label: string } | null {
+  const facts = isRecord(candidate.selected_facts_json) ? candidate.selected_facts_json : {};
+  const existingAsset = isRecord(facts.existingAsset) ? facts.existingAsset : null;
+  if (existingAsset && typeof existingAsset.id === "string") {
+    return {
+      id: existingAsset.id as string,
+      asset_type: (existingAsset.asset_type as "vehicle" | "property") ?? candidate.asset_type,
+      display_label: (existingAsset.display_label as string) ?? "Existing asset",
+    };
+  }
+  if (candidate.draft_existing_asset_id) {
+    return {
+      id: candidate.draft_existing_asset_id,
+      asset_type: candidate.draft_existing_asset_type ?? candidate.asset_type,
+      display_label: "Existing asset",
+    };
+  }
+  return null;
+}
+
+export function getInitialDecision(candidate: ExtractionCandidate): CandidateDecision | null {
+  if (candidate.match_classification === "possible_existing_match") {
+    return null;
+  }
+
+  const persisted = candidate.draft_decision;
+  if (
+    persisted === "approve_new" ||
+    persisted === "link_existing" ||
+    persisted === "skip" ||
+    persisted === "needs_correction"
+  ) {
+    return persisted;
+  }
+
+  if (candidate.match_classification === "exact_existing_match") {
+    return "link_existing";
+  }
+  if (candidate.match_classification === "new_identity_confirmation_required") {
+    return "needs_correction";
+  }
+
+  return "approve_new";
+}

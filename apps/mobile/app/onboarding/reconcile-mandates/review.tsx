@@ -27,6 +27,7 @@ import {
   mandateValuesEqual,
   visibleMandateItems,
 } from "@/lib/mandate-reconciliation";
+import { getExistingAssetDisplay } from "@/lib/review-entities-helpers";
 import { supabase } from "@/lib/supabase";
 
 export default function MandateReconciliationReview() {
@@ -162,6 +163,37 @@ export default function MandateReconciliationReview() {
             ? "These are the changes that will be saved. Your uploaded policy documents will remain unchanged."
             : "No coverage rules need to change."}
         </Body>
+
+        <Subtitle>Asset decisions</Subtitle>
+        {candidates?.length === 0 ? <Body muted>No asset decisions to review.</Body> : null}
+        {candidates?.map((candidate) => {
+          const existingAsset =
+            candidate.draft_decision === "link_existing"
+              ? getExistingAssetDisplay(candidate)
+              : null;
+          const decisionLabel =
+            candidate.draft_decision === "approve_new"
+              ? "Add as new asset"
+              : candidate.draft_decision === "link_existing"
+                ? "Link to existing asset"
+                : candidate.draft_decision === "needs_correction"
+                  ? "Needs correction"
+                  : candidate.draft_decision === "skip"
+                    ? "Skip"
+                    : "Undecided";
+          return (
+            <Card key={candidate.id}>
+              <Body>{candidate.display_label}</Body>
+              <Caption>{decisionLabel}</Caption>
+              {existingAsset ? (
+                <Caption style={{ color: "#6B7280" }}>
+                  {candidate.asset_type === "vehicle" ? "Vehicle" : "Property"}:{" "}
+                  {existingAsset.display_label}
+                </Caption>
+              ) : null}
+            </Card>
+          );
+        })}
 
         <Subtitle>Coverage changes</Subtitle>
         {changed.length === 0 ? <Body muted>No coverage rules changed.</Body> : null}

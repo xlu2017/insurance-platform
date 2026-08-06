@@ -1,4 +1,5 @@
 export * from "./client";
+export * from "./compare-coverage";
 export * from "./mandate-repository";
 export * from "./quote-normalizer";
 export * from "./recommendation-loader";

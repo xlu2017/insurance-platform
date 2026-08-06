@@ -1158,6 +1158,12 @@ Deno.serve(async (req) => {
       const mergedSourceDocIds = new Set<string>(existingCandidate?.source_document_ids ?? []);
       for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
 
+      const matchedExistingAsset =
+        group.resolution.matchedExistingEntityId &&
+        group.resolution.status !== "matches_pending_candidate"
+          ? existingById.get(group.resolution.matchedExistingEntityId)
+          : undefined;
+
       const selectedFacts = {
         canonicalFingerprint: group.fingerprint,
         entities: group.entities.map((e) => e.temporaryId),
@@ -1165,6 +1171,13 @@ Deno.serve(async (req) => {
         resolution: group.resolution,
         identity: representative.identity,
         candidateIdentity: representative.candidateIdentity,
+        existingAsset: matchedExistingAsset
+          ? {
+              id: matchedExistingAsset.id,
+              asset_type: matchedExistingAsset.assetType,
+              display_label: matchedExistingAsset.displayLabel ?? "Existing asset",
+            }
+          : undefined,
         currentPolicy: representative.currentPolicy,
         currentCoverage: representative.currentCoverage,
         mandateSuggestions: representative.mandateSuggestions,

@@ -1,18 +1,20 @@
 import { formatCad } from "@autopilot/schemas";
+import {
+  autoCoverageFormOptions,
+  coveragePreferenceOptions,
+  deductibleRuleOptions,
+  limitRuleOptions,
+  propertyCoverageFormOptions,
+  propertySettlementOptions,
+} from "@autopilot/schemas";
 import type {
-  AutoCoverageForm,
   AutoEndorsementKey,
   BillingMethod,
   BrokerDirectPreference,
-  CoveragePreference,
-  DeductibleRule,
   FinancialRating,
   FinancingStatus,
-  LimitRule,
   PaymentFrequency,
-  PropertyCoverageForm,
   PropertyOptionalCoverageKey,
-  PropertySettlement,
   PropertyType,
   VehicleUseClass,
 } from "@autopilot/schemas";
@@ -30,52 +32,8 @@ export function dollarsFromCents(cents: number | undefined | null): string {
 
 export { formatCad };
 
-export const coveragePreferenceOptions: { value: CoveragePreference; label: string }[] = [
-  { value: "required", label: "Required" },
-  { value: "preferred", label: "Preferred" },
-  { value: "indifferent", label: "Indifferent" },
-  { value: "prohibited", label: "Prohibited" },
-];
-
-export const limitRuleOptions: { value: LimitRule; label: string }[] = [
-  { value: "minimum", label: "At least" },
-  { value: "maximum", label: "At most" },
-  { value: "exact", label: "Exactly" },
-  { value: "match_current_or_better", label: "Match current or better" },
-  { value: "any", label: "Any" },
-];
-
-export const deductibleRuleOptions: { value: DeductibleRule; label: string }[] = [
-  { value: "maximum", label: "At most" },
-  { value: "exact", label: "Exactly" },
-  { value: "match_current_or_better", label: "Match current or better" },
-  { value: "any", label: "Any" },
-];
-
-export const autoCoverageFormOptions: { value: AutoCoverageForm; label: string }[] = [
-  { value: "unknown", label: "Unknown" },
-  { value: "liability_only", label: "Liability only" },
-  { value: "collision", label: "Collision" },
-  { value: "comprehensive", label: "Comprehensive" },
-  { value: "specified_perils", label: "Specified perils" },
-  { value: "all_perils", label: "All perils" },
-];
-
-export const propertyCoverageFormOptions: { value: PropertyCoverageForm; label: string }[] = [
-  { value: "unknown", label: "Unknown" },
-  { value: "comprehensive", label: "Comprehensive" },
-  { value: "broad", label: "Broad" },
-  { value: "named_perils", label: "Named perils" },
-  { value: "basic", label: "Basic" },
-];
-
-export const propertySettlementOptions: { value: PropertySettlement; label: string }[] = [
-  { value: "unknown", label: "Unknown" },
-  { value: "replacement_cost", label: "Replacement cost" },
-  { value: "guaranteed_replacement_cost", label: "Guaranteed replacement cost" },
-  { value: "extended_replacement_cost", label: "Extended replacement cost" },
-  { value: "actual_cash_value", label: "Actual cash value" },
-];
+export { coveragePreferenceOptions, limitRuleOptions, deductibleRuleOptions };
+export { autoCoverageFormOptions, propertyCoverageFormOptions, propertySettlementOptions };
 
 export const propertyTypeOptions: { value: PropertyType; label: string }[] = [
   { value: "homeowner", label: "Homeowner" },
