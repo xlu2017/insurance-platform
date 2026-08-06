@@ -210,6 +210,85 @@ export async function loadDocumentBatch(
   return data;
 }
 
+export interface UploadPlanEstimate {
+  lowerSeconds: number;
+  upperSeconds: number;
+  reviewPasses: number;
+}
+
+export interface UploadPlan {
+  activeBatchId: string | null;
+  activeStatus: DocumentBatchStatus | null;
+  completedNormalizationCount: number;
+  unfinishedDocumentCount: number;
+  newDocumentCount: number;
+  restartEstimate: UploadPlanEstimate | null;
+  waitEstimate:
+    | (UploadPlanEstimate & {
+        currentLowerSeconds: number;
+        currentUpperSeconds: number;
+        queuedLowerSeconds: number;
+        queuedUpperSeconds: number;
+      })
+    | null;
+}
+
+export async function planDocumentUpload(input: {
+  householdId: string;
+  caseId?: string;
+  newPolicyDocumentIds?: string[];
+}): Promise<UploadPlan> {
+  const { data, error } = await invokeEdgeFunction<UploadPlan>("document-processing-batch", {
+    action: "plan",
+    household_id: input.householdId,
+    case_id: input.caseId,
+    new_policy_document_ids: input.newPolicyDocumentIds ?? [],
+  });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Failed to plan document upload");
+  return data;
+}
+
+export async function supersedeDocumentBatch(input: {
+  householdId: string;
+  activeBatchId: string;
+  newPolicyDocumentIds?: string[];
+}): Promise<{ new_batch_id: string; new_session_id: string; superseded_batch_id: string }> {
+  const { data, error } = await invokeEdgeFunction<{
+    new_batch_id: string;
+    new_session_id: string;
+    superseded_batch_id: string;
+  }>("document-processing-batch", {
+    action: "supersede",
+    household_id: input.householdId,
+    batch_id: input.activeBatchId,
+    new_policy_document_ids: input.newPolicyDocumentIds ?? [],
+  });
+  if (error) throw new Error(error.message);
+  if (!data?.new_batch_id) throw new Error("Failed to supersede document batch");
+  return data;
+}
+
+export async function queueSuccessorDocumentBatch(input: {
+  householdId: string;
+  predecessorBatchId: string;
+  newPolicyDocumentIds?: string[];
+}): Promise<{ new_batch_id: string; new_session_id: string; predecessor_batch_id: string }> {
+  const { data, error } = await invokeEdgeFunction<{
+    new_batch_id: string;
+    new_session_id: string;
+    predecessor_batch_id: string;
+  }>("document-processing-batch", {
+    action: "queue-successor",
+    household_id: input.householdId,
+    batch_id: input.predecessorBatchId,
+    new_policy_document_ids: input.newPolicyDocumentIds ?? [],
+  });
+  if (error) throw new Error(error.message);
+  if (!data?.new_batch_id) throw new Error("Failed to queue successor document batch");
+  return data;
+}
+
 export interface DangerousModeSetting {
   enabled: boolean;
   disclosure_version: string;

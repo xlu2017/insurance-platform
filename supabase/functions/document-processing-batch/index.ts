@@ -275,6 +275,25 @@ Deno.serve(async (req) => {
     );
   }
 
+  if (action === "plan") {
+    const newDocIds = Array.isArray(body.new_policy_document_ids)
+      ? body.new_policy_document_ids
+          .filter((id): id is string => typeof id === "string" && isUuid(id))
+          .map((id) => String(id))
+      : [];
+    const hasCaseId = Object.prototype.hasOwnProperty.call(body, "case_id");
+    const caseParse = parseCaseId(body.case_id, hasCaseId);
+    if (caseParse.kind === "invalid") return jsonError(caseParse.reason ?? "Invalid case_id", 400);
+
+    const { data, error } = await admin.rpc("plan_document_upload_v1", {
+      p_household_id: householdId,
+      p_new_policy_document_ids: newDocIds,
+      p_case_id: caseParse.kind === "valid" ? caseParse.value : null,
+    });
+    if (error) return jsonError(error.message, 500);
+    return jsonResponse(data);
+  }
+
   if (action === "create") {
     const hasCaseId = Object.prototype.hasOwnProperty.call(body, "case_id");
     const caseParse = parseCaseId(body.case_id, hasCaseId);
@@ -345,6 +364,33 @@ Deno.serve(async (req) => {
       return jsonError("Failed to create document batch", 500);
     }
     return jsonResponse(publicBatch(batch as Record<string, unknown>), 201);
+  }
+
+  if (action === "supersede" || action === "queue-successor") {
+    const batchId = String(body.batch_id ?? "");
+    if (!isUuid(batchId)) return jsonError("Invalid batch_id", 400);
+    const newDocIds = Array.isArray(body.new_policy_document_ids)
+      ? body.new_policy_document_ids
+          .filter((id): id is string => typeof id === "string" && isUuid(id))
+          .map((id) => String(id))
+      : [];
+    const rpcName =
+      action === "supersede"
+        ? "supersede_processing_batch_v1"
+        : "create_successor_document_batch_v1";
+    const rpcArgs: Record<string, unknown> = {
+      p_household_id: householdId,
+      p_actor_id: user.id,
+      p_new_policy_document_ids: newDocIds,
+    };
+    if (action === "supersede") {
+      rpcArgs.p_active_batch_id = batchId;
+    } else {
+      rpcArgs.p_predecessor_batch_id = batchId;
+    }
+    const { data, error } = await admin.rpc(rpcName, rpcArgs);
+    if (error) return jsonError(error.message, 400);
+    return jsonResponse(data, action === "supersede" ? 201 : 202);
   }
 
   let batchId = "";
