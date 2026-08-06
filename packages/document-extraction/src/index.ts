@@ -32,3 +32,4 @@ export {
   SupabaseFileLifecycleStore,
 } from "./providers/supabase-adapter.ts";
 export { FileSystemFileBytesLoader } from "./document-loaders/node-bytes.ts";
+export * from "./pending-candidate-builder.ts";

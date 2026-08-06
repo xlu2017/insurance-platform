@@ -36,3 +36,4 @@ export {
   SupabaseFileLifecycleStore,
 } from "../src/providers/supabase-adapter.ts";
 export { MemoryFileBytesLoader } from "../src/document-loaders/memory-bytes.ts";
+export * from "../src/pending-candidate-builder.ts";

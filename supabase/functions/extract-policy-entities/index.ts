@@ -7,8 +7,6 @@
 // asset_candidates.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  buildPropertyIdentity,
-  buildVehicleIdentity,
   buildCandidateContext,
   buildCandidateIdentity,
   createNativeDocumentAnalyzer,
@@ -22,6 +20,15 @@ import {
   SupabaseFileLifecycleStore,
   buildMandateReviewSeeds,
   partitionDocumentDigests,
+  parsePendingCandidateRecord,
+  pendingRecordToEntityCandidate,
+  mapResolutionStatus,
+  occupancyForEntity,
+  candidateDisplayLabel,
+  isExactFingerprint,
+  computeCanonicalFingerprint,
+  buildExistingAssetReference,
+  buildDraftDecisionPayload,
 } from "../_shared/document-extraction.js";
 import type {
   CandidateComparisonContext,
@@ -33,6 +40,24 @@ import type {
   ProcessingConsentCheck,
   PublicDocumentError,
 } from "./types.ts";
+
+interface PendingCandidateRecord {
+  id: string;
+  asset_type: "vehicle" | "property";
+  identity_fingerprint: string;
+  display_label: string;
+  session_id: string;
+  source_document_ids: string[];
+  draft_decision: string | null;
+  draft_identity_confirmed: boolean | null;
+  draft_existing_asset_id: string | null;
+  draft_existing_asset_type: "vehicle" | "property" | null;
+  approved_asset_id: string | null;
+  approved_asset_type: "vehicle" | "property" | null;
+  selected_facts_json: Record<string, unknown>;
+  conflicts_json: unknown[];
+  case_id: string | null;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,193 +125,6 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function computeCanonicalFingerprint(entity: DetectedInsuranceEntity): string {
-  // The analyzer already derives the canonical identity from VIN/address and applies
-  // the LLM resolution result (e.g. matching an existing asset or pending candidate).
-  if (entity.canonicalFingerprint && entity.canonicalFingerprint.length > 0) {
-    return entity.canonicalFingerprint;
-  }
-  if (entity.entityType === "vehicle") {
-    const identity = buildVehicleIdentity({
-      vin: entity.identity.vin ?? undefined,
-      modelYear: entity.identity.year ?? undefined,
-      make: entity.identity.make ?? undefined,
-      model: entity.identity.model ?? undefined,
-      trim: entity.identity.trim ?? undefined,
-    });
-    if (identity.strength === "exact" && identity.exactFingerprint) {
-      return identity.exactFingerprint;
-    }
-    return `possible:${entity.temporaryId}`;
-  }
-  const identity = buildPropertyIdentity({
-    addressLine1: entity.identity.fullAddress ?? undefined,
-    city: entity.identity.city ?? undefined,
-    province: entity.identity.province ?? undefined,
-    postalCode: entity.identity.postalCode ?? undefined,
-    occupancy: entity.identity.occupancy ?? undefined,
-    isRedacted: false,
-  });
-  if (identity.strength === "exact" && identity.exactFingerprint) {
-    return identity.exactFingerprint;
-  }
-  return `possible:${entity.temporaryId}`;
-}
-
-function mapResolutionStatus(entity: DetectedInsuranceEntity): string {
-  const status = entity.resolution.status;
-  if (status === "new") return "new";
-  if (status === "possible_match_requires_confirmation") {
-    if (entity.resolution.matchedExistingEntityId || entity.resolution.matchedPendingCandidateId) {
-      return "possible_existing_match";
-    }
-    return "new_identity_confirmation_required";
-  }
-  if (status === "matches_existing" || status === "matches_pending_candidate") {
-    return "exact_existing_match";
-  }
-  return "new";
-}
-
-function occupancyForEntity(entity: DetectedInsuranceEntity): string | null {
-  if (entity.entityType === "vehicle") return null;
-  const value = entity.identity.occupancy;
-  if (value === "principal_residence" || value === "rental" || value === "unknown") return value;
-  return "unknown";
-}
-
-function candidateDisplayLabel(entity: DetectedInsuranceEntity): string {
-  if (entity.displayLabel && entity.displayLabel.trim().length > 0)
-    return entity.displayLabel.trim();
-  if (entity.entityType === "vehicle") {
-    const { year, make, model, trim } = entity.identity;
-    return [year, make, model, trim].filter(Boolean).join(" ") || "Unidentified vehicle";
-  }
-  const { fullAddress, city, province, postalCode, occupancy } = entity.identity;
-  const parts = [fullAddress, city, province, postalCode].filter(Boolean);
-  const label = parts.join(" ") || `${occupancy ?? "Property"} at ${city ?? "unknown"}`;
-  return label;
-}
-
-function buildExistingAssetReference(
-  existingById: Map<string, ExistingHouseholdAsset>,
-  record?: {
-    draftExistingAssetId?: string | null;
-    draftExistingAssetType?: string | null;
-    displayLabel?: string;
-    assetType?: string;
-  },
-): { id: string; asset_type: "vehicle" | "property"; display_label: string } | undefined {
-  if (!record?.draftExistingAssetId) return undefined;
-  const asset = existingById.get(record.draftExistingAssetId);
-  return {
-    id: record.draftExistingAssetId,
-    asset_type:
-      (record.draftExistingAssetType as "vehicle" | "property") ??
-      (record.assetType as "vehicle" | "property") ??
-      "vehicle",
-    display_label: asset?.displayLabel ?? record.displayLabel ?? "Existing asset",
-  };
-}
-
-interface DraftDecisionPayload {
-  _draftDecision?: string;
-  _draftExistingAssetId?: string;
-  _draftExistingAssetType?: string;
-  _draftIdentityConfirmed?: boolean;
-  existingAsset?: { id: string; asset_type: "vehicle" | "property"; display_label: string };
-}
-
-function buildDraftDecisionPayload(
-  existingById: Map<string, ExistingHouseholdAsset>,
-  resolutionStatus: string,
-  matchedExistingAsset: ExistingHouseholdAsset | undefined,
-  matchedPendingRecord: PendingEntityCandidate | undefined,
-  identityStrength: "exact" | "partial" | "unknown" | "redacted" | undefined,
-): DraftDecisionPayload {
-  const pendingExisting = matchedPendingRecord
-    ? buildExistingAssetReference(existingById, matchedPendingRecord)
-    : undefined;
-  const pendingDecision = matchedPendingRecord?.draftDecision;
-
-  if (resolutionStatus === "matches_existing" && matchedExistingAsset) {
-    return {
-      _draftDecision: "link_existing",
-      _draftExistingAssetId: matchedExistingAsset.id,
-      _draftExistingAssetType: matchedExistingAsset.assetType,
-      _draftIdentityConfirmed: true,
-      existingAsset: {
-        id: matchedExistingAsset.id,
-        asset_type: matchedExistingAsset.assetType,
-        display_label: matchedExistingAsset.displayLabel ?? "Existing asset",
-      },
-    };
-  }
-
-  if (resolutionStatus === "matches_pending_candidate") {
-    if (pendingExisting) {
-      return {
-        _draftDecision: "link_existing",
-        _draftExistingAssetId: pendingExisting.id,
-        _draftExistingAssetType: pendingExisting.asset_type,
-        _draftIdentityConfirmed: true,
-        existingAsset: pendingExisting,
-      };
-    }
-    if (pendingDecision && pendingDecision !== "undecided") {
-      return {
-        _draftDecision: pendingDecision,
-        _draftIdentityConfirmed: pendingDecision !== "needs_correction",
-      };
-    }
-    // Do not silently convert an undecided pending match into approve_new.
-    return {
-      _draftDecision: "undecided",
-      _draftIdentityConfirmed: false,
-    };
-  }
-
-  if (resolutionStatus === "possible_match_requires_confirmation") {
-    if (matchedExistingAsset) {
-      return {
-        _draftDecision: "link_existing",
-        _draftExistingAssetId: matchedExistingAsset.id,
-        _draftExistingAssetType: matchedExistingAsset.assetType,
-        _draftIdentityConfirmed: false,
-        existingAsset: {
-          id: matchedExistingAsset.id,
-          asset_type: matchedExistingAsset.assetType,
-          display_label: matchedExistingAsset.displayLabel ?? "Existing asset",
-        },
-      };
-    }
-    if (pendingExisting) {
-      return {
-        _draftDecision: "link_existing",
-        _draftExistingAssetId: pendingExisting.id,
-        _draftExistingAssetType: pendingExisting.asset_type,
-        _draftIdentityConfirmed: false,
-        existingAsset: pendingExisting,
-      };
-    }
-    if (pendingDecision) {
-      return {
-        _draftDecision: pendingDecision,
-        _draftIdentityConfirmed: false,
-      };
-    }
-    return {
-      _draftDecision: "needs_correction",
-      _draftIdentityConfirmed: false,
-    };
-  }
-
-  return {
-    _draftDecision: "approve_new",
-    _draftIdentityConfirmed: identityStrength === "exact",
-  };
 }
 
 async function loadExistingAssets(
@@ -358,72 +196,11 @@ async function loadExistingAssets(
   return assets;
 }
 
-async function loadPendingCandidates(
-  admin: any,
-  householdId: string,
-  excludeSessionId?: string,
-): Promise<PendingEntityCandidate[]> {
-  const rows = await loadPendingCandidateRecords(admin, householdId, excludeSessionId);
-  return rows.map((c) => {
-    const facts = c.selected_facts_json ?? {};
-    const identity = (facts.identity ?? {}) as Record<string, unknown>;
-    const currentPolicy = (facts.currentPolicy ?? undefined) as Record<string, unknown> | undefined;
-    const candidateIdentity = (facts.candidateIdentity ?? undefined) as
-      | { exactIdentityFingerprint: string | null; provisionalCandidateKey: string }
-      | undefined;
-    return {
-      id: String(c.id),
-      assetType: c.asset_type as "property" | "vehicle",
-      identityFingerprint: String(c.identity_fingerprint),
-      displayLabel: c.display_label || undefined,
-      candidateIdentity: candidateIdentity
-        ? {
-            exactIdentityFingerprint: candidateIdentity.exactIdentityFingerprint ?? null,
-            provisionalCandidateKey: candidateIdentity.provisionalCandidateKey,
-            identityStrength: candidateIdentity.exactIdentityFingerprint
-              ? ("exact" as const)
-              : ("partial" as const),
-          }
-        : undefined,
-      identity: identity as any,
-      currentPolicy: currentPolicy as any,
-      draftDecision: c.draft_decision,
-      draftIdentityConfirmed: c.draft_identity_confirmed,
-      draftExistingAssetId: c.draft_existing_asset_id,
-      draftExistingAssetType: c.draft_existing_asset_type as
-        | "vehicle"
-        | "property"
-        | null
-        | undefined,
-      approvedAssetId: c.approved_asset_id,
-      approvedAssetType: c.approved_asset_type as "vehicle" | "property" | null | undefined,
-      selectedFactsJson: c.selected_facts_json,
-    };
-  });
-}
-
 async function loadPendingCandidateRecords(
   admin: any,
   householdId: string,
   excludeSessionId?: string,
-): Promise<
-  {
-    id: string;
-    asset_type: string;
-    identity_fingerprint: string;
-    display_label: string;
-    session_id: string;
-    source_document_ids: string[];
-    draft_decision: string | null;
-    draft_identity_confirmed: boolean | null;
-    draft_existing_asset_id: string | null;
-    draft_existing_asset_type: "vehicle" | "property" | null;
-    approved_asset_id: string | null;
-    approved_asset_type: "vehicle" | "property" | null;
-    selected_facts_json: Record<string, unknown>;
-    conflicts_json: unknown[];
-  }[]
-> {
+): Promise<PendingCandidateRecord[]> {
   const query = admin
     .from("asset_candidates")
     .select(
@@ -437,18 +214,36 @@ async function loadPendingCandidateRecords(
   }
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []).map((c: Record<string, unknown>) => ({
-    id: String(c.id),
-    asset_type: String(c.asset_type),
-    identity_fingerprint: String(c.identity_fingerprint),
-    display_label: String(c.display_label ?? ""),
-    session_id: String(c.session_id),
-    source_document_ids: Array.isArray(c.source_document_ids)
-      ? (c.source_document_ids as string[])
-      : [],
-    selected_facts_json: (c.selected_facts_json as Record<string, unknown>) ?? {},
-    conflicts_json: Array.isArray(c.conflicts_json) ? c.conflicts_json : [],
-  }));
+
+  const records: PendingCandidateRecord[] = (data ?? ([] as unknown[])).map(
+    (c: unknown) => parsePendingCandidateRecord(c) as PendingCandidateRecord,
+  );
+  if (records.length === 0) return [];
+
+  const sessionIds = Array.from(new Set(records.map((r) => r.session_id).filter(Boolean)));
+  const { data: sessions, error: sessionErr } = await admin
+    .from("document_extraction_sessions")
+    .select("id, case_id")
+    .in("id", sessionIds);
+  if (sessionErr) throw new Error(sessionErr.message);
+
+  const caseBySession = new Map<string, string | null>();
+  for (const session of sessions ?? []) {
+    caseBySession.set(String(session.id), session.case_id ? String(session.case_id) : null);
+  }
+  for (const record of records) {
+    record.case_id = caseBySession.get(record.session_id) ?? null;
+  }
+  return records;
+}
+
+async function loadPendingCandidates(
+  admin: any,
+  householdId: string,
+  excludeSessionId?: string,
+): Promise<PendingEntityCandidate[]> {
+  const records = await loadPendingCandidateRecords(admin, householdId, excludeSessionId);
+  return records.map((r) => pendingRecordToEntityCandidate(r) as PendingEntityCandidate);
 }
 
 Deno.serve(async (req) => {
@@ -534,6 +329,7 @@ Deno.serve(async (req) => {
   }
 
   let batch: Record<string, any> | null = null;
+  let currentCaseId: string | null = null;
   if (batchIdRaw) {
     const { data: batchRow, error: batchError } = await admin
       .from("document_processing_batches")
@@ -570,6 +366,7 @@ Deno.serve(async (req) => {
     );
     if (policyDocumentIds.length === 0) return jsonError("Document batch is empty", 400);
     sessionIdRaw = String(batchRow.session_id);
+    currentCaseId = batchRow.case_id ?? null;
     batch = batchRow as Record<string, any>;
 
     const { data: claimed, error: claimError } = await admin.rpc(
@@ -898,7 +695,7 @@ Deno.serve(async (req) => {
   } else {
     const { data: session } = await supabase
       .from("document_extraction_sessions")
-      .select("id")
+      .select("id, case_id")
       .eq("id", sessionId)
       .maybeSingle();
     if (!session) {
@@ -907,6 +704,7 @@ Deno.serve(async (req) => {
       });
       return jsonError("Session not found", 404);
     }
+    currentCaseId = session.case_id ?? null;
   }
 
   const [existingAssets, pendingCandidates] = await Promise.all([
@@ -1131,16 +929,19 @@ Deno.serve(async (req) => {
     }
 
     // Prepare household-wide lookup tables for canonical identity resolution.
+    // Candidates are scoped to their optimization case; a later session in a different
+    // case must create a new case-local candidate even if the canonical identity matches.
     const allPendingRecords = await loadPendingCandidateRecords(admin, householdId);
     const existingById = new Map<string, ExistingHouseholdAsset>();
     for (const asset of existingAssets) {
       existingById.set(asset.id, asset);
     }
-    const pendingById = new Map<string, (typeof allPendingRecords)[number]>();
-    const candidateByFingerprint = new Map<string, (typeof allPendingRecords)[number]>();
+    const pendingById = new Map<string, PendingCandidateRecord>();
+    const candidateByCaseFingerprint = new Map<string, PendingCandidateRecord>();
     for (const record of allPendingRecords) {
       pendingById.set(record.id, record);
-      candidateByFingerprint.set(record.identity_fingerprint, record);
+      const caseKey = `${record.case_id ?? "null"}:${record.identity_fingerprint}`;
+      candidateByCaseFingerprint.set(caseKey, record);
     }
     const pendingCandidateById = new Map<string, PendingEntityCandidate>();
     for (const candidate of pendingCandidates) {
@@ -1165,13 +966,6 @@ Deno.serve(async (req) => {
         resolution: DetectedInsuranceEntity["resolution"];
       }
     >();
-
-    function isExactFingerprint(fingerprint: string): boolean {
-      return (
-        (fingerprint.startsWith("vehicle:vin:") && fingerprint.length > "vehicle:vin:".length) ||
-        (fingerprint.startsWith("property:") && fingerprint.includes("|"))
-      );
-    }
 
     for (const entity of analysis.detectedEntities) {
       // Validate the LLM resolution against supplied context; downgrade on mismatch.
@@ -1287,18 +1081,27 @@ Deno.serve(async (req) => {
         group.entities.map(occupancyForEntity).find((o) => o) ?? occupancyForEntity(representative);
 
       const matchedPendingId =
-        group.resolution.status === "matches_pending_candidate" &&
+        (group.resolution.status === "matches_pending_candidate" ||
+          group.resolution.status === "possible_match_requires_confirmation") &&
         group.resolution.matchedPendingCandidateId
           ? group.resolution.matchedPendingCandidateId
           : undefined;
-      const existingCandidate =
-        (matchedPendingId ? pendingById.get(matchedPendingId) : undefined) ??
-        candidateByFingerprint.get(group.fingerprint);
+
       const matchedPendingRecord = matchedPendingId
         ? pendingCandidateById.get(matchedPendingId)
-        : existingCandidate
-          ? pendingCandidateById.get(existingCandidate.id)
+        : undefined;
+
+      // A candidate may only be reused within the same optimization case. If the matched
+      // pending candidate belongs to a different case we preserve its lineage in the
+      // draft payload but create a new case-local row.
+      const sameCaseMatchedPending =
+        matchedPendingId && pendingById.get(matchedPendingId)?.case_id === currentCaseId
+          ? pendingById.get(matchedPendingId)
           : undefined;
+      const sameCaseFingerprintCandidate = candidateByCaseFingerprint.get(
+        `${currentCaseId ?? "null"}:${group.fingerprint}`,
+      );
+      const existingCandidate = sameCaseMatchedPending ?? sameCaseFingerprintCandidate ?? undefined;
 
       const mergedSourceDocIds = new Set<string>(existingCandidate?.source_document_ids ?? []);
       for (const id of group.sourceDocIds) mergedSourceDocIds.add(id);
@@ -1355,7 +1158,8 @@ Deno.serve(async (req) => {
       });
 
       if (existingCandidate) {
-        candidateByFingerprint.set(group.fingerprint, {
+        const caseKey = `${currentCaseId ?? "null"}:${group.fingerprint}`;
+        candidateByCaseFingerprint.set(caseKey, {
           ...existingCandidate,
           source_document_ids: Array.from(mergedSourceDocIds),
           selected_facts_json: selectedFacts,

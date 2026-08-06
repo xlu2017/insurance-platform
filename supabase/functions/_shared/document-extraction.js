@@ -1,5 +1,5 @@
 // This file is generated from packages/document-extraction. Do not edit manually.
-// source-hash: 67df642e7f16129b45fc6475cd5b75e1ea9c2adc2c543e62cc874d4adc061b74
+// source-hash: 3faa1c2d9685479a828900998d9d421e062ded082013f906f63e71f469117fa4
 
 
 // ../../node_modules/zod/lib/index.mjs
@@ -9621,7 +9621,16 @@ var PendingEntityCandidateSchema = z.object({
   displayLabel: z.string().optional(),
   candidateIdentity: z.lazy(() => CandidateIdentitySchema).optional(),
   identity: z.lazy(() => DetectedEntityIdentitySchema).optional(),
-  currentPolicy: z.lazy(() => CurrentPolicySchema).optional()
+  currentPolicy: z.lazy(() => CurrentPolicySchema).optional(),
+  sourceDocumentIds: z.array(z.string().min(1)).default([]),
+  draftDecision: z.enum(["approve_new", "link_existing", "skip", "needs_correction", "undecided"]).nullable().optional(),
+  draftIdentityConfirmed: z.boolean().nullable().optional(),
+  draftExistingAssetId: z.string().nullable().optional(),
+  draftExistingAssetType: z.enum(["vehicle", "property"]).nullable().optional(),
+  approvedAssetId: z.string().nullable().optional(),
+  approvedAssetType: z.enum(["vehicle", "property"]).nullable().optional(),
+  selectedFactsJson: z.record(z.unknown()).nullable().optional(),
+  caseId: z.string().nullable().optional()
 }).strict();
 var PriorDocumentSummarySchema = z.object({
   documentId: z.string().min(1),
@@ -12794,6 +12803,278 @@ var MemoryFileBytesLoader = class {
     };
   }
 };
+
+// src/pending-candidate-builder.ts
+function unknownToString(value) {
+  if (typeof value === "string") return value;
+  return null;
+}
+function unknownToStringArray(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => typeof item === "string" ? item : null).filter((item) => item !== null);
+  }
+  return [];
+}
+function unknownToBoolean(value) {
+  if (typeof value === "boolean") return value;
+  return null;
+}
+function unknownToRecord(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+}
+function parseAssetType(value) {
+  if (value === "vehicle" || value === "property") return value;
+  return null;
+}
+function parsePendingCandidateRecord(row) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    throw new Error("Pending candidate row must be an object");
+  }
+  const record = row;
+  const id = unknownToString(record.id);
+  if (!id) throw new Error("Pending candidate row missing id");
+  const rawAssetType = record.asset_type ?? record.assetType;
+  const assetType = parseAssetType(rawAssetType);
+  if (!assetType)
+    throw new Error(`Pending candidate ${id} has invalid asset_type: ${rawAssetType}`);
+  const identityFingerprint = unknownToString(
+    record.identity_fingerprint ?? record.identityFingerprint
+  );
+  if (!identityFingerprint) {
+    throw new Error(`Pending candidate ${id} missing identity_fingerprint`);
+  }
+  const displayLabel = unknownToString(record.display_label ?? record.displayLabel) ?? "";
+  const sessionId = unknownToString(record.session_id ?? record.sessionId) ?? "";
+  const sourceDocumentIds = unknownToStringArray(
+    record.source_document_ids ?? record.sourceDocumentIds
+  );
+  const draftDecision = unknownToString(record.draft_decision ?? record.draftDecision);
+  const draftIdentityConfirmed = unknownToBoolean(
+    record.draft_identity_confirmed ?? record.draftIdentityConfirmed
+  );
+  const draftExistingAssetId = unknownToString(
+    record.draft_existing_asset_id ?? record.draftExistingAssetId
+  );
+  const rawDraftExistingAssetType = record.draft_existing_asset_type ?? record.draftExistingAssetType;
+  const draftExistingAssetType = parseAssetType(rawDraftExistingAssetType);
+  const approvedAssetId = unknownToString(record.approved_asset_id ?? record.approvedAssetId);
+  const rawApprovedAssetType = record.approved_asset_type ?? record.approvedAssetType;
+  const approvedAssetType = parseAssetType(rawApprovedAssetType);
+  const selectedFactsJson = unknownToRecord(record.selected_facts_json ?? record.selectedFactsJson);
+  const conflictsJson = Array.isArray(record.conflicts_json ?? record.conflictsJson) ? record.conflicts_json ?? record.conflictsJson : [];
+  const caseId = unknownToString(record.case_id ?? record.caseId);
+  return {
+    id,
+    asset_type: assetType,
+    identity_fingerprint: identityFingerprint,
+    display_label: displayLabel,
+    session_id: sessionId,
+    source_document_ids: sourceDocumentIds,
+    draft_decision: draftDecision,
+    draft_identity_confirmed: draftIdentityConfirmed,
+    draft_existing_asset_id: draftExistingAssetId,
+    draft_existing_asset_type: draftExistingAssetType,
+    approved_asset_id: approvedAssetId,
+    approved_asset_type: approvedAssetType,
+    selected_facts_json: selectedFactsJson,
+    conflicts_json: conflictsJson,
+    case_id: caseId
+  };
+}
+function pendingRecordToEntityCandidate(record) {
+  const facts = record.selected_facts_json;
+  const identity = facts.identity ?? {};
+  const currentPolicy = facts.currentPolicy ?? void 0;
+  const candidateIdentity = facts.candidateIdentity ?? void 0;
+  return {
+    id: record.id,
+    assetType: record.asset_type,
+    identityFingerprint: record.identity_fingerprint,
+    displayLabel: record.display_label || void 0,
+    candidateIdentity: candidateIdentity ? {
+      exactIdentityFingerprint: candidateIdentity.exactIdentityFingerprint ?? null,
+      provisionalCandidateKey: candidateIdentity.provisionalCandidateKey,
+      identityStrength: validateIdentityStrength(candidateIdentity.identityStrength)
+    } : void 0,
+    identity,
+    currentPolicy,
+    sourceDocumentIds: record.source_document_ids,
+    draftDecision: record.draft_decision,
+    draftIdentityConfirmed: record.draft_identity_confirmed,
+    draftExistingAssetId: record.draft_existing_asset_id,
+    draftExistingAssetType: record.draft_existing_asset_type,
+    approvedAssetId: record.approved_asset_id,
+    approvedAssetType: record.approved_asset_type,
+    selectedFactsJson: record.selected_facts_json,
+    caseId: record.case_id
+  };
+}
+function validateIdentityStrength(value) {
+  if (value === "exact" || value === "partial" || value === "redacted" || value === "unknown") {
+    return value;
+  }
+  if (value === "confirmation_required") return "partial";
+  return "unknown";
+}
+function mapResolutionStatus(entity) {
+  const status = entity.resolution.status;
+  if (status === "new") return "new";
+  if (status === "possible_match_requires_confirmation") {
+    if (entity.resolution.matchedExistingEntityId || entity.resolution.matchedPendingCandidateId) {
+      return "possible_existing_match";
+    }
+    return "new_identity_confirmation_required";
+  }
+  if (status === "matches_existing" || status === "matches_pending_candidate") {
+    return "exact_existing_match";
+  }
+  return "new";
+}
+function occupancyForEntity(entity) {
+  if (entity.entityType === "vehicle") return null;
+  const value = entity.identity.occupancy;
+  if (value === "principal_residence" || value === "rental" || value === "unknown") return value;
+  return "unknown";
+}
+function candidateDisplayLabel(entity) {
+  if (entity.displayLabel && entity.displayLabel.trim().length > 0)
+    return entity.displayLabel.trim();
+  if (entity.entityType === "vehicle") {
+    const { year, make, model, trim } = entity.identity;
+    return [year, make, model, trim].filter(Boolean).join(" ") || "Unidentified vehicle";
+  }
+  const { fullAddress, city, province, postalCode } = entity.identity;
+  const parts = [fullAddress, city, province, postalCode].filter(Boolean);
+  const occupancy = entity.identity.occupancy;
+  const label = parts.join(" ") || `${occupancy ?? "Property"} at ${city ?? "unknown"}`;
+  return label;
+}
+function isExactFingerprint2(fingerprint) {
+  return fingerprint.startsWith("vehicle:vin:") && fingerprint.length > "vehicle:vin:".length || fingerprint.startsWith("property:") && fingerprint.includes("|");
+}
+function computeCanonicalFingerprint(entity) {
+  if (entity.canonicalFingerprint && entity.canonicalFingerprint.length > 0) {
+    return entity.canonicalFingerprint;
+  }
+  if (entity.entityType === "vehicle") {
+    const identity2 = buildVehicleIdentity({
+      vin: entity.identity.vin ?? void 0,
+      modelYear: entity.identity.year ?? void 0,
+      make: entity.identity.make ?? void 0,
+      model: entity.identity.model ?? void 0,
+      trim: entity.identity.trim ?? void 0
+    });
+    if (identity2.strength === "exact" && identity2.exactFingerprint) {
+      return identity2.exactFingerprint;
+    }
+    return `possible:${entity.temporaryId}`;
+  }
+  const identity = buildPropertyIdentity({
+    addressLine1: entity.identity.fullAddress ?? void 0,
+    city: entity.identity.city ?? void 0,
+    province: entity.identity.province ?? void 0,
+    postalCode: entity.identity.postalCode ?? void 0,
+    occupancy: entity.identity.occupancy === "other" ? void 0 : entity.identity.occupancy,
+    isRedacted: false
+  });
+  if (identity.strength === "exact" && identity.exactFingerprint) {
+    return identity.exactFingerprint;
+  }
+  return `possible:${entity.temporaryId}`;
+}
+function buildExistingAssetReference(existingById, record) {
+  if (!record?.draftExistingAssetId) return void 0;
+  const asset = existingById.get(record.draftExistingAssetId);
+  return {
+    id: record.draftExistingAssetId,
+    asset_type: record.draftExistingAssetType ?? record.assetType ?? "vehicle",
+    display_label: asset?.displayLabel ?? record.displayLabel ?? "Existing asset"
+  };
+}
+function buildDraftDecisionPayload(existingById, resolutionStatus, matchedExistingAsset, matchedPendingRecord, identityStrength) {
+  const pendingExisting = matchedPendingRecord ? buildExistingAssetReference(existingById, {
+    draftExistingAssetId: matchedPendingRecord.draftExistingAssetId,
+    draftExistingAssetType: matchedPendingRecord.draftExistingAssetType,
+    displayLabel: matchedPendingRecord.displayLabel,
+    assetType: matchedPendingRecord.assetType
+  }) : void 0;
+  const pendingDecision = matchedPendingRecord?.draftDecision;
+  if (resolutionStatus === "matches_existing" && matchedExistingAsset) {
+    return {
+      _draftDecision: "link_existing",
+      _draftExistingAssetId: matchedExistingAsset.id,
+      _draftExistingAssetType: matchedExistingAsset.assetType,
+      _draftIdentityConfirmed: true,
+      existingAsset: {
+        id: matchedExistingAsset.id,
+        asset_type: matchedExistingAsset.assetType,
+        display_label: matchedExistingAsset.displayLabel ?? "Existing asset"
+      }
+    };
+  }
+  if (resolutionStatus === "matches_pending_candidate") {
+    if (pendingExisting) {
+      return {
+        _draftDecision: "link_existing",
+        _draftExistingAssetId: pendingExisting.id,
+        _draftExistingAssetType: pendingExisting.asset_type,
+        _draftIdentityConfirmed: matchedPendingRecord?.draftIdentityConfirmed ?? true,
+        existingAsset: pendingExisting
+      };
+    }
+    if (pendingDecision && pendingDecision !== "undecided") {
+      return {
+        _draftDecision: pendingDecision,
+        _draftIdentityConfirmed: matchedPendingRecord?.draftIdentityConfirmed ?? pendingDecision !== "needs_correction"
+      };
+    }
+    return {
+      _draftDecision: "undecided",
+      _draftIdentityConfirmed: false
+    };
+  }
+  if (resolutionStatus === "possible_match_requires_confirmation") {
+    if (matchedExistingAsset) {
+      return {
+        _draftDecision: "link_existing",
+        _draftExistingAssetId: matchedExistingAsset.id,
+        _draftExistingAssetType: matchedExistingAsset.assetType,
+        _draftIdentityConfirmed: false,
+        existingAsset: {
+          id: matchedExistingAsset.id,
+          asset_type: matchedExistingAsset.assetType,
+          display_label: matchedExistingAsset.displayLabel ?? "Existing asset"
+        }
+      };
+    }
+    if (pendingExisting) {
+      return {
+        _draftDecision: "link_existing",
+        _draftExistingAssetId: pendingExisting.id,
+        _draftExistingAssetType: pendingExisting.asset_type,
+        _draftIdentityConfirmed: false,
+        existingAsset: pendingExisting
+      };
+    }
+    if (pendingDecision && pendingDecision !== "undecided") {
+      return {
+        _draftDecision: pendingDecision,
+        _draftIdentityConfirmed: matchedPendingRecord?.draftIdentityConfirmed ?? false
+      };
+    }
+    return {
+      _draftDecision: "needs_correction",
+      _draftIdentityConfirmed: false
+    };
+  }
+  return {
+    _draftDecision: "approve_new",
+    _draftIdentityConfirmed: identityStrength === "exact"
+  };
+}
 export {
   AnalysisWarningSchema,
   AnalyzedDocumentSchema,
@@ -12853,12 +13134,16 @@ export {
   buildCandidateContext,
   buildCandidateIdentity,
   buildCandidateMandateValues,
+  buildDraftDecisionPayload,
+  buildExistingAssetReference,
   buildInsuranceAnalysisSystemPrompt,
   buildInsuranceExtractionSystemPrompt,
   buildMandateReviewSeeds,
   buildPropertyIdentity,
   buildVehicleIdentity,
   canAutoMergeIdentity,
+  candidateDisplayLabel,
+  computeCanonicalFingerprint,
   createEmptyIncrementalOnboardingSession,
   createKimiK3Analyzer,
   createLlmFirstAnalyzer,
@@ -12868,12 +13153,17 @@ export {
   getPrivacyNoticeUrl,
   getPrivacyNoticeVersion,
   getProcessorContractVersion,
+  isExactFingerprint2 as isExactFingerprint,
+  mapResolutionStatus,
   mergeIncrementalOnboardingUpload,
   normalizeDocumentValueState,
   normalizeLlmAnalysisResult,
+  occupancyForEntity,
   parseDocument,
   parseLlmExtractionResult,
+  parsePendingCandidateRecord,
   partitionDocumentDigests,
+  pendingRecordToEntityCandidate,
   planDocumentIntake,
   privacyPreparationConfigFromEnv,
   projectLlmRunToParsedDocument,
@@ -12889,4 +13179,4 @@ export {
 // document-extraction-edge-bundle end
 
 
-export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "67df642e7f16129b45fc6475cd5b75e1ea9c2adc2c543e62cc874d4adc061b74";
+export const __DOCUMENT_EXTRACTION_SOURCE_HASH__ = "3faa1c2d9685479a828900998d9d421e062ded082013f906f63e71f469117fa4";

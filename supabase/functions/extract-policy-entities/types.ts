@@ -119,6 +119,7 @@ export interface PendingEntityCandidate {
   candidateIdentity?: CandidateIdentity;
   identity?: DetectedEntityIdentity;
   currentPolicy?: CurrentPolicy;
+  sourceDocumentIds?: string[];
   draftDecision?: string | null;
   draftIdentityConfirmed?: boolean | null;
   draftExistingAssetId?: string | null;
@@ -126,6 +127,7 @@ export interface PendingEntityCandidate {
   approvedAssetId?: string | null;
   approvedAssetType?: "vehicle" | "property" | null;
   selectedFactsJson?: Record<string, unknown> | null;
+  caseId?: string | null;
 }
 
 export interface CandidateComparisonContext {

@@ -74,6 +74,18 @@ export const PendingEntityCandidateSchema = z
     candidateIdentity: z.lazy(() => CandidateIdentitySchema).optional(),
     identity: z.lazy(() => DetectedEntityIdentitySchema).optional(),
     currentPolicy: z.lazy(() => CurrentPolicySchema).optional(),
+    sourceDocumentIds: z.array(z.string().min(1)).default([]),
+    draftDecision: z
+      .enum(["approve_new", "link_existing", "skip", "needs_correction", "undecided"])
+      .nullable()
+      .optional(),
+    draftIdentityConfirmed: z.boolean().nullable().optional(),
+    draftExistingAssetId: z.string().nullable().optional(),
+    draftExistingAssetType: z.enum(["vehicle", "property"]).nullable().optional(),
+    approvedAssetId: z.string().nullable().optional(),
+    approvedAssetType: z.enum(["vehicle", "property"]).nullable().optional(),
+    selectedFactsJson: z.record(z.unknown()).nullable().optional(),
+    caseId: z.string().nullable().optional(),
   })
   .strict();
 export type PendingEntityCandidate = z.infer<typeof PendingEntityCandidateSchema>;
