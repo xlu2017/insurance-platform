@@ -4,14 +4,14 @@ import {
   selectCompatibleNormalization,
   type ReusableNormalization,
   type StoredNormalization,
+  type TargetNormalizationContract,
 } from "../src/normalization-reuse.ts";
 
 function digest(character: string): string {
   return character.repeat(64);
 }
 
-const target = {
-  contentSha256: digest("a"),
+const contract: TargetNormalizationContract = {
   normalizationSchemaVersion: "1.0.0",
   analyzerVersion: "gemini-2.5-flash-lite:1.0.0",
 };
@@ -24,8 +24,8 @@ function makeNormalization(
     id: "normalization-1",
     policyDocumentId: "policy-document-1",
     contentSha256,
-    normalizationSchemaVersion: target.normalizationSchemaVersion,
-    analyzerVersion: target.analyzerVersion,
+    normalizationSchemaVersion: contract.normalizationSchemaVersion,
+    analyzerVersion: contract.analyzerVersion,
     status: "complete",
     normalizedOutput: {},
     normalizedEntities: [],
@@ -41,9 +41,10 @@ describe("selectCompatibleNormalization", () => {
     const result = selectCompatibleNormalization({
       document: { documentId: "doc-1", contentSha256: digest("a") },
       normalizations: [normalization],
-      targetCompatibility: target,
+      contract,
     });
-    expect(result).toBe(normalization);
+    expect(result.normalization).toBe(normalization);
+    expect(result.integrityWarning).toBeUndefined();
   });
 
   it("returns null when the schema version mismatches", () => {
@@ -52,18 +53,18 @@ describe("selectCompatibleNormalization", () => {
       normalizations: [
         makeNormalization({ contentSha256: digest("a"), normalizationSchemaVersion: "2.0.0" }),
       ],
-      targetCompatibility: target,
+      contract,
     });
-    expect(result).toBeNull();
+    expect(result.normalization).toBeNull();
   });
 
   it("returns null when the analyzer version mismatches", () => {
     const result = selectCompatibleNormalization({
       document: { documentId: "doc-1", contentSha256: digest("a") },
       normalizations: [makeNormalization({ contentSha256: digest("a"), analyzerVersion: "other" })],
-      targetCompatibility: target,
+      contract,
     });
-    expect(result).toBeNull();
+    expect(result.normalization).toBeNull();
   });
 
   it("returns null for failed or incomplete normalizations", () => {
@@ -73,15 +74,15 @@ describe("selectCompatibleNormalization", () => {
       selectCompatibleNormalization({
         document: { documentId: "doc-1", contentSha256: digest("a") },
         normalizations: [failed],
-        targetCompatibility: target,
-      }),
+        contract,
+      }).normalization,
     ).toBeNull();
     expect(
       selectCompatibleNormalization({
         document: { documentId: "doc-1", contentSha256: digest("a") },
         normalizations: [incomplete],
-        targetCompatibility: target,
-      }),
+        contract,
+      }).normalization,
     ).toBeNull();
   });
 
@@ -90,9 +91,22 @@ describe("selectCompatibleNormalization", () => {
     const result = selectCompatibleNormalization({
       document: { documentId: "doc-1", contentSha256: digest("a") },
       normalizations: [upper],
-      targetCompatibility: target,
+      contract,
     });
-    expect(result).toBe(upper);
+    expect(result.normalization).toBe(upper);
+  });
+
+  it("selects deterministically and surfaces integrity problem when multiple complete normalizations share a key", () => {
+    const first = makeNormalization({ contentSha256: digest("a"), id: "norm-a-1" });
+    const second = makeNormalization({ contentSha256: digest("a"), id: "norm-a-2" });
+    const result = selectCompatibleNormalization({
+      document: { documentId: "doc-1", contentSha256: digest("a") },
+      normalizations: [second, first],
+      contract,
+    });
+    expect(result.normalization).toBe(first);
+    expect(result.integrityWarning).toContain("Multiple complete normalizations");
+    expect(result.integrityWarning).toContain("norm-a-1");
   });
 });
 
@@ -105,7 +119,7 @@ describe("partitionDocumentsByNormalization", () => {
         { documentId: "doc-2", contentSha256: digest("b") },
       ],
       normalizations: [complete],
-      targetCompatibility: target,
+      contract,
     });
 
     expect(result.reusable).toEqual([
@@ -119,6 +133,7 @@ describe("partitionDocumentsByNormalization", () => {
       },
     ]);
     expect(result.unavailable).toEqual([]);
+    expect(result.integrityWarnings).toEqual([]);
   });
 
   it("classifies schema mismatches as provider processing", () => {
@@ -130,7 +145,7 @@ describe("partitionDocumentsByNormalization", () => {
     const result = partitionDocumentsByNormalization({
       documents: [{ documentId: "doc-1", contentSha256: digest("a") }],
       normalizations: [mismatch],
-      targetCompatibility: target,
+      contract,
     });
     expect(result.reusable).toEqual([]);
     expect(result.requiresProvider).toEqual([
@@ -147,7 +162,7 @@ describe("partitionDocumentsByNormalization", () => {
     const result = partitionDocumentsByNormalization({
       documents: [{ documentId: "doc-1", contentSha256: digest("a") }],
       normalizations: [mismatch],
-      targetCompatibility: target,
+      contract,
     });
     expect(result.reusable).toEqual([]);
     expect(result.requiresProvider).toEqual([
@@ -160,7 +175,7 @@ describe("partitionDocumentsByNormalization", () => {
     const result = partitionDocumentsByNormalization({
       documents: [{ documentId: "doc-1", contentSha256: digest("a") }],
       normalizations: [failed],
-      targetCompatibility: target,
+      contract,
     });
     expect(result.reusable).toEqual([]);
     expect(result.requiresProvider).toEqual([
@@ -176,7 +191,7 @@ describe("partitionDocumentsByNormalization", () => {
         { documentId: "upload-2", contentSha256: digest("a") },
       ],
       normalizations: [complete],
-      targetCompatibility: target,
+      contract,
     });
     expect(result.reusable).toEqual([
       { documentId: "upload-1", contentSha256: digest("a"), normalizationId: "norm-a" },
@@ -196,7 +211,7 @@ describe("partitionDocumentsByNormalization", () => {
         { documentId: "fourth", contentSha256: digest("d") },
       ],
       normalizations: [normA, normC],
-      targetCompatibility: target,
+      contract,
     });
     expect(result.reusable.map((entry) => entry.documentId)).toEqual(["first", "third"]);
     expect(result.requiresProvider.map((entry) => entry.documentId)).toEqual(["second", "fourth"]);
@@ -211,7 +226,7 @@ describe("partitionDocumentsByNormalization", () => {
         { documentId: "good", contentSha256: digest("a") },
       ],
       normalizations: [complete],
-      targetCompatibility: target,
+      contract,
     });
     expect(result.reusable.map((entry) => entry.documentId)).toEqual(["good"]);
     expect(result.unavailable).toEqual([
@@ -234,10 +249,76 @@ describe("partitionDocumentsByNormalization", () => {
     partitionDocumentsByNormalization({
       documents,
       normalizations,
-      targetCompatibility: target,
+      contract,
     });
 
     expect(JSON.stringify(documents)).toBe(documentsBefore);
     expect(JSON.stringify(normalizations)).toBe(normalizationsBefore);
+  });
+
+  it("produces deterministic provider reasons across several historical normalization versions", () => {
+    const normalizations: StoredNormalization[] = [
+      makeNormalization({ contentSha256: digest("a"), id: "norm-failed", status: "failed" }),
+      makeNormalization({
+        contentSha256: digest("a"),
+        id: "norm-analyzer",
+        normalizationSchemaVersion: contract.normalizationSchemaVersion,
+        analyzerVersion: "older-analyzer",
+      }),
+      makeNormalization({
+        contentSha256: digest("a"),
+        id: "norm-schema",
+        normalizationSchemaVersion: "0.9.0",
+        analyzerVersion: contract.analyzerVersion,
+      }),
+    ];
+
+    const completeFirst = makeNormalization({
+      contentSha256: digest("a"),
+      id: "norm-complete-first",
+      normalizationSchemaVersion: contract.normalizationSchemaVersion,
+      analyzerVersion: contract.analyzerVersion,
+      status: "complete",
+    });
+
+    const resultWithComplete = partitionDocumentsByNormalization({
+      documents: [{ documentId: "doc-1", contentSha256: digest("a") }],
+      normalizations: [...normalizations, completeFirst],
+      contract,
+    });
+    expect(resultWithComplete.reusable.map((entry) => entry.normalizationId)).toEqual([
+      "norm-complete-first",
+    ]);
+
+    const resultNoComplete = partitionDocumentsByNormalization({
+      documents: [{ documentId: "doc-1", contentSha256: digest("a") }],
+      normalizations,
+      contract,
+    });
+    expect(resultNoComplete.requiresProvider).toEqual([
+      { documentId: "doc-1", contentSha256: digest("a"), reason: "incomplete_or_failed" },
+    ]);
+
+    const analyzerOnly = normalizations.filter(
+      (n) => n.id !== "norm-failed" && n.id !== "norm-schema",
+    );
+    const resultAnalyzerMismatch = partitionDocumentsByNormalization({
+      documents: [{ documentId: "doc-1", contentSha256: digest("a") }],
+      normalizations: analyzerOnly,
+      contract,
+    });
+    expect(resultAnalyzerMismatch.requiresProvider).toEqual([
+      { documentId: "doc-1", contentSha256: digest("a"), reason: "analyzer_mismatch" },
+    ]);
+
+    const schemaOnly = normalizations.filter((n) => n.id === "norm-schema");
+    const resultSchemaMismatch = partitionDocumentsByNormalization({
+      documents: [{ documentId: "doc-1", contentSha256: digest("a") }],
+      normalizations: schemaOnly,
+      contract,
+    });
+    expect(resultSchemaMismatch.requiresProvider).toEqual([
+      { documentId: "doc-1", contentSha256: digest("a"), reason: "schema_mismatch" },
+    ]);
   });
 });
