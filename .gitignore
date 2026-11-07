@@ -19,3 +19,11 @@ deno.lock
 **/fixtures/private/
 apps/mobile/android/
 apps/mobile/ios/
+
+artifacts/
+*.pem
+*.key
+*.p12
+*.keystore
+.vscode/
+.idea/

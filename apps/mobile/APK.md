@@ -6,11 +6,11 @@ This document records the working Android release build and emulator launch step
 
 A universal release APK that includes `x86`, `x86_64`, `armeabi-v7a`, and `arm64-v8a` native libraries has been built and run on an Android 35 emulator.
 
-Latest verified download: `https://app.devin.ai/attachments/83242638-8b8e-43d8-9458-c38bb7b9b938/app-release.apk`
+Latest verified download: `<github-release-url>
 
 ## Prerequisites
 
-- Android SDK installed at `/home/ubuntu/android-sdk` (or set `ANDROID_HOME` to your own path).
+- Android SDK installed at `$ANDROID_HOME` (or set `ANDROID_HOME` to your own path).
 - JDK 17.
 - `ANDROID_HOME` and `JAVA_HOME` exported in the shell.
 - For emulator hardware acceleration on Linux, `/dev/kvm` must be writable:
@@ -23,7 +23,7 @@ Latest verified download: `https://app.devin.ai/attachments/83242638-8b8e-43d8-9
 From the repository root:
 
 ```bash
-export ANDROID_HOME=/home/ubuntu/android-sdk
+export ANDROID_HOME=$ANDROID_HOME
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 pnpm install
 cd apps/mobile/android
@@ -41,7 +41,7 @@ apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 1. Create an Android 35 x86_64 AVD:
 
    ```bash
-   export ANDROID_HOME=/home/ubuntu/android-sdk
+   export ANDROID_HOME=$ANDROID_HOME
    $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd \
      -n test_avd \
      -k "system-images;android-35;google_apis;x86_64" \
