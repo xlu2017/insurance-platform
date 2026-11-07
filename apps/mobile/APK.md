@@ -6,7 +6,9 @@ This document records the working Android release build and emulator launch step
 
 A universal release APK that includes `x86`, `x86_64`, `armeabi-v7a`, and `arm64-v8a` native libraries has been built and run on an Android 35 emulator.
 
-Latest verified download: `<github-release-url>
+The latest verified build is published as a GitHub Release asset. Download it from
+`https://github.com/xlu2017/insurance-platform/releases` (asset: `app-release.apk`),
+or build it yourself with the steps below.
 
 ## Prerequisites
 
@@ -23,7 +25,7 @@ Latest verified download: `<github-release-url>
 From the repository root:
 
 ```bash
-export ANDROID_HOME=$ANDROID_HOME
+export ANDROID_HOME=/path/to/Android/sdk          # e.g. $HOME/Android/Sdk
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 pnpm install
 cd apps/mobile/android
@@ -41,7 +43,6 @@ apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 1. Create an Android 35 x86_64 AVD:
 
    ```bash
-   export ANDROID_HOME=$ANDROID_HOME
    $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd \
      -n test_avd \
      -k "system-images;android-35;google_apis;x86_64" \

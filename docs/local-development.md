@@ -57,4 +57,5 @@ The Supabase CLI version is pinned in `.tool-versions`. Use the same version loc
 
 - `scripts/ci/check-supabase.sh` starts the local Supabase stack only when it is not already running. Subsequent local runs reuse the same stack and Docker images.
 - `scripts/ci/export-supabase-env.sh` writes temporary credential files with restrictive permissions and is intended for local sourcing only.
+- The mobile app can load an unsigned JSON remote config via `EXPO_PUBLIC_CONFIG_ENDPOINT` (`loadRemoteConfig` in `apps/mobile/lib/config.ts`). This exists for local dev/demo only — it carries the public anon key and demo credentials and must not point at a production endpoint.
 - Do not commit `.env` files or temporary credential files.

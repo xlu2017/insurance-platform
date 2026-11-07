@@ -103,7 +103,7 @@ Finish the single-asset quote foundation so genuinely incomplete drafts can pers
 ### 12. Verification
 
 - `pnpm ci:local` must pass.
-- Save `artifacts/phase-1d-d-verification.txt`.
+- Save `docs/plans/phase-1d-d-verification.txt`.
 - Attempt to manually dispatch GitHub workflow and record result.
 
 ## Deferred

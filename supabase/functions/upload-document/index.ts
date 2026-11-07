@@ -1,7 +1,7 @@
 // Server-side, batch-aware document upload. SHA-256 is calculated before storage
 // or external AI transmission. Household duplicates reuse one canonical metadata
 // row and one private storage object.
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -56,7 +56,7 @@ function extensionForMime(mimeType: string): string {
   return ".jpg";
 }
 
-async function updateBatchCounts(admin: any, batchId: string): Promise<void> {
+async function updateBatchCounts(admin: SupabaseClient, batchId: string): Promise<void> {
   const { data: items } = await admin
     .from("document_processing_batch_items")
     .select("policy_document_id, deduplicated")
@@ -78,7 +78,7 @@ async function updateBatchCounts(admin: any, batchId: string): Promise<void> {
 }
 
 async function createLegacyBatch(
-  admin: any,
+  admin: SupabaseClient,
   householdId: string,
   actorProfileId: string,
 ): Promise<string> {

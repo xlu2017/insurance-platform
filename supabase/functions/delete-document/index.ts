@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +17,7 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
-async function updateBatchCounts(admin: any, batchId: string): Promise<void> {
+async function updateBatchCounts(admin: SupabaseClient, batchId: string): Promise<void> {
   const { data: items } = await admin
     .from("document_processing_batch_items")
     .select("policy_document_id, deduplicated")

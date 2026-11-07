@@ -5,7 +5,7 @@
 // model identifiers, and file references are never returned to the client.
 // Results are persisted in document_extraction_sessions, extracted_documents, and
 // asset_candidates.
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   buildPropertyIdentity,
   buildVehicleIdentity,
@@ -171,7 +171,7 @@ function candidateDisplayLabel(entity: DetectedInsuranceEntity): string {
 }
 
 async function loadExistingAssets(
-  admin: any,
+  admin: SupabaseClient,
   householdId: string,
 ): Promise<ExistingHouseholdAsset[]> {
   const { data: vehicles, error: vehicleErr } = await admin
@@ -240,7 +240,7 @@ async function loadExistingAssets(
 }
 
 async function loadPendingCandidates(
-  admin: any,
+  admin: SupabaseClient,
   householdId: string,
   excludeSessionId?: string,
 ): Promise<PendingEntityCandidate[]> {
@@ -273,7 +273,7 @@ async function loadPendingCandidates(
 }
 
 async function loadPendingCandidateRecords(
-  admin: any,
+  admin: SupabaseClient,
   householdId: string,
   excludeSessionId?: string,
 ): Promise<

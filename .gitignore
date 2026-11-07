@@ -13,6 +13,7 @@ supabase/.temp/
 supabase/.branches/
 playwright-report/
 test-results/
+.tmp/
 *.tsbuildinfo
 .DS_Store
 deno.lock

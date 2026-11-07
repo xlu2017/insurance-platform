@@ -24,7 +24,7 @@
     "ci:e2e": "bash scripts/ci/run-e2e.sh",
     "ci:local": "bash scripts/ci/run-all.sh",
     "db:types": "supabase gen types typescript --local --schema public > packages/database/src/database.types.ts && pnpm prettier --config .prettierrc --write packages/database/src/database.types.ts",
-    "db:types:check": "supabase gen types typescript --local --schema public > /tmp/database.types.ts && pnpm prettier --config .prettierrc --write /tmp/database.types.ts && diff -u packages/database/src/database.types.ts /tmp/database.types.ts",
+    "db:types:check": "bash scripts/ci/check-db-types.sh",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\""
   },

@@ -45,6 +45,9 @@ function getConfigEndpoint(): string | undefined {
   );
 }
 
+// Dev/demo only: fetches unsigned JSON config (e.g. from a local tunnel) to
+// point the app at a backend without rebuilding. It only carries the public
+// anon key and demo credentials — never ship a production endpoint here.
 export async function loadRemoteConfig(options?: {
   signal?: AbortSignal;
   timeoutMs?: number;

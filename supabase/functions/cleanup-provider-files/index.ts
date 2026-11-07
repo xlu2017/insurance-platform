@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { KimiK3Provider } from "../_shared/document-extraction.js";
 
 interface ProviderFileDeletionResult {
@@ -61,7 +61,7 @@ function addMinutes(iso: string, minutes: number): string {
 }
 
 async function checkReadiness(
-  admin: any,
+  admin: SupabaseClient,
   workerId: string,
   providerCredentialPresent: boolean,
 ): Promise<{ ready: boolean; checks: ReadinessChecks }> {

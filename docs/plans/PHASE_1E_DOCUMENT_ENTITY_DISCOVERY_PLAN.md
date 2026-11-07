@@ -202,7 +202,7 @@ A service-role-only RPC `approve_policy_candidates_v1` performs the final transa
 
 ## Verification
 
-Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm typecheck:edge`, `pnpm test`, admin build, mobile `expo:doctor`, `supabase db reset`, `supabase test db`, `pnpm --filter @autopilot/database test:integration`, `pnpm db:types`, `pnpm db:types:check`, `pnpm --filter @autopilot/insurance-engine check:edge`, and `pnpm test:private-policy-import`. Save a redacted `artifacts/phase-1e-verification.txt`.
+Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm typecheck:edge`, `pnpm test`, admin build, mobile `expo:doctor`, `supabase db reset`, `supabase test db`, `pnpm --filter @autopilot/database test:integration`, `pnpm db:types`, `pnpm db:types:check`, `pnpm --filter @autopilot/insurance-engine check:edge`, and `pnpm test:private-policy-import`. Save a redacted `docs/plans/phase-1e-verification.txt`.
 
 ## Explicitly deferred
 

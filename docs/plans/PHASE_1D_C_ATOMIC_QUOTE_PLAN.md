@@ -214,7 +214,7 @@ pnpm test:e2e
 pnpm --filter @autopilot/insurance-engine check:edge
 ```
 
-Commit `artifacts/phase-1d-c-verification.txt` after a clean run.
+Commit `docs/plans/phase-1d-c-verification.txt` after a clean run.
 
 ## Deferred
 

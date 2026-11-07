@@ -1,5 +1,5 @@
 // Durable batch creation, provider-neutral status and asynchronous routing.
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { documentProcessingRoute } from "../_shared/document-extraction.js";
 
 const corsHeaders = {
@@ -67,7 +67,10 @@ function publicCase(
   };
 }
 
-async function ensureBatchCase(admin: any, batch: Record<string, unknown>): Promise<string> {
+async function ensureBatchCase(
+  admin: SupabaseClient,
+  batch: Record<string, unknown>,
+): Promise<string> {
   if (batch.case_id) {
     const { data: existing } = await admin
       .from("optimization_cases")
@@ -105,7 +108,7 @@ async function ensureBatchCase(admin: any, batch: Record<string, unknown>): Prom
 }
 
 async function dispatchExtraction(
-  admin: any,
+  admin: SupabaseClient,
   authHeader: string,
   householdId: string,
   batchId: string,

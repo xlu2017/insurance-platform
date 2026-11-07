@@ -1,5 +1,7 @@
 # Insurance Autopilot
 
+![CI](https://github.com/xlu2017/insurance-platform/actions/workflows/ci.yml/badge.svg)
+
 A mobile-first platform that optimizes a Canadian household's auto and property insurance the way
 a managed investment account optimizes a portfolio: set your requirements once, and the service
 monitors renewals, collects competing quotes, compares whole-household configurations and presents
@@ -93,3 +95,7 @@ pnpm --filter @autopilot/mobile expo:doctor
 - [Deployment](docs/deployment.md)
 - [Regulatory boundaries](docs/regulatory-boundaries.md)
 - [Roadmap](docs/roadmap.md)
+
+## License
+
+[MIT](LICENSE)
